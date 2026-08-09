@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Models;
+using SmeBackend.Shared;
 
 namespace SmeBackend.Data;
 
@@ -26,6 +27,14 @@ public class AppDbContext : DbContext
         {
             entity.Property(t => t.Id).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(t => t.Name).IsUnique();
+
+            entity.HasData(new Tenant
+            {
+                Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                Name = "Lumenis",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
         });
 
         modelBuilder.Entity<Branch>(entity =>
@@ -37,6 +46,17 @@ public class AppDbContext : DbContext
 
             entity.Property(b => b.Id).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(b => new { b.TenantId, b.Name }).IsUnique();
+
+            entity.HasData(new Branch
+            {
+                Id = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                TenantId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                Name = "Colombo Main Branch",
+                Address = "123 Galle Road, Colombo 3",
+                Phone = "+94112345678",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
         });
 
         modelBuilder.Entity<User>(entity =>
@@ -53,6 +73,64 @@ public class AppDbContext : DbContext
 
             entity.Property(u => u.Id).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(u => u.Email).IsUnique();
+
+            var tenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+            var branchId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+            entity.HasData(
+                new User
+                {
+                    Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                    TenantId = tenantId,
+                    BranchId = branchId,
+                    Email = "admin@lumenis.com",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"),
+                    FullName = "System Administrator",
+                    Phone = "+94123456789",
+                    Role = UserRole.Admin,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new User
+                {
+                    Id = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                    TenantId = tenantId,
+                    BranchId = branchId,
+                    Email = "manager@lumenis.com",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Manager@123"),
+                    FullName = "Branch Manager",
+                    Phone = "+94123456780",
+                    Role = UserRole.Manager,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new User
+                {
+                    Id = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                    TenantId = tenantId,
+                    BranchId = branchId,
+                    Email = "staff@lumenis.com",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Staff@123"),
+                    FullName = "Staff Member",
+                    Phone = "+94123456781",
+                    Role = UserRole.Staff,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new User
+                {
+                    Id = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+                    TenantId = tenantId,
+                    BranchId = null, // Customers are not tied to a specific branch
+                    Email = "customer@lumenis.com",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Customer@123"),
+                    FullName = "Test Customer",
+                    Phone = "+94123456782",
+                    Role = UserRole.Customer,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                }
+            );
         });
 
         modelBuilder.Entity<AgentWorkflow>(entity =>
