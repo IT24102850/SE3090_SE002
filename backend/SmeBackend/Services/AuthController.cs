@@ -23,7 +23,7 @@ public class AuthController : ControllerBase
     
     [HttpPost("register")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponseDto>> Register(RegisterDto dto)
+    public async Task<ActionResult<AuthResponseDto>> Register([FromBody] RegisterDto dto)
     {
         // Check if email exists
         if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
@@ -60,7 +60,7 @@ public class AuthController : ControllerBase
     
     [HttpPost("login")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponseDto>> Login(LoginDto dto)
+    public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
     {
         var user = await _context.Users
             .Include(u => u.Tenant)

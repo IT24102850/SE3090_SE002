@@ -1,8 +1,4 @@
-namespace SmeBackend.DTOs;
-
-// For ResourcesController
-public record CreateResourceDto();
-public record ScheduleDto();
+﻿namespace SmeBackend.DTOs;
 
 // For AgentWorkflowController
 public record RejectDto();

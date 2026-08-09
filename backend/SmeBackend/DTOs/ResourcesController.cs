@@ -14,28 +14,28 @@ namespace SmeBackend.Controllers
     {
         [HttpGet]
         [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
-        public async Task<IActionResult> GetResources([FromQuery] Guid tenantId)
+        public IActionResult GetResources([FromQuery] Guid tenantId)
         {
             return Ok();
         }
 
         [HttpPost]
         [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
-        public async Task<IActionResult> CreateResource([FromBody] CreateResourceDto dto)
+        public IActionResult CreateResource([FromBody] CreateResourceDto dto)
         {
             return Ok();
         }
 
         [HttpGet("{id}/schedule")]
         [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
-        public async Task<IActionResult> GetResourceSchedule(Guid id)
+        public IActionResult GetResourceSchedule(Guid id)
         {
             return Ok();
         }
 
         [HttpPut("{id}/schedule")]
         [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
-        public async Task<IActionResult> UpdateResourceSchedule(Guid id, [FromBody] ScheduleDto dto)
+        public IActionResult UpdateResourceSchedule(Guid id, [FromBody] ScheduleDto dto)
         {
             return Ok();
         }
