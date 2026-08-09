@@ -1,71 +1,92 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SmeBackend.Data;
 using SmeBackend.DTOs;
-using SmeBackend.Shared;
-using System;
-using System.Threading.Tasks;
+using SmeBackend.Models;
 
-namespace SmeBackend.Controllers
+namespace SmeBackend.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+[Authorize] // All endpoints require authentication
+public class BookingsController : ControllerBase
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    [Authorize] // Base: any authenticated user
-    public class BookingsController : ControllerBase
+    private readonly AppDbContext _context;
+    
+    public BookingsController(AppDbContext context)
     {
-        // Admin/Manager: View all bookings across branches
-        [HttpGet]
-        [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
-        public async Task<IActionResult> GetAllBookings(
-            [FromQuery] Guid tenantId,
-            [FromQuery] string? type,
-            [FromQuery] DateTime? dateFrom,
-            [FromQuery] DateTime? dateTo,
-            [FromQuery] string? status,
-            [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 20)
+        _context = context;
+    }
+    
+    // Anyone authenticated can view bookings (with tenant filter applied in service)
+    [HttpGet]
+    public async Task<ActionResult> GetBookings()
+    {
+        var tenantId = GetTenantId();
+        var role = GetUserRole();
+        
+        var query = _context.Bookings.Where(b => b.TenantId == tenantId);
+        
+        // Managers and Staff only see their branch
+        if (role == "Manager" || role == "Staff")
         {
-            // Implementation
-            return Ok();
+            var branchId = GetBranchId();
+            if (branchId.HasValue)
+                query = query.Where(b => b.BranchId == branchId);
         }
-
-        // Staff: View their assigned bookings
-        [HttpGet("my-bookings")]
-        [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
-        public async Task<IActionResult> GetMyBookings()
+        
+        // Customers only see their own bookings
+        if (role == "Customer")
         {
-            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            // Filter by staff ID
-            return Ok();
+            var userId = GetUserId();
+            query = query.Where(b => b.CustomerId == userId);
         }
-
-        // Customer: Create their own booking
-        [HttpPost]
-        [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff},{Roles.Customer}")]
-        public async Task<IActionResult> CreateBooking([FromBody] CreateBookingDto dto)
-        {
-            // If Customer, ensure they can only book for themselves
-            if (User.IsInRole(Roles.Customer))
-            {
-                var customerId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                // Validate dto.CustomerId matches authenticated customer
-            }
-            return Ok();
-        }
-
-        // Admin/Manager/Staff: Update any booking
-        [HttpPut("{id}")]
-        [Authorize(Roles = $"{Roles.Admin},{Roles.Manager},{Roles.Staff}")]
-        public async Task<IActionResult> UpdateBooking(Guid id, [FromBody] UpdateBookingDto dto)
-        {
-            return Ok();
-        }
-
-        // Admin/Manager only: Bulk schedule operations
-        [HttpPost("bulk-schedule")]
-        [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
-        public async Task<IActionResult> BulkSchedule([FromBody] BulkScheduleDto dto)
-        {
-            return Ok();
-        }
+        
+        var bookings = await query.ToListAsync();
+        return Ok(bookings);
+    }
+    
+    // Only Staff, Manager, Admin can create bookings
+    [HttpPost]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    public async Task<ActionResult> CreateBooking([FromBody] CreateBookingDto dto)
+    {
+        // Implementation...
+        return Ok(new { message = "Booking created" });
+    }
+    
+    // Only Admin and Manager can delete
+    [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<ActionResult> DeleteBooking(Guid id)
+    {
+        // Implementation...
+        return NoContent();
+    }
+    
+    // Bulk schedule — high impact, Manager+ only
+    [HttpPost("bulk-schedule")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<ActionResult> BulkSchedule([FromBody] List<CreateBookingDto> dtos)
+    {
+        // Implementation...
+        return Ok(new { message = "Bulk schedule created" });
+    }
+    
+    // Helper methods to extract values from JWT claims
+    private Guid GetTenantId() => 
+        Guid.Parse(User.FindFirst("tenantId")?.Value ?? throw new UnauthorizedAccessException());
+    
+    private string GetUserRole() => 
+        User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "Customer";
+    
+    private Guid GetUserId() => 
+        Guid.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value!);
+    
+    private Guid? GetBranchId()
+    {
+        var branchClaim = User.FindFirst("branchId")?.Value;
+        return branchClaim != null ? Guid.Parse(branchClaim) : null;
     }
 }

@@ -1,4 +1,4 @@
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from './context/AuthContext';
 
 export const RoleTest = () => {
   const { user, isAuthenticated, hasRole, logout } = useAuth();
