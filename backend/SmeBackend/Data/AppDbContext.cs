@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<AvailabilitySlot> AvailabilitySlots => Set<AvailabilitySlot>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<TenantModule> TenantModules { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -221,5 +222,9 @@ public class AppDbContext : DbContext
             entity.Property(rt => rt.Id).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(rt => rt.Token).IsUnique();
         });
+
+        modelBuilder.Entity<TenantModule>()
+            .HasIndex(tm => new { tm.TenantId, tm.ModuleName })
+            .IsUnique();
     }
 }

@@ -50,7 +50,7 @@ public class BookingsController : ControllerBase
     // Only Staff, Manager, Admin can create bookings
     [HttpPost]
     [Authorize(Roles = "Admin,Manager,Staff")]
-    public async Task<ActionResult> CreateBooking([FromBody] CreateBookingDto dto)
+    public ActionResult CreateBooking([FromBody] CreateBookingDto dto)
     {
         // Implementation...
         return Ok(new { message = "Booking created" });
@@ -59,7 +59,7 @@ public class BookingsController : ControllerBase
     // Only Admin and Manager can delete
     [HttpDelete("{id}")]
     [Authorize(Roles = "Admin,Manager")]
-    public async Task<ActionResult> DeleteBooking(Guid id)
+    public ActionResult DeleteBooking(Guid id)
     {
         // Implementation...
         return NoContent();
@@ -68,7 +68,7 @@ public class BookingsController : ControllerBase
     // Bulk schedule — high impact, Manager+ only
     [HttpPost("bulk-schedule")]
     [Authorize(Roles = "Admin,Manager")]
-    public async Task<ActionResult> BulkSchedule([FromBody] List<CreateBookingDto> dtos)
+    public ActionResult BulkSchedule([FromBody] List<CreateBookingDto> dtos)
     {
         // Implementation...
         return Ok(new { message = "Bulk schedule created" });
