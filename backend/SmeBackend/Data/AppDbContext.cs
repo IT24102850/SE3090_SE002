@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<Resource> Resources => Set<Resource>();
     public DbSet<AvailabilitySlot> AvailabilitySlots => Set<AvailabilitySlot>();
     public DbSet<Booking> Bookings => Set<Booking>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -23,6 +24,7 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<Tenant>(entity =>
         {
+            entity.Property(t => t.Id).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(t => t.Name).IsUnique();
         });
 
@@ -33,6 +35,7 @@ public class AppDbContext : DbContext
                 .HasForeignKey(b => b.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.Property(b => b.Id).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(b => new { b.TenantId, b.Name }).IsUnique();
         });
 
@@ -48,6 +51,7 @@ public class AppDbContext : DbContext
                 .HasForeignKey(u => u.BranchId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            entity.Property(u => u.Id).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(u => u.Email).IsUnique();
         });
 
@@ -67,6 +71,8 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(w => w.CreatedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.Property(w => w.Id).HasDefaultValueSql("gen_random_uuid()");
         });
 
         modelBuilder.Entity<Resource>(entity =>
@@ -81,6 +87,7 @@ public class AppDbContext : DbContext
                 .HasForeignKey(r => r.BranchId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.Property(r => r.Id).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(r => new { r.BranchId, r.Name }).IsUnique();
         });
 
@@ -91,6 +98,7 @@ public class AppDbContext : DbContext
                 .HasForeignKey(a => a.ResourceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.Property(a => a.Id).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(a => new { a.ResourceId, a.StartTime, a.EndTime });
         });
 
@@ -121,7 +129,19 @@ public class AppDbContext : DbContext
                 .HasForeignKey(b => b.CreatedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            entity.Property(b => b.Id).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(b => new { b.ResourceId, b.StartTime, b.EndTime });
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasOne(rt => rt.User)
+                .WithMany() // No navigation property on User for RefreshTokens
+                .HasForeignKey(rt => rt.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(rt => rt.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.HasIndex(rt => rt.Token).IsUnique();
         });
     }
 }
