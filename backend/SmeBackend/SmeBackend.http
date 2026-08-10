@@ -1,0 +1,6 @@
+@SmeBackend_HostAddress = http://localhost:5298
+
+GET {{SmeBackend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
