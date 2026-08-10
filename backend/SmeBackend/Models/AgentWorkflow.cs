@@ -1,24 +1,18 @@
 namespace SmeBackend.Models;
 
-public enum AgentWorkflowStatus
-{
-    Draft,
-    InProgress,
-    Completed,
-    Failed
-}
-
-public class AgentWorkflow : BaseEntity
+public class AgentWorkflow : BaseEntity, ITenantScoped
 {
     public Guid TenantId { get; set; }
-    public Tenant Tenant { get; set; } = null!;
-    public Guid? BranchId { get; set; }
-    public Branch? Branch { get; set; }
-    public Guid? CreatedByUserId { get; set; }
-    public User? CreatedByUser { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string? Description { get; set; }
-    public string? InputPayload { get; set; }
-    public string? OutputPayload { get; set; }
-    public AgentWorkflowStatus Status { get; set; } = AgentWorkflowStatus.Draft;
+    public string Objective { get; set; } = string.Empty;
+    public string? PlanJson { get; set; }
+    public string Status { get; set; } = "Pending";
+    public int CurrentStep { get; set; }
+    public string? ToolResultsJson { get; set; }
+    public string? ValidationResults { get; set; }
+    public string ApprovalStatus { get; set; } = "Pending";
+    public Guid? ApprovedBy { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+    public string? FinalOutcome { get; set; }
+    public string? ErrorLog { get; set; }
+    public DateTime? CompletedAt { get; set; }
 }

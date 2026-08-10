@@ -1,6 +1,6 @@
 namespace SmeBackend.Models;
 
-public class User : BaseEntity
+public class User : BaseEntity, ITenantScoped
 {
     public Guid TenantId { get; set; }
     public Tenant Tenant { get; set; } = null!;
@@ -13,6 +13,4 @@ public class User : BaseEntity
     public UserRole Role { get; set; } = UserRole.Customer;
     
     public bool IsActive { get; set; } = true;
-
-    public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 }
