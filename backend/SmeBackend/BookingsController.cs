@@ -9,7 +9,7 @@ namespace SmeBackend.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // All endpoints require authentication
+[Authorize]
 public class BookingsController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -19,7 +19,6 @@ public class BookingsController : ControllerBase
         _context = context;
     }
     
-    // Anyone authenticated can view bookings (with tenant filter applied in service)
     [HttpGet]
     public async Task<ActionResult> GetBookings()
     {
@@ -28,7 +27,6 @@ public class BookingsController : ControllerBase
         
         var query = _context.Bookings.Where(b => b.TenantId == tenantId);
         
-        // Managers and Staff only see their branch
         if (role == "Manager" || role == "Staff")
         {
             var branchId = GetBranchId();
@@ -36,7 +34,6 @@ public class BookingsController : ControllerBase
                 query = query.Where(b => b.BranchId == branchId);
         }
         
-        // Customers only see their own bookings
         if (role == "Customer")
         {
             var userId = GetUserId();
@@ -47,34 +44,82 @@ public class BookingsController : ControllerBase
         return Ok(bookings);
     }
     
-    // Only Staff, Manager, Admin can create bookings
     [HttpPost]
     [Authorize(Roles = "Admin,Manager,Staff")]
-    public ActionResult CreateBooking([FromBody] CreateBookingDto dto)
+    public async Task<ActionResult> CreateBooking([FromBody] CreateBookingDto dto)
     {
-        // Implementation...
-        return Ok(new { message = "Booking created" });
+        var tenantId = GetTenantId();
+        var userId = GetUserId();
+        
+        var booking = new Booking
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            BranchId = dto.BranchId,
+            BookingType = dto.BookingType,
+            CustomerId = dto.CustomerId,
+            ScheduledDateTime = dto.ScheduledDateTime,
+            Duration = dto.Duration,
+            Status = "Pending",
+            Notes = dto.Notes,
+            CreatedBy = userId,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        
+        _context.Bookings.Add(booking);
+        await _context.SaveChangesAsync();
+        
+        return Ok(new { message = "Booking created", bookingId = booking.Id });
     }
     
-    // Only Admin and Manager can delete
     [HttpDelete("{id}")]
     [Authorize(Roles = "Admin,Manager")]
-    public ActionResult DeleteBooking(Guid id)
+    public async Task<ActionResult> DeleteBooking(Guid id)
     {
-        // Implementation...
+        var tenantId = GetTenantId();
+        
+        var booking = await _context.Bookings
+            .FirstOrDefaultAsync(b => b.Id == id && b.TenantId == tenantId);
+        
+        if (booking == null)
+            return NotFound(new { message = "Booking not found" });
+        
+        _context.Bookings.Remove(booking);
+        await _context.SaveChangesAsync();
+        
         return NoContent();
     }
     
-    // Bulk schedule — high impact, Manager+ only
     [HttpPost("bulk-schedule")]
     [Authorize(Roles = "Admin,Manager")]
-    public ActionResult BulkSchedule([FromBody] List<CreateBookingDto> dtos)
+    public async Task<ActionResult> BulkSchedule([FromBody] List<CreateBookingDto> dtos)
     {
-        // Implementation...
-        return Ok(new { message = "Bulk schedule created" });
+        var tenantId = GetTenantId();
+        var userId = GetUserId();
+        
+        var bookings = dtos.Select(dto => new Booking
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            BranchId = dto.BranchId,
+            BookingType = dto.BookingType,
+            CustomerId = dto.CustomerId,
+            ScheduledDateTime = dto.ScheduledDateTime,
+            Duration = dto.Duration,
+            Status = "Pending",
+            Notes = dto.Notes,
+            CreatedBy = userId,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        }).ToList();
+        
+        _context.Bookings.AddRange(bookings);
+        await _context.SaveChangesAsync();
+        
+        return Ok(new { message = "Bulk schedule created", count = bookings.Count });
     }
     
-    // Helper methods to extract values from JWT claims
     private Guid GetTenantId() => 
         Guid.Parse(User.FindFirst("tenantId")?.Value ?? throw new UnauthorizedAccessException());
     
@@ -82,7 +127,8 @@ public class BookingsController : ControllerBase
         User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "Customer";
     
     private Guid GetUserId() => 
-        Guid.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value!);
+        Guid.Parse(User.FindFirst(System.Security.Claims.ClaimsIdentity.DefaultNameClaimType)?.Value 
+            ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value!);
     
     private Guid? GetBranchId()
     {
