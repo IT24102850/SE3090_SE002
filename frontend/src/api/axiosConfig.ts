@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 
 const api = axios.create({
   baseURL: 'http://localhost:5298/api',
@@ -7,7 +7,6 @@ const api = axios.create({
   },
 });
 
-// Attach token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -16,7 +15,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401 globally
 api.interceptors.response.use(
   (response) => response,
   (error) => {
