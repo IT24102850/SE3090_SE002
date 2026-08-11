@@ -9,17 +9,14 @@ class ApiService {
   // - iOS Simulator:     http://localhost:5298/api
   // - Physical device:   http://<your-lan-ip>:5298/api
   // - Deployed:          https://your-api.railway.app/api
-  static const String baseUrl = 'http://localhost:5298/api';
+  static const String baseUrl = 'http://10.0.2.2:5298/api';
 
   static final Dio _dio = Dio(
     BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
     ),
   );
 
