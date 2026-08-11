@@ -1,0 +1,24 @@
+name: sme_mobile
+description: SME Platform Mobile App
+publish_to: 'none'
+version: 1.0.0+1
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  # State Management
+  flutter_riverpod: ^2.5.1
+  # HTTP Client
+  dio: ^5.4.3
+  # Secure Storage
+  flutter_secure_storage: ^9.0.0
+  # Navigation
+  go_router: ^14.1.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+flutter:
+  uses-material-design: true
