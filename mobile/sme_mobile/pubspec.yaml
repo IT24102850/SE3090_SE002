@@ -18,6 +18,9 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   # Navigation
   go_router: ^14.2.0
+  # QR check-in (FR-B7): generate on the patient's booking, scan on staff's check-in screen
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.2.3
 
 dev_dependencies:
   flutter_test:

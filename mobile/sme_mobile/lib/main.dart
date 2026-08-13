@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/auth_provider.dart';
-import 'screens/login_screen.dart';
+import 'screens/landing_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/profile_setup_screen.dart';
+import 'theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,26 +32,22 @@ class _MyAppState extends ConsumerState<MyApp> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
 
+    Widget home;
+    if (!auth.isInitialized) {
+      home = const _SplashScreen();
+    } else if (!auth.isAuthenticated) {
+      home = const LandingScreen(); // <-- THIS IS THE FIX
+    } else if (!auth.isProfileComplete) {
+      home = const ProfileSetupScreen();
+    } else {
+      home = const DashboardScreen();
+    }
+
     return MaterialApp(
       title: 'SME Platform',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2563EB),
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.grey.shade50,
-        ),
-      ),
-      // Show splash while restoring session, then Login or Dashboard
-      home: !auth.isInitialized
-          ? const _SplashScreen()
-          : auth.isAuthenticated
-              ? const DashboardScreen()
-              : const LoginScreen(),
+      theme: AppTheme.light(),
+      home: home,
     );
   }
 }
@@ -64,7 +62,8 @@ class _SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.business_center_rounded, size: 64, color: Color(0xFF2563EB)),
+            Icon(Icons.business_center_rounded,
+                size: 64, color: Color(0xFF2563EB)),
             SizedBox(height: 24),
             CircularProgressIndicator(),
             SizedBox(height: 16),

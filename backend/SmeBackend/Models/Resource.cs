@@ -29,6 +29,9 @@ public class Resource
     [Required]
     public Guid TenantId { get; set; }
 
+    public Guid? BranchId { get; set; }
+    public Branch? Branch { get; set; }
+
     [Required]
     [MaxLength(100)]
     public string Name { get; set; } = string.Empty;
@@ -42,6 +45,14 @@ public class Resource
 
     [MaxLength(500)]
     public string? Description { get; set; }
+
+    /// Doctor/staff specialty (e.g. "Cardiology"), used by FR-B1 availability search.
+    [MaxLength(100)]
+    public string? Specialty { get; set; }
+
+    /// The User (Staff role) this resource represents, so a doctor's login maps to
+    /// their own bookings for "my schedule" (FR-B8).
+    public Guid? LinkedUserId { get; set; }
 
     public int? Capacity { get; set; }
 

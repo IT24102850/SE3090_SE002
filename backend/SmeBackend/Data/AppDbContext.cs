@@ -14,6 +14,11 @@ public class AppDbContext : DbContext
     public DbSet<User> Users { get; set; } = null!;
 
     // NEW DbSets for your task
+    public DbSet<ResourceSchedule> ResourceSchedules { get; set; } = null!;
+    public DbSet<AvailabilitySlot> AvailabilitySlots { get; set; } = null!;
+    public DbSet<BookingReminder> BookingReminders { get; set; } = null!;
+    public DbSet<RecurringPattern> RecurringPatterns { get; set; } = null!;
+    public DbSet<AgentWorkflow> AgentWorkflows { get; set; } = null!;
     public DbSet<Resource> Resources { get; set; } = null!;
     public DbSet<BookingType> BookingTypes { get; set; } = null!;
     public DbSet<Booking> Bookings { get; set; } = null!;
@@ -31,6 +36,7 @@ public class AppDbContext : DbContext
             entity.HasIndex(r => new { r.TenantId, r.Category });
             entity.HasIndex(r => new { r.TenantId, r.Status });
             entity.HasIndex(r => new { r.TenantId, r.Name });
+            entity.HasIndex(r => new { r.TenantId, r.BranchId });
             entity.HasIndex(r => r.Code).IsUnique();
 
             entity.Property(r => r.Status)
@@ -41,6 +47,11 @@ public class AppDbContext : DbContext
                   .HasMaxLength(20);
             entity.Property(r => r.HourlyRate)
                   .HasPrecision(18, 2);
+
+            entity.HasOne(r => r.Branch)
+                  .WithMany()
+                  .HasForeignKey(r => r.BranchId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // ==================== BOOKING TYPES ====================
@@ -92,6 +103,78 @@ public class AppDbContext : DbContext
                   .WithMany(bt => bt.Bookings)
                   .HasForeignKey(b => b.BookingTypeId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ==================== RESOURCE SCHEDULES ====================
+        modelBuilder.Entity<ResourceSchedule>(entity =>
+        {
+            entity.ToTable("resource_schedules");
+
+            entity.HasIndex(rs => new { rs.ResourceId, rs.DayOfWeek });
+
+            entity.HasOne(rs => rs.Resource)
+                  .WithMany()
+                  .HasForeignKey(rs => rs.ResourceId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ==================== AVAILABILITY SLOTS ====================
+        modelBuilder.Entity<AvailabilitySlot>(entity =>
+        {
+            entity.ToTable("availability_slots");
+
+            entity.HasIndex(a => new { a.ResourceId, a.Date });
+            entity.HasIndex(a => new { a.ResourceId, a.Date, a.StartTime, a.EndTime }).IsUnique();
+            entity.HasIndex(a => a.BookingId);
+
+            entity.HasOne(a => a.Resource)
+                  .WithMany()
+                  .HasForeignKey(a => a.ResourceId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ==================== BOOKING REMINDERS ====================
+        modelBuilder.Entity<BookingReminder>(entity =>
+        {
+            entity.ToTable("booking_reminders");
+
+            entity.HasIndex(r => r.BookingId);
+            entity.HasIndex(r => r.Status);
+
+            entity.Property(r => r.Channel).HasMaxLength(20);
+            entity.Property(r => r.Status).HasMaxLength(20);
+
+            entity.HasOne(r => r.Booking)
+                  .WithMany()
+                  .HasForeignKey(r => r.BookingId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ==================== RECURRING PATTERNS ====================
+        modelBuilder.Entity<RecurringPattern>(entity =>
+        {
+            entity.ToTable("recurring_patterns");
+
+            entity.HasIndex(p => p.BookingId);
+
+            entity.Property(p => p.Frequency).HasMaxLength(20);
+
+            entity.HasOne(p => p.Booking)
+                  .WithMany()
+                  .HasForeignKey(p => p.BookingId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ==================== AGENT WORKFLOWS ====================
+        modelBuilder.Entity<AgentWorkflow>(entity =>
+        {
+            entity.ToTable("agent_workflows");
+
+            entity.HasIndex(w => new { w.TenantId, w.Status });
+            entity.HasIndex(w => w.CreatedAt);
+
+            entity.Property(w => w.Status).HasMaxLength(30);
+            entity.Property(w => w.ApprovalStatus).HasMaxLength(30);
         });
     }
 }

@@ -13,6 +13,7 @@ class AuthState {
   final String? token;
   final bool isLoading;
   final bool isInitialized;
+  final bool isProfileComplete;
   final String? error;
 
   const AuthState({
@@ -20,10 +21,12 @@ class AuthState {
     this.token,
     this.isLoading = false,
     this.isInitialized = false,
+    this.isProfileComplete = false,
     this.error,
   });
 
   bool get isAuthenticated => token != null && token!.isNotEmpty && user != null;
+
 
   AuthState copyWith({
     User? user,
@@ -31,6 +34,7 @@ class AuthState {
     bool? isLoading,
     bool? isInitialized,
     String? error,
+    bool? isProfileComplete,
     bool clearUser = false,
     bool clearToken = false,
     bool clearError = false,
@@ -40,6 +44,7 @@ class AuthState {
       token: clearToken ? null : (token ?? this.token),
       isLoading: isLoading ?? this.isLoading,
       isInitialized: isInitialized ?? this.isInitialized,
+      isProfileComplete: isProfileComplete ?? this.isProfileComplete,
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -63,6 +68,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           user: user,
           token: token,
           isInitialized: true,
+          isProfileComplete: true, // Assume complete for now
         );
       } else {
         state = const AuthState(isInitialized: true);
@@ -111,6 +117,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         token: accessToken,
         isLoading: false,
         isInitialized: true,
+        isProfileComplete: true, // Assume complete for now
       );
       return true;
     } on DioException catch (e) {
@@ -177,6 +184,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         token: accessToken,
         isLoading: false,
         isInitialized: true,
+        isProfileComplete: true, // Assume complete for now
       );
       return true;
     } on DioException catch (e) {

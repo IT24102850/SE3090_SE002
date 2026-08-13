@@ -90,6 +90,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddHostedService<SmeBackend.Services.ReminderDispatchService>();
 
 // CORS
 builder.Services.AddCors(options =>

@@ -45,5 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Staff use the camera to scan a patient's booking QR code at check-in.</string>
 </dict>
 </plist>
