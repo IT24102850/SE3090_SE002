@@ -1,3 +1,22 @@
+// In Resource.cs
+public class Resource : IAuditableEntity
+{
+    // No other changes needed here as all properties are already defined.
+    // ...
+}
+
+// In BookingType.cs
+public class BookingType : IAuditableEntity
+{
+    // No other changes needed here.
+    // ...
+}
+// You can place this in a new file, e.g., /Models/ComplexTypes/LocationData.cs
+public class LocationData
+{
+    public string? Floor { get; set; }
+    public string? Building { get; set; }
+}
 # SME Platform – Flutter Mobile (Auth Module)
 
 Fully working **Login / Register** screens with:
