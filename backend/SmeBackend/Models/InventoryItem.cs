@@ -15,4 +15,5 @@ public class InventoryItem : BaseEntity
     public decimal ReorderLevel { get; set; }
     public decimal UnitCost { get; set; }
     public bool IsActive { get; set; } = true;
+    public ICollection<StockMovement> StockMovements { get; set; } = [];
 }

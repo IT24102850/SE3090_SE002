@@ -13,4 +13,6 @@ public class Supplier : BaseEntity
     public string? Address { get; set; }
     public bool IsActive { get; set; } = true;
     public ICollection<InventoryItem> InventoryItems { get; set; } = [];
+    public ICollection<PurchaseOrder> PurchaseOrders { get; set; } = [];
+    public ICollection<StockMovement> StockMovements { get; set; } = [];
 }
