@@ -16,4 +16,5 @@ public class PurchaseOrder : BaseEntity
     public decimal TotalAmount { get; set; }
     public string? Notes { get; set; }
     public ICollection<StockMovement> StockMovements { get; set; } = [];
+    public ICollection<PurchaseOrderItem> Items { get; set; } = [];
 }

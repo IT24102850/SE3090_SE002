@@ -14,6 +14,8 @@ public class AppDbContext : DbContext
     public DbSet<InventoryItem> InventoryItems { get; set; }
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; }
     public DbSet<StockMovement> StockMovements { get; set; }
+    public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
+    public DbSet<EquipmentMaintenance> EquipmentMaintenanceRecords { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +29,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<InventoryItem>().HasQueryFilter(i => i.Tenant.IsActive && i.IsActive);
         modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(p => p.Tenant.IsActive);
         modelBuilder.Entity<StockMovement>().HasQueryFilter(m => m.Tenant.IsActive);
+        modelBuilder.Entity<EquipmentMaintenance>().HasQueryFilter(m => m.Tenant.IsActive);
+        modelBuilder.Entity<PurchaseOrderItem>().HasQueryFilter(i =>
+            i.PurchaseOrder.Tenant.IsActive && i.InventoryItem.Tenant.IsActive && i.InventoryItem.IsActive);
 
         // Indexes
         modelBuilder.Entity<User>().HasIndex(u => u.Email).IsUnique();
@@ -86,6 +91,31 @@ public class AppDbContext : DbContext
             entity.HasOne(m => m.InventoryItem).WithMany(i => i.StockMovements).HasForeignKey(m => m.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(m => m.Supplier).WithMany(s => s.StockMovements).HasForeignKey(m => m.SupplierId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(m => m.PurchaseOrder).WithMany(p => p.StockMovements).HasForeignKey(m => m.PurchaseOrderId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<PurchaseOrderItem>(entity =>
+        {
+            entity.Property(i => i.OrderedQuantity).HasPrecision(18, 3);
+            entity.Property(i => i.ReceivedQuantity).HasPrecision(18, 3);
+            entity.Property(i => i.UnitCost).HasPrecision(18, 2);
+            entity.Property(i => i.Notes).HasMaxLength(2000);
+            entity.HasIndex(i => new { i.PurchaseOrderId, i.InventoryItemId }).IsUnique();
+            entity.HasOne(i => i.PurchaseOrder).WithMany(p => p.Items).HasForeignKey(i => i.PurchaseOrderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(i => i.InventoryItem).WithMany(i => i.PurchaseOrderItems).HasForeignKey(i => i.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EquipmentMaintenance>(entity =>
+        {
+            entity.Property(m => m.MaintenanceType).HasMaxLength(100).IsRequired();
+            entity.Property(m => m.Status).HasMaxLength(30).IsRequired();
+            entity.Property(m => m.Cost).HasPrecision(18, 2);
+            entity.Property(m => m.PerformedBy).HasMaxLength(200);
+            entity.Property(m => m.Notes).HasMaxLength(2000);
+            entity.HasIndex(m => new { m.TenantId, m.BranchId });
+            entity.HasIndex(m => new { m.InventoryItemId, m.ScheduledFor });
+            entity.HasOne(m => m.Tenant).WithMany().HasForeignKey(m => m.TenantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(m => m.Branch).WithMany().HasForeignKey(m => m.BranchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(m => m.InventoryItem).WithMany(i => i.MaintenanceRecords).HasForeignKey(m => m.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

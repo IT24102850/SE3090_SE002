@@ -16,4 +16,6 @@ public class InventoryItem : BaseEntity
     public decimal UnitCost { get; set; }
     public bool IsActive { get; set; } = true;
     public ICollection<StockMovement> StockMovements { get; set; } = [];
+    public ICollection<PurchaseOrderItem> PurchaseOrderItems { get; set; } = [];
+    public ICollection<EquipmentMaintenance> MaintenanceRecords { get; set; } = [];
 }
