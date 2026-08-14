@@ -16,6 +16,8 @@ public class AppDbContext : DbContext
     public DbSet<StockMovement> StockMovements { get; set; }
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
     public DbSet<EquipmentMaintenance> EquipmentMaintenanceRecords { get; set; }
+    public DbSet<AnalyticsSnapshot> AnalyticsSnapshots { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,6 +34,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<EquipmentMaintenance>().HasQueryFilter(m => m.Tenant.IsActive);
         modelBuilder.Entity<PurchaseOrderItem>().HasQueryFilter(i =>
             i.PurchaseOrder.Tenant.IsActive && i.InventoryItem.Tenant.IsActive && i.InventoryItem.IsActive);
+        modelBuilder.Entity<AnalyticsSnapshot>().HasQueryFilter(s => s.Tenant.IsActive);
+        modelBuilder.Entity<Notification>().HasQueryFilter(n => n.Tenant.IsActive);
 
         // Indexes
         modelBuilder.Entity<User>().HasIndex(u => u.Email).IsUnique();
@@ -116,6 +120,28 @@ public class AppDbContext : DbContext
             entity.HasOne(m => m.Tenant).WithMany().HasForeignKey(m => m.TenantId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(m => m.Branch).WithMany().HasForeignKey(m => m.BranchId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(m => m.InventoryItem).WithMany(i => i.MaintenanceRecords).HasForeignKey(m => m.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AnalyticsSnapshot>(entity =>
+        {
+            entity.Property(s => s.SnapshotType).HasMaxLength(100).IsRequired();
+            entity.Property(s => s.Data).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(s => new { s.TenantId, s.BranchId, s.SnapshotType, s.PeriodStart });
+            entity.HasOne(s => s.Tenant).WithMany().HasForeignKey(s => s.TenantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(s => s.Branch).WithMany().HasForeignKey(s => s.BranchId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.Property(n => n.Type).HasMaxLength(50).IsRequired();
+            entity.Property(n => n.Title).HasMaxLength(200).IsRequired();
+            entity.Property(n => n.Message).HasMaxLength(2000).IsRequired();
+            entity.Property(n => n.ActionUrl).HasMaxLength(2000);
+            entity.HasIndex(n => new { n.TenantId, n.UserId, n.IsRead, n.CreatedAt });
+            entity.HasIndex(n => new { n.TenantId, n.BranchId });
+            entity.HasOne(n => n.Tenant).WithMany().HasForeignKey(n => n.TenantId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(n => n.Branch).WithMany().HasForeignKey(n => n.BranchId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(n => n.User).WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.SetNull);
         });
     }
 }
