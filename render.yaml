@@ -1,0 +1,35 @@
+# Render Blueprint - deploys the ASP.NET Core backend from this repo.
+# Postgres is already hosted on Supabase (see backend user-secrets), so no
+# Render-managed database is declared here.
+#
+# One-time manual step (Render's CLI can't create new services, only manage
+# existing ones): Render Dashboard -> New + -> Blueprint -> connect this
+# repo -> it detects this file -> fill in the `sync: false` secrets below ->
+# Deploy.
+services:
+  - type: web
+    name: sme-backend
+    runtime: docker
+    rootDir: backend/SmeBackend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ConnectionStrings__DefaultConnection
+        sync: false
+      - key: Jwt__Key
+        sync: false
+      - key: Jwt__Issuer
+        value: SmeBackend
+      - key: Jwt__Audience
+        value: SmeBackendUsers
+      - key: AgentService__BaseUrl
+        value: http://localhost:8001
+      - key: AgentService__InternalToken
+        sync: false
+      - key: Cloudinary__CloudName
+        sync: false
+      - key: Cloudinary__ApiKey
+        sync: false
+      - key: Cloudinary__ApiSecret
+        sync: false
