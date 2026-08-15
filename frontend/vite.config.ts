@@ -1,19 +1,14 @@
-/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// NOTE: npm registry access was blocked (403) in the environment these
-// tests were authored in, so vitest/@testing-library/* could never actually
-// be installed or run here - this config + the *.test.tsx files are
-// written and ready, but unverified. Run `npm install` then `npm run test`
-// once registry access is available.
+// Test-only config (vitest, jsdom, @testing-library/*) lives in
+// vitest.config.ts, deliberately NOT here - this file is on the production
+// build path (`tsc && vite build`), and none of those packages are actually
+// installed yet (npm registry access was blocked when they were added), so
+// referencing them here would break every build until someone runs
+// `npm install` locally. See vitest.config.ts for details.
 export default defineConfig({
   plugins: [react()],
-  test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/setupTests.ts'],
-    globals: true,
-  },
   server: {
     port: 5173,
     open: true,
