@@ -81,6 +81,20 @@ public sealed class InventoryController(
             totalPages));
     }
 
+    [HttpGet("low-stock")]
+    public Task<ActionResult<InventoryListResponse>> GetLowStockInventory(
+        [FromQuery] Guid? branchId = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default) =>
+        GetInventory(
+            category: null,
+            lowStock: true,
+            branchId: branchId,
+            page: page,
+            pageSize: pageSize,
+            cancellationToken: cancellationToken);
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<InventoryItemResponse>> GetInventoryItem(
         Guid id,
