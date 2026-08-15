@@ -5,6 +5,8 @@ import { AnalyticsDashboardPage } from './pages/AnalyticsDashboardCharts';
 import { ForbiddenPage } from './pages/ForbiddenPage';
 import { InventoryManagerPage } from './pages/InventoryManagerPage';
 import { LoginPage } from './pages/LoginPage';
+import { PurchaseOrderManagerPage } from './pages/PurchaseOrderManagerPage';
+import { StockMovementLogPage } from './pages/StockMovementLogPage';
 
 export function App() {
   return (
@@ -13,6 +15,8 @@ export function App() {
       <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']} />}>
         <Route element={<AppLayout />}>
           <Route path="/inventory" element={<InventoryManagerPage />} />
+          <Route path="/stock-movements" element={<StockMovementLogPage />} />
+          <Route path="/purchase-orders" element={<PurchaseOrderManagerPage />} />
         </Route>
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager']} />}>
