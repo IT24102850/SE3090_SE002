@@ -36,6 +36,7 @@ public class UpdateProfileDto
     public string? InsuranceProvider { get; set; }
     public string? InsuranceNumber { get; set; }
     public string? MedicalNotes { get; set; }
+    public string? ProfilePictureUrl { get; set; }
 }
 
 public class LoginDto
@@ -68,4 +69,5 @@ public class UserResponseDto
     public string? InsuranceProvider { get; set; }
     public string? InsuranceNumber { get; set; }
     public string? MedicalNotes { get; set; }
+    public string? ProfilePictureUrl { get; set; }
 }

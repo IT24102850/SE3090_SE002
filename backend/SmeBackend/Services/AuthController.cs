@@ -122,6 +122,7 @@ public class AuthController : ControllerBase
         if (dto.InsuranceProvider != null) user.InsuranceProvider = dto.InsuranceProvider;
         if (dto.InsuranceNumber != null) user.InsuranceNumber = dto.InsuranceNumber;
         if (dto.MedicalNotes != null) user.MedicalNotes = dto.MedicalNotes;
+        if (dto.ProfilePictureUrl != null) user.ProfilePictureUrl = dto.ProfilePictureUrl;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -140,6 +141,7 @@ public class AuthController : ControllerBase
         Address = user.Address,
         InsuranceProvider = user.InsuranceProvider,
         InsuranceNumber = user.InsuranceNumber,
-        MedicalNotes = user.MedicalNotes
+        MedicalNotes = user.MedicalNotes,
+        ProfilePictureUrl = user.ProfilePictureUrl
     };
 }

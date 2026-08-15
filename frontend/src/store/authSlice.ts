@@ -8,6 +8,7 @@ export interface User {
   role: 'Admin' | 'Manager' | 'Staff' | 'Customer';
   tenantId: string;
   branchId?: string;
+  profilePictureUrl?: string | null;
 }
 
 interface AuthState {
@@ -82,6 +83,13 @@ const authSlice = createSlice({
         state.isAuthenticated = true;
       }
     },
+    // Patches the logged-in user's own record (e.g. after saving a new
+    // profile picture on the My Profile page) without a full re-login.
+    updateCurrentUser: (state, action: PayloadAction<Partial<User>>) => {
+      if (!state.user) return;
+      state.user = { ...state.user, ...action.payload };
+      localStorage.setItem('user', JSON.stringify(state.user));
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -102,5 +110,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearError, initializeAuth } = authSlice.actions;
+export const { logout, clearError, initializeAuth, updateCurrentUser } = authSlice.actions;
 export default authSlice.reducer;

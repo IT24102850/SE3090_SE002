@@ -90,7 +90,7 @@ export const bookingApi = createApi({
       query: ({ tenantId, orderedUrls }) => ({ url: `/tenants/${tenantId}/gallery-images/reorder`, method: 'PUT', body: { orderedUrls } }),
       invalidatesTags: (_r, _e, { tenantId }) => [{ type: 'Tenant', id: tenantId }],
     }),
-    uploadMedia: builder.mutation<{ url: string; publicId: string }, { file: File; purpose: 'logo' | 'cover' | 'gallery' }>({
+    uploadMedia: builder.mutation<{ url: string; publicId: string }, { file: File; purpose: 'logo' | 'cover' | 'gallery' | 'avatar' }>({
       query: ({ file, purpose }) => {
         const formData = new FormData();
         formData.append('file', file);
@@ -100,6 +100,14 @@ export const bookingApi = createApi({
     }),
     deleteMedia: builder.mutation<void, { publicId: string }>({
       query: ({ publicId }) => ({ url: `/media/${encodeURIComponent(publicId)}`, method: 'DELETE' }),
+    }),
+
+    // ── Own profile (any authenticated role) ─────────────────
+    updateMyProfile: builder.mutation<
+      { id: string; fullName: string; phone: string; profilePictureUrl?: string | null },
+      { fullName?: string; phone?: string; profilePictureUrl?: string }
+    >({
+      query: (body) => ({ url: '/auth/me', method: 'PUT', body }),
     }),
 
     // ── Staff management (FR-AS2) ──────────────────────────
@@ -368,6 +376,7 @@ export const {
   useReorderGalleryImagesMutation,
   useUploadMediaMutation,
   useDeleteMediaMutation,
+  useUpdateMyProfileMutation,
   useGetBookingsQuery,
   useGetBookingQuery,
   useCreateBookingMutation,

@@ -21,6 +21,7 @@ import StaffManagementPage from './features/staff/StaffManagementPage';
 import BranchesPage from './features/branches/BranchesPage';
 import BusinessSettingsPage from './features/settings/BusinessSettingsPage';
 import BusinessProfilePage from './features/settings/BusinessProfilePage';
+import MyProfilePage from './features/settings/MyProfilePage';
 
 const AuthInitializer = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
@@ -48,6 +49,15 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Shell><CalendarDashboardPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Shell><MyProfilePage /></Shell>
                   </ProtectedRoute>
                 }
               />

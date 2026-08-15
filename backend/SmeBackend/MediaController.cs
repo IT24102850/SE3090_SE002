@@ -21,7 +21,7 @@ public class MediaController : ControllerBase
         "image/jpeg", "image/jpg", "image/png", "image/webp"
     };
     private const long MaxFileSizeBytes = 5 * 1024 * 1024;
-    private static readonly HashSet<string> AllowedPurposes = new(StringComparer.OrdinalIgnoreCase) { "logo", "cover", "gallery" };
+    private static readonly HashSet<string> AllowedPurposes = new(StringComparer.OrdinalIgnoreCase) { "logo", "cover", "gallery", "avatar" };
 
     private readonly ICloudinaryImageService _images;
     public MediaController(ICloudinaryImageService images) => _images = images;
@@ -33,7 +33,7 @@ public class MediaController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest(new { message = "No file was uploaded." });
         if (!AllowedPurposes.Contains(purpose))
-            return BadRequest(new { message = "purpose must be one of: logo, cover, gallery." });
+            return BadRequest(new { message = "purpose must be one of: logo, cover, gallery, avatar." });
         if (!AllowedContentTypes.Contains(file.ContentType))
             return BadRequest(new { message = "Only JPG, PNG, and WEBP images are allowed." });
         if (file.Length > MaxFileSizeBytes)

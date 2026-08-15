@@ -23,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/booking-types', label: 'Booking Types', icon: '🏷️', roles: ['Admin', 'Manager'] },
   { path: '/staff', label: 'Staff', icon: '🧑‍💼', roles: ['Admin', 'Manager'] },
   { path: '/branches', label: 'Branches', icon: '📍', roles: ['Admin'] },
+  { path: '/business-profile', label: 'Business Profile', icon: '🏪', roles: ['Admin', 'Manager'] },
   { path: '/settings', label: 'Business Settings', icon: '⚙️', roles: ['Admin'] },
 ];
 
@@ -77,8 +78,42 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </nav>
         {user && (
           <div className="sidebar-footer">
-            <div className="sidebar-user">{user.fullName}</div>
-            <div className="sidebar-role">{user.role}</div>
+            <NavLink
+              to="/profile"
+              onClick={() => setMobileNavOpen(false)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit', marginBottom: 10 }}
+            >
+              <span
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                  background: 'rgba(255,255,255,0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}
+              >
+                {user.profilePictureUrl ? (
+                  <img src={user.profilePictureUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  (user.fullName || user.email || '?')
+                    .trim()
+                    .split(/\s+/)
+                    .slice(0, 2)
+                    .map((p) => p[0]?.toUpperCase())
+                    .join('')
+                )}
+              </span>
+              <span>
+                <div className="sidebar-user">{user.fullName}</div>
+                <div className="sidebar-role">{user.role}</div>
+              </span>
+            </NavLink>
             <button className="sidebar-logout" onClick={handleLogout}>Log out</button>
           </div>
         )}
