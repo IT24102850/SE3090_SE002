@@ -19,7 +19,9 @@ import type {
   UpdateTenantProfileBody,
 } from '../features/booking/types';
 
-const API_BASE_URL = 'http://localhost:5298/api';
+// VITE_API_URL lets the deployed (Vercel) build point at a real deployed
+// backend instead of the local dev server - see frontend/.env.example.
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api';
 
 export const bookingApi = createApi({
   reducerPath: 'bookingApi',

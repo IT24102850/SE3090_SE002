@@ -2,6 +2,8 @@
 import axios from 'axios';
 import { TOURISM_SUB_TYPES } from '../features/booking/types';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api';
+
 const RegisterPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -33,7 +35,7 @@ const RegisterPage = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:5298/api/tenant/onboard', form);
+      const response = await axios.post(`${API_BASE_URL}/tenant/onboard`, form);
       const { accessToken, user } = response.data;
       
       localStorage.setItem('token', accessToken);
