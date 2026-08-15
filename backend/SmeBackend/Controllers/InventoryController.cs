@@ -81,6 +81,295 @@ public sealed class InventoryController(
             totalPages));
     }
 
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<InventoryItemResponse>> GetInventoryItem(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var item = await LoadItemAsync(id, cancellationToken);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        if (!await RequireItemAccessAsync(
+                InventoryAuthorizationPolicies.InventoryRead,
+                item,
+                cancellationToken))
+        {
+            return Forbid();
+        }
+
+        return Ok(ToResponse(item));
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<InventoryItemResponse>> UpdateInventoryItem(
+        Guid id,
+        UpdateInventoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var item = await LoadItemAsync(id, cancellationToken);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        if (!await RequireItemAccessAsync(
+                InventoryAuthorizationPolicies.InventoryWrite,
+                item,
+                cancellationToken))
+        {
+            return Forbid();
+        }
+
+        // A branch move needs access to both the source item and its destination.
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService,
+                InventoryAuthorizationPolicies.InventoryWrite,
+                tenantId,
+                request.BranchId))
+        {
+            return Forbid();
+        }
+
+        var name = request.Name?.Trim();
+        var sku = request.Sku?.Trim();
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            ModelState.AddModelError("name", "Name is required.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (string.IsNullOrWhiteSpace(sku))
+        {
+            ModelState.AddModelError("sku", "Sku is required.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.ReorderLevel < 0)
+        {
+            ModelState.AddModelError("reorderLevel", "Reorder level cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.UnitCost < 0)
+        {
+            ModelState.AddModelError("unitCost", "Unit cost cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (await db.InventoryItems.IgnoreQueryFilters()
+            .AnyAsync(candidate => candidate.TenantId == tenantId && candidate.Sku == sku && candidate.Id != id,
+                cancellationToken))
+        {
+            return Conflict(new { message = $"An item with SKU '{sku}' already exists." });
+        }
+
+        if (request.BranchId.HasValue &&
+            !await db.Branches.AnyAsync(branch => branch.Id == request.BranchId.Value, cancellationToken))
+        {
+            ModelState.AddModelError("branchId", "The branch does not exist for this tenant.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.CategoryId.HasValue &&
+            !await db.InventoryCategories.AnyAsync(category => category.Id == request.CategoryId.Value, cancellationToken))
+        {
+            ModelState.AddModelError("categoryId", "The category does not exist for this tenant.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.UnitId.HasValue &&
+            !await db.InventoryUnits.AnyAsync(unit => unit.Id == request.UnitId.Value, cancellationToken))
+        {
+            ModelState.AddModelError("unitId", "The unit does not exist for this tenant.");
+            return ValidationProblem(ModelState);
+        }
+
+        item.Name = name;
+        item.Sku = sku;
+        item.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        item.CategoryId = request.CategoryId;
+        item.UnitId = request.UnitId;
+        item.BranchId = request.BranchId;
+        item.ReorderLevel = request.ReorderLevel;
+        item.UnitCost = request.UnitCost;
+        item.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
+        var updated = await LoadItemAsync(item.Id, cancellationToken);
+        return Ok(ToResponse(updated!));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteInventoryItem(Guid id, CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var item = await LoadItemAsync(id, cancellationToken);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        if (!await RequireItemAccessAsync(
+                InventoryAuthorizationPolicies.InventoryWrite,
+                item,
+                cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (item.Quantity != 0)
+        {
+            return Conflict(new { message = "Item still has stock on hand. Adjust or receive stock to zero before deleting." });
+        }
+
+        item.IsActive = false;
+        item.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPost("{id:guid}/adjust")]
+    public async Task<ActionResult<InventoryItemResponse>> AdjustInventoryItem(
+        Guid id,
+        AdjustInventoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var item = await LoadItemAsync(id, cancellationToken);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        if (!await RequireItemAccessAsync(
+                InventoryAuthorizationPolicies.InventoryWrite,
+                item,
+                cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (request.Quantity == 0)
+        {
+            ModelState.AddModelError("quantity", "Adjustment quantity cannot be zero.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (!item.BranchId.HasValue)
+        {
+            return Conflict(new { message = "Stock operations require the item to be assigned to a branch." });
+        }
+
+        if (request.Quantity < 0 && item.Quantity + request.Quantity < 0)
+        {
+            return Conflict(new { message = $"Adjustment would take '{item.Name}' below zero ({item.Quantity} on hand)." });
+        }
+
+        item.Quantity += request.Quantity;
+        item.UpdatedAt = DateTime.UtcNow;
+
+        db.StockMovements.Add(new StockMovement
+        {
+            InventoryItemId = item.Id,
+            BranchId = item.BranchId.Value,
+            MovementType = "Adjustment",
+            Quantity = request.Quantity,
+            Reference = request.Reference,
+            Notes = request.Notes,
+            OccurredAt = DateTime.UtcNow,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToResponse(item));
+    }
+
+    [HttpPost("{id:guid}/receive")]
+    public async Task<ActionResult<InventoryItemResponse>> ReceiveInventoryItem(
+        Guid id,
+        ReceiveInventoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var item = await LoadItemAsync(id, cancellationToken);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        if (!await RequireItemAccessAsync(
+                InventoryAuthorizationPolicies.InventoryWrite,
+                item,
+                cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (request.Quantity <= 0)
+        {
+            ModelState.AddModelError("quantity", "Receive quantity must be greater than zero.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (!item.BranchId.HasValue)
+        {
+            return Conflict(new { message = "Stock operations require the item to be assigned to a branch." });
+        }
+
+        if (request.UnitCost < 0)
+        {
+            ModelState.AddModelError("unitCost", "Unit cost cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+
+        item.Quantity += request.Quantity;
+        if (request.UnitCost.HasValue)
+        {
+            item.UnitCost = request.UnitCost;
+        }
+        item.UpdatedAt = DateTime.UtcNow;
+
+        db.StockMovements.Add(new StockMovement
+        {
+            InventoryItemId = item.Id,
+            BranchId = item.BranchId.Value,
+            MovementType = "Receive",
+            Quantity = request.Quantity,
+            UnitCost = request.UnitCost,
+            Reference = request.Reference,
+            Notes = request.Notes,
+            OccurredAt = DateTime.UtcNow,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToResponse(item));
+    }
+
     [HttpPost]
     public async Task<ActionResult<InventoryItemResponse>> CreateInventory(
         CreateInventoryRequest request,
@@ -174,6 +463,30 @@ public sealed class InventoryController(
     private bool TryGetTenantId(out Guid tenantId) =>
         Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out tenantId);
 
+    private async Task<InventoryItem?> LoadItemAsync(Guid id, CancellationToken cancellationToken) =>
+        await db.InventoryItems
+            .Include(item => item.Category)
+            .Include(item => item.Unit)
+            .Include(item => item.Branch)
+            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+
+    private async Task<bool> RequireItemAccessAsync(
+        string policy,
+        InventoryItem item,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return false;
+        }
+
+        return await this.IsInventoryOperationAuthorizedAsync(
+            authorizationService,
+            policy,
+            tenantId,
+            item.BranchId);
+    }
+
     private static InventoryItemResponse ToResponse(InventoryItem item)
     {
         var status = item.Quantity <= 0
@@ -235,3 +548,24 @@ public sealed record CreateInventoryRequest(
     decimal Quantity = 0,
     decimal ReorderLevel = 0,
     decimal? UnitCost = null);
+
+public sealed record UpdateInventoryRequest(
+    string? Name,
+    string? Sku,
+    string? Description,
+    Guid? CategoryId,
+    Guid? UnitId,
+    Guid? BranchId,
+    decimal ReorderLevel = 0,
+    decimal? UnitCost = null);
+
+public sealed record AdjustInventoryRequest(
+    decimal Quantity,
+    string? Reference = null,
+    string? Notes = null);
+
+public sealed record ReceiveInventoryRequest(
+    decimal Quantity,
+    decimal? UnitCost = null,
+    string? Reference = null,
+    string? Notes = null);
