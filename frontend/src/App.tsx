@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ProtectedRoute } from './auth/ProtectedRoute';
 import { AppLayout } from './layout/AppLayout';
-import { AnalyticsDashboardPage } from './pages/AnalyticsDashboardPage';
+import { AnalyticsDashboardPage } from './pages/AnalyticsDashboardCharts';
 import { ForbiddenPage } from './pages/ForbiddenPage';
 import { InventoryManagerPage } from './pages/InventoryManagerPage';
 import { LoginPage } from './pages/LoginPage';
