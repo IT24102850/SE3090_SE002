@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { RootState } from '../../store/store';
 import { logout } from '../../store/authSlice';
 import NotificationBell from './NotificationBell';
@@ -30,6 +30,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const { user } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const items = NAV_ITEMS.filter((item) => !user || item.roles.includes(user.role));
 
@@ -40,7 +41,23 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <button
+        type="button"
+        className="mobile-menu-toggle"
+        aria-label={mobileNavOpen ? 'Close menu' : 'Open menu'}
+        aria-expanded={mobileNavOpen}
+        onClick={() => setMobileNavOpen((open) => !open)}
+      >
+        <span className={`hamburger-icon${mobileNavOpen ? ' open' : ''}`}>
+          <span />
+          <span />
+          <span />
+        </span>
+      </button>
+      {mobileNavOpen && (
+        <div className="sidebar-overlay" onClick={() => setMobileNavOpen(false)} />
+      )}
+      <aside className={`sidebar${mobileNavOpen ? ' open' : ''}`}>
         <div className="sidebar-brand">
           <span className="sidebar-brand-mark">⬢</span>
           SME Platform
@@ -51,6 +68,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               key={item.path}
               to={item.path}
               className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+              onClick={() => setMobileNavOpen(false)}
             >
               <span>{item.icon}</span>
               <span>{item.label}</span>
