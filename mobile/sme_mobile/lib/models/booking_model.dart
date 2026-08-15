@@ -1,3 +1,5 @@
+import '../shared/date_format.dart';
+
 class Booking {
   final String id;
   final String tenantId;
@@ -6,6 +8,7 @@ class Booking {
   final String bookingTypeId;
   final String bookingTypeName;
   final String colorHex;
+  final String bookingUnit;
   final String bookedBy;
   final String? bookedFor;
   final String? title;
@@ -26,6 +29,7 @@ class Booking {
     required this.bookingTypeId,
     required this.bookingTypeName,
     required this.colorHex,
+    this.bookingUnit = 'Slot',
     required this.bookedBy,
     this.bookedFor,
     this.title,
@@ -41,6 +45,14 @@ class Booking {
 
   DateTime get startLocal => DateTime.parse(startTime).toLocal();
   DateTime get endLocal => DateTime.parse(endTime).toLocal();
+
+  /// One-line schedule summary, format depending on [bookingUnit] - a
+  /// time-of-day range for Slot, "Aug 14 → Aug 17 · 3 nights" for
+  /// Night/DateRange/Package. Shared by the confirm/success/my-bookings
+  /// screens so the branch isn't duplicated in three places.
+  String get scheduleSummary => bookingUnit == 'Slot'
+      ? '${formatDayMonth(startLocal)} · ${formatTimeOfDay(startLocal)} – ${formatTimeOfDay(endLocal)}'
+      : formatDateRangeSummary(startLocal, endLocal, nights: bookingUnit == 'Night');
 
   bool get isUpcoming =>
       startLocal.isAfter(DateTime.now()) &&
@@ -61,6 +73,7 @@ class Booking {
       bookingTypeId: json['bookingTypeId'].toString(),
       bookingTypeName: json['bookingTypeName']?.toString() ?? '',
       colorHex: json['colorHex']?.toString() ?? '#3B82F6',
+      bookingUnit: json['bookingUnit']?.toString() ?? 'Slot',
       bookedBy: json['bookedBy'].toString(),
       bookedFor: json['bookedFor']?.toString(),
       title: json['title']?.toString(),

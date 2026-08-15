@@ -6,7 +6,6 @@ import '../../providers/api_service_provider.dart';
 import '../../providers/booking_providers.dart';
 import '../../providers/public_tenant_provider.dart';
 import '../../shared/color_utils.dart';
-import '../../shared/date_format.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/booking_qr_code.dart';
 import '../../widgets/date_slot_picker.dart';
@@ -24,13 +23,13 @@ class MyBookingsScreen extends ConsumerWidget {
     };
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('My Bookings'),
           bottom: const TabBar(
             indicatorColor: Colors.white,
-            tabs: [Tab(text: 'Upcoming'), Tab(text: 'Past')],
+            tabs: [Tab(text: 'Upcoming'), Tab(text: 'Past'), Tab(text: 'Cancelled')],
           ),
         ),
         body: bookingsAsync.when(
@@ -39,13 +38,16 @@ class MyBookingsScreen extends ConsumerWidget {
           data: (bookings) {
             final upcoming = bookings.where((b) => b.isUpcoming).toList()
               ..sort((a, b) => a.startTime.compareTo(b.startTime));
-            final past = bookings.where((b) => !b.isUpcoming).toList()
+            final cancelled = bookings.where((b) => b.status == 'Cancelled').toList()
+              ..sort((a, b) => b.startTime.compareTo(a.startTime));
+            final past = bookings.where((b) => !b.isUpcoming && b.status != 'Cancelled').toList()
               ..sort((a, b) => b.startTime.compareTo(a.startTime));
 
             return TabBarView(
               children: [
                 _BookingList(bookings: upcoming, tenantNames: tenantNames, showActions: true, emptyMessage: 'No upcoming bookings yet.'),
                 _BookingList(bookings: past, tenantNames: tenantNames, showActions: false, emptyMessage: 'No past bookings.'),
+                _BookingList(bookings: cancelled, tenantNames: tenantNames, showActions: false, emptyMessage: 'No cancelled bookings.'),
               ],
             );
           },
@@ -254,13 +256,13 @@ class _BookingCard extends ConsumerWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.calendar_today_outlined, size: 14, color: Colors.grey.shade500),
+                Icon(
+                  booking.bookingUnit == 'Slot' ? Icons.access_time_rounded : Icons.calendar_today_outlined,
+                  size: 14,
+                  color: Colors.grey.shade500,
+                ),
                 const SizedBox(width: 6),
-                Text(formatDayMonth(booking.startLocal), style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
-                const SizedBox(width: 14),
-                Icon(Icons.access_time_rounded, size: 14, color: Colors.grey.shade500),
-                const SizedBox(width: 6),
-                Text('${formatTimeOfDay(booking.startLocal)} – ${formatTimeOfDay(booking.endLocal)}', style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
+                Text(booking.scheduleSummary, style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
               ],
             ),
             if (showActions) ...[
@@ -275,11 +277,11 @@ class _BookingCard extends ConsumerWidget {
                 ),
               ),
             ],
-            if (showActions && (booking.isCancellable || booking.isReschedulable)) ...[
+            if (showActions && (booking.isCancellable || (booking.isReschedulable && booking.bookingUnit == 'Slot'))) ...[
               const SizedBox(height: 10),
               Row(
                 children: [
-                  if (booking.isReschedulable)
+                  if (booking.isReschedulable && booking.bookingUnit == 'Slot')
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () => _reschedule(context, ref),
@@ -288,7 +290,7 @@ class _BookingCard extends ConsumerWidget {
                         style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10)),
                       ),
                     ),
-                  if (booking.isReschedulable && booking.isCancellable) const SizedBox(width: 10),
+                  if (booking.isReschedulable && booking.bookingUnit == 'Slot' && booking.isCancellable) const SizedBox(width: 10),
                   if (booking.isCancellable)
                     Expanded(
                       child: OutlinedButton.icon(

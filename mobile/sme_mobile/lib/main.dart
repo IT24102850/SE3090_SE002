@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/auth_provider.dart';
 import 'screens/landing_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/profile_setup_screen.dart';
+import 'services/push_notification_service.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -23,8 +26,11 @@ class _MyAppState extends ConsumerState<MyApp> {
   void initState() {
     super.initState();
     // Restore JWT + user from flutter_secure_storage on cold start
-    Future.microtask(() {
-      ref.read(authProvider.notifier).initializeAuth();
+    Future.microtask(() async {
+      await ref.read(authProvider.notifier).initializeAuth();
+      // Never allowed to block/crash startup - see PushNotificationService's
+      // own internal try/catch guards for why this is safe to call unconditionally.
+      unawaited(PushNotificationService.init(ref));
     });
   }
 
@@ -46,6 +52,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     return MaterialApp(
       title: 'SME Platform',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: PushNotificationService.messengerKey,
       theme: AppTheme.light(),
       home: home,
     );

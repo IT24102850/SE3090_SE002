@@ -3,13 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/booking_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/booking_providers.dart';
+import '../providers/notification_providers.dart';
 import '../shared/color_utils.dart';
 import '../shared/date_format.dart';
 import '../theme/app_theme.dart';
 import '../widgets/route_transitions.dart';
 import '../widgets/status_badge.dart';
+import 'customer/ai_planner_screen.dart';
 import 'customer/book_business_list_screen.dart';
 import 'customer/my_bookings_screen.dart';
+import 'notifications_screen.dart';
+import 'profile_screen.dart';
 import 'staff/check_in_scanner_screen.dart';
 import 'staff/my_schedule_screen.dart';
 
@@ -32,6 +36,7 @@ class DashboardScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('SME Platform'),
         actions: [
+          const _NotificationBellAction(),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
@@ -63,6 +68,14 @@ class DashboardScreen extends ConsumerWidget {
               leading: const Icon(Icons.dashboard_outlined),
               title: const Text('Dashboard'),
               onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('My Profile'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(slideFadeRoute(const ProfileScreen()));
+              },
             ),
             if (user.role == 'Admin' || user.role == 'Manager')
               ListTile(
@@ -97,6 +110,14 @@ class DashboardScreen extends ConsumerWidget {
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).push(slideFadeRoute(const MyBookingsScreen()));
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.auto_awesome, color: AppColors.purple),
+                title: const Text('Ask AI to book for you'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(slideFadeRoute(const AiPlannerScreen()));
                 },
               ),
             ],
@@ -245,6 +266,12 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color) {
         icon: Icons.event_busy_outlined,
         color: color,
         onTap: () => Navigator.of(context).push(slideFadeRoute(const MyBookingsScreen())),
+      ),
+      _QuickActionCard(
+        label: 'Ask AI to book for you',
+        icon: Icons.auto_awesome,
+        color: AppColors.purple,
+        onTap: () => Navigator.of(context).push(slideFadeRoute(const AiPlannerScreen())),
       ),
     ];
   }
@@ -413,6 +440,48 @@ class _InfoRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// FR-C11: bell + unread badge in the app bar, opening the in-app
+/// notification center.
+class _NotificationBellAction extends ConsumerWidget {
+  const _NotificationBellAction();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final countAsync = ref.watch(unreadNotificationCountProvider);
+    final unread = countAsync.valueOrNull ?? 0;
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_none_rounded),
+          tooltip: 'Notifications',
+          onPressed: () {
+            Navigator.of(context).push(slideFadeRoute(const NotificationsScreen())).then((_) {
+              ref.invalidate(unreadNotificationCountProvider);
+            });
+          },
+        ),
+        if (unread > 0)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+              alignment: Alignment.center,
+              child: Text(
+                unread > 9 ? '9+' : '$unread',
+                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

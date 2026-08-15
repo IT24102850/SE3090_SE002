@@ -62,6 +62,7 @@ public class ResourcesController : ControllerBase
                 r.HourlyRate,
                 r.Specialty,
                 r.LinkedUserId,
+                r.CustomAttributes,
                 r.CreatedAt
             })
             .ToListAsync();
@@ -99,6 +100,8 @@ public class ResourcesController : ControllerBase
             HourlyRate = dto.HourlyRate,
             Specialty = dto.Specialty,
             LinkedUserId = dto.LinkedUserId,
+            CustomAttributes = dto.CustomAttributes,
+            LocationMetadata = dto.LocationMetadata,
             Status = ResourceStatus.Available
         };
 
@@ -123,6 +126,8 @@ public class ResourcesController : ControllerBase
         if (dto.HourlyRate.HasValue) resource.HourlyRate = dto.HourlyRate;
         if (dto.Specialty != null) resource.Specialty = dto.Specialty;
         if (dto.LinkedUserId.HasValue) resource.LinkedUserId = dto.LinkedUserId;
+        if (dto.CustomAttributes != null) resource.CustomAttributes = dto.CustomAttributes;
+        if (dto.LocationMetadata != null) resource.LocationMetadata = dto.LocationMetadata;
         resource.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -160,7 +165,16 @@ public class ResourcesController : ControllerBase
         var days = await _db.ResourceSchedules.AsNoTracking()
             .Where(s => s.ResourceId == id)
             .OrderBy(s => s.DayOfWeek)
-            .Select(s => new { s.DayOfWeek, s.StartTime, s.EndTime, s.IsAvailable })
+            .Select(s => new
+            {
+                s.DayOfWeek,
+                s.StartTime,
+                s.EndTime,
+                s.IsAvailable,
+                s.LunchBreakStart,
+                s.LunchBreakEnd,
+                s.MaxDailyBookedHours
+            })
             .ToListAsync();
 
         return Ok(days);
@@ -192,12 +206,57 @@ public class ResourcesController : ControllerBase
                 DayOfWeek = day.DayOfWeek,
                 StartTime = day.StartTime,
                 EndTime = day.EndTime,
-                IsAvailable = day.IsAvailable
+                IsAvailable = day.IsAvailable,
+                LunchBreakStart = day.LunchBreakStart,
+                LunchBreakEnd = day.LunchBreakEnd,
+                MaxDailyBookedHours = day.MaxDailyBookedHours
             });
         }
 
         await _db.SaveChangesAsync();
         return Ok(new { message = "Schedule updated.", days = dto.Days.Count });
+    }
+
+    // ── FR-AS6: one-off closed dates (holidays/closures) ───────
+    [HttpGet("{id}/schedule-exceptions")]
+    public async Task<IActionResult> GetScheduleExceptions(Guid id)
+    {
+        var exceptions = await _db.ResourceScheduleExceptions.AsNoTracking()
+            .Where(e => e.ResourceId == id)
+            .OrderBy(e => e.Date)
+            .Select(e => new { e.Id, e.Date, e.Reason })
+            .ToListAsync();
+
+        return Ok(exceptions);
+    }
+
+    [HttpPost("{id}/schedule-exceptions")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
+    public async Task<IActionResult> AddScheduleException(Guid id, [FromBody] AddScheduleExceptionDto dto)
+    {
+        var resourceExists = await _db.Resources.AnyAsync(r => r.Id == id);
+        if (!resourceExists) return NotFound();
+
+        var date = DateTimeUtil.AsUtc(dto.Date).Date;
+        if (await _db.ResourceScheduleExceptions.AnyAsync(e => e.ResourceId == id && e.Date == date))
+            return Conflict(new { message = "A closed date already exists for this day." });
+
+        var exception = new ResourceScheduleException { ResourceId = id, Date = date, Reason = dto.Reason };
+        _db.ResourceScheduleExceptions.Add(exception);
+        await _db.SaveChangesAsync();
+        return Ok(exception);
+    }
+
+    [HttpDelete("{id}/schedule-exceptions/{exceptionId}")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
+    public async Task<IActionResult> RemoveScheduleException(Guid id, Guid exceptionId)
+    {
+        var exception = await _db.ResourceScheduleExceptions.FirstOrDefaultAsync(e => e.Id == exceptionId && e.ResourceId == id);
+        if (exception == null) return NotFound();
+
+        _db.ResourceScheduleExceptions.Remove(exception);
+        await _db.SaveChangesAsync();
+        return NoContent();
     }
 
     // GET /api/resources/{id}/availability-grid?from=&to=  → per-day open/booked hour summary
@@ -289,6 +348,11 @@ public class ResourcesController : ControllerBase
         var schedules = await _db.ResourceSchedules.AsNoTracking()
             .Where(s => s.ResourceId.HasValue && resourceIds.Contains(s.ResourceId.Value) && s.DayOfWeek == dayOfWeek)
             .ToDictionaryAsync(s => s.ResourceId!.Value);
+        var closedResourceIds = (await _db.ResourceScheduleExceptions.AsNoTracking()
+            .Where(e => resourceIds.Contains(e.ResourceId) && e.Date == date.Date)
+            .Select(e => e.ResourceId)
+            .ToListAsync())
+            .ToHashSet();
         var bookingsByResource = (await _db.Bookings.AsNoTracking()
             .Where(b => resourceIds.Contains(b.ResourceId) && b.StartTime.Date == date.Date && b.DeletedAt == null
                 && b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.Rejected)
@@ -304,7 +368,7 @@ public class ResourcesController : ControllerBase
             bookingsByResource.TryGetValue(r.Id, out var existing);
             var (isOpen, slots) = SlotCalculator.Calculate(
                 date, schedule, duration, bufferBefore, bufferAfter,
-                existing ?? new List<(DateTime, DateTime)>(), now);
+                existing ?? new List<(DateTime, DateTime)>(), now, closedResourceIds.Contains(r.Id));
             var nextSlot = slots.FirstOrDefault(s => s.IsAvailable);
 
             return new
@@ -322,3 +386,5 @@ public class ResourcesController : ControllerBase
         return Ok(new { date = date.Date, results });
     }
 }
+
+public record AddScheduleExceptionDto(DateTime Date, string? Reason);

@@ -107,6 +107,39 @@ class _ScheduleCard extends ConsumerWidget {
     }
   }
 
+  Future<void> _editNotes(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController(text: booking.notes ?? '');
+    final newNotes = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Appointment notes'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Add notes for this appointment...'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(controller.text), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (newNotes == null || !context.mounted) return;
+
+    try {
+      await updateBookingNotes(ref.read(apiServiceProvider), booking.id, newNotes);
+      ref.invalidate(myScheduleProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notes saved.')));
+      }
+    } on BookingRequestException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final color = parseHexColor(booking.colorHex) ?? AppColors.primary;
@@ -138,16 +171,27 @@ class _ScheduleCard extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   StatusBadge(status: booking.status),
+                  if (booking.notes != null && booking.notes!.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      booking.notes!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                    ),
+                  ],
                 ],
               ),
             ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
-              onSelected: (status) => _setStatus(context, ref, status),
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'InProgress', child: Text('Mark In progress')),
-                PopupMenuItem(value: 'Completed', child: Text('Mark Completed')),
-                PopupMenuItem(value: 'NoShow', child: Text('Mark No-show')),
+              onSelected: (value) => value == 'notes' ? _editNotes(context, ref) : _setStatus(context, ref, value),
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'InProgress', child: Text('Mark In progress')),
+                const PopupMenuItem(value: 'Completed', child: Text('Mark Completed')),
+                const PopupMenuItem(value: 'NoShow', child: Text('Mark No-show')),
+                const PopupMenuDivider(),
+                const PopupMenuItem(value: 'notes', child: Text('Add/edit notes')),
               ],
             ),
           ],

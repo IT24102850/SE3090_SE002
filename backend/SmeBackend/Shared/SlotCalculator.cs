@@ -16,8 +16,14 @@ public static class SlotCalculator
         int bufferBeforeMinutes,
         int bufferAfterMinutes,
         IReadOnlyList<(DateTime StartTime, DateTime EndTime)> existingBookings,
-        DateTime now)
+        DateTime now,
+        bool isClosedException = false)
     {
+        // FR-AS6: a one-off closed date (holiday/closure) overrides the
+        // otherwise-open weekly schedule for just that day.
+        if (isClosedException)
+            return (false, new List<SlotResult>());
+
         if (schedule != null && !schedule.IsAvailable)
             return (false, new List<SlotResult>());
 

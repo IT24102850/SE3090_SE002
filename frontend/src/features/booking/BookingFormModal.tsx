@@ -36,6 +36,7 @@ export default function BookingFormModal({
   const [date, setDate] = useState(() => toISODate(defaultDate ?? new Date()));
   const [time, setTime] = useState('09:00');
   const [priority, setPriority] = useState<BookingPriority>('Normal');
+  const [attendeeCount, setAttendeeCount] = useState('');
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatUntil, setRepeatUntil] = useState(() => toISODate(addDays(defaultDate ?? new Date(), 28)));
   const [formError, setFormError] = useState<string | null>(null);
@@ -86,6 +87,7 @@ export default function BookingFormModal({
           startTime: start.toISOString(),
           endTime: end.toISOString(),
           priority,
+          attendeeCount: attendeeCount ? Number(attendeeCount) : undefined,
         }).unwrap();
         show('Booking created.', 'success');
       }
@@ -148,6 +150,19 @@ export default function BookingFormModal({
               <option value="Urgent">Urgent</option>
             </select>
           </div>
+          {!repeatWeekly && (
+            <div className="field">
+              <label>Attendee count</label>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                value={attendeeCount}
+                onChange={(e) => setAttendeeCount(e.target.value)}
+                placeholder="Optional, e.g. group size"
+              />
+            </div>
+          )}
           <div className="field">
             <label>Title</label>
             <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Optional" />

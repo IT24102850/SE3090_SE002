@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useGetAvailabilityGridQuery, useGetResourceScheduleQuery, useSetResourceScheduleMutation } from '../../api/bookingApi';
+import {
+  useAddScheduleExceptionMutation,
+  useGetAvailabilityGridQuery,
+  useGetResourceScheduleQuery,
+  useGetScheduleExceptionsQuery,
+  useRemoveScheduleExceptionMutation,
+  useSetResourceScheduleMutation,
+} from '../../api/bookingApi';
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
 import { addDays, toISODate } from '../../shared/dateUtils';
 import type { DaySchedule, Resource } from './types';
@@ -26,6 +33,10 @@ export default function ResourceDetailPanel({ resource, onClose }: { resource: R
   const { show } = useToast();
   const { data: scheduleData, isLoading: scheduleLoading } = useGetResourceScheduleQuery(resource.id);
   const [setSchedule, { isLoading: saving }] = useSetResourceScheduleMutation();
+  const { data: exceptions } = useGetScheduleExceptionsQuery(resource.id);
+  const [addException, { isLoading: addingException }] = useAddScheduleExceptionMutation();
+  const [removeException] = useRemoveScheduleExceptionMutation();
+  const [newExceptionDate, setNewExceptionDate] = useState('');
 
   const [days, setDays] = useState<DaySchedule[]>(defaultWeek());
 
@@ -53,6 +64,25 @@ export default function ResourceDetailPanel({ resource, onClose }: { resource: R
     }
   };
 
+  const handleAddException = async () => {
+    if (!newExceptionDate) return;
+    try {
+      await addException({ resourceId: resource.id, date: newExceptionDate }).unwrap();
+      setNewExceptionDate('');
+      show('Closed date added.', 'success');
+    } catch (err) {
+      show(apiErrorMessage(err, 'Could not add closed date.'), 'error');
+    }
+  };
+
+  const handleRemoveException = async (exceptionId: string) => {
+    try {
+      await removeException({ resourceId: resource.id, exceptionId }).unwrap();
+    } catch (err) {
+      show(apiErrorMessage(err, 'Could not remove closed date.'), 'error');
+    }
+  };
+
   return (
     <div className="card card-pad" style={{ marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
@@ -73,29 +103,77 @@ export default function ResourceDetailPanel({ resource, onClose }: { resource: R
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {days.map((d, idx) => (
-                <div key={d.dayOfWeek} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, width: 100 }}>
-                    <input type="checkbox" checked={d.isAvailable} onChange={(e) => updateDay(idx, { isAvailable: e.target.checked })} />
-                    {DAY_NAMES[d.dayOfWeek].slice(0, 3)}
-                  </label>
-                  <input
-                    className="input" type="time" style={{ padding: '4px 8px' }}
-                    value={d.startTime.slice(0, 5)}
-                    disabled={!d.isAvailable}
-                    onChange={(e) => updateDay(idx, { startTime: `${e.target.value}:00` })}
-                  />
-                  <span>–</span>
-                  <input
-                    className="input" type="time" style={{ padding: '4px 8px' }}
-                    value={d.endTime.slice(0, 5)}
-                    disabled={!d.isAvailable}
-                    onChange={(e) => updateDay(idx, { endTime: `${e.target.value}:00` })}
-                  />
+                <div key={d.dayOfWeek} style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingBottom: 6, borderBottom: '1px solid var(--color-border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, width: 100 }}>
+                      <input type="checkbox" checked={d.isAvailable} onChange={(e) => updateDay(idx, { isAvailable: e.target.checked })} />
+                      {DAY_NAMES[d.dayOfWeek].slice(0, 3)}
+                    </label>
+                    <input
+                      className="input" type="time" style={{ padding: '4px 8px' }}
+                      value={d.startTime.slice(0, 5)}
+                      disabled={!d.isAvailable}
+                      onChange={(e) => updateDay(idx, { startTime: `${e.target.value}:00` })}
+                    />
+                    <span>–</span>
+                    <input
+                      className="input" type="time" style={{ padding: '4px 8px' }}
+                      value={d.endTime.slice(0, 5)}
+                      disabled={!d.isAvailable}
+                      onChange={(e) => updateDay(idx, { endTime: `${e.target.value}:00` })}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--color-text-secondary)', paddingLeft: 106 }}>
+                    <span>Lunch break</span>
+                    <input
+                      className="input" type="time" style={{ padding: '2px 6px', fontSize: 11.5 }}
+                      value={d.lunchBreakStart ? d.lunchBreakStart.slice(0, 5) : ''}
+                      disabled={!d.isAvailable}
+                      onChange={(e) => updateDay(idx, { lunchBreakStart: e.target.value ? `${e.target.value}:00` : null })}
+                    />
+                    <span>–</span>
+                    <input
+                      className="input" type="time" style={{ padding: '2px 6px', fontSize: 11.5 }}
+                      value={d.lunchBreakEnd ? d.lunchBreakEnd.slice(0, 5) : ''}
+                      disabled={!d.isAvailable}
+                      onChange={(e) => updateDay(idx, { lunchBreakEnd: e.target.value ? `${e.target.value}:00` : null })}
+                    />
+                    <span style={{ marginLeft: 8 }}>Max hrs/day</span>
+                    <input
+                      className="input" type="number" min={0} step={0.5} style={{ padding: '2px 6px', fontSize: 11.5, width: 56 }}
+                      placeholder="8"
+                      value={d.maxDailyBookedHours ?? ''}
+                      disabled={!d.isAvailable}
+                      onChange={(e) => updateDay(idx, { maxDailyBookedHours: e.target.value ? Number(e.target.value) : null })}
+                    />
+                  </div>
                 </div>
               ))}
               <button className="btn btn-primary btn-sm" style={{ marginTop: 8, alignSelf: 'flex-start' }} onClick={handleSave} disabled={saving}>
                 {saving ? <span className="spinner" /> : 'Save schedule'}
               </button>
+            </div>
+          )}
+
+          <h4 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.03em', color: 'var(--color-text-secondary)', margin: '20px 0 10px' }}>
+            Closed dates (holidays)
+          </h4>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <input className="input" type="date" value={newExceptionDate} onChange={(e) => setNewExceptionDate(e.target.value)} style={{ padding: '4px 8px' }} />
+            <button className="btn btn-secondary btn-sm" onClick={handleAddException} disabled={!newExceptionDate || addingException}>
+              {addingException ? <span className="spinner" /> : 'Add'}
+            </button>
+          </div>
+          {(!exceptions || exceptions.length === 0) ? (
+            <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>No closed dates set.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {exceptions.map((ex) => (
+                <div key={ex.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+                  <span>{new Date(ex.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <button className="btn btn-ghost btn-sm" onClick={() => handleRemoveException(ex.id)}>Remove</button>
+                </div>
+              ))}
             </div>
           )}
         </div>

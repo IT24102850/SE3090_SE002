@@ -6,6 +6,10 @@ class User {
   final String tenantId;
   final String? branchId;
   final String? phone;
+  final String? address;
+  final String? insuranceProvider;
+  final String? insuranceNumber;
+  final String? medicalNotes;
 
   const User({
     required this.id,
@@ -15,6 +19,10 @@ class User {
     required this.tenantId,
     this.branchId,
     this.phone,
+    this.address,
+    this.insuranceProvider,
+    this.insuranceNumber,
+    this.medicalNotes,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -26,6 +34,10 @@ class User {
       tenantId: json['tenantId']?.toString() ?? '',
       branchId: json['branchId']?.toString(),
       phone: json['phone']?.toString(),
+      address: json['address']?.toString(),
+      insuranceProvider: json['insuranceProvider']?.toString(),
+      insuranceNumber: json['insuranceNumber']?.toString(),
+      medicalNotes: json['medicalNotes']?.toString(),
     );
   }
 
@@ -38,6 +50,10 @@ class User {
       'tenantId': tenantId,
       'branchId': branchId,
       'phone': phone,
+      'address': address,
+      'insuranceProvider': insuranceProvider,
+      'insuranceNumber': insuranceNumber,
+      'medicalNotes': medicalNotes,
     };
   }
 
@@ -49,6 +65,10 @@ class User {
     String? tenantId,
     String? branchId,
     String? phone,
+    String? address,
+    String? insuranceProvider,
+    String? insuranceNumber,
+    String? medicalNotes,
   }) {
     return User(
       id: id ?? this.id,
@@ -58,6 +78,10 @@ class User {
       tenantId: tenantId ?? this.tenantId,
       branchId: branchId ?? this.branchId,
       phone: phone ?? this.phone,
+      address: address ?? this.address,
+      insuranceProvider: insuranceProvider ?? this.insuranceProvider,
+      insuranceNumber: insuranceNumber ?? this.insuranceNumber,
+      medicalNotes: medicalNotes ?? this.medicalNotes,
     );
   }
 }

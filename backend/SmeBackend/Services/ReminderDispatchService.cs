@@ -1,16 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Shared;
 
 namespace SmeBackend.Services;
 
 /// FR-B6: automatically sends a reminder for every upcoming booking, instead
 /// of relying on staff to click "send reminder" (BookingsController's
 /// /remind endpoint, which stays available for on-demand/last-minute sends).
-/// Channel dispatch is simulated the same way the manual endpoint already
-/// simulates it — no SMS/WhatsApp/Email gateway is configured in this
-/// project, so a reminder is recorded as "Sent" for audit/demo purposes
-/// rather than actually delivered.
+/// Channel dispatch goes through the same IReminderChannelSender the manual
+/// endpoint uses, so both places log the same stubbed "would send" output
+/// until a real SMS/WhatsApp/Email gateway is configured.
 public class ReminderDispatchService : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(5);
@@ -53,6 +53,8 @@ public class ReminderDispatchService : BackgroundService
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var reminderSender = scope.ServiceProvider.GetRequiredService<IReminderChannelSender>();
+        var pushSender = scope.ServiceProvider.GetRequiredService<IPushNotificationSender>();
 
         var now = DateTime.UtcNow;
         var horizon = now.Add(ReminderLeadTime);
@@ -69,6 +71,8 @@ public class ReminderDispatchService : BackgroundService
 
         foreach (var booking in due)
         {
+            await reminderSender.SendAsync(booking, "Email");
+
             db.BookingReminders.Add(new BookingReminder
             {
                 BookingId = booking.Id,
@@ -78,6 +82,12 @@ public class ReminderDispatchService : BackgroundService
             });
             booking.ReminderSent = true;
             booking.UpdatedAt = now;
+
+            var reminderMessage = $"Reminder: you have an appointment on {booking.StartTime:MMM d, h:mm tt}.";
+            NotificationHelper.Queue(db, booking.TenantId, booking.BookedBy, "BookingReminder",
+                "Upcoming appointment", reminderMessage);
+
+            await pushSender.SendAsync(booking.TenantId, booking.BookedBy, "Upcoming appointment", reminderMessage);
         }
 
         await db.SaveChangesAsync(stoppingToken);

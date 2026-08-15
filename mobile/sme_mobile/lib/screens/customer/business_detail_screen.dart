@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/public_tenant_model.dart';
 import '../../models/resource_model.dart';
+import '../../models/tourism_subtype.dart';
 import '../../providers/booking_providers.dart';
+import '../../providers/tenant_profile_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/business_profile_header.dart';
 import '../../widgets/route_transitions.dart';
+import '../booking_dashboard_screen.dart';
 import 'booking_flow_screen.dart';
 
 class BusinessDetailScreen extends ConsumerStatefulWidget {
@@ -22,52 +26,45 @@ class _BusinessDetailScreenState extends ConsumerState<BusinessDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final tenant = widget.tenant;
-    final visual = BusinessTypeVisual.of(tenant.businessType);
     final branchesAsync = ref.watch(branchesProvider(tenant.id));
+
+    // Tourism tenants with a resolved sub-type get the themed dashboard
+    // (distinct terminology/fields per sub-type) instead of the generic
+    // resource list below. Tenants with no sub-type set yet (legacy data)
+    // or non-Tourism business types keep the existing behavior unchanged.
+    final resolvedSubType = tenant.businessType == 'Tourism'
+        ? TourismSubTypeParsing.fromTenantSubType(tenant.subType)
+        : null;
+    if (resolvedSubType != null) {
+      final branches = branchesAsync.valueOrNull ?? const [];
+      return BookingDashboardScreen(
+        tenant: tenant,
+        address: branches.isNotEmpty ? branches.first.address : null,
+        subType: resolvedSubType,
+        fetchAvailableResources: () async {
+          final resources = await ref.read(resourcesProvider((tenantId: tenant.id, branchId: null)).future);
+          return resources.where((r) => r.status == 'Available').toList();
+        },
+      );
+    }
+
+    final visual = BusinessTypeVisual.of(tenant.businessType);
+    final profileAsync = ref.watch(tenantProfileProvider(tenant.id));
 
     return Scaffold(
       backgroundColor: AppColors.surface,
+      appBar: AppBar(title: Text(tenant.businessName), backgroundColor: AppColors.ink, foregroundColor: Colors.white, elevation: 0),
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            pinned: true,
-            expandedHeight: 200,
-            backgroundColor: AppColors.ink,
-            foregroundColor: Colors.white,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(gradient: AppColors.heroGradientFor(visual.color)),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 48, 20, 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                          ),
-                          child: Icon(visual.icon, color: Colors.white, size: 30),
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          tenant.businessName,
-                          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          tenant.businessType,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+          SliverToBoxAdapter(
+            child: BusinessProfileHeader(
+              businessName: tenant.businessName,
+              address: null, // the branch address row below already covers this for the generic path
+              profile: profileAsync.valueOrNull,
+              hasError: profileAsync.hasError,
+              onRetry: () => ref.invalidate(tenantProfileProvider(tenant.id)),
+              themeColor: visual.color,
+              themeIcon: visual.icon,
             ),
           ),
           SliverToBoxAdapter(

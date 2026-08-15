@@ -20,8 +20,22 @@ public class RegisterDto
     public Guid TenantId { get; set; }
     
     public Guid? BranchId { get; set; }
-    
-    public UserRole Role { get; set; } = UserRole.Customer;
+
+    // No Role field: this is the public customer self-registration endpoint
+    // (POST /api/auth/register). Every account it creates is a Customer —
+    // Staff/Manager accounts are created by an Admin via
+    // POST /api/tenant/staff, which is [Authorize]-gated. Accepting a
+    // client-supplied Role here would let anyone self-elevate.
+}
+
+public class UpdateProfileDto
+{
+    public string? FullName { get; set; }
+    public string? Phone { get; set; }
+    public string? Address { get; set; }
+    public string? InsuranceProvider { get; set; }
+    public string? InsuranceNumber { get; set; }
+    public string? MedicalNotes { get; set; }
 }
 
 public class LoginDto
@@ -46,7 +60,12 @@ public class UserResponseDto
     public Guid Id { get; set; }
     public string Email { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;
     public Guid TenantId { get; set; }
     public Guid? BranchId { get; set; }
+    public string? Address { get; set; }
+    public string? InsuranceProvider { get; set; }
+    public string? InsuranceNumber { get; set; }
+    public string? MedicalNotes { get; set; }
 }

@@ -10,6 +10,7 @@ import {
   useGetWorkflowsQuery,
   useProposeScheduleMutation,
   useRejectWorkflowMutation,
+  useReviseWorkflowMutation,
 } from '../../api/bookingApi';
 import { formatTime } from '../../shared/dateUtils';
 import type { AgentWorkflow, WorkflowStep } from './types';
@@ -44,6 +45,7 @@ export default function AgentPlannerPage() {
   const [approveWorkflow] = useApproveWorkflowMutation();
   const [rejectWorkflow] = useRejectWorkflowMutation();
   const [applyWorkflow, { isLoading: applying }] = useApplyWorkflowMutation();
+  const [reviseWorkflow, { isLoading: revising }] = useReviseWorkflowMutation();
 
   const [objective, setObjective] = useState('Fit follow-up appointments this week');
   const [count, setCount] = useState(5);
@@ -102,6 +104,15 @@ export default function AgentPlannerPage() {
     }
   };
 
+  const handleRevise = async (id: string, steps: WorkflowStep[]) => {
+    try {
+      await reviseWorkflow({ id, plan: { steps, estimatedRevenueImpact: 0 } }).unwrap();
+      show('Plan revised — awaiting approval again.', 'success');
+    } catch (err) {
+      show(apiErrorMessage(err, 'Could not revise workflow.'), 'error');
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -155,7 +166,9 @@ export default function AgentPlannerPage() {
             onApprove={handleApprove}
             onReject={handleReject}
             onApply={handleApply}
+            onRevise={handleRevise}
             applying={applying}
+            revising={revising}
           />
         </div>
       )}
@@ -169,7 +182,15 @@ export default function AgentPlannerPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {workflows.map((w) => (
             <div className="card" style={{ padding: 20 }} key={w.id}>
-              <WorkflowCard workflow={w} onApprove={handleApprove} onReject={handleReject} onApply={handleApply} applying={applying} />
+              <WorkflowCard
+                workflow={w}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                onApply={handleApply}
+                onRevise={handleRevise}
+                applying={applying}
+                revising={revising}
+              />
             </div>
           ))}
         </div>
@@ -183,17 +204,31 @@ function WorkflowCard({
   onApprove,
   onReject,
   onApply,
+  onRevise,
   applying,
+  revising,
 }: {
   workflow: AgentWorkflow;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onApply: (id: string) => void;
+  onRevise: (id: string, steps: WorkflowStep[]) => void;
   applying: boolean;
+  revising: boolean;
 }) {
   const steps = parseSteps(workflow.planJson);
   const canApprove = workflow.approvalStatus === 'Pending';
   const canApply = (workflow.approvalStatus === 'Approved' || workflow.approvalStatus === 'NotRequired') && workflow.status !== 'Completed';
+
+  const [revisingOpen, setRevisingOpen] = useState(false);
+  const [excluded, setExcluded] = useState<Set<number>>(new Set());
+
+  const handleSaveRevision = () => {
+    const keptSteps = steps.filter((_, i) => !excluded.has(i));
+    onRevise(workflow.id, keptSteps);
+    setRevisingOpen(false);
+    setExcluded(new Set());
+  };
 
   return (
     <div>
@@ -221,7 +256,19 @@ function WorkflowCard({
       {steps.length > 0 && (
         <ul style={{ margin: '12px 0 0', paddingLeft: 18, fontSize: 13 }}>
           {steps.slice(0, 10).map((s, i) => (
-            <li key={i}>
+            <li key={i} style={{ opacity: revisingOpen && excluded.has(i) ? 0.4 : 1 }}>
+              {revisingOpen && (
+                <input
+                  type="checkbox"
+                  checked={!excluded.has(i)}
+                  onChange={(e) => setExcluded((prev) => {
+                    const next = new Set(prev);
+                    if (e.target.checked) next.delete(i); else next.add(i);
+                    return next;
+                  })}
+                  style={{ marginRight: 6 }}
+                />
+              )}
               {String(s.parameters?.resourceName ?? 'Resource')} — {formatTime(String(s.parameters?.startTime ?? ''))}
             </li>
           ))}
@@ -233,11 +280,37 @@ function WorkflowCard({
         <p style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', marginTop: 10 }}>{workflow.finalOutcome}</p>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-        {canApprove && (
+      {/* FR-AS23: audit trail — who decided, when, and why. */}
+      {(workflow.approvedBy || workflow.errorLog) && (
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 10 }}>
+          {workflow.approvedBy && workflow.approvedAt && (
+            <>Approved by {workflow.approvedBy} on {new Date(workflow.approvedAt).toLocaleString()}. </>
+          )}
+          {workflow.errorLog && workflow.approvalStatus === 'Rejected' && <>Rejected: {workflow.errorLog}</>}
+        </p>
+      )}
+      {workflow.completedAt && (
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+          Applied {new Date(workflow.completedAt).toLocaleString()}.
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+        {canApprove && !revisingOpen && (
           <>
             <button className="btn btn-primary btn-sm" onClick={() => onApprove(workflow.id)}>Approve</button>
             <button className="btn btn-secondary btn-sm" onClick={() => onReject(workflow.id)}>Reject</button>
+            {steps.length > 0 && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setRevisingOpen(true)}>Revise</button>
+            )}
+          </>
+        )}
+        {canApprove && revisingOpen && (
+          <>
+            <button className="btn btn-primary btn-sm" onClick={handleSaveRevision} disabled={revising || excluded.size === steps.length}>
+              {revising ? <span className="spinner" /> : 'Save revision'}
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setRevisingOpen(false); setExcluded(new Set()); }}>Cancel</button>
           </>
         )}
         {canApply && (

@@ -19,6 +19,7 @@ export const Sidebar: React.FC = () => {
     { path: '/bulk-schedule', label: 'Bulk Schedule', icon: '⚡', roles: ['Admin', 'Manager'] },
     { path: '/agent-workflows', label: 'AI Workflows', icon: '🤖', roles: ['Admin', 'Manager', 'Staff'] },
     { path: '/my-bookings', label: 'My Bookings', icon: '🎫', roles: ['Customer'] },
+    { path: '/business-profile', label: 'Business Profile', icon: '🏬', roles: ['Admin', 'Manager'] },
     { path: '/settings', label: 'Settings', icon: '⚙️', roles: ['Admin', 'Manager', 'Staff', 'Customer'] },
   ];
 

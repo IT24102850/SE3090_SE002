@@ -9,9 +9,14 @@ import type {
   Branch,
   ConflictPair,
   DaySchedule,
+  NotificationItem,
   PagedResult,
   Resource,
+  ScheduleException,
   StaffUser,
+  Tenant,
+  TenantProfile,
+  UpdateTenantProfileBody,
 } from '../features/booking/types';
 
 const API_BASE_URL = 'http://localhost:5298/api';
@@ -26,12 +31,99 @@ export const bookingApi = createApi({
       return headers;
     },
   }),
-  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow'],
+  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification'],
   endpoints: (builder) => ({
     // ── Branches ──────────────────────────────────────────
     getBranches: builder.query<Branch[], { tenantId: string }>({
       query: (params) => ({ url: '/branches', params }),
       providesTags: [{ type: 'Branch', id: 'LIST' }],
+    }),
+    createBranch: builder.mutation<Branch, { tenantId: string; name: string; address?: string; phone?: string }>({
+      query: (body) => ({ url: '/branches', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Branch', id: 'LIST' }],
+    }),
+    updateBranch: builder.mutation<Branch, { id: string; body: Partial<Branch> & { isActive?: boolean } }>({
+      query: ({ id, body }) => ({ url: `/branches/${id}`, method: 'PUT', body }),
+      invalidatesTags: [{ type: 'Branch', id: 'LIST' }],
+    }),
+    deleteBranch: builder.mutation<void, string>({
+      query: (id) => ({ url: `/branches/${id}`, method: 'DELETE' }),
+      invalidatesTags: [{ type: 'Branch', id: 'LIST' }],
+    }),
+
+    // ── Tenant settings (FR-AS4/AS11) ──────────────────────
+    getTenant: builder.query<Tenant, { tenantId: string }>({
+      query: (params) => ({ url: '/tenant', params }),
+      providesTags: [{ type: 'Tenant', id: 'CURRENT' }],
+    }),
+    updateTenant: builder.mutation<Tenant, Partial<Pick<Tenant, 'name' | 'logoUrl' | 'rescheduleCutoffHours' | 'cancellationCutoffHours' | 'subType'>>>({
+      query: (body) => ({ url: '/tenant', method: 'PUT', body }),
+      invalidatesTags: [{ type: 'Tenant', id: 'CURRENT' }],
+    }),
+
+    // ── Business Profile (shared, business-type-agnostic listing page) ──
+    getTenantProfile: builder.query<TenantProfile, { tenantId: string }>({
+      query: ({ tenantId }) => `/tenants/${tenantId}/profile`,
+      providesTags: (_r, _e, { tenantId }) => [{ type: 'Tenant', id: tenantId }],
+    }),
+    updateTenantProfile: builder.mutation<TenantProfile, { tenantId: string; body: UpdateTenantProfileBody }>({
+      query: ({ tenantId, body }) => ({ url: `/tenants/${tenantId}/profile`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { tenantId }) => [{ type: 'Tenant', id: tenantId }],
+    }),
+    setTenantLogo: builder.mutation<{ logoUrl: string }, { tenantId: string; imageUrl: string }>({
+      query: ({ tenantId, imageUrl }) => ({ url: `/tenants/${tenantId}/logo`, method: 'PUT', body: { imageUrl } }),
+      invalidatesTags: (_r, _e, { tenantId }) => [{ type: 'Tenant', id: tenantId }],
+    }),
+    setTenantCoverImage: builder.mutation<{ coverImageUrl: string }, { tenantId: string; imageUrl: string }>({
+      query: ({ tenantId, imageUrl }) => ({ url: `/tenants/${tenantId}/cover-image`, method: 'PUT', body: { imageUrl } }),
+      invalidatesTags: (_r, _e, { tenantId }) => [{ type: 'Tenant', id: tenantId }],
+    }),
+    addGalleryImage: builder.mutation<{ galleryImageUrls: string[] }, { tenantId: string; imageUrl: string }>({
+      query: ({ tenantId, imageUrl }) => ({ url: `/tenants/${tenantId}/gallery-images`, method: 'POST', body: { imageUrl } }),
+      invalidatesTags: (_r, _e, { tenantId }) => [{ type: 'Tenant', id: tenantId }],
+    }),
+    removeGalleryImage: builder.mutation<{ galleryImageUrls: string[] }, { tenantId: string; index: number }>({
+      query: ({ tenantId, index }) => ({ url: `/tenants/${tenantId}/gallery-images/${index}`, method: 'DELETE' }),
+      invalidatesTags: (_r, _e, { tenantId }) => [{ type: 'Tenant', id: tenantId }],
+    }),
+    reorderGalleryImages: builder.mutation<{ galleryImageUrls: string[] }, { tenantId: string; orderedUrls: string[] }>({
+      query: ({ tenantId, orderedUrls }) => ({ url: `/tenants/${tenantId}/gallery-images/reorder`, method: 'PUT', body: { orderedUrls } }),
+      invalidatesTags: (_r, _e, { tenantId }) => [{ type: 'Tenant', id: tenantId }],
+    }),
+    uploadMedia: builder.mutation<{ url: string; publicId: string }, { file: File; purpose: 'logo' | 'cover' | 'gallery' }>({
+      query: ({ file, purpose }) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('purpose', purpose);
+        return { url: '/media/upload', method: 'POST', body: formData };
+      },
+    }),
+    deleteMedia: builder.mutation<void, { publicId: string }>({
+      query: ({ publicId }) => ({ url: `/media/${encodeURIComponent(publicId)}`, method: 'DELETE' }),
+    }),
+
+    // ── Staff management (FR-AS2) ──────────────────────────
+    createStaff: builder.mutation<StaffUser, { email: string; password: string; fullName: string; phone?: string; branchId?: string; role: 'Staff' | 'Manager' }>({
+      query: (body) => ({ url: '/tenant/staff', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Staff', id: 'LIST' }],
+    }),
+    updateStaffMember: builder.mutation<StaffUser, { id: string; branchId?: string | null; isActive?: boolean }>({
+      query: ({ id, ...body }) => ({ url: `/tenant/staff/${id}`, method: 'PUT', body }),
+      invalidatesTags: [{ type: 'Staff', id: 'LIST' }],
+    }),
+
+    // ── Notifications (FR-C11/FR-AS21) ─────────────────────
+    getNotifications: builder.query<{ items: NotificationItem[]; total: number }, void>({
+      query: () => '/notifications',
+      providesTags: [{ type: 'Notification', id: 'LIST' }],
+    }),
+    getUnreadNotificationCount: builder.query<{ count: number }, void>({
+      query: () => '/notifications/unread-count',
+      providesTags: [{ type: 'Notification', id: 'COUNT' }],
+    }),
+    markNotificationRead: builder.mutation<void, string>({
+      query: (id) => ({ url: `/notifications/${id}/read`, method: 'PUT' }),
+      invalidatesTags: [{ type: 'Notification', id: 'LIST' }, { type: 'Notification', id: 'COUNT' }],
     }),
 
     // ── Bookings ──────────────────────────────────────────
@@ -88,7 +180,7 @@ export const bookingApi = createApi({
     }),
     updateBookingStatus: builder.mutation<unknown, { id: string; status: string }>({
       query: ({ id, status }) => ({ url: `/bookings/${id}/status`, method: 'PUT', body: { status } }),
-      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Booking', id: 'MINE' }],
     }),
     sendReminder: builder.mutation<{ message: string }, { id: string; channel: string }>({
       query: ({ id, channel }) => ({ url: `/bookings/${id}/remind`, method: 'POST', body: { channel } }),
@@ -118,6 +210,15 @@ export const bookingApi = createApi({
     >({
       query: (body) => ({ url: '/bookings/recurring', method: 'POST', body }),
       invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    // FR-AS8: the logged-in doctor/staff member's own schedule.
+    getMySchedule: builder.query<Booking[], { date?: string } | void>({
+      query: (params) => ({ url: '/bookings/my-schedule', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'MINE' }],
+    }),
+    checkInBooking: builder.mutation<{ message: string }, string>({
+      query: (id) => ({ url: `/bookings/${id}/checkin`, method: 'POST' }),
+      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }],
     }),
     getNoShowStats: builder.query<
       { total: number; noShows: number; completed: number; cancelled: number; noShowRate: number; utilizationRate: number },
@@ -168,6 +269,20 @@ export const bookingApi = createApi({
       query: ({ id, from, to }) => ({ url: `/resources/${id}/availability-grid`, params: { from, to } }),
     }),
 
+    // FR-AS6: one-off closed dates (holidays/closures) on top of the weekly hours.
+    getScheduleExceptions: builder.query<ScheduleException[], string>({
+      query: (resourceId) => `/resources/${resourceId}/schedule-exceptions`,
+      providesTags: (_r, _e, resourceId) => [{ type: 'ScheduleException', id: resourceId }],
+    }),
+    addScheduleException: builder.mutation<ScheduleException, { resourceId: string; date: string; reason?: string }>({
+      query: ({ resourceId, ...body }) => ({ url: `/resources/${resourceId}/schedule-exceptions`, method: 'POST', body }),
+      invalidatesTags: (_r, _e, { resourceId }) => [{ type: 'ScheduleException', id: resourceId }],
+    }),
+    removeScheduleException: builder.mutation<void, { resourceId: string; exceptionId: string }>({
+      query: ({ resourceId, exceptionId }) => ({ url: `/resources/${resourceId}/schedule-exceptions/${exceptionId}`, method: 'DELETE' }),
+      invalidatesTags: (_r, _e, { resourceId }) => [{ type: 'ScheduleException', id: resourceId }],
+    }),
+
     // ── Booking Types ─────────────────────────────────────
     getBookingTypes: builder.query<BookingType[], { tenantId: string; status?: string }>({
       query: (params) => ({ url: '/bookingtypes', params }),
@@ -187,7 +302,7 @@ export const bookingApi = createApi({
     }),
 
     // ── Staff directory (for linking a doctor resource to a login) ────────
-    getStaffUsers: builder.query<StaffUser[], { tenantId: string }>({
+    getStaffUsers: builder.query<StaffUser[], { tenantId: string; includeInactive?: boolean }>({
       query: (params) => ({ url: '/tenant/staff', params }),
       providesTags: [{ type: 'Staff', id: 'LIST' }],
     }),
@@ -219,11 +334,40 @@ export const bookingApi = createApi({
       query: (id) => ({ url: `/agent/workflow/${id}/apply`, method: 'POST' }),
       invalidatesTags: (_r, _e, id) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }, { type: 'Booking', id: 'LIST' }],
     }),
+    reviseWorkflow: builder.mutation<AgentWorkflow, { id: string; plan: { steps: unknown[]; estimatedRevenueImpact: number } }>({
+      query: ({ id, plan }) => ({ url: `/agent/workflow/${id}/revise`, method: 'POST', body: { plan } }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }],
+    }),
   }),
 });
 
 export const {
   useGetBranchesQuery,
+  useCreateBranchMutation,
+  useUpdateBranchMutation,
+  useDeleteBranchMutation,
+  useGetTenantQuery,
+  useUpdateTenantMutation,
+  useCreateStaffMutation,
+  useUpdateStaffMemberMutation,
+  useGetNotificationsQuery,
+  useGetUnreadNotificationCountQuery,
+  useMarkNotificationReadMutation,
+  useGetMyScheduleQuery,
+  useCheckInBookingMutation,
+  useGetScheduleExceptionsQuery,
+  useAddScheduleExceptionMutation,
+  useRemoveScheduleExceptionMutation,
+  useReviseWorkflowMutation,
+  useGetTenantProfileQuery,
+  useUpdateTenantProfileMutation,
+  useSetTenantLogoMutation,
+  useSetTenantCoverImageMutation,
+  useAddGalleryImageMutation,
+  useRemoveGalleryImageMutation,
+  useReorderGalleryImagesMutation,
+  useUploadMediaMutation,
+  useDeleteMediaMutation,
   useGetBookingsQuery,
   useGetBookingQuery,
   useCreateBookingMutation,

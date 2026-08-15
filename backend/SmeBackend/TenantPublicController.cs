@@ -21,6 +21,7 @@ namespace SmeBackend.Controllers
                     t.Id,
                     t.Name,
                     BusinessType = t.BusinessType,
+                    t.SubType,
                     t.LogoUrl
                 })
                 .ToListAsync();

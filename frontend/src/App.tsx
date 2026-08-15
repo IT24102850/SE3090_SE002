@@ -15,6 +15,12 @@ import ResourceManagerPage from './features/booking/ResourceManagerPage';
 import MultiBranchSchedulePage from './features/booking/MultiBranchSchedulePage';
 import ReportsPage from './features/booking/ReportsPage';
 import AgentPlannerPage from './features/booking/AgentPlannerPage';
+import BookingTypeManagementPage from './features/booking/BookingTypeManagementPage';
+import MySchedulePage from './features/staff/MySchedulePage';
+import StaffManagementPage from './features/staff/StaffManagementPage';
+import BranchesPage from './features/branches/BranchesPage';
+import BusinessSettingsPage from './features/settings/BusinessSettingsPage';
+import BusinessProfilePage from './features/settings/BusinessProfilePage';
 
 const AuthInitializer = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
@@ -96,6 +102,60 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
                     <Shell><AgentPlannerPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/booking-types"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><BookingTypeManagementPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/my-schedule"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><MySchedulePage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/staff"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><StaffManagementPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/branches"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin']}>
+                    <Shell><BranchesPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin']}>
+                    <Shell><BusinessSettingsPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/business-profile"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><BusinessProfilePage /></Shell>
                   </ProtectedRoute>
                 }
               />

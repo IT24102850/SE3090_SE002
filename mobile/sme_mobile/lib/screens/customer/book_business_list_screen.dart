@@ -6,8 +6,8 @@ import '../../providers/public_tenant_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/route_transitions.dart';
 import '../login_screen.dart';
-import '../register_screen.dart';
 import 'business_detail_screen.dart';
+import 'customer_register_screen.dart';
 
 class BookBusinessListScreen extends ConsumerStatefulWidget {
   const BookBusinessListScreen({super.key});
@@ -76,9 +76,16 @@ class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen>
                 width: double.infinity,
                 height: 48,
                 child: OutlinedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.pop(sheetContext);
-                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RegisterScreen()));
+                    final signedUp = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(builder: (_) => CustomerRegisterScreen(tenant: tenant)),
+                    );
+                    // Signed up as this tenant's customer — continue straight
+                    // into their business page instead of dropping back to the list.
+                    if (signedUp == true && mounted) {
+                      Navigator.of(context).push(slideFadeRoute(BusinessDetailScreen(tenant: tenant)));
+                    }
                   },
                   style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                   child: const Text('Create Account'),

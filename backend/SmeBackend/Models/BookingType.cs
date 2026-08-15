@@ -44,6 +44,21 @@ public class BookingType
 
     public int BufferMinutesAfter { get; set; } = 0;
 
+    // "Slot" (fixed-duration time slot, the original/default shape) | "Night"
+    // (check-in/check-out, e.g. homestays) | "DateRange" (multi-day, e.g.
+    // vehicle rental) | "Package" (multi-day itinerary against one primary
+    // resource - see docs/tourism-business-template.md). Existing rows
+    // default to "Slot" so every pre-existing business type is unaffected.
+    [MaxLength(20)]
+    public string BookingUnit { get; set; } = "Slot";
+
+    // Free-form per-bookingUnit/per-tourism-subtype config (capacity,
+    // weather-dependent, cancellation cutoff/refund, check-in/out time,
+    // itinerary, ...) - same config-not-code pattern as
+    // Resource.CustomAttributes and TenantModule.ConfigJson.
+    [Column(TypeName = "jsonb")]
+    public string? ConfigJson { get; set; }
+
     [Column(TypeName = "jsonb")]
     public string? CancellationPolicy { get; set; }
 

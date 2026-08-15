@@ -1,13 +1,15 @@
 ﻿import { useState } from 'react';
 import axios from 'axios';
+import { TOURISM_SUB_TYPES } from '../features/booking/types';
 
 const RegisterPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   const [form, setForm] = useState({
     businessName: '',
     businessType: 'Clinic',
+    subType: '',
     address: '',
     phone: '',
     adminEmail: '',
@@ -17,7 +19,12 @@ const RegisterPage = () => {
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'businessType' && value !== 'Tourism' ? { subType: '' } : {}),
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,6 +69,12 @@ const RegisterPage = () => {
           <option value="Tourism">Tourism</option>
           <option value="General">General</option>
         </select>
+        {form.businessType === 'Tourism' && (
+          <select name="subType" value={form.subType} onChange={handleChange} style={inputStyle}>
+            <option value="">Select tourism sub-type...</option>
+            {TOURISM_SUB_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        )}
         <input name="address" placeholder="Address" value={form.address} onChange={handleChange} style={inputStyle} />
         <input name="phone" placeholder="Business Phone" value={form.phone} onChange={handleChange} style={inputStyle} />
 

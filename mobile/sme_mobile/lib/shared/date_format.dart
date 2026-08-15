@@ -20,3 +20,14 @@ const _months = [
 String formatWeekday(DateTime d) => _weekdays[d.weekday - 1];
 String formatDayMonth(DateTime d) => '${d.day} ${_months[d.month - 1]}';
 String formatFullDate(DateTime d) => '${formatWeekday(d)}, ${formatDayMonth(d)} ${d.year}';
+
+/// Shared rendering for Night/DateRange/Package bookings (see
+/// docs/tourism-business-template.md) - used by the confirm/success/my
+/// bookings screens so the branch isn't duplicated in three places.
+String formatDateRangeSummary(DateTime start, DateTime end, {required bool nights}) {
+  final startDay = DateTime(start.year, start.month, start.day);
+  final endDay = DateTime(end.year, end.month, end.day);
+  final count = endDay.difference(startDay).inDays;
+  final unitLabel = nights ? (count == 1 ? 'night' : 'nights') : (count == 1 ? 'day' : 'days');
+  return '${formatDayMonth(start)} → ${formatDayMonth(end)} · $count $unitLabel';
+}

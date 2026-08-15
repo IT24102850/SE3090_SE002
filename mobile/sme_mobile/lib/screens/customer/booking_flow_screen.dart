@@ -1,24 +1,64 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/available_slot_model.dart';
 import '../../models/booking_type_model.dart';
 import '../../models/public_tenant_model.dart';
 import '../../models/resource_model.dart';
+import '../../models/subtype_dashboard_config.dart';
+import '../../models/tourism_subtype.dart';
 import '../../providers/api_service_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/booking_providers.dart';
+import '../../registry/tourism_dashboard_registry.dart';
 import '../../shared/color_utils.dart';
 import '../../shared/date_format.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/booking_field_input.dart';
+import '../../widgets/date_range_picker.dart';
 import '../../widgets/date_slot_picker.dart';
 import '../../widgets/route_transitions.dart';
 import 'booking_success_screen.dart';
 
+/// Unifies Slot's [AvailableSlot] and Night/DateRange/Package's picked
+/// start/end dates into one shape [_ConfirmStep]/[_confirmBooking] work
+/// with, so neither has to branch on booking unit internally.
+typedef BookingWindow = ({DateTime startLocal, DateTime endLocal, String startIso, String endIso});
+
+({int hour, int minute}) _parseTimeOfDay(String? value, {required int fallbackHour, required int fallbackMinute}) {
+  if (value != null) {
+    final parts = value.split(':');
+    final h = int.tryParse(parts.elementAt(0));
+    final m = parts.length > 1 ? int.tryParse(parts.elementAt(1)) : 0;
+    if (h != null && m != null) return (hour: h, minute: m);
+  }
+  return (hour: fallbackHour, minute: fallbackMinute);
+}
+
+BookingWindow _rangeToWindow(DateTime start, DateTime end, BookingType type) {
+  final config = type.config;
+  if (type.bookingUnit == 'Night') {
+    final checkIn = _parseTimeOfDay(config?['checkInTime'] as String?, fallbackHour: 14, fallbackMinute: 0);
+    final checkOut = _parseTimeOfDay(config?['checkOutTime'] as String?, fallbackHour: 11, fallbackMinute: 0);
+    final startLocal = DateTime(start.year, start.month, start.day, checkIn.hour, checkIn.minute);
+    final endLocal = DateTime(end.year, end.month, end.day, checkOut.hour, checkOut.minute);
+    return (startLocal: startLocal, endLocal: endLocal, startIso: startLocal.toUtc().toIso8601String(), endIso: endLocal.toUtc().toIso8601String());
+  }
+  final startLocal = DateTime(start.year, start.month, start.day);
+  final endLocal = DateTime(end.year, end.month, end.day, 23, 59);
+  return (startLocal: startLocal, endLocal: endLocal, startIso: startLocal.toUtc().toIso8601String(), endIso: endLocal.toUtc().toIso8601String());
+}
+
 class BookingFlowScreen extends ConsumerStatefulWidget {
   final PublicTenant tenant;
   final Resource resource;
+  // Resolved tourism sub-type (see models/tourism_subtype.dart), null for
+  // non-Tourism tenants or Tourism tenants with no sub-type set - in both
+  // cases the wizard behaves exactly as before (no extra step).
+  final TourismSubType? subType;
 
-  const BookingFlowScreen({super.key, required this.tenant, required this.resource});
+  const BookingFlowScreen({super.key, required this.tenant, required this.resource, this.subType});
 
   @override
   ConsumerState<BookingFlowScreen> createState() => _BookingFlowScreenState();
@@ -29,13 +69,37 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
   BookingType? _selectedType;
   DateTime? _selectedDate;
   AvailableSlot? _selectedSlot;
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
   int _attendeeCount = 1;
   final _notesController = TextEditingController();
   bool _submitting = false;
   bool _repeatWeekly = false;
   DateTime? _repeatUntil;
+  final Map<String, dynamic> _extraFieldValues = {};
 
   Color get _accent => BusinessTypeVisual.of(widget.tenant.businessType).color;
+
+  List<BookingFormField> get _extraFields =>
+      widget.subType == null ? const [] : TourismDashboardRegistry.configFor(widget.subType!).bookingFormFields;
+
+  bool get _hasExtraStep => _extraFields.isNotEmpty;
+
+  // Step after date/time is always index 2, whether that's the extra-fields
+  // step (when the sub-type has any) or confirm directly (when it doesn't).
+  int get _confirmStepIndex => _hasExtraStep ? 3 : 2;
+
+  BookingWindow? get _window {
+    final type = _selectedType;
+    if (type == null) return null;
+    if (type.bookingUnit == 'Slot') {
+      final s = _selectedSlot;
+      if (s == null) return null;
+      return (startLocal: s.startLocal, endLocal: s.endLocal, startIso: s.startTime, endIso: s.endTime);
+    }
+    if (_rangeStart == null || _rangeEnd == null) return null;
+    return _rangeToWindow(_rangeStart!, _rangeEnd!, type);
+  }
 
   @override
   void dispose() {
@@ -53,9 +117,9 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
 
   Future<void> _confirmBooking() async {
     final user = ref.read(authProvider).user;
-    final slot = _selectedSlot;
+    final window = _window;
     final type = _selectedType;
-    if (user == null || slot == null || type == null) return;
+    if (user == null || window == null || type == null) return;
 
     if (_repeatWeekly && _repeatUntil == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -74,7 +138,7 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
           resourceId: widget.resource.id,
           bookingTypeId: type.id,
           bookedBy: user.id,
-          firstStartTimeIso: slot.startTime,
+          firstStartTimeIso: window.startIso,
           durationMinutes: type.defaultDurationMinutes,
           endDate: toApiDateString(_repeatUntil!),
           title: '${type.name} — ${widget.resource.name}',
@@ -97,11 +161,12 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
         resourceId: widget.resource.id,
         bookingTypeId: type.id,
         bookedBy: user.id,
-        startTimeIso: slot.startTime,
-        endTimeIso: slot.endTime,
+        startTimeIso: window.startIso,
+        endTimeIso: window.endIso,
         title: '${type.name} — ${widget.resource.name}',
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
         attendeeCount: (widget.resource.capacity ?? 1) > 1 ? _attendeeCount : null,
+        formData: _extraFieldValues.isEmpty ? null : jsonEncode(_extraFieldValues),
       );
 
       if (!mounted) return;
@@ -110,23 +175,34 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
         tenantName: widget.tenant.businessName,
         resourceName: widget.resource.name,
         bookingTypeName: type.name,
-        startLocal: slot.startLocal,
-        endLocal: slot.endLocal,
+        startLocal: window.startLocal,
+        endLocal: window.endLocal,
+        bookingUnit: type.bookingUnit,
         requiresApproval: type.requiresApproval,
         accentColor: _accent,
         bookingId: bookingId,
       )));
     } on BookingConflictException catch (e) {
       if (!mounted) return;
-      final query = (
-        resourceId: widget.resource.id,
-        date: toApiDateString(_selectedDate!),
-        duration: type.defaultDurationMinutes,
-        bookingTypeId: type.id,
-      );
-      ref.invalidate(availableSlotsProvider(query));
+      if (type.bookingUnit == 'Slot' && _selectedDate != null) {
+        ref.invalidate(availableSlotsProvider((
+          resourceId: widget.resource.id,
+          date: toApiDateString(_selectedDate!),
+          duration: type.defaultDurationMinutes,
+          bookingTypeId: type.id,
+        )));
+      } else {
+        final today = DateTime.now();
+        ref.invalidate(unavailableRangesProvider((
+          resourceId: widget.resource.id,
+          from: toApiDateString(DateTime(today.year, today.month, today.day)),
+          to: toApiDateString(DateTime(today.year, today.month, today.day).add(const Duration(days: 365))),
+        )));
+      }
       setState(() {
         _selectedSlot = null;
+        _rangeStart = null;
+        _rangeEnd = null;
         _step = 1;
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -145,50 +221,72 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _WizardHeader(step: _step, accent: _accent, onBack: _goBack, resourceName: widget.resource.name),
+            _WizardHeader(
+              step: _step,
+              accent: _accent,
+              onBack: _goBack,
+              resourceName: widget.resource.name,
+              labels: _hasExtraStep ? const ['Type', 'Date & time', 'Details', 'Confirm'] : const ['Type', 'Date & time', 'Confirm'],
+            ),
             Expanded(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 220),
-                child: switch (_step) {
-                  0 => _TypeStep(
-                      key: const ValueKey('type'),
-                      tenantId: widget.tenant.id,
-                      accent: _accent,
-                      onSelected: (type) => setState(() {
-                        _selectedType = type;
-                        _step = 1;
-                      }),
-                    ),
-                  1 => _DateTimeStep(
-                      key: const ValueKey('datetime'),
-                      resource: widget.resource,
-                      type: _selectedType!,
-                      accent: _accent,
-                      selectedSlotStartTime: _selectedSlot?.startTime,
-                      onSelected: (date, slot) => setState(() {
-                        _selectedDate = date;
-                        _selectedSlot = slot;
-                        _step = 2;
-                      }),
-                    ),
-                  _ => _ConfirmStep(
-                      key: const ValueKey('confirm'),
-                      tenant: widget.tenant,
-                      resource: widget.resource,
-                      type: _selectedType!,
-                      slot: _selectedSlot!,
-                      accent: _accent,
-                      notesController: _notesController,
-                      attendeeCount: _attendeeCount,
-                      onAttendeeChanged: (v) => setState(() => _attendeeCount = v),
-                      repeatWeekly: _repeatWeekly,
-                      onRepeatWeeklyChanged: (v) => setState(() => _repeatWeekly = v),
-                      repeatUntil: _repeatUntil,
-                      onRepeatUntilChanged: (v) => setState(() => _repeatUntil = v),
-                      submitting: _submitting,
-                      onConfirm: _confirmBooking,
-                    ),
-                },
+                child: _step == 0
+                    ? _TypeStep(
+                        key: const ValueKey('type'),
+                        tenantId: widget.tenant.id,
+                        accent: _accent,
+                        onSelected: (type) => setState(() {
+                          _selectedType = type;
+                          _step = 1;
+                        }),
+                      )
+                    : _step == 1
+                        ? _DateTimeStep(
+                            key: const ValueKey('datetime'),
+                            resource: widget.resource,
+                            type: _selectedType!,
+                            accent: _accent,
+                            selectedSlotStartTime: _selectedSlot?.startTime,
+                            initialRangeStart: _rangeStart,
+                            initialRangeEnd: _rangeEnd,
+                            onSlotSelected: (date, slot) => setState(() {
+                              _selectedDate = date;
+                              _selectedSlot = slot;
+                              _step = 2;
+                            }),
+                            onRangeSelected: (start, end) => setState(() {
+                              _rangeStart = start;
+                              _rangeEnd = end;
+                              _step = 2;
+                            }),
+                          )
+                        : (_hasExtraStep && _step == 2)
+                            ? _ExtraFieldsStep(
+                                key: const ValueKey('extra'),
+                                fields: _extraFields,
+                                accent: _accent,
+                                values: _extraFieldValues,
+                                onChanged: (key, value) => setState(() => _extraFieldValues[key] = value),
+                                onContinue: () => setState(() => _step = _confirmStepIndex),
+                              )
+                            : _ConfirmStep(
+                                key: const ValueKey('confirm'),
+                                tenant: widget.tenant,
+                                resource: widget.resource,
+                                type: _selectedType!,
+                                window: _window!,
+                                accent: _accent,
+                                notesController: _notesController,
+                                attendeeCount: _attendeeCount,
+                                onAttendeeChanged: (v) => setState(() => _attendeeCount = v),
+                                repeatWeekly: _repeatWeekly,
+                                onRepeatWeeklyChanged: (v) => setState(() => _repeatWeekly = v),
+                                repeatUntil: _repeatUntil,
+                                onRepeatUntilChanged: (v) => setState(() => _repeatUntil = v),
+                                submitting: _submitting,
+                                onConfirm: _confirmBooking,
+                              ),
               ),
             ),
           ],
@@ -203,10 +301,17 @@ class _WizardHeader extends StatelessWidget {
   final Color accent;
   final VoidCallback onBack;
   final String resourceName;
+  final List<String> labels;
 
-  const _WizardHeader({required this.step, required this.accent, required this.onBack, required this.resourceName});
+  const _WizardHeader({
+    required this.step,
+    required this.accent,
+    required this.onBack,
+    required this.resourceName,
+    this.labels = const ['Type', 'Date & time', 'Confirm'],
+  });
 
-  static const _labels = ['Type', 'Date & time', 'Confirm'];
+  List<String> get _labels => labels;
 
   @override
   Widget build(BuildContext context) {
@@ -374,7 +479,10 @@ class _DateTimeStep extends StatelessWidget {
   final BookingType type;
   final Color accent;
   final String? selectedSlotStartTime;
-  final void Function(DateTime date, AvailableSlot slot) onSelected;
+  final DateTime? initialRangeStart;
+  final DateTime? initialRangeEnd;
+  final void Function(DateTime date, AvailableSlot slot) onSlotSelected;
+  final void Function(DateTime start, DateTime end) onRangeSelected;
 
   const _DateTimeStep({
     super.key,
@@ -382,7 +490,68 @@ class _DateTimeStep extends StatelessWidget {
     required this.type,
     required this.accent,
     required this.selectedSlotStartTime,
-    required this.onSelected,
+    required this.initialRangeStart,
+    required this.initialRangeEnd,
+    required this.onSlotSelected,
+    required this.onRangeSelected,
+  });
+
+  static const _titles = {
+    'Slot': 'Pick a date & time',
+    'Night': 'Pick your stay dates',
+    'DateRange': 'Pick your rental dates',
+    'Package': 'Pick your tour dates',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+      children: [
+        Text(_titles[type.bookingUnit] ?? _titles['Slot']!, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        if (type.bookingUnit == 'Slot')
+          DateSlotPicker(
+            resourceId: resource.id,
+            bookingTypeId: type.id,
+            durationMinutes: type.defaultDurationMinutes,
+            accentColor: accent,
+            selectedSlotStartTime: selectedSlotStartTime,
+            onSlotSelected: onSlotSelected,
+          )
+        else
+          DateRangePicker(
+            resourceId: resource.id,
+            bookingUnit: type.bookingUnit,
+            config: type.config,
+            accentColor: accent,
+            initialStart: initialRangeStart,
+            initialEnd: initialRangeEnd,
+            onRangeSelected: onRangeSelected,
+          ),
+      ],
+    );
+  }
+}
+
+/// One shared step (not one screen per sub-type) collecting the tourism
+/// sub-type's extra fields via [BookingFieldInput] - inserted between
+/// date/time and confirm only when the registry has fields for this
+/// business's sub-type (see TourismDashboardRegistry).
+class _ExtraFieldsStep extends StatelessWidget {
+  final List<BookingFormField> fields;
+  final Color accent;
+  final Map<String, dynamic> values;
+  final void Function(String key, dynamic value) onChanged;
+  final VoidCallback onContinue;
+
+  const _ExtraFieldsStep({
+    super.key,
+    required this.fields,
+    required this.accent,
+    required this.values,
+    required this.onChanged,
+    required this.onContinue,
   });
 
   @override
@@ -390,15 +559,24 @@ class _DateTimeStep extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
       children: [
-        Text('Pick a date & time', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        Text('A few more details', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
-        DateSlotPicker(
-          resourceId: resource.id,
-          bookingTypeId: type.id,
-          durationMinutes: type.defaultDurationMinutes,
-          accentColor: accent,
-          selectedSlotStartTime: selectedSlotStartTime,
-          onSlotSelected: onSelected,
+        ...fields.map((f) => Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: BookingFieldInput(
+                field: f,
+                value: values[f.key],
+                onChanged: (v) => onChanged(f.key, v),
+              ),
+            )),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 52,
+          child: ElevatedButton(
+            onPressed: onContinue,
+            style: ElevatedButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+            child: const Text('Continue', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ),
         ),
       ],
     );
@@ -409,7 +587,7 @@ class _ConfirmStep extends StatelessWidget {
   final PublicTenant tenant;
   final Resource resource;
   final BookingType type;
-  final AvailableSlot slot;
+  final BookingWindow window;
   final Color accent;
   final TextEditingController notesController;
   final int attendeeCount;
@@ -426,7 +604,7 @@ class _ConfirmStep extends StatelessWidget {
     required this.tenant,
     required this.resource,
     required this.type,
-    required this.slot,
+    required this.window,
     required this.accent,
     required this.notesController,
     required this.attendeeCount,
@@ -441,11 +619,13 @@ class _ConfirmStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final start = slot.startLocal;
-    final end = slot.endLocal;
+    final start = window.startLocal;
+    final end = window.endLocal;
+    final isSlot = type.bookingUnit == 'Slot';
+    final unitCount = isSlot ? null : DateTime(end.year, end.month, end.day).difference(DateTime(start.year, start.month, start.day)).inDays;
     final price = resource.hourlyRate == null
         ? null
-        : resource.hourlyRate! * (end.difference(start).inMinutes / 60);
+        : resource.hourlyRate! * (isSlot ? (end.difference(start).inMinutes / 60) : unitCount!);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -462,9 +642,15 @@ class _ConfirmStep extends StatelessWidget {
               const SizedBox(height: 2),
               Text('${resource.name} · ${type.name}', style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13)),
               const Divider(color: Colors.white24, height: 28),
-              _SummaryRow(icon: Icons.calendar_today_outlined, label: formatFullDate(start)),
-              const SizedBox(height: 8),
-              _SummaryRow(icon: Icons.access_time_rounded, label: '${formatTimeOfDay(start)} – ${formatTimeOfDay(end)}'),
+              if (isSlot) ...[
+                _SummaryRow(icon: Icons.calendar_today_outlined, label: formatFullDate(start)),
+                const SizedBox(height: 8),
+                _SummaryRow(icon: Icons.access_time_rounded, label: '${formatTimeOfDay(start)} – ${formatTimeOfDay(end)}'),
+              ] else
+                _SummaryRow(
+                  icon: Icons.calendar_today_outlined,
+                  label: formatDateRangeSummary(start, end, nights: type.bookingUnit == 'Night'),
+                ),
               if (price != null) ...[
                 const SizedBox(height: 8),
                 _SummaryRow(icon: Icons.payments_outlined, label: 'LKR ${price.toStringAsFixed(0)}'),
@@ -515,37 +701,39 @@ class _ConfirmStep extends StatelessWidget {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
-        const SizedBox(height: 20),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          value: repeatWeekly,
-          onChanged: onRepeatWeeklyChanged,
-          activeColor: accent,
-          title: const Text('Repeat weekly', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-          subtitle: const Text('e.g. weekly physiotherapy sessions', style: TextStyle(fontSize: 12)),
-        ),
-        if (repeatWeekly) ...[
-          const SizedBox(height: 8),
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: repeatUntil ?? slot.startLocal.add(const Duration(days: 28)),
-                firstDate: slot.startLocal,
-                lastDate: slot.startLocal.add(const Duration(days: 365)),
-              );
-              if (picked != null) onRepeatUntilChanged(picked);
-            },
-            child: InputDecorator(
-              decoration: InputDecoration(
-                labelText: 'Repeat until',
-                prefixIcon: const Icon(Icons.event_repeat_outlined),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: Text(repeatUntil == null ? 'Select a date' : formatFullDate(repeatUntil!)),
-            ),
+        if (isSlot) ...[
+          const SizedBox(height: 20),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: repeatWeekly,
+            onChanged: onRepeatWeeklyChanged,
+            activeColor: accent,
+            title: const Text('Repeat weekly', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            subtitle: const Text('e.g. weekly physiotherapy sessions', style: TextStyle(fontSize: 12)),
           ),
+          if (repeatWeekly) ...[
+            const SizedBox(height: 8),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: repeatUntil ?? start.add(const Duration(days: 28)),
+                  firstDate: start,
+                  lastDate: start.add(const Duration(days: 365)),
+                );
+                if (picked != null) onRepeatUntilChanged(picked);
+              },
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Repeat until',
+                  prefixIcon: const Icon(Icons.event_repeat_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(repeatUntil == null ? 'Select a date' : formatFullDate(repeatUntil!)),
+              ),
+            ),
+          ],
         ],
         const SizedBox(height: 24),
         SizedBox(

@@ -11,6 +11,12 @@ public class User : BaseEntity, ITenantScoped
     public string FullName { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.Customer;
-    
+
     public bool IsActive { get; set; } = true;
+
+    // FR-C2: self-service profile details (contact + medical/insurance).
+    public string? Address { get; set; }
+    public string? InsuranceProvider { get; set; }
+    public string? InsuranceNumber { get; set; }
+    public string? MedicalNotes { get; set; }
 }

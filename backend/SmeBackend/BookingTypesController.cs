@@ -36,7 +36,9 @@ public class BookingTypesController : ControllerBase
                 bt.RequiresApproval,
                 bt.MaxParticipants,
                 bt.BufferMinutesBefore,
-                bt.BufferMinutesAfter
+                bt.BufferMinutesAfter,
+                bt.BookingUnit,
+                bt.ConfigJson
             })
             .ToListAsync();
 
@@ -71,6 +73,8 @@ public class BookingTypesController : ControllerBase
             MaxParticipants = dto.MaxParticipants,
             BufferMinutesBefore = dto.BufferMinutesBefore ?? 0,
             BufferMinutesAfter = dto.BufferMinutesAfter ?? 0,
+            BookingUnit = string.IsNullOrEmpty(dto.BookingUnit) ? "Slot" : dto.BookingUnit,
+            ConfigJson = dto.ConfigJson,
             Status = BookingTypeStatus.Active
         };
 
@@ -95,6 +99,8 @@ public class BookingTypesController : ControllerBase
         if (dto.MaxParticipants.HasValue) bt.MaxParticipants = dto.MaxParticipants;
         if (dto.BufferMinutesBefore.HasValue) bt.BufferMinutesBefore = dto.BufferMinutesBefore.Value;
         if (dto.BufferMinutesAfter.HasValue) bt.BufferMinutesAfter = dto.BufferMinutesAfter.Value;
+        if (!string.IsNullOrEmpty(dto.BookingUnit)) bt.BookingUnit = dto.BookingUnit;
+        if (dto.ConfigJson != null) bt.ConfigJson = dto.ConfigJson;
         bt.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -129,7 +135,9 @@ public record CreateBookingTypeDto(
     bool? RequiresApproval,
     int? MaxParticipants,
     int? BufferMinutesBefore,
-    int? BufferMinutesAfter
+    int? BufferMinutesAfter,
+    string? BookingUnit,
+    string? ConfigJson
 );
 
 public record UpdateBookingTypeDto(
@@ -141,5 +149,7 @@ public record UpdateBookingTypeDto(
     bool? RequiresApproval,
     int? MaxParticipants,
     int? BufferMinutesBefore,
-    int? BufferMinutesAfter
+    int? BufferMinutesAfter,
+    string? BookingUnit,
+    string? ConfigJson
 );

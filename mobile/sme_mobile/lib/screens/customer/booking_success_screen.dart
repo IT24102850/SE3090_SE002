@@ -11,6 +11,7 @@ class BookingSuccessScreen extends StatefulWidget {
   final String bookingTypeName;
   final DateTime startLocal;
   final DateTime endLocal;
+  final String bookingUnit;
   final bool requiresApproval;
   final Color accentColor;
   final String bookingId;
@@ -22,6 +23,7 @@ class BookingSuccessScreen extends StatefulWidget {
     required this.bookingTypeName,
     required this.startLocal,
     required this.endLocal,
+    this.bookingUnit = 'Slot',
     required this.requiresApproval,
     required this.accentColor,
     required this.bookingId,
@@ -93,13 +95,20 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> with Single
                   children: [
                     Text('${widget.resourceName} · ${widget.bookingTypeName}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 10),
-                    _Row(icon: Icons.calendar_today_outlined, label: formatFullDate(widget.startLocal), accent: widget.accentColor),
-                    const SizedBox(height: 8),
-                    _Row(
-                      icon: Icons.access_time_rounded,
-                      label: '${formatTimeOfDay(widget.startLocal)} – ${formatTimeOfDay(widget.endLocal)}',
-                      accent: widget.accentColor,
-                    ),
+                    if (widget.bookingUnit == 'Slot') ...[
+                      _Row(icon: Icons.calendar_today_outlined, label: formatFullDate(widget.startLocal), accent: widget.accentColor),
+                      const SizedBox(height: 8),
+                      _Row(
+                        icon: Icons.access_time_rounded,
+                        label: '${formatTimeOfDay(widget.startLocal)} – ${formatTimeOfDay(widget.endLocal)}',
+                        accent: widget.accentColor,
+                      ),
+                    ] else
+                      _Row(
+                        icon: Icons.calendar_today_outlined,
+                        label: formatDateRangeSummary(widget.startLocal, widget.endLocal, nights: widget.bookingUnit == 'Night'),
+                        accent: widget.accentColor,
+                      ),
                     const SizedBox(height: 8),
                     _Row(icon: Icons.confirmation_number_outlined, label: 'Ref: ${widget.bookingId.substring(0, 8).toUpperCase()}', accent: widget.accentColor),
                   ],

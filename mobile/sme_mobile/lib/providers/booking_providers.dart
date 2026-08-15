@@ -55,6 +55,34 @@ final availableSlotsProvider = FutureProvider.family<SlotsResult, SlotsQuery>((r
   return SlotsResult.fromJson(response.data as Map<String, dynamic>);
 });
 
+/// Which date ranges are already booked on this resource, for
+/// Night/DateRange/Package booking types - lets [DateRangePicker] grey out
+/// taken dates. Deliberately not [availableSlotsProvider], which is
+/// Slot-specific (fixed-duration sub-day windows).
+typedef UnavailableRangesQuery = ({String resourceId, String from, String to});
+
+final unavailableRangesProvider = FutureProvider.family<List<DateTimeRange>, UnavailableRangesQuery>((ref, q) async {
+  final dio = ref.watch(apiServiceProvider);
+  final response = await dio.get('/bookings/unavailable-ranges', queryParameters: {
+    'resourceId': q.resourceId,
+    'from': q.from,
+    'to': q.to,
+  });
+  final List<dynamic> data = response.data as List<dynamic>;
+  return data.map((j) {
+    final m = j as Map<String, dynamic>;
+    return DateTimeRange(start: DateTime.parse(m['startTime'].toString()), end: DateTime.parse(m['endTime'].toString()));
+  }).toList();
+});
+
+class DateTimeRange {
+  final DateTime start;
+  final DateTime end;
+  const DateTimeRange({required this.start, required this.end});
+
+  bool overlaps(DateTime dayStart, DateTime dayEnd) => start.isBefore(dayEnd) && end.isAfter(dayStart);
+}
+
 /// The current customer's own bookings, across every business they've
 /// booked with. Requires `bookedBy` support on GET /api/bookings.
 final myBookingsProvider = FutureProvider<List<Booking>>((ref) async {
@@ -119,6 +147,7 @@ Future<String> createBooking(
   String? title,
   String? notes,
   int? attendeeCount,
+  String? formData,
 }) async {
   try {
     final response = await dio.post('/bookings', data: {
@@ -132,6 +161,7 @@ Future<String> createBooking(
       'notes': notes,
       'priority': 'Normal',
       'attendeeCount': attendeeCount,
+      'formData': formData,
     });
     return (response.data as Map<String, dynamic>)['id'].toString();
   } on DioException catch (e) {
@@ -187,6 +217,15 @@ Future<void> updateBookingStatus(Dio dio, String bookingId, String status) async
   }
 }
 
+/// FR-B8: staff adds/edits an appointment's notes from their schedule.
+Future<void> updateBookingNotes(Dio dio, String bookingId, String notes) async {
+  try {
+    await dio.put('/bookings/$bookingId', data: {'notes': notes});
+  } on DioException catch (e) {
+    throw BookingRequestException(_extractApiMessage(e) ?? 'Could not save notes.');
+  }
+}
+
 /// FR-B9: creates a weekly recurring series. Echoes the same startTimeIso
 /// convention as [createBooking] — pass the exact slot ISO string, not a
 /// locally reconstructed DateTime.
@@ -226,6 +265,107 @@ Future<RecurringBookingResult> createRecurringBooking(
     throw BookingRequestException(_extractApiMessage(e) ?? 'Could not create the recurring series.');
   }
 }
+
+/// Outcome of the Gemini-powered agent pipeline (Planner -> Domain Analysis
+/// -> Action/Tool -> Validation/Safety) behind POST /api/agent/find-and-book.
+/// Mirrors AgentWorkflowController.FindAndBook's three possible outcomes:
+/// booked outright, sent for manager approval (high-impact), or rejected/failed.
+class AiPlanOutcome {
+  final String status; // Completed | AwaitingApproval | Rejected | Failed
+  final String message;
+  final String? bookingId;
+  final String? workflowId;
+
+  const AiPlanOutcome({required this.status, required this.message, this.bookingId, this.workflowId});
+
+  bool get isBooked => status == 'Completed' && bookingId != null;
+}
+
+/// Runs a customer's free-text objective ("find and book the best dive trip
+/// this weekend") through the full agentic-ai-service pipeline. Success (200)
+/// and awaiting-approval (202) both arrive as normal responses; the safety
+/// gate's rejection and any pipeline failure arrive as a 422 DioException.
+Future<AiPlanOutcome> findAndBook(
+  Dio dio, {
+  required String objective,
+  required String bookingTypeId,
+  DateTime? dateFrom,
+  DateTime? dateTo,
+}) async {
+  try {
+    final response = await dio.post('/agent/find-and-book', data: {
+      'objective': objective,
+      'dateFrom': dateFrom?.toUtc().toIso8601String(),
+      'dateTo': dateTo?.toUtc().toIso8601String(),
+      'extraConstraints': {'booking_type_id': bookingTypeId},
+    });
+    final data = response.data as Map<String, dynamic>;
+    if (response.statusCode == 202) {
+      return AiPlanOutcome(
+        status: 'AwaitingApproval',
+        message: data['message']?.toString() ?? 'This booking needs manager approval before it\'s confirmed.',
+        workflowId: data['workflowId']?.toString(),
+      );
+    }
+    return AiPlanOutcome(
+      status: data['status']?.toString() ?? 'Completed',
+      message: 'Booking confirmed!',
+      bookingId: data['bookingId']?.toString(),
+      workflowId: data['workflowId']?.toString(),
+    );
+  } on DioException catch (e) {
+    final data = e.response?.data;
+    final message = (data is Map ? data['message']?.toString() : null) ?? _extractApiMessage(e) ?? 'The AI planner could not complete this request.';
+    return AiPlanOutcome(
+      status: 'Rejected',
+      message: message,
+      workflowId: data is Map ? data['workflowId']?.toString() : null,
+    );
+  }
+}
+
+/// One of the caller's own agent-driven booking requests (GET
+/// /agent/workflow/mine), across every status. Used by MyAiRequestsScreen so
+/// a customer whose AI request went to AwaitingApproval has somewhere to
+/// track it after the fact — see AgentWorkflowController's Approve/Reject/
+/// Apply, which now notify (in-app + push) whoever's RequestedByUserId this
+/// matches.
+class MyAgentWorkflow {
+  final String id;
+  final String objective;
+  final String status; // Pending | AwaitingApproval | Approved | Rejected | Completed | Failed
+  final String? errorLog;
+  final String? finalOutcome;
+  final DateTime createdAt;
+  final DateTime? completedAt;
+
+  const MyAgentWorkflow({
+    required this.id,
+    required this.objective,
+    required this.status,
+    this.errorLog,
+    this.finalOutcome,
+    required this.createdAt,
+    this.completedAt,
+  });
+
+  factory MyAgentWorkflow.fromJson(Map<String, dynamic> json) => MyAgentWorkflow(
+        id: json['id'].toString(),
+        objective: json['objective']?.toString() ?? '',
+        status: json['status']?.toString() ?? 'Pending',
+        errorLog: json['errorLog']?.toString(),
+        finalOutcome: json['finalOutcome']?.toString(),
+        createdAt: DateTime.parse(json['createdAt'].toString()),
+        completedAt: json['completedAt'] == null ? null : DateTime.parse(json['completedAt'].toString()),
+      );
+}
+
+final myAgentWorkflowsProvider = FutureProvider<List<MyAgentWorkflow>>((ref) async {
+  final dio = ref.watch(apiServiceProvider);
+  final response = await dio.get('/agent/workflow/mine');
+  final List<dynamic> items = response.data as List<dynamic>;
+  return items.map((j) => MyAgentWorkflow.fromJson(j as Map<String, dynamic>)).toList();
+});
 
 class RecurringBookingResult {
   final bool requiresApproval;

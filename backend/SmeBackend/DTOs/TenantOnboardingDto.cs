@@ -9,7 +9,11 @@ public class TenantOnboardingDto
     
     [Required]
     public string BusinessType { get; set; } = string.Empty; // Clinic, Restaurant, Gym, School, RealEstate, Tourism, General
-    
+
+    // Finer-grained category within BusinessType - currently only used when
+    // BusinessType == "Tourism" (e.g. "Accommodation", "Water sports / diving").
+    public string? SubType { get; set; }
+
     public string? Address { get; set; }
     public string? Phone { get; set; }
     

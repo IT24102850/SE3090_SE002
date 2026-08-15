@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Services;
 using SmeBackend.Shared;
 using System.Text.Json;
 
@@ -14,7 +15,17 @@ namespace SmeBackend.Controllers;
 public class AgentWorkflowController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public AgentWorkflowController(AppDbContext db) => _db = db;
+    private readonly IPlannerAgentService _plannerAgentService;
+    private readonly IJwtService _jwtService;
+    private readonly IPushNotificationSender _pushSender;
+
+    public AgentWorkflowController(AppDbContext db, IPlannerAgentService plannerAgentService, IJwtService jwtService, IPushNotificationSender pushSender)
+    {
+        _db = db;
+        _plannerAgentService = plannerAgentService;
+        _jwtService = jwtService;
+        _pushSender = pushSender;
+    }
 
     [HttpPost]
     [Authorize(Roles = "Admin,Manager")]
@@ -205,14 +216,142 @@ public class AgentWorkflowController : ControllerBase
         wf.CompletedAt = DateTime.UtcNow;
         wf.FinalOutcome = $"Applied: {created} booking(s) created, {skipped} skipped.";
         wf.UpdatedAt = DateTime.UtcNow;
+
+        if (wf.RequestedByUserId.HasValue && created > 0)
+        {
+            NotificationHelper.Queue(_db, wf.TenantId, wf.RequestedByUserId, "WorkflowApplied",
+                "Booking confirmed", $"Your request \"{wf.Objective}\" is now confirmed.");
+        }
+
         await _db.SaveChangesAsync();
+
+        if (wf.RequestedByUserId.HasValue && created > 0)
+        {
+            await _pushSender.SendAsync(wf.TenantId, wf.RequestedByUserId.Value, "Booking confirmed",
+                $"Your request \"{wf.Objective}\" is now confirmed.");
+        }
 
         return Ok(new { message = wf.FinalOutcome, created, skipped });
     }
 
-    private async Task<AgentWorkflow> PersistWorkflowAsync(Guid tenantId, string objective, PlanDto plan)
+    // ── Gemini-powered pipeline (agentic-ai-service) ────────────────────────
+    // Customer-facing front door: "find and book the best dentist this week".
+    // Different trigger/role than ProposeSchedule above (staff bulk-filling
+    // slots) but converges on the same AgentWorkflow table, PlanDto shape,
+    // and approve/reject/apply endpoints.
+    [HttpPost("~/api/agent/find-and-book")]
+    [Authorize(Roles = Roles.Customer)]
+    public async Task<IActionResult> FindAndBook([FromBody] FindAndBookDto dto)
     {
-        var requiresApproval = plan.Steps.Count > 20 || plan.EstimatedRevenueImpact > 500;
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdClaim, out var customerId)) return Unauthorized();
+
+        var customer = await _db.Users.FindAsync(customerId);
+        if (customer == null) return Unauthorized();
+
+        var tenant = await _db.Tenants.FindAsync(customer.TenantId);
+        if (tenant == null || !tenant.IsActive) return BadRequest(new { message = "Tenant not found or inactive." });
+
+        // Short-lived token minted for the actual customer — every tool the
+        // Python service calls uses this, so it gets exactly the same
+        // tenant-scoping and role checks a real app request would get.
+        var authToken = _jwtService.GenerateAccessToken(customer);
+
+        var planResult = await _plannerAgentService.PlanAsync(new AgentPlanRequest(
+            Objective: dto.Objective,
+            TenantId: tenant.Id,
+            BusinessType: tenant.BusinessType,
+            BranchId: customer.BranchId,
+            CustomerId: customer.Id,
+            DateFrom: dto.DateFrom,
+            DateTo: dto.DateTo,
+            ExtraConstraints: dto.ExtraConstraints ?? new Dictionary<string, object>(),
+            AuthToken: authToken
+        ));
+
+        if (!planResult.Success)
+            return UnprocessableEntity(new { message = planResult.ErrorMessage ?? "The AI planner could not complete this request." });
+
+        var trace = planResult.Trace!;
+        var plan = BuildPlanFromTrace(trace);
+
+        switch (trace.Status)
+        {
+            case "Completed":
+            {
+                // The Validation/Safety agent already created the booking
+                // using the customer's own token — record it for audit/trace
+                // (FR-AS23) without going through PersistWorkflowAsync's
+                // approval branching (already decided) or /apply (would
+                // create a second booking).
+                var workflow = new AgentWorkflow
+                {
+                    TenantId = tenant.Id,
+                    Objective = dto.Objective,
+                    PlanJson = JsonSerializer.Serialize(plan),
+                    Status = "Completed",
+                    ApprovalStatus = "NotRequired",
+                    CurrentStep = plan.Steps.Count,
+                    FinalOutcome = $"Booking created: {trace.ValidationOutput?.BookingId}",
+                    CompletedAt = DateTime.UtcNow,
+                    RequestedByUserId = customer.Id,
+                };
+                _db.AgentWorkflows.Add(workflow);
+                await _db.SaveChangesAsync();
+                return Ok(new { workflowId = workflow.Id, status = workflow.Status, bookingId = trace.ValidationOutput?.BookingId });
+            }
+            case "AwaitingApproval":
+            {
+                var workflow = await PersistWorkflowAsync(tenant.Id, dto.Objective, plan, requiresApprovalOverride: true, requestedByUserId: customer.Id);
+                return Accepted(new
+                {
+                    message = "This booking needs manager approval before it's confirmed.",
+                    workflowId = workflow.Id,
+                });
+            }
+            default: // Rejected / Failed
+            {
+                var workflow = new AgentWorkflow
+                {
+                    TenantId = tenant.Id,
+                    Objective = dto.Objective,
+                    PlanJson = plan.Steps.Count > 0 ? JsonSerializer.Serialize(plan) : null,
+                    Status = "Rejected",
+                    ApprovalStatus = "NotRequired",
+                    ErrorLog = trace.ValidationOutput?.RejectionReason ?? trace.Error,
+                    CompletedAt = DateTime.UtcNow,
+                    RequestedByUserId = customer.Id,
+                };
+                _db.AgentWorkflows.Add(workflow);
+                await _db.SaveChangesAsync();
+                return UnprocessableEntity(new { message = workflow.ErrorLog ?? "Could not find an available booking for this request.", workflowId = workflow.Id });
+            }
+        }
+    }
+
+    private static PlanDto BuildPlanFromTrace(WorkflowTraceDto trace)
+    {
+        var steps = (trace.ActionToolOutput?.ProposedBookings ?? new List<ProposedBookingDto>())
+            .Select(b => new StepDto(
+                "ActionToolAgent",
+                "CreateBooking",
+                "bookings.create",
+                new
+                {
+                    resourceId = b.ResourceId,
+                    resourceName = b.ResourceName,
+                    bookingTypeId = b.BookingTypeId,
+                    startTime = b.ScheduledDatetime,
+                    endTime = b.ScheduledDatetime.AddMinutes(b.DurationMinutes),
+                }))
+            .ToList();
+        return new PlanDto(steps, 0);
+    }
+
+    private async Task<AgentWorkflow> PersistWorkflowAsync(
+        Guid tenantId, string objective, PlanDto plan, bool? requiresApprovalOverride = null, Guid? requestedByUserId = null)
+    {
+        var requiresApproval = requiresApprovalOverride ?? (plan.Steps.Count > 20 || plan.EstimatedRevenueImpact > 500);
 
         var workflow = new AgentWorkflow
         {
@@ -221,10 +360,18 @@ public class AgentWorkflowController : ControllerBase
             PlanJson = JsonSerializer.Serialize(plan),
             Status = requiresApproval ? "AwaitingApproval" : "Approved",
             ApprovalStatus = requiresApproval ? "Pending" : "NotRequired",
-            CurrentStep = 0
+            CurrentStep = 0,
+            RequestedByUserId = requestedByUserId
         };
 
         _db.AgentWorkflows.Add(workflow);
+
+        if (requiresApproval)
+        {
+            NotificationHelper.Queue(_db, tenantId, null, "WorkflowApproval",
+                "Plan needs approval", $"\"{objective}\" affects {plan.Steps.Count} booking(s) and needs your approval.");
+        }
+
         await _db.SaveChangesAsync();
         return workflow;
     }
@@ -235,6 +382,22 @@ public class AgentWorkflowController : ControllerBase
         var wf = await _db.AgentWorkflows.AsNoTracking().FirstOrDefaultAsync(w => w.Id == id);
         if (wf == null) return NotFound();
         return Ok(wf);
+    }
+
+    // Customer-facing status tracking (FR-AS: agentic pipeline) - the
+    // requesting customer's own AI booking requests, across every status.
+    // Backs the mobile "My AI Requests" screen.
+    [HttpGet("mine")]
+    public async Task<IActionResult> GetMyWorkflows()
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdClaim, out var userId)) return Unauthorized();
+
+        var workflows = await _db.AgentWorkflows.AsNoTracking()
+            .Where(w => w.RequestedByUserId == userId)
+            .OrderByDescending(w => w.CreatedAt)
+            .ToListAsync();
+        return Ok(workflows);
     }
 
     [HttpGet]
@@ -263,7 +426,20 @@ public class AgentWorkflowController : ControllerBase
         wf.ApprovedBy = Guid.TryParse(userId, out var uid) ? uid : null;
         wf.ApprovedAt = DateTime.UtcNow;
         wf.UpdatedAt = DateTime.UtcNow;
+
+        if (wf.RequestedByUserId.HasValue)
+        {
+            NotificationHelper.Queue(_db, wf.TenantId, wf.RequestedByUserId, "WorkflowApproved",
+                "Booking request approved", $"Your request \"{wf.Objective}\" was approved. It'll be confirmed shortly.");
+        }
+
         await _db.SaveChangesAsync();
+
+        if (wf.RequestedByUserId.HasValue)
+        {
+            await _pushSender.SendAsync(wf.TenantId, wf.RequestedByUserId.Value, "Booking request approved",
+                $"Your request \"{wf.Objective}\" was approved.");
+        }
 
         return Ok(new { message = "Workflow approved.", wf.Id, wf.Status });
     }
@@ -279,7 +455,20 @@ public class AgentWorkflowController : ControllerBase
         wf.Status = "Rejected";
         wf.ErrorLog = dto.Reason;
         wf.UpdatedAt = DateTime.UtcNow;
+
+        if (wf.RequestedByUserId.HasValue)
+        {
+            NotificationHelper.Queue(_db, wf.TenantId, wf.RequestedByUserId, "WorkflowRejected",
+                "Booking request declined", $"Your request \"{wf.Objective}\" was declined.{(string.IsNullOrEmpty(dto.Reason) ? "" : $" Reason: {dto.Reason}")}");
+        }
+
         await _db.SaveChangesAsync();
+
+        if (wf.RequestedByUserId.HasValue)
+        {
+            await _pushSender.SendAsync(wf.TenantId, wf.RequestedByUserId.Value, "Booking request declined",
+                $"Your request \"{wf.Objective}\" was declined.");
+        }
 
         return Ok(new { message = "Workflow rejected." });
     }
@@ -307,3 +496,4 @@ public record StepDto(string Agent, string Action, string Tool, object Parameter
 public record RejectWorkflowDto(string Reason);
 public record ReviseWorkflowDto(PlanDto Plan);
 public record ProposeScheduleDto(Guid TenantId, string Objective, int Count, Guid BookingTypeId, Guid? BranchId, int? WithinDays);
+public record FindAndBookDto(string Objective, DateTime? DateFrom, DateTime? DateTo, Dictionary<string, object>? ExtraConstraints);

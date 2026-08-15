@@ -105,7 +105,7 @@ class LandingScreen extends StatelessWidget {
                 icon: Icons.calendar_month_outlined,
                 title: 'For Customers',
                 subtitle:
-                    'Patients, students, diners & tourists — book instantly without signing up.',
+                    'Patients, students, diners & tourists — browse for free, sign up in seconds to book.',
                 primaryButton: _ActionButton(
                   label: 'Find & Book Appointment',
                   icon: Icons.search,

@@ -22,6 +22,11 @@ public class AppDbContext : DbContext
     public DbSet<Resource> Resources { get; set; } = null!;
     public DbSet<BookingType> BookingTypes { get; set; } = null!;
     public DbSet<Booking> Bookings { get; set; } = null!;
+    public DbSet<ResourceScheduleException> ResourceScheduleExceptions { get; set; } = null!;
+    public DbSet<Notification> Notifications { get; set; } = null!;
+    public DbSet<DeviceToken> DeviceTokens { get; set; } = null!;
+    public DbSet<InventoryItem> InventoryItems { get; set; } = null!;
+    public DbSet<EquipmentReservation> EquipmentReservations { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -175,6 +180,68 @@ public class AppDbContext : DbContext
 
             entity.Property(w => w.Status).HasMaxLength(30);
             entity.Property(w => w.ApprovalStatus).HasMaxLength(30);
+        });
+
+        // ==================== RESOURCE SCHEDULE EXCEPTIONS ====================
+        modelBuilder.Entity<ResourceScheduleException>(entity =>
+        {
+            entity.ToTable("resource_schedule_exceptions");
+
+            entity.HasIndex(e => new { e.ResourceId, e.Date }).IsUnique();
+
+            entity.HasOne(e => e.Resource)
+                  .WithMany()
+                  .HasForeignKey(e => e.ResourceId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ==================== NOTIFICATIONS ====================
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.ToTable("notifications");
+
+            entity.HasIndex(n => new { n.TenantId, n.UserId, n.IsRead });
+            entity.HasIndex(n => n.CreatedAt);
+
+            entity.Property(n => n.Type).HasMaxLength(40);
+        });
+
+        // ==================== DEVICE TOKENS ====================
+        modelBuilder.Entity<DeviceToken>(entity =>
+        {
+            entity.ToTable("device_tokens");
+
+            entity.HasIndex(t => t.Token).IsUnique();
+            entity.HasIndex(t => new { t.TenantId, t.UserId });
+
+            entity.Property(t => t.Token).HasMaxLength(500);
+            entity.Property(t => t.Platform).HasMaxLength(20);
+        });
+
+        // InventoryItem itself is intentionally left unconfigured here - it's
+        // Student 3's pre-existing model/table from InitialCreate (default
+        // PascalCase "InventoryItems" naming), and this Inventory placeholder
+        // only reads/writes it, not re-shapes it.
+
+        // ==================== EQUIPMENT RESERVATIONS ====================
+        modelBuilder.Entity<EquipmentReservation>(entity =>
+        {
+            entity.ToTable("equipment_reservations");
+
+            entity.HasIndex(r => r.BookingId);
+            entity.HasIndex(r => r.InventoryItemId);
+
+            entity.Property(r => r.Quantity).HasPrecision(18, 2);
+
+            entity.HasOne(r => r.Booking)
+                  .WithMany()
+                  .HasForeignKey(r => r.BookingId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(r => r.InventoryItem)
+                  .WithMany()
+                  .HasForeignKey(r => r.InventoryItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

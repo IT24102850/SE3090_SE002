@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/tourism_subtype.dart';
 import '../providers/auth_provider.dart';
 import '../screens/dashboard_screen.dart';
 import '../theme/app_theme.dart';
@@ -22,6 +23,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _adminPhoneController = TextEditingController();
 
   String _businessType = 'Clinic';
+  String? _subType;
   bool _obscurePassword = true;
 
   static const _businessTypes = [
@@ -61,6 +63,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           adminPhone: _adminPhoneController.text.trim().isEmpty
               ? null
               : _adminPhoneController.text.trim(),
+          subType: _businessType == 'Tourism' ? _subType : null,
         );
 
     if (success && mounted) {
@@ -207,9 +210,29 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                     .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                                     .toList(),
                                 onChanged: (v) {
-                                  if (v != null) setState(() => _businessType = v);
+                                  if (v != null) {
+                                    setState(() {
+                                      _businessType = v;
+                                      if (v != 'Tourism') _subType = null;
+                                    });
+                                  }
                                 },
                               ),
+                              if (_businessType == 'Tourism') ...[
+                                const SizedBox(height: 12),
+                                DropdownButtonFormField<String>(
+                                  value: _subType,
+                                  decoration: _decoration('Tourism Sub-Type *', Icons.travel_explore),
+                                  hint: const Text('Select tourism sub-type...'),
+                                  items: kTourismSubTypeLabels
+                                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                                      .toList(),
+                                  onChanged: (v) => setState(() => _subType = v),
+                                  validator: (v) => (_businessType == 'Tourism' && (v == null || v.isEmpty))
+                                      ? 'Required for Tourism businesses'
+                                      : null,
+                                ),
+                              ],
                               const SizedBox(height: 12),
                               TextFormField(
                                 controller: _addressController,

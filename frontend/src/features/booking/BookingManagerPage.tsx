@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
 import {
   useCancelBookingMutation,
+  useCheckInBookingMutation,
   useDeleteBookingMutation,
   useGetBookingsQuery,
   useGetConflictsQuery,
@@ -31,18 +32,22 @@ export default function BookingManagerPage() {
   const [page, setPage] = useState(1);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
   const [showConflicts, setShowConflicts] = useState(false);
+  const [checkInId, setCheckInId] = useState('');
 
   const weekDays = useMemo(() => buildWeekGrid(weekAnchor), [weekAnchor]);
 
-  const { data: resourcesData } = useGetResourcesQuery({ tenantId, pageSize: 100 }, { skip: !tenantId });
+  // FR-AS1: Staff only see their own branch's bookings; Admin/Manager stay tenant-wide.
+  const staffBranchId = user?.role === 'Staff' ? user.branchId : undefined;
+
+  const { data: resourcesData } = useGetResourcesQuery({ tenantId, branchId: staffBranchId, pageSize: 100 }, { skip: !tenantId });
 
   const { data: weekData, isFetching: weekLoading } = useGetBookingsQuery(
-    { tenantId, dateFrom: toISODate(weekDays[0]), dateTo: toISODate(addDays(weekDays[6], 1)), pageSize: 200 },
+    { tenantId, branchId: staffBranchId, dateFrom: toISODate(weekDays[0]), dateTo: toISODate(addDays(weekDays[6], 1)), pageSize: 200 },
     { skip: !tenantId }
   );
 
   const { data: tableData, isFetching: tableLoading } = useGetBookingsQuery(
-    { tenantId, status: statusFilter || undefined, resourceId: resourceFilter || undefined, page, pageSize: 10 },
+    { tenantId, branchId: staffBranchId, status: statusFilter || undefined, resourceId: resourceFilter || undefined, page, pageSize: 10 },
     { skip: !tenantId }
   );
 
@@ -52,6 +57,7 @@ export default function BookingManagerPage() {
   const [cancelBooking] = useCancelBookingMutation();
   const [deleteBooking] = useDeleteBookingMutation();
   const [updateStatus] = useUpdateBookingStatusMutation();
+  const [checkIn, { isLoading: checkingIn }] = useCheckInBookingMutation();
 
   const bookingsByDay = useMemo(() => {
     const map = new Map<string, Booking[]>();
@@ -121,6 +127,20 @@ export default function BookingManagerPage() {
     }
   };
 
+  // FR-AS9: desk check-in without a camera — paste the booking ID from the
+  // patient's confirmation/QR (mobile has the actual camera scanner).
+  const handleCheckIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!checkInId.trim()) return;
+    try {
+      const result = await checkIn(checkInId.trim()).unwrap();
+      show(result.message, 'success');
+      setCheckInId('');
+    } catch (err) {
+      show(apiErrorMessage(err, 'Could not check in — is the booking ID correct?'), 'error');
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -128,7 +148,21 @@ export default function BookingManagerPage() {
           <h1 className="page-title">Booking Manager</h1>
           <p className="page-subtitle">Drag a booking card onto another day to reschedule it.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New booking</button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <form onSubmit={handleCheckIn} style={{ display: 'flex', gap: 6 }}>
+            <input
+              className="input"
+              placeholder="Paste booking ID to check in…"
+              value={checkInId}
+              onChange={(e) => setCheckInId(e.target.value)}
+              style={{ width: 220 }}
+            />
+            <button className="btn btn-secondary" type="submit" disabled={!checkInId.trim() || checkingIn}>
+              {checkingIn ? <span className="spinner" /> : 'Check in'}
+            </button>
+          </form>
+          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New booking</button>
+        </div>
       </div>
 
       {!!conflictsData?.totalConflicts && (

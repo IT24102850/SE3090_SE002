@@ -8,7 +8,11 @@ plugins {
 android {
     namespace = "com.example.sme_mobile"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // flutter.ndkVersion (26.3.11579264) is an incomplete/corrupted install on
+    // this machine - missing source.properties, fails Gradle configuration.
+    // Pinned to 27.1.12297006, a verified-complete install under the SDK's
+    // ndk/ dir, until the default version is reinstalled properly.
+    ndkVersion = "27.1.12297006"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

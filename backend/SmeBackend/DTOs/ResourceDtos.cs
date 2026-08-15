@@ -13,7 +13,12 @@ public record CreateResourceDto(
     int? Capacity,
     decimal? HourlyRate,
     [MaxLength(100)] string? Specialty,
-    Guid? LinkedUserId
+    Guid? LinkedUserId,
+    // Free-form JSON bag for business-type-specific ranking signals (rating,
+    // cuisine, distance, wait time, ...) consumed by the Domain Analysis
+    // Agent — see agentic-ai-service/agents/domain_analysis_agent.py.
+    string? CustomAttributes,
+    string? LocationMetadata
 );
 
 public record UpdateResourceDto(
@@ -25,9 +30,19 @@ public record UpdateResourceDto(
     int? Capacity,
     decimal? HourlyRate,
     [MaxLength(100)] string? Specialty,
-    Guid? LinkedUserId
+    Guid? LinkedUserId,
+    string? CustomAttributes,
+    string? LocationMetadata
 );
 
-public record DaySchedule(int DayOfWeek, TimeSpan StartTime, TimeSpan EndTime, bool IsAvailable);
+public record DaySchedule(
+    int DayOfWeek,
+    TimeSpan StartTime,
+    TimeSpan EndTime,
+    bool IsAvailable,
+    TimeSpan? LunchBreakStart = null,
+    TimeSpan? LunchBreakEnd = null,
+    decimal? MaxDailyBookedHours = null
+);
 
 public record SetScheduleDto(List<DaySchedule> Days);

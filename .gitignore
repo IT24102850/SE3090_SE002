@@ -22,6 +22,7 @@ logs/
 # Environment files
 .env
 .env.*
+!.env.example
 appsettings.*.local.json
 appsettings.Local.json
 
