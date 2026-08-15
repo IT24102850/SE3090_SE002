@@ -1,21 +1,19 @@
 namespace SmeBackend.Models;
 
-public class InventoryItem : BaseEntity
+public class InventoryItem : BaseEntity, ITenantScopedEntity
 {
     public Guid TenantId { get; set; }
-    public Tenant Tenant { get; set; } = null!;
-    public Guid BranchId { get; set; }
-    public Branch Branch { get; set; } = null!;
-    public Guid? SupplierId { get; set; }
-    public Supplier? Supplier { get; set; }
-    public string Sku { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string Sku { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public decimal QuantityOnHand { get; set; }
+    public Guid? CategoryId { get; set; }
+    public InventoryCategory? Category { get; set; }
+    public Guid? UnitId { get; set; }
+    public InventoryUnit? Unit { get; set; }
+    public Guid? BranchId { get; set; }
+    public Branch? Branch { get; set; }
+    public decimal Quantity { get; set; }
     public decimal ReorderLevel { get; set; }
-    public decimal UnitCost { get; set; }
+    public decimal? UnitCost { get; set; }
     public bool IsActive { get; set; } = true;
-    public ICollection<StockMovement> StockMovements { get; set; } = [];
-    public ICollection<PurchaseOrderItem> PurchaseOrderItems { get; set; } = [];
-    public ICollection<EquipmentMaintenance> MaintenanceRecords { get; set; } = [];
 }

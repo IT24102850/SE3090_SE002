@@ -1,23 +1,43 @@
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Models;
+using SmeBackend.Tenancy;
 
 namespace SmeBackend.Data;
 
 public class AppDbContext : DbContext
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+    private readonly ITenantContext _tenantContext;
+
+    public AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext) : base(options)
+    {
+        _tenantContext = tenantContext;
+    }
 
     public DbSet<Tenant> Tenants { get; set; }
     public DbSet<Branch> Branches { get; set; }
     public DbSet<User> Users { get; set; }
-    public DbSet<Supplier> Suppliers { get; set; }
+    public DbSet<InventoryCategory> InventoryCategories { get; set; }
+    public DbSet<InventoryUnit> InventoryUnits { get; set; }
     public DbSet<InventoryItem> InventoryItems { get; set; }
+    public DbSet<Supplier> Suppliers { get; set; }
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; }
     public DbSet<StockMovement> StockMovements { get; set; }
-    public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
-    public DbSet<EquipmentMaintenance> EquipmentMaintenanceRecords { get; set; }
-    public DbSet<AnalyticsSnapshot> AnalyticsSnapshots { get; set; }
-    public DbSet<Notification> Notifications { get; set; }
+
+    private Guid? CurrentTenantId => _tenantContext.TenantId;
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        AddDefaultInventoryCatalogs();
+        ApplyTenantScope();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        AddDefaultInventoryCatalogs();
+        ApplyTenantScope();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,121 +47,92 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Tenant>().HasQueryFilter(t => t.IsActive);
         modelBuilder.Entity<Branch>().HasQueryFilter(b => b.IsActive);
         modelBuilder.Entity<User>().HasQueryFilter(u => u.Tenant.IsActive);
-        modelBuilder.Entity<Supplier>().HasQueryFilter(s => s.Tenant.IsActive && s.IsActive);
-        modelBuilder.Entity<InventoryItem>().HasQueryFilter(i => i.Tenant.IsActive && i.IsActive);
-        modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(p => p.Tenant.IsActive);
-        modelBuilder.Entity<StockMovement>().HasQueryFilter(m => m.Tenant.IsActive);
-        modelBuilder.Entity<EquipmentMaintenance>().HasQueryFilter(m => m.Tenant.IsActive);
-        modelBuilder.Entity<PurchaseOrderItem>().HasQueryFilter(i =>
-            i.PurchaseOrder.Tenant.IsActive && i.InventoryItem.Tenant.IsActive && i.InventoryItem.IsActive);
-        modelBuilder.Entity<AnalyticsSnapshot>().HasQueryFilter(s => s.Tenant.IsActive);
-        modelBuilder.Entity<Notification>().HasQueryFilter(n => n.Tenant.IsActive);
+        modelBuilder.Entity<InventoryCategory>().HasQueryFilter(c => c.TenantId == CurrentTenantId && c.Tenant.IsActive && c.IsActive);
+        modelBuilder.Entity<InventoryUnit>().HasQueryFilter(u => u.TenantId == CurrentTenantId && u.Tenant.IsActive && u.IsActive);
+        modelBuilder.Entity<InventoryItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId && item.IsActive);
+        modelBuilder.Entity<Supplier>().HasQueryFilter(supplier => supplier.TenantId == CurrentTenantId && supplier.IsActive);
+        modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(order => order.TenantId == CurrentTenantId);
+        modelBuilder.Entity<StockMovement>().HasQueryFilter(movement => movement.TenantId == CurrentTenantId);
 
         // Indexes
         modelBuilder.Entity<User>().HasIndex(u => u.Email).IsUnique();
         modelBuilder.Entity<Branch>().HasIndex(b => b.TenantId);
-
-        modelBuilder.Entity<Supplier>(entity =>
-        {
-            entity.Property(s => s.Name).HasMaxLength(200).IsRequired();
-            entity.Property(s => s.ContactPerson).HasMaxLength(150);
-            entity.Property(s => s.Email).HasMaxLength(320);
-            entity.Property(s => s.Phone).HasMaxLength(50);
-            entity.Property(s => s.Address).HasMaxLength(500);
-            entity.HasIndex(s => new { s.TenantId, s.BranchId });
-            entity.HasOne(s => s.Tenant).WithMany().HasForeignKey(s => s.TenantId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(s => s.Branch).WithMany().HasForeignKey(s => s.BranchId).OnDelete(DeleteBehavior.Restrict);
-        });
+        modelBuilder.Entity<InventoryCategory>().HasIndex(c => new { c.TenantId, c.Name }).IsUnique();
+        modelBuilder.Entity<InventoryUnit>().HasIndex(u => new { u.TenantId, u.Code }).IsUnique();
+        modelBuilder.Entity<InventoryItem>().HasIndex(item => new { item.TenantId, item.Sku }).IsUnique();
+        modelBuilder.Entity<Supplier>().HasIndex(supplier => new { supplier.TenantId, supplier.Name }).IsUnique();
+        modelBuilder.Entity<PurchaseOrder>().HasIndex(order => new { order.TenantId, order.Number }).IsUnique();
+        modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.TenantId, movement.BranchId });
+        modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.InventoryItemId, movement.OccurredAt });
 
         modelBuilder.Entity<InventoryItem>(entity =>
         {
-            entity.Property(i => i.Sku).HasMaxLength(100).IsRequired();
-            entity.Property(i => i.Name).HasMaxLength(200).IsRequired();
-            entity.Property(i => i.Description).HasMaxLength(2000);
-            entity.Property(i => i.QuantityOnHand).HasPrecision(18, 3);
-            entity.Property(i => i.ReorderLevel).HasPrecision(18, 3);
-            entity.Property(i => i.UnitCost).HasPrecision(18, 2);
-            entity.HasIndex(i => new { i.TenantId, i.BranchId });
-            entity.HasIndex(i => new { i.TenantId, i.Sku }).IsUnique();
-            entity.HasOne(i => i.Tenant).WithMany().HasForeignKey(i => i.TenantId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(i => i.Branch).WithMany().HasForeignKey(i => i.BranchId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(i => i.Supplier).WithMany(s => s.InventoryItems).HasForeignKey(i => i.SupplierId).OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<PurchaseOrder>(entity =>
-        {
-            entity.Property(p => p.OrderNumber).HasMaxLength(100).IsRequired();
-            entity.Property(p => p.Status).HasMaxLength(30).IsRequired();
-            entity.Property(p => p.TotalAmount).HasPrecision(18, 2);
-            entity.Property(p => p.Notes).HasMaxLength(2000);
-            entity.HasIndex(p => new { p.TenantId, p.BranchId });
-            entity.HasIndex(p => new { p.TenantId, p.OrderNumber }).IsUnique();
-            entity.HasOne(p => p.Tenant).WithMany().HasForeignKey(p => p.TenantId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(p => p.Branch).WithMany().HasForeignKey(p => p.BranchId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(p => p.Supplier).WithMany(s => s.PurchaseOrders).HasForeignKey(p => p.SupplierId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(item => item.Name).HasMaxLength(150).IsRequired();
+            entity.Property(item => item.Sku).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.Description).HasMaxLength(2000);
+            entity.Property(item => item.Quantity).HasPrecision(18, 3);
+            entity.Property(item => item.ReorderLevel).HasPrecision(18, 3);
+            entity.Property(item => item.UnitCost).HasPrecision(18, 2);
+            entity.HasOne(item => item.Category)
+                .WithMany()
+                .HasForeignKey(item => item.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(item => item.Unit)
+                .WithMany()
+                .HasForeignKey(item => item.UnitId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(item => item.Branch)
+                .WithMany()
+                .HasForeignKey(item => item.BranchId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<StockMovement>(entity =>
         {
-            entity.Property(m => m.MovementType).HasMaxLength(30).IsRequired();
-            entity.Property(m => m.Quantity).HasPrecision(18, 3);
-            entity.Property(m => m.UnitCost).HasPrecision(18, 2);
-            entity.Property(m => m.Reference).HasMaxLength(100);
-            entity.Property(m => m.Notes).HasMaxLength(2000);
-            entity.HasIndex(m => new { m.TenantId, m.BranchId });
-            entity.HasIndex(m => new { m.InventoryItemId, m.OccurredAt });
-            entity.HasOne(m => m.Tenant).WithMany().HasForeignKey(m => m.TenantId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(m => m.Branch).WithMany().HasForeignKey(m => m.BranchId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(m => m.InventoryItem).WithMany(i => i.StockMovements).HasForeignKey(m => m.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(m => m.Supplier).WithMany(s => s.StockMovements).HasForeignKey(m => m.SupplierId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(m => m.PurchaseOrder).WithMany(p => p.StockMovements).HasForeignKey(m => m.PurchaseOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.Property(movement => movement.MovementType).HasMaxLength(30).IsRequired();
+            entity.Property(movement => movement.Quantity).HasPrecision(18, 3);
+            entity.Property(movement => movement.UnitCost).HasPrecision(18, 2);
+            entity.Property(movement => movement.Reference).HasMaxLength(100);
+            entity.Property(movement => movement.Notes).HasMaxLength(2000);
+            entity.HasOne<Branch>().WithMany().HasForeignKey(movement => movement.BranchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InventoryItem>().WithMany().HasForeignKey(movement => movement.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Supplier>().WithMany().HasForeignKey(movement => movement.SupplierId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<PurchaseOrder>().WithMany().HasForeignKey(movement => movement.PurchaseOrderId).OnDelete(DeleteBehavior.SetNull);
         });
+    }
 
-        modelBuilder.Entity<PurchaseOrderItem>(entity =>
-        {
-            entity.Property(i => i.OrderedQuantity).HasPrecision(18, 3);
-            entity.Property(i => i.ReceivedQuantity).HasPrecision(18, 3);
-            entity.Property(i => i.UnitCost).HasPrecision(18, 2);
-            entity.Property(i => i.Notes).HasMaxLength(2000);
-            entity.HasIndex(i => new { i.PurchaseOrderId, i.InventoryItemId }).IsUnique();
-            entity.HasOne(i => i.PurchaseOrder).WithMany(p => p.Items).HasForeignKey(i => i.PurchaseOrderId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(i => i.InventoryItem).WithMany(i => i.PurchaseOrderItems).HasForeignKey(i => i.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
-        });
+    private void AddDefaultInventoryCatalogs()
+    {
+        var newTenants = ChangeTracker.Entries<Tenant>()
+            .Where(entry => entry.State == EntityState.Added)
+            .Select(entry => entry.Entity)
+            .ToList();
 
-        modelBuilder.Entity<EquipmentMaintenance>(entity =>
+        foreach (var tenant in newTenants)
         {
-            entity.Property(m => m.MaintenanceType).HasMaxLength(100).IsRequired();
-            entity.Property(m => m.Status).HasMaxLength(30).IsRequired();
-            entity.Property(m => m.Cost).HasPrecision(18, 2);
-            entity.Property(m => m.PerformedBy).HasMaxLength(200);
-            entity.Property(m => m.Notes).HasMaxLength(2000);
-            entity.HasIndex(m => new { m.TenantId, m.BranchId });
-            entity.HasIndex(m => new { m.InventoryItemId, m.ScheduledFor });
-            entity.HasOne(m => m.Tenant).WithMany().HasForeignKey(m => m.TenantId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(m => m.Branch).WithMany().HasForeignKey(m => m.BranchId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(m => m.InventoryItem).WithMany(i => i.MaintenanceRecords).HasForeignKey(m => m.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
-        });
+            DefaultInventoryCatalog.SeedFor(tenant, InventoryCategories.Local, InventoryUnits.Local);
+        }
+    }
 
-        modelBuilder.Entity<AnalyticsSnapshot>(entity =>
+    private void ApplyTenantScope()
+    {
+        var tenantId = CurrentTenantId;
+        foreach (var entry in ChangeTracker.Entries<ITenantScopedEntity>())
         {
-            entity.Property(s => s.SnapshotType).HasMaxLength(100).IsRequired();
-            entity.Property(s => s.Data).HasColumnType("jsonb").IsRequired();
-            entity.HasIndex(s => new { s.TenantId, s.BranchId, s.SnapshotType, s.PeriodStart });
-            entity.HasOne(s => s.Tenant).WithMany().HasForeignKey(s => s.TenantId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(s => s.Branch).WithMany().HasForeignKey(s => s.BranchId).OnDelete(DeleteBehavior.SetNull);
-        });
+            if (entry.State == EntityState.Added)
+            {
+                if (!tenantId.HasValue)
+                {
+                    throw new InvalidOperationException("A tenant-scoped entity cannot be created without a tenant context.");
+                }
 
-        modelBuilder.Entity<Notification>(entity =>
-        {
-            entity.Property(n => n.Type).HasMaxLength(50).IsRequired();
-            entity.Property(n => n.Title).HasMaxLength(200).IsRequired();
-            entity.Property(n => n.Message).HasMaxLength(2000).IsRequired();
-            entity.Property(n => n.ActionUrl).HasMaxLength(2000);
-            entity.HasIndex(n => new { n.TenantId, n.UserId, n.IsRead, n.CreatedAt });
-            entity.HasIndex(n => new { n.TenantId, n.BranchId });
-            entity.HasOne(n => n.Tenant).WithMany().HasForeignKey(n => n.TenantId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(n => n.Branch).WithMany().HasForeignKey(n => n.BranchId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(n => n.User).WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.SetNull);
-        });
+                entry.Entity.TenantId = tenantId.Value;
+            }
+            else if ((entry.State is EntityState.Modified or EntityState.Deleted) &&
+                     (!tenantId.HasValue || entry.Entity.TenantId != tenantId.Value))
+            {
+                throw new UnauthorizedAccessException("A tenant-scoped entity cannot be modified outside the current tenant.");
+            }
+        }
     }
 }

@@ -1,18 +1,10 @@
 namespace SmeBackend.Models;
 
-public class Supplier : BaseEntity
+public class Supplier : BaseEntity, ITenantScopedEntity
 {
     public Guid TenantId { get; set; }
-    public Tenant Tenant { get; set; } = null!;
-    public Guid BranchId { get; set; }
-    public Branch Branch { get; set; } = null!;
     public string Name { get; set; } = string.Empty;
-    public string? ContactPerson { get; set; }
-    public string? Email { get; set; }
-    public string? Phone { get; set; }
-    public string? Address { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
-    public ICollection<InventoryItem> InventoryItems { get; set; } = [];
-    public ICollection<PurchaseOrder> PurchaseOrders { get; set; } = [];
-    public ICollection<StockMovement> StockMovements { get; set; } = [];
 }

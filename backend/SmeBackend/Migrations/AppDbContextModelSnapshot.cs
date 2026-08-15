@@ -22,51 +22,6 @@ namespace SmeBackend.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("SmeBackend.Models.AnalyticsSnapshot", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("BranchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Data")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<DateTime>("GeneratedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("PeriodEnd")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("PeriodStart")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("SnapshotType")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BranchId");
-
-                    b.HasIndex("TenantId", "BranchId", "SnapshotType", "PeriodStart");
-
-                    b.ToTable("AnalyticsSnapshots");
-                });
-
             modelBuilder.Entity("SmeBackend.Models.Branch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -104,48 +59,21 @@ namespace SmeBackend.Migrations
                     b.ToTable("Branches");
                 });
 
-            modelBuilder.Entity("SmeBackend.Models.EquipmentMaintenance", b =>
+            modelBuilder.Entity("SmeBackend.Models.InventoryCategory", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("BranchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal?>("Cost")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("InventoryItemId")
-                        .HasColumnType("uuid");
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
 
-                    b.Property<string>("MaintenanceType")
+                    b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("PerformedBy")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime>("ScheduledFor")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                        .HasColumnType("text");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -155,13 +83,10 @@ namespace SmeBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BranchId");
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
 
-                    b.HasIndex("InventoryItemId", "ScheduledFor");
-
-                    b.HasIndex("TenantId", "BranchId");
-
-                    b.ToTable("EquipmentMaintenanceRecords");
+                    b.ToTable("InventoryCategories");
                 });
 
             modelBuilder.Entity("SmeBackend.Models.InventoryItem", b =>
@@ -170,7 +95,10 @@ namespace SmeBackend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("BranchId")
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CategoryId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
@@ -185,10 +113,10 @@ namespace SmeBackend.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
 
-                    b.Property<decimal>("QuantityOnHand")
+                    b.Property<decimal>("Quantity")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
@@ -198,18 +126,18 @@ namespace SmeBackend.Migrations
 
                     b.Property<string>("Sku")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid?>("SupplierId")
-                        .HasColumnType("uuid");
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
-                    b.Property<decimal>("UnitCost")
+                    b.Property<decimal?>("UnitCost")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("UnitId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -218,9 +146,9 @@ namespace SmeBackend.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("SupplierId");
+                    b.HasIndex("CategoryId");
 
-                    b.HasIndex("TenantId", "BranchId");
+                    b.HasIndex("UnitId");
 
                     b.HasIndex("TenantId", "Sku")
                         .IsUnique();
@@ -228,63 +156,38 @@ namespace SmeBackend.Migrations
                     b.ToTable("InventoryItems");
                 });
 
-            modelBuilder.Entity("SmeBackend.Models.Notification", b =>
+            modelBuilder.Entity("SmeBackend.Models.InventoryUnit", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("ActionUrl")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<Guid?>("BranchId")
-                        .HasColumnType("uuid");
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("IsRead")
+                    b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("Message")
+                    b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<DateTime?>("ReadAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("text");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("UserId")
-                        .HasColumnType("uuid");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("BranchId");
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique();
 
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("TenantId", "BranchId");
-
-                    b.HasIndex("TenantId", "UserId", "IsRead", "CreatedAt");
-
-                    b.ToTable("Notifications");
+                    b.ToTable("InventoryUnits");
                 });
 
             modelBuilder.Entity("SmeBackend.Models.PurchaseOrder", b =>
@@ -299,28 +202,13 @@ namespace SmeBackend.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("ExpectedDeliveryAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("OrderNumber")
+                    b.Property<string>("Number")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("OrderedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ReceivedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("text");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                        .HasColumnType("text");
 
                     b.Property<Guid>("SupplierId")
                         .HasColumnType("uuid");
@@ -328,69 +216,15 @@ namespace SmeBackend.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
-                    b.Property<decimal>("TotalAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BranchId");
-
-                    b.HasIndex("SupplierId");
-
-                    b.HasIndex("TenantId", "BranchId");
-
-                    b.HasIndex("TenantId", "OrderNumber")
+                    b.HasIndex("TenantId", "Number")
                         .IsUnique();
 
                     b.ToTable("PurchaseOrders");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.PurchaseOrderItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("InventoryItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<decimal>("OrderedQuantity")
-                        .HasPrecision(18, 3)
-                        .HasColumnType("numeric(18,3)");
-
-                    b.Property<Guid>("PurchaseOrderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("ReceivedQuantity")
-                        .HasPrecision(18, 3)
-                        .HasColumnType("numeric(18,3)");
-
-                    b.Property<decimal>("UnitCost")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InventoryItemId");
-
-                    b.HasIndex("PurchaseOrderId", "InventoryItemId")
-                        .IsUnique();
-
-                    b.ToTable("PurchaseOrderItems");
                 });
 
             modelBuilder.Entity("SmeBackend.Models.StockMovement", b =>
@@ -465,35 +299,23 @@ namespace SmeBackend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Address")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<Guid>("BranchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ContactPerson")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Email")
-                        .HasMaxLength(320)
-                        .HasColumnType("character varying(320)");
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Phone")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -503,9 +325,8 @@ namespace SmeBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BranchId");
-
-                    b.HasIndex("TenantId", "BranchId");
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
 
                     b.ToTable("Suppliers");
                 });
@@ -590,24 +411,6 @@ namespace SmeBackend.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("SmeBackend.Models.AnalyticsSnapshot", b =>
-                {
-                    b.HasOne("SmeBackend.Models.Branch", "Branch")
-                        .WithMany()
-                        .HasForeignKey("BranchId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("SmeBackend.Models.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Branch");
-
-                    b.Navigation("Tenant");
-                });
-
             modelBuilder.Entity("SmeBackend.Models.Branch", b =>
                 {
                     b.HasOne("SmeBackend.Models.Tenant", "Tenant")
@@ -619,29 +422,13 @@ namespace SmeBackend.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("SmeBackend.Models.EquipmentMaintenance", b =>
+            modelBuilder.Entity("SmeBackend.Models.InventoryCategory", b =>
                 {
-                    b.HasOne("SmeBackend.Models.Branch", "Branch")
-                        .WithMany()
-                        .HasForeignKey("BranchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SmeBackend.Models.InventoryItem", "InventoryItem")
-                        .WithMany("MaintenanceRecords")
-                        .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("SmeBackend.Models.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Branch");
-
-                    b.Navigation("InventoryItem");
 
                     b.Navigation("Tenant");
                 });
@@ -651,156 +438,59 @@ namespace SmeBackend.Migrations
                     b.HasOne("SmeBackend.Models.Branch", "Branch")
                         .WithMany()
                         .HasForeignKey("BranchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SmeBackend.Models.Supplier", "Supplier")
-                        .WithMany("InventoryItems")
-                        .HasForeignKey("SupplierId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("SmeBackend.Models.Tenant", "Tenant")
+                    b.HasOne("SmeBackend.Models.InventoryCategory", "Category")
                         .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Branch");
-
-                    b.Navigation("Supplier");
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.Notification", b =>
-                {
-                    b.HasOne("SmeBackend.Models.Branch", "Branch")
-                        .WithMany()
-                        .HasForeignKey("BranchId")
+                        .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("SmeBackend.Models.Tenant", "Tenant")
+                    b.HasOne("SmeBackend.Models.InventoryUnit", "Unit")
                         .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SmeBackend.Models.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
+                        .HasForeignKey("UnitId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Branch");
 
-                    b.Navigation("Tenant");
+                    b.Navigation("Category");
 
-                    b.Navigation("User");
+                    b.Navigation("Unit");
                 });
 
-            modelBuilder.Entity("SmeBackend.Models.PurchaseOrder", b =>
+            modelBuilder.Entity("SmeBackend.Models.InventoryUnit", b =>
                 {
-                    b.HasOne("SmeBackend.Models.Branch", "Branch")
-                        .WithMany()
-                        .HasForeignKey("BranchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SmeBackend.Models.Supplier", "Supplier")
-                        .WithMany("PurchaseOrders")
-                        .HasForeignKey("SupplierId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("SmeBackend.Models.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Branch");
-
-                    b.Navigation("Supplier");
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.PurchaseOrderItem", b =>
-                {
-                    b.HasOne("SmeBackend.Models.InventoryItem", "InventoryItem")
-                        .WithMany("PurchaseOrderItems")
-                        .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SmeBackend.Models.PurchaseOrder", "PurchaseOrder")
-                        .WithMany("Items")
-                        .HasForeignKey("PurchaseOrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("InventoryItem");
-
-                    b.Navigation("PurchaseOrder");
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("SmeBackend.Models.StockMovement", b =>
                 {
-                    b.HasOne("SmeBackend.Models.Branch", "Branch")
+                    b.HasOne("SmeBackend.Models.Branch", null)
                         .WithMany()
                         .HasForeignKey("BranchId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("SmeBackend.Models.InventoryItem", "InventoryItem")
-                        .WithMany("StockMovements")
+                    b.HasOne("SmeBackend.Models.InventoryItem", null)
+                        .WithMany()
                         .HasForeignKey("InventoryItemId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("SmeBackend.Models.PurchaseOrder", "PurchaseOrder")
-                        .WithMany("StockMovements")
+                    b.HasOne("SmeBackend.Models.PurchaseOrder", null)
+                        .WithMany()
                         .HasForeignKey("PurchaseOrderId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("SmeBackend.Models.Supplier", "Supplier")
-                        .WithMany("StockMovements")
+                    b.HasOne("SmeBackend.Models.Supplier", null)
+                        .WithMany()
                         .HasForeignKey("SupplierId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("SmeBackend.Models.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Branch");
-
-                    b.Navigation("InventoryItem");
-
-                    b.Navigation("PurchaseOrder");
-
-                    b.Navigation("Supplier");
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.Supplier", b =>
-                {
-                    b.HasOne("SmeBackend.Models.Branch", "Branch")
-                        .WithMany()
-                        .HasForeignKey("BranchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SmeBackend.Models.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Branch");
-
-                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("SmeBackend.Models.User", b =>
@@ -818,31 +508,6 @@ namespace SmeBackend.Migrations
                     b.Navigation("Branch");
 
                     b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.InventoryItem", b =>
-                {
-                    b.Navigation("MaintenanceRecords");
-
-                    b.Navigation("PurchaseOrderItems");
-
-                    b.Navigation("StockMovements");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.PurchaseOrder", b =>
-                {
-                    b.Navigation("Items");
-
-                    b.Navigation("StockMovements");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.Supplier", b =>
-                {
-                    b.Navigation("InventoryItems");
-
-                    b.Navigation("PurchaseOrders");
-
-                    b.Navigation("StockMovements");
                 });
 #pragma warning restore 612, 618
         }
