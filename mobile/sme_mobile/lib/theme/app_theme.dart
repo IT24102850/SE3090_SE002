@@ -157,6 +157,7 @@ class RoleTheme {
           title: 'Tenant Admin',
           icon: Icons.admin_panel_settings,
           actions: [
+            'Business Profile',
             'Manage all branches',
             'View system analytics',
             'Assign managers & staff',
@@ -169,6 +170,7 @@ class RoleTheme {
           title: 'Branch Manager',
           icon: Icons.manage_accounts,
           actions: [
+            'Business Profile',
             'Manage branch bookings',
             'Approve schedules',
             'View branch reports',

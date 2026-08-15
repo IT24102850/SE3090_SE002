@@ -27,6 +27,10 @@ dependencies:
   firebase_messaging: ^15.1.3
   # Business Profile: tap-to-call/email/website/social links.
   url_launcher: ^6.3.1
+  # Business Profile editor (Admin/Manager): pick logo/cover/gallery images.
+  # XFile's readAsBytes() is cross-platform (works on web, unlike dart:io
+  # File), matching how this app is actually tested (flutter run -d chrome).
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

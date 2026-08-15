@@ -9,6 +9,7 @@ import '../shared/date_format.dart';
 import '../theme/app_theme.dart';
 import '../widgets/route_transitions.dart';
 import '../widgets/status_badge.dart';
+import 'business_profile_editor_screen.dart';
 import 'customer/ai_planner_screen.dart';
 import 'customer/book_business_list_screen.dart';
 import 'customer/my_bookings_screen.dart';
@@ -277,6 +278,7 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color) {
   }
 
   const icons = {
+    'Business Profile': Icons.storefront_outlined,
     'Manage all branches': Icons.store_outlined,
     'View system analytics': Icons.insights_outlined,
     'Assign managers & staff': Icons.group_add_outlined,
@@ -289,9 +291,14 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color) {
     'Process walk-ins': Icons.directions_walk_outlined,
   };
 
-  final staffTaps = <String, Widget Function()>{
+  // Most Admin/Manager tiles stay as "coming soon" stubs — that management
+  // tooling lives in the web app — except the ones with a real mobile
+  // screen wired below (Staff's FR-B7/FR-B8 tasks, and Business Profile,
+  // which was explicitly asked for on mobile too).
+  final wiredTaps = <String, Widget Function()>{
     'Mark attendance': () => const MyScheduleScreen(),
     'Process walk-ins': () => const CheckInScannerScreen(),
+    'Business Profile': () => const BusinessProfileEditorScreen(),
   };
 
   return RoleTheme.of(role)
@@ -300,9 +307,7 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color) {
             label: action,
             icon: icons[action] ?? Icons.check_circle_outline,
             color: color,
-            onTap: role == 'Staff' && staffTaps.containsKey(action)
-                ? () => Navigator.of(context).push(slideFadeRoute<void>(staffTaps[action]!()))
-                : null,
+            onTap: wiredTaps.containsKey(action) ? () => Navigator.of(context).push(slideFadeRoute<void>(wiredTaps[action]!())) : null,
           ))
       .toList();
 }
