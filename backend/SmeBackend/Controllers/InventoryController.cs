@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Authorization;
@@ -9,6 +10,7 @@ namespace SmeBackend.Controllers;
 
 [ApiController]
 [Route("api/inventory")]
+[Produces("application/json")]
 public sealed class InventoryController(
     AppDbContext db,
     IAuthorizationService authorizationService) : ControllerBase
@@ -16,6 +18,9 @@ public sealed class InventoryController(
     private const int MaxPageSize = 100;
 
     [HttpGet]
+    [ProducesResponseType(typeof(InventoryListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<InventoryListResponse>> GetInventory(
         [FromQuery] string? category,
         [FromQuery] bool lowStock = false,
@@ -82,6 +87,9 @@ public sealed class InventoryController(
     }
 
     [HttpGet("low-stock")]
+    [ProducesResponseType(typeof(InventoryListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public Task<ActionResult<InventoryListResponse>> GetLowStockInventory(
         [FromQuery] Guid? branchId = null,
         [FromQuery] int page = 1,
@@ -96,6 +104,10 @@ public sealed class InventoryController(
             cancellationToken: cancellationToken);
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<InventoryItemResponse>> GetInventoryItem(
         Guid id,
         CancellationToken cancellationToken)
@@ -123,6 +135,13 @@ public sealed class InventoryController(
     }
 
     [HttpPut("{id:guid}")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<InventoryItemResponse>> UpdateInventoryItem(
         Guid id,
         UpdateInventoryRequest request,
@@ -228,6 +247,11 @@ public sealed class InventoryController(
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeleteInventoryItem(Guid id, CancellationToken cancellationToken)
     {
         if (!TryGetTenantId(out var tenantId))
@@ -261,6 +285,13 @@ public sealed class InventoryController(
     }
 
     [HttpPost("{id:guid}/adjust")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<InventoryItemResponse>> AdjustInventoryItem(
         Guid id,
         AdjustInventoryRequest request,
@@ -320,6 +351,13 @@ public sealed class InventoryController(
     }
 
     [HttpPost("{id:guid}/receive")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<InventoryItemResponse>> ReceiveInventoryItem(
         Guid id,
         ReceiveInventoryRequest request,
@@ -385,6 +423,12 @@ public sealed class InventoryController(
     }
 
     [HttpPost]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<InventoryItemResponse>> CreateInventory(
         CreateInventoryRequest request,
         CancellationToken cancellationToken)

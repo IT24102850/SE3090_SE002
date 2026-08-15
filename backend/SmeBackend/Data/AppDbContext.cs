@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<Supplier> Suppliers { get; set; }
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; }
     public DbSet<StockMovement> StockMovements { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
 
     private Guid? CurrentTenantId => _tenantContext.TenantId;
 
@@ -53,6 +54,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Supplier>().HasQueryFilter(supplier => supplier.TenantId == CurrentTenantId && supplier.IsActive);
         modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(order => order.TenantId == CurrentTenantId);
         modelBuilder.Entity<StockMovement>().HasQueryFilter(movement => movement.TenantId == CurrentTenantId);
+        modelBuilder.Entity<Notification>().HasQueryFilter(notification => notification.TenantId == CurrentTenantId);
 
         // Indexes
         modelBuilder.Entity<User>().HasIndex(u => u.Email).IsUnique();
@@ -64,6 +66,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<PurchaseOrder>().HasIndex(order => new { order.TenantId, order.Number }).IsUnique();
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.TenantId, movement.BranchId });
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.InventoryItemId, movement.OccurredAt });
+        modelBuilder.Entity<Notification>().HasIndex(notification => new { notification.TenantId, notification.BranchId, notification.IsRead });
+        modelBuilder.Entity<Notification>().HasIndex(notification => notification.CreatedAt);
 
         modelBuilder.Entity<InventoryItem>(entity =>
         {
@@ -98,6 +102,14 @@ public class AppDbContext : DbContext
             entity.HasOne<InventoryItem>().WithMany().HasForeignKey(movement => movement.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Supplier>().WithMany().HasForeignKey(movement => movement.SupplierId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<PurchaseOrder>().WithMany().HasForeignKey(movement => movement.PurchaseOrderId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.Property(notification => notification.Type).HasMaxLength(50).IsRequired();
+            entity.Property(notification => notification.Title).HasMaxLength(150).IsRequired();
+            entity.Property(notification => notification.Message).HasMaxLength(1000).IsRequired();
+            entity.HasOne<Branch>().WithMany().HasForeignKey(notification => notification.BranchId).OnDelete(DeleteBehavior.SetNull);
         });
     }
 
