@@ -9,6 +9,15 @@ using SmeBackend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Railway (and most PaaS hosts) assign the listen port via $PORT at runtime
+// rather than appsettings/launchSettings - bind to it when present so the
+// container isn't unreachable. Local dev is unaffected (PORT is unset).
+var railwayPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(railwayPort))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{railwayPort}");
+}
+
 // Add services
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -113,11 +122,10 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Middleware pipeline
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// Swagger stays on in every environment (not just Development) - the
+// assignment spec requires a working deployed Swagger URL for grading.
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
@@ -125,6 +133,8 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
+
+app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 
 app.MapControllers();
 
