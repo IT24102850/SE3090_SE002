@@ -1,0 +1,61 @@
+# IDE and editor
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# .NET build outputs
+bin/
+obj/
+TestResults/
+Migrations/*Designer.cs
+Migrations/*ModelSnapshot.cs
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# Logs and diagnostics
+*.log
+logs/
+
+# Environment files
+.env
+.env.*
+appsettings.*.local.json
+appsettings.Local.json
+
+# Frontend / Node.js
+node_modules/
+dist/
+build/
+coverage/
+.npm/
+.yarn/
+.pnpm-store/
+*.tsbuildinfo
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+pubspec.lock
+build/
+ios/Pods/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# OS files
+Thumbs.db
+.DS_Store
