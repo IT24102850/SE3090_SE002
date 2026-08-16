@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Badge, type BadgeTone } from '../ui/Badge';
+import { useToast } from '../ui/ToastContext';
 
 type StockStatus = 'In stock' | 'Low stock' | 'Out of stock';
 
@@ -188,6 +189,7 @@ function ItemModal({
 }
 
 export function InventoryManagerPage() {
+  const { notify } = useToast();
   const [items, setItems] = useState<StockRow[]>(initialStock);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(categories[0]);
@@ -239,16 +241,20 @@ export function InventoryManagerPage() {
   function handleSave(form: StockForm) {
     if (modal?.mode === 'add') {
       setItems((prev) => [...prev, { sku: nextSku(prev), ...form }]);
+      notify(`${form.item} was added to inventory.`);
     } else if (modal?.mode === 'edit') {
       setItems((prev) => prev.map((row) => (row.sku === modal.sku ? { ...row, ...form } : row)));
+      notify(`${form.item} was updated.`);
     }
     setModal(null);
   }
 
   function confirmDelete() {
     if (!deleteSku) return;
+    const item = items.find((row) => row.sku === deleteSku);
     setItems((prev) => prev.filter((row) => row.sku !== deleteSku));
     setDeleteSku(null);
+    notify(`${item?.item ?? 'Item'} was deleted.`, 'info');
   }
 
   const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;

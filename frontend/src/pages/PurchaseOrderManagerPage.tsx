@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { Badge, type BadgeTone } from '../ui/Badge';
+import { useToast } from '../ui/ToastContext';
 
 type POStatus = 'Draft' | 'InReview' | 'Placed' | 'InTransit' | 'Received' | 'Cancelled';
 
@@ -312,6 +313,7 @@ function CreatePoModal({
 }
 
 export function PurchaseOrderManagerPage() {
+  const { notify } = useToast();
   const { token, user } = useAuth();
   const [orders, setOrders] = useState<PurchaseOrder[]>(fallbackOrders);
   const [usedFallback, setUsedFallback] = useState(true);
@@ -413,9 +415,11 @@ export function PurchaseOrderManagerPage() {
       try {
         await apiPut<PurchaseOrderResponse>(`/api/purchase-orders/${order.id}/status`, token, { status: next });
       } catch {
-        // Keep optimistic UI; demo fallback already applied locally.
+        notify(`Could not sync ${order.number}; the status is only saved locally.`, 'error');
+        return;
       }
     }
+    notify(`${order.number} moved to ${statusLabels[next]}.`);
   }
 
   function cancelOrder(order: PurchaseOrder) {
@@ -427,6 +431,7 @@ export function PurchaseOrderManagerPage() {
         ? { ...candidate, status: 'Cancelled', updatedAt: now, timeline: [...candidate.timeline, timelineEvent] }
         : candidate
     )));
+    notify(`${order.number} was cancelled.`, 'info');
   }
 
   function createOrder(supplier: string) {
@@ -447,6 +452,7 @@ export function PurchaseOrderManagerPage() {
     setOrders((prev) => [created, ...prev]);
     setSelectedId(created.id);
     setShowCreate(false);
+    notify(`${number} draft was created.`);
   }
 
   const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;

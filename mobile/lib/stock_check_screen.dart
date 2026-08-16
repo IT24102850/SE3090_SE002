@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'auth/authenticated_api_client.dart';
+import 'auth/app_notifications.dart';
 
 enum StockOperation { checkIn, checkOut }
 
@@ -52,8 +53,8 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
     final code = _barcode.text.trim();
     final quantity = int.tryParse(_quantity.text);
     if (code.isEmpty || quantity == null || quantity <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Scan or enter an item code and enter a valid quantity.')));
+      showAppNotification('Scan or enter an item code and enter a valid quantity.',
+          tone: AppNotificationTone.error);
       return;
     }
     setState(() => _saving = true);
@@ -92,8 +93,9 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
         throw StockOperationException(error ?? 'Unable to record this stock movement.');
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${_operation == StockOperation.checkIn ? 'Check-in' : 'Check-out'} recorded for ${item['name']}.')),
+      showAppNotification(
+        '${_operation == StockOperation.checkIn ? 'Check-in' : 'Check-out'} recorded for ${item['name']}.',
+        tone: AppNotificationTone.success,
       );
       setState(() {
         _scannedCode = null;
@@ -102,13 +104,12 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
       });
     } on StockOperationException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+        showAppNotification(error.message, tone: AppNotificationTone.error);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Unable to record stock. Check your connection and try again.'),
-        ));
+        showAppNotification('Unable to record stock. Check your connection and try again.',
+            tone: AppNotificationTone.error);
       }
     } finally {
       if (mounted) setState(() => _saving = false);

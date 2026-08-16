@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createDemoToken, useAuth } from '../auth/AuthContext';
+import { useToast } from '../ui/ToastContext';
 
 type LoginResponse = { accessToken?: string; token?: string };
 
@@ -179,6 +180,7 @@ export function LoginPage() {
   const { setToken } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { notify } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -202,10 +204,13 @@ export function LoginPage() {
       const token = body.accessToken ?? body.token;
       if (!response.ok || !token) throw new Error('Login failed. Check your credentials and try again.');
       setToken(token);
+      notify('Signed in successfully.');
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
       navigate(from ?? '/inventory', { replace: true });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Login failed.');
+      const message = caught instanceof Error ? caught.message : 'Login failed.';
+      setError(message);
+      notify(message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -213,6 +218,7 @@ export function LoginPage() {
 
   function demoSignIn() {
     setToken(createDemoToken('Admin'));
+    notify('Demo sign-in successful.');
     navigate('/analytics', { replace: true });
   }
 

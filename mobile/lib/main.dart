@@ -8,6 +8,7 @@ import 'auth/auth_controller.dart';
 import 'auth/auth_repository.dart';
 import 'auth/auth_session.dart';
 import 'stock_check_screen.dart';
+import 'auth/app_notifications.dart';
 
 // Chrome reaches the API through the host loopback address. Android emulators
 // use 10.0.2.2 as their alias for the host machine's loopback address.
@@ -32,6 +33,7 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: appMessengerKey,
       title: 'SME Inventory',
       theme: ThemeData(
           useMaterial3: true,
@@ -131,10 +133,14 @@ class _LoginState extends State<LoginScreen> {
     });
     try {
       await widget.auth.login(email.text.trim(), password.text);
+      showAppNotification('Signed in successfully.', tone: AppNotificationTone.success);
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
+      showAppNotification(e.message, tone: AppNotificationTone.error);
     } catch (_) {
-      if (mounted) setState(() => error = 'Unable to reach the server.');
+      const message = 'Unable to reach the server. Check the API connection and try again.';
+      if (mounted) setState(() => error = message);
+      showAppNotification(message, tone: AppNotificationTone.error);
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -1169,6 +1175,28 @@ class _ShellState extends State<Shell> {
     super.dispose();
   }
 
+  Future<void> confirmLogout() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text('Are you sure you want to sign out of SME Inventory?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Sign out')),
+        ],
+      ),
+    );
+    if (shouldLogout == true) {
+      await widget.auth.logout();
+      showAppNotification('You have been signed out.', tone: AppNotificationTone.info);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final analytics =
@@ -1199,7 +1227,7 @@ class _ShellState extends State<Shell> {
           Padding(
               padding: const EdgeInsets.only(right: 16),
               child: IconButton.filledTonal(
-                  onPressed: widget.auth.logout,
+                  onPressed: confirmLogout,
                   tooltip: 'Sign out',
                   icon: const Icon(Icons.logout_rounded)))
         ]),
@@ -1221,7 +1249,8 @@ class Inventory extends StatelessWidget {
           subtitle:
               'A clear view of stock health and what needs attention today.',
           action: FilledButton.icon(
-              onPressed: () {},
+              onPressed: () => showAppNotification(
+                  'Add item is not available in the mobile app yet.'),
               icon: const Icon(Icons.add_rounded),
               label: const Text('Add item')),
           children: [
@@ -1275,7 +1304,8 @@ class Analytics extends StatelessWidget {
           title: 'Inventory intelligence',
           subtitle: 'Use these signals to make confident stocking decisions.',
           action: OutlinedButton.icon(
-              onPressed: () {},
+              onPressed: () => showAppNotification(
+                  'Report export is not available in the mobile app yet.'),
               icon: const Icon(Icons.download_outlined),
               label: const Text('Export report')),
           children: const [
@@ -1403,7 +1433,7 @@ class ActionTile extends StatelessWidget {
   Widget build(BuildContext c) => LayoutBuilder(builder: (_, constraints) {
         final width = constraints.maxWidth < 190 ? constraints.maxWidth : 190.0;
         return InkWell(
-            onTap: () {},
+            onTap: () => showAppNotification('$label is not available yet.'),
             borderRadius: BorderRadius.circular(16),
             child: Ink(
                 width: width,

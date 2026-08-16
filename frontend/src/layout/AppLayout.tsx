@@ -1,12 +1,16 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { useToast } from '../ui/ToastContext';
 
 export function AppLayout() {
   const { user, logout, hasAnyRole } = useAuth();
   const navigate = useNavigate();
+  const { notify } = useToast();
 
   function signOut() {
+    if (!window.confirm('Are you sure you want to sign out?')) return;
     logout();
+    notify('You have been signed out.', 'info');
     navigate('/login');
   }
 
