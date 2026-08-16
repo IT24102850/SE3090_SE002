@@ -1,14 +1,20 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'auth/app_role.dart';
 import 'auth/auth_controller.dart';
 import 'auth/auth_repository.dart';
 import 'auth/auth_session.dart';
+import 'stock_check_screen.dart';
 
-const apiBaseUrl = String.fromEnvironment('API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:5107');
+// Chrome reaches the API through the host loopback address. Android emulators
+// use 10.0.2.2 as their alias for the host machine's loopback address.
+const apiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: kIsWeb ? 'http://localhost:5107' : 'http://10.0.2.2:5107',
+);
 const navy = Color(0xFFB94769),
     mint = Color(0xFF7B9FAD),
     canvas = Color(0xFFE1F0F6);
@@ -1159,12 +1165,16 @@ class _ShellState extends State<Shell> {
   Widget build(BuildContext context) {
     final analytics =
         widget.session.hasAnyRole([AppRole.admin, AppRole.manager]);
-    final pages = [const Inventory(), if (analytics) const Analytics()];
+    final pages = [const Inventory(), const StockCheckScreen(), if (analytics) const Analytics()];
     final destinations = [
       const NavigationDestination(
           icon: Icon(Icons.inventory_2_outlined),
           selectedIcon: Icon(Icons.inventory_2),
           label: 'Inventory'),
+      const NavigationDestination(
+          icon: Icon(Icons.qr_code_scanner_outlined),
+          selectedIcon: Icon(Icons.qr_code_scanner),
+          label: 'Scan stock'),
       if (analytics)
         const NavigationDestination(
             icon: Icon(Icons.insights_outlined),
