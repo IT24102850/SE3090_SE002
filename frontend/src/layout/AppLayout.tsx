@@ -19,6 +19,8 @@ export function AppLayout() {
           {hasAnyRole(['Admin', 'Manager', 'Staff']) && <NavLink to="/inventory">Inventory</NavLink>}
           {hasAnyRole(['Admin', 'Manager', 'Staff']) && <NavLink to="/stock-movements">Stock Log</NavLink>}
           {hasAnyRole(['Admin', 'Manager', 'Staff']) && <NavLink to="/purchase-orders">Purchase Orders</NavLink>}
+          {hasAnyRole(['Admin', 'Manager', 'Staff']) && <NavLink to="/low-stock-alerts">Low Stock Alerts</NavLink>}
+          {hasAnyRole(['Admin', 'Manager', 'Staff']) && <NavLink to="/branch-overview">Branches</NavLink>}
         </nav>
         <div className="account">
           <span>{user?.roles.join(', ')}</span>

@@ -7,6 +7,8 @@ import { InventoryManagerPage } from './pages/InventoryManagerPage';
 import { LoginPage } from './pages/LoginPage';
 import { PurchaseOrderManagerPage } from './pages/PurchaseOrderManagerPage';
 import { StockMovementLogPage } from './pages/StockMovementLogPage';
+import { LowStockAlertsPage } from './pages/LowStockAlertsPage';
+import { BranchOverviewPage } from './pages/BranchOverviewPage';
 
 export function App() {
   return (
@@ -17,6 +19,8 @@ export function App() {
           <Route path="/inventory" element={<InventoryManagerPage />} />
           <Route path="/stock-movements" element={<StockMovementLogPage />} />
           <Route path="/purchase-orders" element={<PurchaseOrderManagerPage />} />
+          <Route path="/low-stock-alerts" element={<LowStockAlertsPage />} />
+          <Route path="/branch-overview" element={<BranchOverviewPage />} />
         </Route>
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager']} />}>

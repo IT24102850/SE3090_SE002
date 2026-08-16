@@ -250,6 +250,12 @@ input { padding: .7rem; border: 1px solid #c8cfdd; border-radius: .35rem; font: 
 .lifecycle-cancelled { color: #b91c1c; font-size: .75rem; font-weight: 700; }
 .modal-hint { margin: 0 0 1rem; color: #64748b; font-size: .82rem; line-height: 1.45; }
 
+/* Inventory health and multi-branch views */
+.live-indicator { display: inline-flex; gap: .4rem; align-items: center; padding: .55rem .7rem; color: #475569; font-size: .78rem; font-weight: 650; background: #f8fafc; border: 1px solid #e7ecf3; border-radius: .55rem; }
+.live-indicator span { width: .5rem; height: .5rem; background: #10b981; border-radius: 50%; box-shadow: 0 0 0 3px #d1fae5; }
+.forecast-date { margin: 0; color: #2563eb; font-weight: 750; }.forecast-critical { margin: 0; color: #dc2626; font-weight: 750; }.table-link { color: #2563eb; font-size: .85rem; font-weight: 650; }.table-link:hover { text-decoration: underline; }.alert-action-message { margin: .75rem 1.25rem 0; padding: .6rem .75rem; color: #065f46; font-size: .82rem; background: #ecfdf5; border-radius: .5rem; }.ai-disclaimer { margin: .75rem 0 0; color: #94a3b8; font-size: .75rem; }
+.branch-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem; }.branch-card { padding: 1rem 1.1rem; background: #fff; border: 1px solid #e7ecf3; border-radius: 1rem; box-shadow: 0 1px 2px rgba(15,23,42,.04); }.branch-card-head { display: flex; gap: .5rem; align-items: flex-start; justify-content: space-between; }.branch-card h2 { margin: 0; font-size: .92rem; }.branch-card p, .branch-card > span { margin: .2rem 0 0; color: #64748b; font-size: .75rem; }.branch-card > strong { display: block; margin-top: 1rem; font-size: 1.1rem; }.branch-card > span { display: block; }.branch-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .85fr); gap: 1rem; }.comparison-title { display: flex; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid #f1f5f9; }.comparison-title strong, .comparison-title span { display: block; }.comparison-title span { margin-top: .18rem; color: #94a3b8; font-size: .76rem; }.branch-levels { padding: .4rem 1.25rem 1rem; }.branch-level { display: grid; grid-template-columns: 150px 1fr 115px; gap: .8rem; align-items: center; padding: .85rem 0; border-bottom: 1px solid #f1f5f9; }.branch-level:last-child { border-bottom: 0; }.branch-level strong, .branch-level span { display: block; }.branch-level span, .branch-level small { color: #64748b; font-size: .76rem; }.branch-level .stock-level { width: 100%; }.transfer-list { display: grid; gap: .2rem; margin: 0; padding: .45rem 1.25rem .9rem; list-style: none; }.transfer-list li { display: flex; gap: .75rem; align-items: flex-start; justify-content: space-between; padding: .8rem 0; border-bottom: 1px solid #f1f5f9; }.transfer-list li:last-child { border-bottom: 0; }.transfer-list strong { font-size: .86rem; }.transfer-list p, .transfer-list span { margin: .2rem 0 0; color: #64748b; font-size: .76rem; }.field-hint { color: #94a3b8; font-size: .72rem; font-weight: 400; }
+
 /* Responsive */
 @media (max-width: 980px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
@@ -257,6 +263,7 @@ input { padding: .7rem; border: 1px solid #c8cfdd; border-radius: .35rem; font: 
   .analytics-grid-primary, .analytics-grid-secondary, .analytics-grid-bottom { grid-template-columns: 1fr; }
   .inventory-layout { grid-template-columns: 1fr; }
   .po-layout { grid-template-columns: 1fr; }
+  .branch-summary-grid { grid-template-columns: repeat(2, 1fr); }.branch-layout { grid-template-columns: 1fr; }
   .po-detail-panel { position: static; }
   .suppliers-panel { position: static; }
   .donut-wrap { grid-template-columns: 1fr; }
@@ -267,6 +274,7 @@ input { padding: .7rem; border: 1px solid #c8cfdd; border-radius: .35rem; font: 
   main { padding: 1.25rem 1rem; }
   .kpi-grid { grid-template-columns: 1fr; }
   .stat-strip { grid-template-columns: repeat(2, 1fr); }
+  .branch-summary-grid { grid-template-columns: 1fr; }.branch-level { grid-template-columns: 1fr; gap: .35rem; }
   .topbar { padding: 0 1rem; }
   .chart-box { height: 280px; padding: .8rem .6rem 1rem; }
   .chart-box-sm { height: 240px; }
