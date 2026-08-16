@@ -1,10 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+
+import 'auth/authenticated_api_client.dart';
 
 enum StockOperation { checkIn, checkOut }
 
 class StockCheckScreen extends StatefulWidget {
-  const StockCheckScreen({super.key});
+  const StockCheckScreen({super.key, required this.client});
+
+  final AuthenticatedApiClient client;
 
   @override
   State<StockCheckScreen> createState() => _StockCheckScreenState();
@@ -51,18 +57,71 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
       return;
     }
     setState(() => _saving = true);
-    // The request payload is ready for the authenticated inventory API. Keep this
-    // local confirmation until the stock-operation endpoint is connected.
-    await Future<void>.delayed(const Duration(milliseconds: 450));
-    if (!mounted) return;
-    setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${_operation == StockOperation.checkIn ? 'Check-in' : 'Check-out'} recorded: $quantity unit${quantity == 1 ? '' : 's'} for $code.')));
-    setState(() {
-      _scannedCode = null;
-      _barcode.clear();
-      _quantity.text = '1';
-    });
+    try {
+      final inventoryResponse = await widget.client.get('/api/inventory?pageSize=100');
+      if (inventoryResponse.statusCode != 200) {
+        throw const StockOperationException('Unable to load inventory.');
+      }
+      final payload = jsonDecode(inventoryResponse.body) as Map<String, dynamic>;
+      final items = payload['items'] as List<dynamic>? ?? const [];
+      Map<String, dynamic>? item;
+      for (final candidate in items) {
+        if (candidate is Map<String, dynamic> &&
+            candidate['sku']?.toString().toLowerCase() == code.toLowerCase()) {
+          item = candidate;
+          break;
+        }
+      }
+      if (item == null) {
+        throw StockOperationException('No inventory item matches "$code".');
+      }
+
+      final endpoint = _operation == StockOperation.checkIn
+          ? '/api/inventory/${item['id']}/receive'
+          : '/api/inventory/${item['id']}/adjust';
+      final response = await widget.client.post(
+        endpoint,
+        body: {
+          'quantity': _operation == StockOperation.checkIn ? quantity : -quantity,
+          'reference': 'MOBILE-SCAN',
+          'notes': 'Recorded from the mobile barcode scanner',
+        },
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final error = _messageFromResponse(response.body);
+        throw StockOperationException(error ?? 'Unable to record this stock movement.');
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${_operation == StockOperation.checkIn ? 'Check-in' : 'Check-out'} recorded for ${item['name']}.')),
+      );
+      setState(() {
+        _scannedCode = null;
+        _barcode.clear();
+        _quantity.text = '1';
+      });
+    } on StockOperationException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Unable to record stock. Check your connection and try again.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  String? _messageFromResponse(String body) {
+    try {
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      return json['message'] as String? ?? json['title'] as String?;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -187,6 +246,11 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
           ]),
         ),
       );
+}
+
+class StockOperationException implements Exception {
+  const StockOperationException(this.message);
+  final String message;
 }
 
 class _ScannerOverlay extends StatelessWidget {

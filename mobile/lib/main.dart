@@ -1161,11 +1161,23 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   int index = 0;
+  late final stockClient = widget.auth.authenticatedClient();
+
+  @override
+  void dispose() {
+    stockClient.close();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final analytics =
         widget.session.hasAnyRole([AppRole.admin, AppRole.manager]);
-    final pages = [const Inventory(), const StockCheckScreen(), if (analytics) const Analytics()];
+    final pages = [
+      const Inventory(),
+      StockCheckScreen(client: stockClient),
+      if (analytics) const Analytics(),
+    ];
     final destinations = [
       const NavigationDestination(
           icon: Icon(Icons.inventory_2_outlined),
