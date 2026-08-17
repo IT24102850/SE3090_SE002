@@ -29,6 +29,12 @@ class AuthenticatedApiClient {
         body: body == null ? null : jsonEncode(body),
       );
 
+  Future<http.Response> put(String path, {Object? body}) => _client.put(
+        _uri(path),
+        headers: _headers,
+        body: body == null ? null : jsonEncode(body),
+      );
+
   void close() => _client.close();
 
   Uri _uri(String path) =>

@@ -8,6 +8,8 @@ import 'auth/auth_controller.dart';
 import 'auth/auth_repository.dart';
 import 'auth/auth_session.dart';
 import 'stock_count_screen.dart';
+import 'purchase_order_approval_screen.dart';
+import 'equipment_maintenance_screen.dart';
 import 'auth/app_notifications.dart';
 
 // Chrome reaches the API through the host loopback address. Android emulators
@@ -1204,6 +1206,10 @@ class _ShellState extends State<Shell> {
     final pages = [
       const Inventory(),
       StockCountScreen(client: stockClient),
+      PurchaseOrderApprovalScreen(
+          client: stockClient,
+          canApprove: widget.session.hasAnyRole([AppRole.admin, AppRole.manager])),
+      const EquipmentMaintenanceScreen(),
       if (analytics) const Analytics(),
     ];
     final destinations = [
@@ -1215,6 +1221,14 @@ class _ShellState extends State<Shell> {
           icon: Icon(Icons.fact_check_outlined),
           selectedIcon: Icon(Icons.fact_check),
           label: 'Stock count'),
+      const NavigationDestination(
+          icon: Icon(Icons.approval_outlined),
+          selectedIcon: Icon(Icons.approval),
+          label: 'Approvals'),
+      const NavigationDestination(
+          icon: Icon(Icons.build_outlined),
+          selectedIcon: Icon(Icons.build),
+          label: 'Maintenance'),
       if (analytics)
         const NavigationDestination(
             icon: Icon(Icons.insights_outlined),
