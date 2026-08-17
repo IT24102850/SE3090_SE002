@@ -14,6 +14,14 @@ Authenticated inventory feature screens should obtain their request client from
 `auth.authenticatedClient()`. The shared client adds `Authorization: Bearer
 <token>` to every request; screens must never read or persist the token.
 
+## Offline stock count
+
+The **Stock count** tab saves a cached inventory catalog and each physical count
+locally. A saved count is an absolute on-hand quantity; when the app reconnects,
+it reloads the server quantity and submits only the required adjustment. Pending
+counts are retained until the server accepts them, and the Sync button can be
+used to retry manually.
+
 ## Run
 
 After generating platform folders with `flutter create .`, fetch packages and run

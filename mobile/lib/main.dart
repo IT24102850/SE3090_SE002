@@ -7,7 +7,7 @@ import 'auth/app_role.dart';
 import 'auth/auth_controller.dart';
 import 'auth/auth_repository.dart';
 import 'auth/auth_session.dart';
-import 'stock_check_screen.dart';
+import 'stock_count_screen.dart';
 import 'auth/app_notifications.dart';
 
 // Chrome reaches the API through the host loopback address. Android emulators
@@ -1203,7 +1203,7 @@ class _ShellState extends State<Shell> {
         widget.session.hasAnyRole([AppRole.admin, AppRole.manager]);
     final pages = [
       const Inventory(),
-      StockCheckScreen(client: stockClient),
+      StockCountScreen(client: stockClient),
       if (analytics) const Analytics(),
     ];
     final destinations = [
@@ -1212,9 +1212,9 @@ class _ShellState extends State<Shell> {
           selectedIcon: Icon(Icons.inventory_2),
           label: 'Inventory'),
       const NavigationDestination(
-          icon: Icon(Icons.qr_code_scanner_outlined),
-          selectedIcon: Icon(Icons.qr_code_scanner),
-          label: 'Scan stock'),
+          icon: Icon(Icons.fact_check_outlined),
+          selectedIcon: Icon(Icons.fact_check),
+          label: 'Stock count'),
       if (analytics)
         const NavigationDestination(
             icon: Icon(Icons.insights_outlined),
