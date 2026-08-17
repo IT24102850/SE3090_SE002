@@ -67,9 +67,89 @@ The Action/Tool Agent decides whether the system should trigger an operational r
 }
 ```
 
+## Allow-listed operational tools
+
+The agent may call only the following tools:
+
+- `query_stock_levels`
+- `query_historical_usage`
+
+These are implemented in `agents/inventory_tools.py` and are guarded by strict validation before execution.
+
+### `query_stock_levels`
+
+Input:
+
+```json
+{
+  "tenant_id": "uuid-string",
+  "inventory_item_id": "uuid-string | null",
+  "branch_id": "uuid-string | null",
+  "include_inactive": false
+}
+```
+
+Output:
+
+```json
+{
+  "tool": "query_stock_levels",
+  "tenantId": "uuid-string",
+  "items": [
+    {
+      "inventoryItemId": "uuid-string",
+      "name": "string",
+      "sku": "string",
+      "branchId": "uuid-string | null",
+      "quantity": 18.0,
+      "reorderLevel": 25.0,
+      "status": "low_stock",
+      "updatedAt": "2026-08-17T08:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+### `query_historical_usage`
+
+Input:
+
+```json
+{
+  "tenant_id": "uuid-string",
+  "inventory_item_id": "uuid-string",
+  "start_date": "2026-08-01",
+  "end_date": "2026-08-15",
+  "granularity": "day",
+  "limit": 30
+}
+```
+
+Output:
+
+```json
+{
+  "tool": "query_historical_usage",
+  "tenantId": "uuid-string",
+  "inventoryItemId": "uuid-string",
+  "series": [
+    {
+      "date": "2026-08-10",
+      "quantityReceived": 40.0,
+      "quantityIssued": 12.0,
+      "netChange": 28.0,
+      "runningBalance": 42.0
+    }
+  ],
+  "count": 1
+}
+```
+
 ## Notes
 - actions is the agent's recommended remediation list.
 - purchaseOrders contains draft orders that can be handed to the purchase-order workflow.
 - notifications contains user-facing alerts for supervisors or branch staff.
 - confidenceScore is a scalar between 0 and 1 that summarises how certain the agent is about the recommendation set.
 - The canonical Python contract lives in `agents/action_tool_agent_contract.py`.
+- The allow-listed operational tool implementation lives in `agents/inventory_tools.py`.
