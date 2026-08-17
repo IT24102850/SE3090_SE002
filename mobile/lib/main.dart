@@ -10,6 +10,7 @@ import 'auth/auth_session.dart';
 import 'stock_count_screen.dart';
 import 'purchase_order_approval_screen.dart';
 import 'equipment_maintenance_screen.dart';
+import 'inventory_dashboard.dart';
 import 'auth/app_notifications.dart';
 
 // Chrome reaches the API through the host loopback address. Android emulators
@@ -18,9 +19,9 @@ const apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: kIsWeb ? 'http://localhost:5107' : 'http://10.0.2.2:5107',
 );
-const navy = Color(0xFFB94769),
-    mint = Color(0xFF7B9FAD),
-    canvas = Color(0xFFE1F0F6);
+const navy = Color(0xFF173B5C),
+    mint = Color(0xFF0E9F8A),
+    canvas = Color(0xFFF4F7FB);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,38 +34,72 @@ class App extends StatelessWidget {
   const App({super.key, required this.auth});
   final AuthController auth;
   @override
-  Widget build(BuildContext context) => MaterialApp(
+  Widget build(BuildContext context) {
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: appMessengerKey,
       title: 'SME Inventory',
       theme: ThemeData(
           useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: navy),
+          colorScheme: ColorScheme.fromSeed(
+              seedColor: navy, brightness: Brightness.light),
           scaffoldBackgroundColor: canvas,
+          appBarTheme: const AppBarTheme(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              surfaceTintColor: Colors.transparent),
+          navigationBarTheme: NavigationBarThemeData(
+              height: 74,
+              backgroundColor: Colors.white,
+              indicatorColor: navy.withValues(alpha: .12)),
+          cardTheme: CardThemeData(
+              elevation: 0,
+              color: Colors.white,
+              surfaceTintColor: Colors.white,
+              margin: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: const BorderSide(color: Color(0xFFE4EAF2)))),
           inputDecorationTheme: InputDecorationTheme(
               filled: true,
-              fillColor: const Color(0xFFF9FAFB),
+              fillColor: Colors.white,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
               border: border(),
               enabledBorder: border(),
               focusedBorder: border(navy, 2)),
           filledButtonTheme: FilledButtonThemeData(
-              style: FilledButton.styleFrom(
-                  backgroundColor: navy,
-                  minimumSize: const Size.fromHeight(54),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14))))),
+            style: FilledButton.styleFrom(
+              backgroundColor: navy,
+              minimumSize: const Size.fromHeight(54),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+            ),
+          ),
+        ),
       home: AnimatedBuilder(
           animation: auth,
           builder: (_, __) => auth.isRestoring
               ? const Scaffold(body: Center(child: CircularProgressIndicator()))
               : AnimatedSwitcher(
                   duration: const Duration(milliseconds: 350),
+                  transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                          position: Tween<Offset>(
+                                  begin: const Offset(0, .025), end: Offset.zero)
+                              .animate(CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOutCubic)),
+                          child: child)),
                   child: auth.session == null
                       ? Login(key: const ValueKey('login'), auth: auth)
                       : Shell(
                           key: const ValueKey('shell'),
                           auth: auth,
-                          session: auth.session!))));
+                          session: auth.session!))),
+    );
+  }
 }
 
 OutlineInputBorder border(
@@ -1137,7 +1172,10 @@ class Logo extends StatelessWidget {
             child: Text('SME Inventory',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)))
+                style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18)))
       ]);
 }
 
@@ -1204,7 +1242,7 @@ class _ShellState extends State<Shell> {
     final analytics =
         widget.session.hasAnyRole([AppRole.admin, AppRole.manager]);
     final pages = [
-      const Inventory(),
+      InventoryDashboard(client: stockClient),
       StockCountScreen(client: stockClient),
       PurchaseOrderApprovalScreen(
           client: stockClient,
@@ -1237,7 +1275,17 @@ class _ShellState extends State<Shell> {
     ];
     final current = index >= pages.length ? 0 : index;
     return Scaffold(
-        appBar: AppBar(toolbarHeight: 78, title: const Logo(), actions: [
+        appBar: AppBar(
+            toolbarHeight: 78,
+            backgroundColor: navy,
+            foregroundColor: Colors.white,
+            flexibleSpace: const DecoratedBox(
+                decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF173B5C), Color(0xFF0E6972)]))),
+            title: const Logo(), actions: [
           Padding(
               padding: const EdgeInsets.only(right: 16),
               child: IconButton.filledTonal(

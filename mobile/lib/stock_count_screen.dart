@@ -157,27 +157,43 @@ class _StockCountScreenState extends State<StockCountScreen> {
               ? const Center(child: CircularProgressIndicator())
               : Column(
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('OFFLINE-READY', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.1)),
-                                const SizedBox(height: 4),
-                                Text('Stock count', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-                                Text(_catalog.isEmpty ? 'No saved catalog yet' : '${_catalog.length} items available offline', style: const TextStyle(color: Color(0xFF667085))),
-                              ],
-                            ),
-                          ),
-                          IconButton.filledTonal(onPressed: _syncing ? null : _sync, tooltip: 'Sync now', icon: _syncing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync_rounded)),
-                        ],
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF173B5C), Color(0xFF0E6972)],
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: const [BoxShadow(color: Color(0x33173B5C), blurRadius: 20, offset: Offset(0, 10))],
                       ),
+                      child: Row(children: [
+                        Container(
+                          padding: const EdgeInsets.all(11),
+                          decoration: BoxDecoration(color: Colors.white.withValues(alpha: .16), borderRadius: BorderRadius.circular(15)),
+                          child: const Icon(Icons.fact_check_rounded, color: Colors.white),
+                        ),
+                        const SizedBox(width: 13),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('OFFLINE-READY', style: TextStyle(color: Color(0xFFB8F3EA), fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.1)),
+                          const SizedBox(height: 3),
+                          Text('Stock count', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 2),
+                          Text(_catalog.isEmpty ? 'Connect once to cache your catalog' : '${_catalog.length} items ready to count', style: const TextStyle(color: Color(0xFFD5EAF2), fontSize: 12)),
+                        ])),
+                        IconButton.filled(
+                          style: IconButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF173B5C)),
+                          onPressed: _syncing ? null : _sync,
+                          tooltip: 'Sync now',
+                          icon: _syncing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync_rounded),
+                        ),
+                      ]),
                     ),
                     if (_pending.isNotEmpty)
-                      Container(width: double.infinity, margin: const EdgeInsets.fromLTRB(20, 0, 20, 12), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFFFFF7E6), borderRadius: BorderRadius.circular(12)), child: Row(children: [const Icon(Icons.cloud_upload_outlined, color: Color(0xFFB54708)), const SizedBox(width: 9), Text('${_pending.length} count(s) waiting to sync', style: const TextStyle(fontWeight: FontWeight.w700))])),
+                      Container(width: double.infinity, margin: const EdgeInsets.fromLTRB(20, 0, 20, 12), padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: const Color(0xFFFFF7E6), border: Border.all(color: const Color(0xFFFDDCA5)), borderRadius: BorderRadius.circular(16)), child: Row(children: [Container(padding: const EdgeInsets.all(7), decoration: BoxDecoration(color: const Color(0xFFFFE7BA), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.cloud_upload_outlined, color: Color(0xFFB54708))), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Waiting to sync', style: TextStyle(fontWeight: FontWeight.w800)), Text('${_pending.length} saved count${_pending.length == 1 ? '' : 's'} will upload automatically.', style: const TextStyle(color: Color(0xFF8A5A18), fontSize: 12))]))])),
                     Expanded(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
