@@ -5,8 +5,14 @@ import 'package:flutter/material.dart';
 import 'auth/authenticated_api_client.dart';
 
 class InventoryDashboard extends StatefulWidget {
-  const InventoryDashboard({super.key, required this.client});
+  const InventoryDashboard({
+    super.key,
+    required this.client,
+    this.onOpenStockOperations,
+  });
+
   final AuthenticatedApiClient client;
+  final VoidCallback? onOpenStockOperations;
 
   @override
   State<InventoryDashboard> createState() => _InventoryDashboardState();
@@ -48,6 +54,13 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                   const SizedBox(height: 4),
                   Text('Inventory at a glance', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
                 ])),
+                if (widget.onOpenStockOperations != null)
+                  IconButton.filledTonal(
+                    onPressed: widget.onOpenStockOperations,
+                    tooltip: 'Open stock operations',
+                    icon: const Icon(Icons.inventory_2_rounded),
+                  ),
+                const SizedBox(width: 8),
                 IconButton.filledTonal(onPressed: _load, tooltip: 'Refresh dashboard', icon: const Icon(Icons.refresh_rounded)),
               ]),
               const SizedBox(height: 8),
