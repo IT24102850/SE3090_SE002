@@ -70,7 +70,10 @@ input { padding: .7rem; border: 1px solid #c8cfdd; border-radius: .35rem; font: 
 .link-button:hover { text-decoration: underline; }
 
 /* Ensure interactive controls are above header overlays */
-.btn, .page-actions button, table button { position: relative; z-index: 300; }
+.btn, .page-actions button, table button, .demo-button, input, select, textarea, a { position: relative; z-index: var(--z-buttons) !important; pointer-events: auto !important; }
+
+/* Defensive: make large overlay-ish decorative elements ignore pointer events unless explicitly needed */
+.owl-wrapper, .background-decor, .decor-overlay { pointer-events: none !important; }
 
 /* Badges */
 .badge { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .55rem; font-size: .72rem; font-weight: 700; border-radius: 999px; white-space: nowrap; }
