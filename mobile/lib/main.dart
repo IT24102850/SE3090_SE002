@@ -12,6 +12,7 @@ import 'purchase_order_approval_screen.dart';
 import 'equipment_maintenance_screen.dart';
 import 'inventory_dashboard.dart';
 import 'auth/app_notifications.dart';
+import 'auth/notification_ws.dart';
 
 // Chrome reaches the API through the host loopback address. Android emulators
 // use 10.0.2.2 as their alias for the host machine's loopback address.
@@ -26,6 +27,15 @@ const navy = Color(0xFF173B5C),
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   final auth = AuthController(AuthRepository(apiBaseUrl: apiBaseUrl));
+  // initialize notifications websocket
+  try {
+    // ignore: unnecessary_statements
+    () {
+      // Lazy connect - NotificationService will attempt to reconnect on failure
+      final ns = (NotificationService());
+      ns.connect();
+    }();
+  } catch (_) {}
   runApp(App(auth: auth));
   auth.restore();
 }

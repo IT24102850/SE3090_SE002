@@ -15,6 +15,9 @@ from .inventory_tools import execute_allowed_tool, ValidationError as ToolValida
 
 
 import os
+import asyncio
+from typing import Set
+from fastapi import WebSocket, WebSocketDisconnect
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'agent_workflows.db')
 OLLAMA_URL = os.environ.get('OLLAMA_URL', "http://localhost:11434")
@@ -33,6 +36,47 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Simple in-memory WebSocket manager for real-time notifications to connected clients
+_connected_webs: Set[WebSocket] = set()
+
+async def broadcast_event(event: dict):
+    """Broadcast an event to all connected WebSocket clients. Best-effort delivery."""
+    if not _connected_webs:
+        return
+    to_remove = []
+    text = json.dumps(event)
+    for ws in list(_connected_webs):
+        try:
+            await ws.send_text(text)
+        except Exception:
+            to_remove.append(ws)
+    for ws in to_remove:
+        try:
+            _connected_webs.remove(ws)
+        except KeyError:
+            pass
+
+
+@app.websocket("/ws/workflows")
+async def websocket_workflows_endpoint(ws: WebSocket):
+    await ws.accept()
+    _connected_webs.add(ws)
+    try:
+        while True:
+            # keep connection alive; echo or ignore incoming messages
+            data = await ws.receive_text()
+            # client can send ping or subscription messages; ignore for now
+    except WebSocketDisconnect:
+        try:
+            _connected_webs.remove(ws)
+        except KeyError:
+            pass
+    except Exception:
+        try:
+            _connected_webs.remove(ws)
+        except KeyError:
+            pass
 
 
 
@@ -187,6 +231,21 @@ def process_workflow(input_obj: ValidationSafetyInput) -> dict[str, Any]:
         record["llm_response"] = f"<llm-error:{e}>"
 
     _insert_workflow(record)
+    # Notify connected websocket clients about the new/updated workflow (best-effort)
+    try:
+        asyncio.create_task(broadcast_event({
+            "type": "workflow_update",
+            "workflow_id": None,
+            "status": record["status"],
+            "actionType": input_obj.actionType,
+            "payload": input_obj.payload,
+            "tool_result": tool_result,
+            "validation_result": validation,
+            "llm": record["llm_response"],
+            "created_at": created_at,
+        }))
+    except Exception:
+        pass
     return {"status": record["status"], "validation": validation, "tool_result": tool_result, "llm": record["llm_response"]}
 
 
@@ -364,6 +423,21 @@ def workflows_approve(workflow_id: int, body: dict[str, Any]):
     cur.execute("UPDATE AgentWorkflows SET validation_result = ? WHERE id = ?", (json.dumps(vr), workflow_id))
     conn.commit()
     conn.close()
+
+    # Notify websocket clients about approval/update
+    try:
+        asyncio.create_task(broadcast_event({
+            "type": "workflow_update",
+            "workflow_id": workflow_id,
+            "status": "approved",
+            "actionType": actionType,
+            "validation_result": vr,
+            "tool_result": tr,
+            "backend_result": backend_result,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }))
+    except Exception:
+        pass
 
     # If backend_result succeeded and send_notification tool is available, attempt to notify procurement
     notify_result = None

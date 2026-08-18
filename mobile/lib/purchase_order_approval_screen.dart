@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
 import 'auth/app_notifications.dart';
 import 'auth/authenticated_api_client.dart';
+import 'auth/notification_ws.dart';
 
 class PurchaseOrderApprovalScreen extends StatefulWidget {
   const PurchaseOrderApprovalScreen({super.key, required this.client, required this.canApprove});
@@ -19,8 +21,41 @@ class _PurchaseOrderApprovalScreenState extends State<PurchaseOrderApprovalScree
   bool _loading = true;
   String? _error;
 
+  StreamSubscription? _notifSub;
+
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _load();
+    // subscribe to notification websocket events
+    try {
+      _notifSub = NotificationService().stream.listen((event) {
+        try {
+          if (event['type'] == 'workflow_update') {
+            final action = event['actionType'] as String? ?? '';
+            // if a backend PO was created or workflow approved, refresh the PO list
+            if (action == 'generate_purchase_order' && (event['backend_result'] != null || event['status'] == 'approved')) {
+              // refresh list on main isolate
+              if (mounted) {
+                showAppNotification('Agent placed or updated a purchase order.', tone: AppNotificationTone.info);
+                _load();
+              }
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+      });
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  @override
+  void dispose() {
+    _notifSub?.cancel();
+    super.dispose();
+  }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
