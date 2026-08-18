@@ -35,3 +35,9 @@ __all__ = [
     "ValidationSafetyInput",
     "ValidationSafetyOutput",
 ]
+
+from .validation_safety_agent import (
+    evaluate_validation_safety,
+)
+
+__all__ += ["evaluate_validation_safety"]
