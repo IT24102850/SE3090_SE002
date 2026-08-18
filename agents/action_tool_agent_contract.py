@@ -47,22 +47,7 @@ class Thresholds:
 
 @dataclass
 class ActionToolAgentInput:
-    """Input payload sent to the Action/Tool agent.
-
-    Contract:
-        {
-          "triggerType": "low_stock" | "stockout" | "forecast_risk" | "threshold_breach" | "manual_review",
-          "inventoryItemId": "string or null",
-          "tenantId": "string",
-          "thresholds": {
-            "reorderLevel": 0,
-            "criticalLevel": 0,
-            "safetyStock": 0,
-            "leadTimeDays": 7,
-            "maxStock": 0
-          }
-        }
-    """
+    """Input payload sent to the Action/Tool agent."""
 
     triggerType: TriggerType
     tenantId: str
@@ -121,17 +106,6 @@ class NotificationDraft:
 
 @dataclass
 class ActionToolAgentOutput:
-    """Output payload returned by the Action/Tool agent.
-
-    Contract:
-        {
-          "actions": [ ... ],
-          "purchaseOrders": [ ... ],
-          "notifications": [ ... ],
-          "confidenceScore": 0.87
-        }
-    """
-
     actions: list[ActionRecommendation] = field(default_factory=list)
     purchaseOrders: list[PurchaseOrderDraft] = field(default_factory=list)
     notifications: list[NotificationDraft] = field(default_factory=list)
