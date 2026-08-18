@@ -1,6 +1,6 @@
 :root { font-family: Inter, system-ui, sans-serif; color: #172033; background: #f7f8fc; --header-height: 68px; --z-topbar: 200; --z-buttons: 300; --z-modal: 1200; --z-toast: 1400; }
 * { box-sizing: border-box; }
-body { margin: 0; }
+body { margin: 0; padding-top: var(--header-height); }
 .topbar { min-height: var(--header-height); height: var(--header-height); padding: 0 1.5rem; display: flex; gap: 1.25rem; align-items: center; background: linear-gradient(90deg,#0f172a,#123); color: white; position: fixed; top: 0; left: 0; right: 0; z-index: var(--z-topbar); box-shadow: 0 6px 20px rgba(2,6,23,0.35); pointer-events: auto; }
 .brand { display: flex; gap: .75rem; align-items: center; }
 .brand-mark { width: 44px; height: 44px; display: grid; place-items: center; background: linear-gradient(135deg,#7c3aed,#2563eb); color: white; border-radius: .6rem; font-weight: 800; }
@@ -9,7 +9,7 @@ body { margin: 0; }
 .account { margin-left: auto; display: flex; gap: .75rem; align-items: center; font-size: .9rem; flex-shrink: 0; }
 .nav-item { display: inline-flex; gap: .5rem; align-items: center; color: rgba(255,255,255,.9); padding: .5rem .7rem; border-radius: .5rem; text-decoration: none; font-weight: 600; }
 .nav-item svg { opacity: .9; }
-.nav-item:hover { background: rgba(255,255,255,.04); transform: translateY(-1px); }
+.nav-item:hover { background: rgba(255,255,255,.04); }
 .nav-item.active { background: rgba(255,255,255,.06); box-shadow: 0 6px 18px rgba(2,6,23,0.12); }
 .account { margin-left: auto; display: flex; gap: .75rem; align-items: center; font-size: .9rem; }
 .account-info { display:flex; gap:.6rem; align-items:center; margin-right: .5rem; }
@@ -178,7 +178,7 @@ input { padding: .7rem; border: 1px solid #c8cfdd; border-radius: .35rem; font: 
 .btn { border-radius: .6rem; padding: .55rem .85rem; font-weight: 700; font-size: .9rem; border: none; cursor: pointer; }
 .btn-primary { background: linear-gradient(180deg,#6d28d9,#4c1d95); color: white; box-shadow: 0 8px 26px rgba(99,102,241,.14); }
 .btn-secondary { background: transparent; border: 1px solid rgba(37,99,235,.12); color: #123; }
-.btn:hover { transform: translateY(-2px); }
+.btn:hover { filter: brightness(1.03); }
 
 .badge { transition: transform .16s ease, box-shadow .16s ease; }
 .badge:hover { transform: translateY(-2px); }
