@@ -134,6 +134,11 @@ export function AgentWorkflowMonitorPage() {
     }
   }
 
+  const totalCount = items.length;
+  const pendingCount = items.filter(i => i.status === 'pending').length;
+  const approvedCount = items.filter(i => i.status === 'approved').length;
+  const avgConfidence = items.reduce((acc, i) => acc + (Number(i.validation_result?.confidence ?? i.tool_result?.confidence ?? 0) || 0), 0) / Math.max(1, items.length);
+
   return (
     <div className="p-4 page page-head">
       <div className="page-head">
@@ -159,6 +164,21 @@ export function AgentWorkflowMonitorPage() {
           </select>
           <input className="filter-select" placeholder="Tenant ID" value={tenantFilter ?? ''} onChange={(e)=>{ setTenantFilter(e.target.value || null); setPage(1); }} />
           <button className="btn btn-secondary" onClick={() => fetchItems()}>Refresh</button>
+        </div>
+      </div>
+
+      <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginTop:12, marginBottom:12}}>
+        <div className="kpi-card">
+          <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="workflow" /><div className="kpi-label">Total Workflows</div></div><div className="kpi-value">{totalCount}</div></div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="predict" /><div className="kpi-label">Pending</div></div><div className="kpi-value">{pendingCount}</div></div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="approve" /><div className="kpi-label">Approved</div></div><div className="kpi-value">{approvedCount}</div></div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="chart" /><div className="kpi-label">Avg Confidence</div></div><div className="kpi-value">{formatConfidence(avgConfidence)}</div></div>
         </div>
       </div>
 

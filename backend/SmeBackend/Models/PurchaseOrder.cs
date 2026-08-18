@@ -7,4 +7,7 @@ public class PurchaseOrder : BaseEntity, ITenantScopedEntity
     public Guid SupplierId { get; set; }
     public string Number { get; set; } = string.Empty;
     public string Status { get; set; } = "Draft";
+
+    // Line items
+    public IList<PurchaseOrderItem> Items { get; set; } = new List<PurchaseOrderItem>();
 }

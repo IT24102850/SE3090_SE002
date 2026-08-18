@@ -1,4 +1,6 @@
 import { Badge, type BadgeTone } from '../ui/Badge';
+import { Link } from 'react-router-dom';
+import { useToast } from '../ui/ToastContext';
 
 const kpis = [
   { label: 'Inventory value', value: 'LKR 4.82M', delta: '+12.4%', tone: 'green' as BadgeTone, spark: [34, 41, 38, 47, 52, 58, 64] },
@@ -182,6 +184,7 @@ function StockLevelBar({ qty, reorder }: { qty: number; reorder: number }) {
 }
 
 export function AnalyticsDashboardPage() {
+  const { notify } = useToast();
   return (
     <div className="page dashboard-page">
       <header className="page-head">
@@ -191,8 +194,8 @@ export function AnalyticsDashboardPage() {
           <p className="page-sub">Use these signals to make confident stocking decisions.</p>
         </div>
         <div className="page-actions">
-          <button className="btn btn-secondary">Export report</button>
-          <button className="btn btn-primary">Schedule report</button>
+          <button className="btn btn-secondary" type="button" onClick={() => notify('Your analytics report is being prepared for download.', 'success')}>Export report</button>
+          <button className="btn btn-primary" type="button" onClick={() => notify('Report scheduling is available to managers.', 'info')}>Schedule report</button>
         </div>
       </header>
 
@@ -244,7 +247,7 @@ export function AnalyticsDashboardPage() {
               <h2>Low stock alerts</h2>
               <p>Items that will need reordering soon</p>
             </div>
-            <button className="link-button">View all</button>
+            <Link className="link-button" to="/low-stock-alerts">View all</Link>
           </div>
           <div className="table-wrap">
             <table className="data-table">
@@ -275,7 +278,7 @@ export function AnalyticsDashboardPage() {
             <h2>Purchase order pipeline</h2>
             <p>Orders across all suppliers, most recent first</p>
           </div>
-          <button className="link-button">Create purchase order</button>
+          <Link className="link-button" to="/purchase-orders">Create purchase order</Link>
         </div>
         <div className="table-wrap">
           <table className="data-table purchase-table">
@@ -290,7 +293,7 @@ export function AnalyticsDashboardPage() {
                   <td className="amount">{order.amount}</td>
                   <td className="cell-sub">{order.date}</td>
                   <td><Badge tone={order.tone}>{order.status}</Badge></td>
-                  <td><button className="row-action" aria-label={`Open ${order.po}`}>⋯</button></td>
+                  <td><Link className="row-action" to="/purchase-orders" aria-label={`Open ${order.po}`}>⋯</Link></td>
                 </tr>
               ))}
             </tbody>

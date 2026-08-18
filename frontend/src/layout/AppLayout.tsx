@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../ui/ToastContext';
@@ -8,11 +8,11 @@ export function AppLayout() {
   const { user, logout, hasAnyRole } = useAuth();
   const navigate = useNavigate();
   const { notify } = useToast();
+  const [showSignOutDialog, setShowSignOutDialog] = useState(false);
 
-  function signOut() {
-    if (!window.confirm('Are you sure you want to sign out?')) return;
+  function confirmSignOut() {
     logout();
-    notify('You have been signed out.', 'info');
+    notify('You have been safely signed out. See you next time!', 'success');
     navigate('/login');
   }
 
@@ -111,10 +111,23 @@ export function AppLayout() {
               <div className="account-roles">{user?.roles.join(', ')}</div>
             </div>
           </div>
-          <button className="btn btn-secondary" onClick={signOut}>Sign out</button>
+          <button className="btn btn-secondary" type="button" onClick={() => setShowSignOutDialog(true)}>Sign out</button>
         </div>
       </header>
       <main className="container"><Outlet /></main>
+      {showSignOutDialog && (
+        <div className="modal-overlay" onClick={() => setShowSignOutDialog(false)} role="presentation">
+          <section className="modal modal-sm signout-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="signout-title">
+            <div className="signout-icon" aria-hidden="true">↗</div>
+            <h2 id="signout-title">Ready to sign out?</h2>
+            <p>Your work is saved. You can sign back in whenever you’re ready.</p>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" type="button" onClick={() => setShowSignOutDialog(false)}>Stay signed in</button>
+              <button className="btn btn-primary" type="button" onClick={confirmSignOut}>Sign out</button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

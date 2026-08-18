@@ -23,16 +23,25 @@ class _EquipmentMaintenanceScreenState extends State<EquipmentMaintenanceScreen>
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('maintenance.tasks.v1');
-    final stored = raw == null ? null : jsonDecode(raw) as List<dynamic>;
-    if (!mounted) return;
-    setState(() {
-      _tasks = stored == null
-          ? _MaintenanceTask.defaults()
-          : stored.whereType<Map<String, dynamic>>().map(_MaintenanceTask.fromJson).toList();
-      _loading = false;
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('maintenance.tasks.v1');
+      final stored = raw == null ? null : jsonDecode(raw) as List<dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _tasks = stored == null
+            ? _MaintenanceTask.defaults()
+            : stored.whereType<Map<String, dynamic>>().map(_MaintenanceTask.fromJson).toList();
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _tasks = _MaintenanceTask.defaults();
+        _loading = false;
+      });
+      showAppNotification('Saved maintenance data was reset because it could not be read.', tone: AppNotificationTone.warning);
+    }
   }
 
   Future<void> _save() async {
@@ -55,6 +64,7 @@ class _EquipmentMaintenanceScreenState extends State<EquipmentMaintenanceScreen>
     final bytes = await photo.readAsBytes();
     if (!mounted) return;
     setState(() => task.photos.add(bytes));
+    await _save();
     showAppNotification('Photo attached to ${task.name}.', tone: AppNotificationTone.success);
   }
 

@@ -110,7 +110,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
               : '${remaining.length} count(s) are still pending.',
           tone: remaining.isEmpty
               ? AppNotificationTone.success
-              : AppNotificationTone.info,
+              : AppNotificationTone.warning,
         );
       }
     } finally { if (mounted) setState(() => _syncing = false); }

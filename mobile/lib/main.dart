@@ -8,6 +8,7 @@ import 'auth/auth_controller.dart';
 import 'auth/auth_repository.dart';
 import 'auth/auth_session.dart';
 import 'stock_count_screen.dart';
+import 'stock_check_screen.dart';
 import 'purchase_order_approval_screen.dart';
 import 'equipment_maintenance_screen.dart';
 import 'inventory_dashboard.dart';
@@ -54,6 +55,7 @@ class App extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(
               seedColor: navy, brightness: Brightness.light),
           scaffoldBackgroundColor: canvas,
+          dividerColor: const Color(0xFFE5EAF2),
           appBarTheme: const AppBarTheme(
               backgroundColor: Colors.transparent,
               elevation: 0,
@@ -61,7 +63,11 @@ class App extends StatelessWidget {
           navigationBarTheme: NavigationBarThemeData(
               height: 74,
               backgroundColor: Colors.white,
-              indicatorColor: navy.withValues(alpha: .12)),
+              elevation: 1,
+              labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+              indicatorColor: navy.withValues(alpha: .12),
+              indicatorShape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14))),
           cardTheme: CardThemeData(
               elevation: 0,
               color: Colors.white,
@@ -81,9 +87,27 @@ class App extends StatelessWidget {
           filledButtonTheme: FilledButtonThemeData(
             style: FilledButton.styleFrom(
               backgroundColor: navy,
+              foregroundColor: Colors.white,
+              textStyle: const TextStyle(fontWeight: FontWeight.w700),
               minimumSize: const Size.fromHeight(54),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
+            ),
+          ),
+          outlinedButtonTheme: OutlinedButtonThemeData(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: navy,
+              minimumSize: const Size.fromHeight(48),
+              side: const BorderSide(color: Color(0xFFCBD8E7)),
+              textStyle: const TextStyle(fontWeight: FontWeight.w700),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+          iconButtonTheme: IconButtonThemeData(
+            style: IconButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13)),
             ),
           ),
         ),
@@ -1228,22 +1252,37 @@ class _ShellState extends State<Shell> {
   Future<void> confirmLogout() async {
     final shouldLogout = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Sign out?'),
-        content: const Text('Are you sure you want to sign out of SME Inventory?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Sign out')),
-        ],
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF7C3AED)]),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(Icons.logout_rounded, color: Colors.white),
+            ),
+            const SizedBox(height: 16),
+            Text('Ready to sign out?', style: Theme.of(dialogContext).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            const Text('Your work is saved. You can sign back in whenever you are ready.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF667085), height: 1.4)),
+            const SizedBox(height: 22),
+            Row(children: [
+              Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Stay signed in'))),
+              const SizedBox(width: 12),
+              Expanded(child: FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Sign out'))),
+            ]),
+          ]),
+        ),
       ),
     );
     if (shouldLogout == true) {
       await widget.auth.logout();
-      showAppNotification('You have been signed out.', tone: AppNotificationTone.info);
+      showAppNotification('You have been safely signed out. See you next time!', tone: AppNotificationTone.success);
     }
   }
 
@@ -1252,7 +1291,14 @@ class _ShellState extends State<Shell> {
     final analytics =
         widget.session.hasAnyRole([AppRole.admin, AppRole.manager]);
     final pages = [
-      InventoryDashboard(client: stockClient),
+      InventoryDashboard(
+        client: stockClient,
+        onOpenStockOperations: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => StockCheckScreen(client: stockClient),
+          ),
+        ),
+      ),
       StockCountScreen(client: stockClient),
       PurchaseOrderApprovalScreen(
           client: stockClient,

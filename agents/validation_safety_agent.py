@@ -3,12 +3,21 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from .validation_safety_agent_contract import (
-    ValidationSafetyInput,
-    ValidationSafetyOutput,
-    AuditEntry,
-)
-from .inventory_tools import ValidationError
+# Support running as package or as standalone script: try relative imports then fall back to absolute
+try:
+    from .validation_safety_agent_contract import (
+        ValidationSafetyInput,
+        ValidationSafetyOutput,
+        AuditEntry,
+    )
+    from .inventory_tools import ValidationError
+except Exception:
+    from validation_safety_agent_contract import (
+        ValidationSafetyInput,
+        ValidationSafetyOutput,
+        AuditEntry,
+    )
+    from inventory_tools import ValidationError
 
 
 ROLE_LEVELS = {

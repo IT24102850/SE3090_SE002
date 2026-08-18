@@ -4,7 +4,11 @@ from dataclasses import dataclass
 from typing import Any, TypedDict, Literal
 import re
 
-from .inventory_tools import ValidationError, UUID_RE
+# Support running as package or as standalone script: try relative import then fall back to absolute
+try:
+    from .inventory_tools import ValidationError, UUID_RE
+except Exception:
+    from inventory_tools import ValidationError, UUID_RE
 
 
 RiskLevel = Literal["low", "medium", "high", "critical"]

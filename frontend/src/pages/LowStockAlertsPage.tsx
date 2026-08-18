@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, type BadgeTone } from '../ui/Badge';
+import { useToast } from '../ui/ToastContext';
 
 type AlertLevel = 'Critical' | 'At risk' | 'Watch';
 
@@ -37,6 +38,7 @@ function runOutDate(alert: StockAlert) {
 }
 
 export function LowStockAlertsPage() {
+  const { notify } = useToast();
   const [query, setQuery] = useState('');
   const [branch, setBranch] = useState(branches[0]);
   const [level, setLevel] = useState<(typeof levels)[number]>(levels[0]);
@@ -70,7 +72,7 @@ export function LowStockAlertsPage() {
         </div>
         <div className="page-actions">
           <span className="live-indicator"><span aria-hidden="true" /> Live · updated {lastUpdated.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</span>
-          <button className="btn btn-secondary" type="button" onClick={() => setLastUpdated(new Date())}>Refresh now</button>
+          <button className="btn btn-secondary" type="button" onClick={() => { setLastUpdated(new Date()); notify('Low-stock signals refreshed.', 'success'); }}>Refresh now</button>
         </div>
       </header>
 
@@ -100,7 +102,7 @@ export function LowStockAlertsPage() {
                   <td><p className={alert.onHand === 0 ? 'forecast-critical' : 'forecast-date'}>{runOutDate(alert)}</p><p className="cell-sub">Usage trend model</p></td>
                   <td><Badge tone={tone[alert.level]}>{alert.level}</Badge></td>
                   <td className="cell-sub">{alert.updatedAt}</td>
-                  <td><div className="row-actions"><Link className="table-link" to="/branch-overview">Transfer</Link><button type="button" className="link-button" onClick={() => setActionMessage(`Reorder draft opened for ${alert.item}.`)}>Reorder</button></div></td>
+                  <td><div className="row-actions"><Link className="table-link" to="/branch-overview">Transfer</Link><button type="button" className="link-button" onClick={() => { setActionMessage(`Reorder draft opened for ${alert.item}.`); notify(`${alert.item} needs a reorder review.`, alert.level === 'Critical' ? 'warning' : 'info'); }}>Reorder</button></div></td>
                 </tr>
               ))}
               {filtered.length === 0 && <tr><td colSpan={7} className="empty-state">No alerts match the selected filters.</td></tr>}

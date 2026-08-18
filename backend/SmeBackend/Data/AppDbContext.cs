@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<InventoryItem> InventoryItems { get; set; }
     public DbSet<Supplier> Suppliers { get; set; }
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; }
+    public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
     public DbSet<StockMovement> StockMovements { get; set; }
     public DbSet<Notification> Notifications { get; set; }
 
@@ -110,6 +111,17 @@ public class AppDbContext : DbContext
             entity.Property(notification => notification.Title).HasMaxLength(150).IsRequired();
             entity.Property(notification => notification.Message).HasMaxLength(1000).IsRequired();
             entity.HasOne<Branch>().WithMany().HasForeignKey(notification => notification.BranchId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Purchase order items
+        modelBuilder.Entity<PurchaseOrderItem>(entity =>
+        {
+            entity.Property(i => i.Quantity).HasPrecision(18, 3);
+            entity.Property(i => i.UnitPrice).HasPrecision(18, 2);
+            entity.Property(i => i.ReceivedQuantity).HasPrecision(18, 3);
+            entity.HasOne<PurchaseOrder>().WithMany(p => p.Items).HasForeignKey(i => i.PurchaseOrderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(i => i.PurchaseOrderId);
+            entity.HasIndex(i => i.InventoryItemId);
         });
     }
 

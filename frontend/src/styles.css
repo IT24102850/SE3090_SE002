@@ -1,6 +1,7 @@
 :root { font-family: Inter, system-ui, sans-serif; color: #172033; background: #f7f8fc; --header-height: 68px; --z-topbar: 200; --z-buttons: 300; --z-modal: 1200; --z-toast: 1400; }
 * { box-sizing: border-box; }
-body { margin: 0; padding-top: var(--header-height); }
+html { min-width: 320px; background: #f7f8fc; }
+body { min-width: 320px; min-height: 100vh; margin: 0; padding-top: var(--header-height); overflow-x: hidden; }
 .topbar { min-height: var(--header-height); height: var(--header-height); padding: 0 1.5rem; display: flex; gap: 1.25rem; align-items: center; background: linear-gradient(90deg,#0f172a,#123); color: white; position: fixed; top: 0; left: 0; right: 0; z-index: var(--z-topbar); box-shadow: 0 6px 20px rgba(2,6,23,0.35); pointer-events: auto; }
 .brand { display: flex; gap: .75rem; align-items: center; }
 .brand-mark { width: 44px; height: 44px; display: grid; place-items: center; background: linear-gradient(135deg,#7c3aed,#2563eb); color: white; border-radius: .6rem; font-weight: 800; }
@@ -16,6 +17,8 @@ body { margin: 0; padding-top: var(--header-height); }
 .avatar { width:36px; height:36px; border-radius:8px; background:#eef2ff; color:#2563eb; display:grid; place-items:center; font-weight:800; }
 .account-name { font-weight:700; color: #fff; }
 .account-roles { font-size: .72rem; color: #cbd5e1; }
+.topbar .btn-secondary { color: #fff; background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.35); }
+.topbar .btn-secondary:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.55); }
 
 .brand, nav a { color: inherit; text-decoration: none; }
 .brand { font-weight: 700; }
@@ -26,7 +29,7 @@ button { border: 0; border-radius: .35rem; padding: .65rem .9rem; cursor: pointe
 button:disabled { opacity: .65; cursor: wait; }
 .secondary { color: #1d4ed8; background: #e8f0ff; }
 .hint { margin: 0; color: #5d677a; font-size: .85rem; line-height: 1.4; }
-main { max-width: 1400px; margin: 0 auto; padding: calc(var(--header-height) + 1rem) 3rem 2.5rem; }
+main { max-width: 1400px; margin: 0 auto; padding: 1.5rem 3rem 2.5rem; }
 .container { max-width: 1400px; margin: 0 auto; padding: 0 1rem; }
 .login-page { min-height: 100vh; display: grid; place-items: center; }
 .login-card { display: grid; gap: 1rem; width: min(100%, 380px); padding: 2rem; border-radius: .75rem; background: white; box-shadow: 0 8px 28px #1720331c; }
@@ -70,7 +73,7 @@ input { padding: .7rem; border: 1px solid #c8cfdd; border-radius: .35rem; font: 
 .link-button:hover { text-decoration: underline; }
 
 /* Ensure interactive controls are above header overlays */
-.btn, .page-actions button, table button, .demo-button, input, select, textarea, a { position: relative; z-index: var(--z-buttons) !important; pointer-events: auto !important; }
+.btn, .page-actions button, table button, .demo-button, input, select, textarea { position: relative; z-index: 0; pointer-events: auto; }
 
 /* Defensive: make large overlay-ish decorative elements ignore pointer events unless explicitly needed */
 .owl-wrapper, .background-decor, .decor-overlay { pointer-events: none !important; }
@@ -318,19 +321,38 @@ main.container { max-width: 1600px; padding-left: 3rem; padding-right: 3rem; }
 .modal-hint { margin: 0 0 1rem; color: #64748b; font-size: .82rem; line-height: 1.45; }
 
 /* Application notifications */
-.toast-region { position: fixed; right: 1rem; bottom: 1rem; z-index: var(--z-toast); display: grid; gap: .6rem; width: min(360px, calc(100vw - 2rem)); }
-.toast { display: flex; gap: .65rem; align-items: center; padding: .8rem .9rem; color: #fff; font-size: .86rem; font-weight: 650; border-radius: .7rem; box-shadow: 0 12px 28px rgba(15,23,42,.22); animation: toast-in .2s ease-out; }
+.toast-region { position: fixed; top: auto; right: 1rem; bottom: 1rem; z-index: var(--z-toast); display: grid; gap: .6rem; width: min(360px, calc(100vw - 2rem)); height: auto; align-content: end; }
+.toast-region { pointer-events: none; }
+.toast { display: flex; gap: .65rem; align-items: center; padding: .8rem .9rem; color: #fff; font-size: .86rem; font-weight: 650; border-radius: .7rem; box-shadow: 0 12px 28px rgba(15,23,42,.22); animation: toast-in .2s ease-out; pointer-events: auto; }
 .toast span { display: grid; place-items: center; width: 1.25rem; height: 1.25rem; flex: none; font-weight: 900; border: 1px solid currentColor; border-radius: 50%; }
 .toast-success { background: #047857; }
 .toast-error { background: #b91c1c; }
+.toast-warning { color: #422006; background: #fbbf24; }
 .toast-info { background: #1d4ed8; }
+.toast-message { flex: 1; min-width: 0; line-height: 1.35; }
+.toast-close { width: 1.65rem; height: 1.65rem; flex: none; padding: 0; color: currentColor; font-size: 1.2rem; line-height: 1; background: transparent; border: 1px solid currentColor; border-radius: 50%; opacity: .8; }
+.toast-close:hover { color: #fff; background: rgba(15,23,42,.22); opacity: 1; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px); } }
 
-/* Ensure interactive controls are above the header so they remain clickable when header is fixed */
-.btn, .page-actions button, table button { position: relative; z-index: var(--z-buttons) !important; }
+/* Controls stay in their page stacking context.  Giving every button a high
+   z-index made them compete with fixed header and modal layers. */
+.btn, .page-actions button, table button, .demo-button, input, select, textarea {
+  position: relative;
+  z-index: auto !important;
+  pointer-events: auto;
+}
 
 /* Modal overlay should sit above header and buttons */
 .modal-overlay { z-index: var(--z-modal) !important; }
+
+/* Sign-out confirmation */
+.signout-modal { max-width: 430px; padding: 2rem; text-align: center; }
+.signout-icon { display: grid; place-items: center; width: 3.25rem; height: 3.25rem; margin: 0 auto 1rem; color: #fff; font-size: 1.5rem; font-weight: 800; background: linear-gradient(135deg, #2563eb, #7c3aed); border-radius: 1rem; box-shadow: 0 12px 24px rgba(79,70,229,.25); }
+.signout-modal h2 { margin: 0; font-size: 1.3rem; }
+.signout-modal p { max-width: 300px; margin: .55rem auto 1.5rem; color: #64748b; line-height: 1.5; }
+.signout-modal .modal-actions { justify-content: center; }
+.signout-modal .btn { min-width: 130px; }
+.signout-modal .btn-secondary { color: #1e3a8a; background: #fff; border-color: #cbd5e1; }
 
 
 /* Inventory health and multi-branch views */
@@ -377,4 +399,49 @@ main.container { max-width: 1600px; padding-left: 3rem; padding-right: 3rem; }
   .topbar { padding: 0 1rem; }
   .chart-box { height: 280px; padding: .8rem .6rem 1rem; }
   .chart-box-sm { height: 240px; }
+}
+
+/* Small-screen shell: keep all navigation usable without clipping the header. */
+@media (max-width: 760px) {
+  body { padding-top: 0; }
+  .topbar {
+    position: sticky;
+    height: auto;
+    min-height: var(--header-height);
+    flex-wrap: wrap;
+    gap: .55rem;
+    padding: .6rem 1rem;
+  }
+  .brand { min-width: 0; flex: 1 1 auto; }
+  .brand-mark { width: 2.25rem; height: 2.25rem; flex: none; }
+  .brand-text small { display: none !important; }
+  .nav-links {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+    padding-bottom: .1rem;
+    scrollbar-width: thin;
+  }
+  .nav-item { flex: none; padding: .45rem .6rem; }
+  .account { margin-left: 0; gap: .35rem; }
+  .account-info { display: none; }
+  .account .btn { padding: .5rem .65rem; font-size: .8rem; white-space: nowrap; }
+  main.container { padding: 1.25rem 1rem 2rem; }
+  .page-head { align-items: flex-start; margin-bottom: 1.1rem; }
+  .page-head h1 { font-size: 1.4rem; }
+  .page-actions { width: 100%; }
+  .page-actions .btn { flex: 1 1 auto; }
+  .panel-head, .toolbar, .po-detail-body { padding-left: 1rem; padding-right: 1rem; }
+  .form-grid, .detail-grid { grid-template-columns: 1fr; }
+  .data-table th, .data-table td { padding-left: .85rem; padding-right: .85rem; }
+  .modal-overlay { padding: .65rem; }
+  .modal { max-height: calc(100dvh - 1.3rem); }
+  .toast-region { right: .75rem; bottom: .75rem; width: calc(100vw - 1.5rem); }
+}
+
+/* The sign-in route has no application header. */
+body:has(.login-page) { padding-top: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

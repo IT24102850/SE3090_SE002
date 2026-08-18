@@ -269,7 +269,7 @@ export function InventoryManagerPage() {
           <p className="page-sub">Search items, monitor stock levels, and keep suppliers in check.</p>
         </div>
         <div className="page-actions">
-          <button className="btn btn-secondary" type="button">Import</button>
+          <button className="btn btn-secondary" type="button" onClick={() => notify('Import is ready for a CSV file. File selection will be available next.', 'warning')}>Import</button>
           <button className="btn btn-primary" type="button" onClick={() => setModal({ mode: 'add' })}>Add item</button>
         </div>
       </header>
@@ -399,7 +399,7 @@ export function InventoryManagerPage() {
               </li>
             ))}
           </ul>
-          <button className="btn btn-secondary supplier-action" type="button">View all suppliers</button>
+          <button className="btn btn-secondary supplier-action" type="button" onClick={() => notify('Showing the four suppliers with the highest outstanding balances.', 'info')}>View all suppliers</button>
         </aside>
       </div>
 
