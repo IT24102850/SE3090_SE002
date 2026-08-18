@@ -11,8 +11,10 @@ The agent may call only the following tools:
 - `query_historical_usage`
 - `predict_demand`
 - `generate_purchase_order`
+- `send_notification`
+- `update_inventory_count`
 
-These are implemented in `agents/inventory_tools.py` and are guarded by strict validation before execution.
+These are implemented in `agents/inventory_tools.py` and are guarded by strict validation before execution. The purchase-order tool also enforces budget limits, supplier active status, and order-multiple/reorder rules when those fields are supplied.
 
 ### `predict_demand`
 
@@ -84,5 +86,10 @@ Output:
 
 ## Notes
 - The demand prediction tool uses historical `quantityIssued` values to estimate average daily demand and compute a safety buffer.
-- The purchase order tool derives a replenishment quantity from forecast demand, safety stock, and current stock.
+- The purchase order tool derives a replenishment quantity from forecast demand, safety stock, and current stock. It additionally respects:
+  - `budget_limit` (total PO cost must not exceed)
+  - `order_multiple` / `pack_size` (quantity rounded up to nearest multiple)
+  - `supplier_active` (supplier must be active)
+- `send_notification` queues simple notifications for delivery (placeholder implementation).
+- `update_inventory_count` validates and returns an updated inventory count object (placeholder; persistence not implemented here).
 - All tool requests are validated before execution.

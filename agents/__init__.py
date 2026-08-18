@@ -11,6 +11,8 @@ from .inventory_tools import (
     predict_demand,
     query_historical_usage,
     query_stock_levels,
+    send_notification,
+    update_inventory_count,
 )
 
 __all__ = [
@@ -23,5 +25,7 @@ __all__ = [
     "query_historical_usage",
     "predict_demand",
     "generate_purchase_order",
+    "send_notification",
+    "update_inventory_count",
     "execute_allowed_tool",
 ]

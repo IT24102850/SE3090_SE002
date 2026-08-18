@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal, TypedDict
 import re
+import math
 
 
 UUID_RE = re.compile(
@@ -15,6 +16,8 @@ ALLOWED_TOOL_NAMES = {
     "query_historical_usage",
     "predict_demand",
     "generate_purchase_order",
+    "send_notification",
+    "update_inventory_count",
 }
 
 
@@ -136,6 +139,9 @@ class PurchaseOrderRequest:
     lead_time_days: int = 7
     unit_cost: float = 0.0
     safety_stock_days: int = 7
+    budget_limit: float | None = None
+    order_multiple: int | None = None
+    supplier_active: bool | None = None
 
     def validate(self) -> "PurchaseOrderRequest":
         self.tenant_id = _ensure_uuid(self.tenant_id, "tenant_id")
@@ -153,6 +159,18 @@ class PurchaseOrderRequest:
             raise ValidationError("unit_cost must be a number.")
         if not isinstance(self.safety_stock_days, int) or self.safety_stock_days < 0:
             raise ValidationError("safety_stock_days must be a non-negative integer.")
+        if self.budget_limit is not None:
+            try:
+                self.budget_limit = float(self.budget_limit)
+            except (TypeError, ValueError):
+                raise ValidationError("budget_limit must be numeric if provided.")
+            if self.budget_limit < 0:
+                raise ValidationError("budget_limit must be non-negative.")
+        if self.order_multiple is not None:
+            if not isinstance(self.order_multiple, int) or self.order_multiple < 1:
+                raise ValidationError("order_multiple must be an integer >= 1 if provided.")
+        if self.supplier_active is not None and not isinstance(self.supplier_active, bool):
+            raise ValidationError("supplier_active must be a boolean if provided.")
         return self
 
 
@@ -375,7 +393,14 @@ def predict_demand(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def generate_purchase_order(payload: dict[str, Any]) -> dict[str, Any]:
-    """Draft a purchase order based on predicted demand and current stock levels."""
+    """Draft a purchase order based on predicted demand and current stock levels.
+
+    Adds validations:
+      - supplier_active (bool) must be True if provided
+      - budget_limit (float) if provided must not be exceeded by total PO cost
+      - order_multiple (int) will round quantity up to nearest multiple
+      - ensure quantity respects reorder_level (bring stock up to reorder level at minimum)
+    """
     request = PurchaseOrderRequest(
         tenant_id=_pick_value(payload, "tenant_id", "tenantId"),
         inventory_item_id=_pick_value(payload, "inventory_item_id", "inventoryItemId"),
@@ -386,14 +411,45 @@ def generate_purchase_order(payload: dict[str, Any]) -> dict[str, Any]:
         lead_time_days=int(_pick_value(payload, "lead_time_days", "leadTimeDays") or 7),
         unit_cost=_coerce_float(_pick_value(payload, "unit_cost", "unitCost", "estimated_unit_cost", "estimatedUnitCost"), "unit_cost"),
         safety_stock_days=int(_pick_value(payload, "safety_stock_days", "safetyStockDays", "safetyStock") or 7),
+        budget_limit=_pick_value(payload, "budget_limit", "budgetLimit", "budget"),
+        order_multiple=_pick_value(payload, "order_multiple", "orderMultiple", "pack_size", "orderPackSize"),
+        supplier_active=_pick_value(payload, "supplier_active", "supplierActive", "active"),
     )
     request.validate()
 
+    # Supplier must be active
+    if request.supplier_active is not None and request.supplier_active is False:
+        raise ValidationError("Supplier is not active and cannot receive purchase orders.")
+
+    # Calculate base recommended quantity from forecast and safety buffer
     safety_buffer = max(0.0, request.predicted_demand * (request.safety_stock_days / max(1, request.lead_time_days)))
     recommended_quantity = max(0.0, request.predicted_demand + safety_buffer - request.current_stock)
-    if recommended_quantity < 0:
-        recommended_quantity = 0.0
 
+    # Ensure we at least order enough to reach reorder level if stock is low
+    min_needed_to_reorder = max(0.0, request.reorder_level - request.current_stock)
+    if recommended_quantity < min_needed_to_reorder:
+        recommended_quantity = min_needed_to_reorder
+
+    # Apply order_multiple rounding if requested
+    if request.order_multiple and request.order_multiple > 0:
+        multiple = int(request.order_multiple)
+        recommended_quantity = math.ceil(recommended_quantity / multiple) * multiple
+
+    # Final safety: non-negative and rounded to 2 decimals
+    recommended_quantity = max(0.0, float(recommended_quantity))
+
+    total_cost = recommended_quantity * float(request.unit_cost)
+
+    # Budget validation
+    if request.budget_limit is not None:
+        try:
+            budget = float(request.budget_limit)
+        except (TypeError, ValueError):
+            raise ValidationError("budget_limit must be numeric if provided.")
+        if total_cost > budget:
+            raise ValidationError(f"Total PO cost {total_cost:.2f} exceeds budget limit {budget:.2f}.")
+
+    # Decide priority
     priority = "medium"
     if recommended_quantity >= request.reorder_level:
         priority = "high"
@@ -409,7 +465,80 @@ def generate_purchase_order(payload: dict[str, Any]) -> dict[str, Any]:
         "priority": priority,
         "expectedDeliveryDays": request.lead_time_days,
         "estimatedUnitCost": round(request.unit_cost, 2),
+        "totalCost": round(total_cost, 2),
         "notes": "Generated from demand forecast and current stock position.",
+    }
+
+
+def send_notification(payload: dict[str, Any]) -> dict[str, Any]:
+    """Queue a notification for delivery by the system.
+
+    Expected keys:
+      - tenant_id / tenantId
+      - channel (in_app|email|sms|dashboard)
+      - title
+      - message
+      - target_role (optional)
+    """
+    tenant = _pick_value(payload, "tenant_id", "tenantId")
+    channel = _pick_value(payload, "channel", "channel")
+    title = _pick_value(payload, "title", "title")
+    message = _pick_value(payload, "message", "message")
+    target_role = _pick_value(payload, "target_role", "targetRole", "target_role")
+
+    tenant = _ensure_uuid(tenant, "tenant_id")
+    if not isinstance(channel, str) or not channel:
+        raise ValidationError("channel is required for send_notification.")
+    if not isinstance(title, str) or not title.strip():
+        raise ValidationError("title is required for send_notification.")
+    if not isinstance(message, str) or not message.strip():
+        raise ValidationError("message is required for send_notification.")
+
+    # Placeholder: real implementation would enqueue or send via external service
+    return {
+        "tool": "send_notification",
+        "tenantId": tenant,
+        "channel": channel,
+        "title": title.strip(),
+        "message": message.strip(),
+        "targetRole": target_role,
+        "status": "queued",
+    }
+
+
+def update_inventory_count(payload: dict[str, Any]) -> dict[str, Any]:
+    """Update the inventory count for a single item. Validated but does not persist (placeholder).
+
+    Expected keys:
+      - tenant_id / tenantId
+      - inventory_item_id / inventoryItemId
+      - new_count / newCount
+      - reason (optional)
+    """
+    tenant = _pick_value(payload, "tenant_id", "tenantId")
+    item_id = _pick_value(payload, "inventory_item_id", "inventoryItemId")
+    new_count = _pick_value(payload, "new_count", "newCount", "quantity", "quantity_on_hand")
+    reason = _pick_value(payload, "reason", "reason")
+
+    tenant = _ensure_uuid(tenant, "tenant_id")
+    item_id = _ensure_uuid(item_id, "inventory_item_id")
+    new_count_val = _coerce_float(new_count, "new_count")
+
+    # Placeholder: here the real repository would persist the change and return updated record
+    updated = {
+        "inventoryItemId": item_id,
+        "tenantId": tenant,
+        "newQuantity": new_count_val,
+        "reason": reason,
+        "status": "updated",
+    }
+    return {
+        "tool": "update_inventory_count",
+        "tenantId": tenant,
+        "inventoryItemId": item_id,
+        "newQuantity": new_count_val,
+        "status": "updated",
+        "details": updated,
     }
 
 
@@ -429,6 +558,10 @@ def execute_allowed_tool(tool_name: str, payload: dict[str, Any]) -> dict[str, A
         return predict_demand(payload)
     if tool_name == "generate_purchase_order":
         return generate_purchase_order(payload)
+    if tool_name == "send_notification":
+        return send_notification(payload)
+    if tool_name == "update_inventory_count":
+        return update_inventory_count(payload)
 
     raise ValidationError(f"No implementation registered for tool '{tool_name}'.")
 
@@ -440,6 +573,8 @@ __all__ = [
     "query_historical_usage",
     "predict_demand",
     "generate_purchase_order",
+    "send_notification",
+    "update_inventory_count",
     "StockLevelRequest",
     "HistoricalUsageRequest",
     "DemandPredictionRequest",
