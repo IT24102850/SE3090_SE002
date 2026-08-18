@@ -41,3 +41,10 @@ from .validation_safety_agent import (
 )
 
 __all__ += ["evaluate_validation_safety"]
+
+from .agent_service import (
+    app as agent_service_app,
+    process_workflow,
+)
+
+__all__ += ["agent_service_app", "process_workflow"]
