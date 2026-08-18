@@ -14,6 +14,10 @@ from .inventory_tools import (
     send_notification,
     update_inventory_count,
 )
+from .validation_safety_agent_contract import (
+    ValidationSafetyInput,
+    ValidationSafetyOutput,
+)
 
 __all__ = [
     "ALLOWED_TOOL_NAMES",
@@ -28,4 +32,6 @@ __all__ = [
     "send_notification",
     "update_inventory_count",
     "execute_allowed_tool",
+    "ValidationSafetyInput",
+    "ValidationSafetyOutput",
 ]
