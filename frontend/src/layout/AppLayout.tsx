@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../ui/ToastContext';
@@ -15,12 +16,47 @@ export function AppLayout() {
     navigate('/login');
   }
 
+  // WebSocket connection to agent service for real-time toasts
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket((window.location.protocol === 'https:' ? 'wss' : 'ws') + '://' + (window.location.hostname || 'localhost') + ':8000/ws/workflows');
+      ws.onmessage = (ev) => {
+        try {
+          const data = JSON.parse(ev.data || '{}');
+          if (data?.type === 'workflow_update') {
+            const act = data.actionType || data.action || 'workflow';
+            const status = data.status || 'updated';
+            const qty = data.tool_result?.quantity ?? data.tool_result?.qty;
+            const backend = data.backend_result || data.tool_result?.backend_response;
+            const msg = backend ? `PO placed (${backend?.number ?? backend?.id ?? 'id'})` : `${act} ${status}${qty ? ` · qty ${qty}` : ''}`;
+            notify(msg, backend ? 'success' : (status === 'blocked' ? 'error' : 'info'));
+          } else if (data?.type === 'workflow_approved') {
+            const backend = data.backend_result;
+            const msg = backend ? `PO ${backend?.number ?? backend?.id ?? 'placed'}` : 'Workflow approved';
+            notify(msg, 'success');
+          }
+        } catch (e) {
+          // ignore
+        }
+      };
+      ws.onopen = () => {
+        // optionally send a ping/subscribe
+      };
+      ws.onclose = () => { /* reconnect logic could be added here */ };
+    } catch (e) {
+      // ignore
+    }
+    return () => { try { ws?.close(); } catch (e) {} };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="app-shell">
       <header className="topbar">
         <NavLink className="brand" to="/inventory">
           <span className="brand-mark">SM</span>
-          <span className="brand-text">SME Platform</span>
+          <span className="brand-text">SME Platform <small style={{display:'block', fontSize:12, fontWeight:600, color:'rgba(255,255,255,.85)'}}>Inventory • Analytics • Intelligence</small></span>
         </NavLink>
         <nav aria-label="Main navigation" className="nav-links">
           {hasAnyRole(['Admin', 'Manager']) && (
@@ -75,7 +111,7 @@ export function AppLayout() {
               <div className="account-roles">{user?.roles.join(', ')}</div>
             </div>
           </div>
-          <button className="btn btn-ghost" onClick={signOut}>Sign out</button>
+          <button className="btn btn-secondary" onClick={signOut}>Sign out</button>
         </div>
       </header>
       <main className="container"><Outlet /></main>
