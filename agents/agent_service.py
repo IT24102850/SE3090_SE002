@@ -20,7 +20,20 @@ DB_PATH = os.path.join(os.path.dirname(__file__), 'agent_workflows.db')
 OLLAMA_URL = os.environ.get('OLLAMA_URL', "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', "llama2")
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Agent Workflows Service")
+
+# Enable CORS for the frontend dev server(s) so the browser can call this service.
+# In production, narrow allowed origins to your real frontend hosts.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 
 class WorkflowRequest(BaseModel):
@@ -193,6 +206,209 @@ def workflows_execute(req: WorkflowRequest):
 
     result = process_workflow(input_obj)
     return result
+
+
+@app.get("/workflows")
+def workflows_list(
+    limit: int = 20,
+    page: int = 1,
+    pageSize: int = 20,
+    status: str | None = None,
+    tenantId: str | None = None,
+    actionType: str | None = None,
+    search: str | None = None,
+):
+    """Return recent workflows with optional filtering, pagination, and search."""
+    _ensure_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    # Build WHERE clauses
+    where_clauses = []
+    params: list[object] = []
+    if status:
+        where_clauses.append("status = ?")
+        params.append(status)
+    if tenantId:
+        where_clauses.append("tenantId = ?")
+        params.append(tenantId)
+    if actionType:
+        where_clauses.append("actionType = ?")
+        params.append(actionType)
+    if search:
+        # search across payload, validation_result, and tool_result as text
+        where_clauses.append("(payload LIKE ? OR validation_result LIKE ? OR tool_result LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like, like])
+
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    # Count total
+    count_sql = f"SELECT COUNT(1) FROM AgentWorkflows {where_sql}"
+    cur.execute(count_sql, params)
+    total_count = cur.fetchone()[0]
+
+    offset = max(0, (page - 1) * pageSize)
+    sql = f"SELECT id, created_at, actionType, payload, userRole, tenantId, riskLevel, validation_result, tool_result, llm_response, status FROM AgentWorkflows {where_sql} ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    exec_params = params + [pageSize, offset]
+    cur.execute(sql, exec_params)
+
+    rows = []
+    for r in cur.fetchall():
+        (id_, created_at, actionType, payload, userRole, tenantId, riskLevel, validation_result, tool_result, llm_response, status) = r
+        try:
+            payload_obj = json.loads(payload) if payload else None
+        except Exception:
+            payload_obj = payload
+        try:
+            validation_obj = json.loads(validation_result) if validation_result else None
+        except Exception:
+            validation_obj = validation_result
+        try:
+            tool_obj = json.loads(tool_result) if tool_result else None
+        except Exception:
+            tool_obj = tool_result
+        rows.append({
+            "id": id_,
+            "created_at": created_at,
+            "actionType": actionType,
+            "payload": payload_obj,
+            "userRole": userRole,
+            "tenantId": tenantId,
+            "riskLevel": riskLevel,
+            "validation_result": validation_obj,
+            "tool_result": tool_obj,
+            "llm_response": llm_response,
+            "status": status,
+        })
+    conn.close()
+    return {"items": rows, "total": total_count, "page": page, "pageSize": pageSize}
+
+
+@app.post("/workflows/{workflow_id}/approve")
+def workflows_approve(workflow_id: int, body: dict[str, Any]):
+    approver = body.get("approverRole", "Manager")
+    note = body.get("note")
+    _ensure_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT actionType, payload, validation_result, tool_result FROM AgentWorkflows WHERE id = ?", (workflow_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    actionType, payload, validation_result, tool_result = row
+
+    try:
+        vr = json.loads(validation_result) if validation_result else {"auditLog": []}
+    except Exception:
+        vr = {"auditLog": []}
+    audit = vr.get("auditLog", [])
+    audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": approver, "actionType": "approval", "outcome": "approved", "details": {"note": note}})
+    vr["auditLog"] = audit
+
+    # Update status to approved first
+    cur.execute("UPDATE AgentWorkflows SET validation_result = ?, status = ? WHERE id = ?", (json.dumps(vr), "approved", workflow_id))
+    conn.commit()
+
+    backend_result = None
+    # If this was a generated purchase order, attempt to create a real PO in the backend
+    try:
+        if actionType == "generate_purchase_order" and tool_result:
+            try:
+                tr = json.loads(tool_result)
+            except Exception:
+                tr = tool_result
+            # Expect branchId and supplierId in payload or tool_result
+            try:
+                payload_obj = json.loads(payload) if payload else {}
+            except Exception:
+                payload_obj = payload or {}
+
+            branch_id = tr.get("branchId") or payload_obj.get("branchId") or tr.get("branch_id")
+            supplier_id = tr.get("supplierId") or payload_obj.get("supplierId") or tr.get("supplier_id")
+            qty = tr.get("quantity") or tr.get("qty")
+            est_unit_cost = tr.get("estimatedUnitCost") or tr.get("estimated_unit_cost") or tr.get("unitCost")
+
+            if branch_id and supplier_id:
+                backend_url = os.environ.get("BACKEND_URL", "http://localhost:5000")
+                api_token = os.environ.get("BACKEND_API_KEY")
+                po_number = f"AI-PO-{workflow_id}-{int(datetime.utcnow().timestamp())}"
+                create_payload = {"BranchId": branch_id, "SupplierId": supplier_id, "Number": po_number, "Status": "Placed"}
+                headers = {"Content-Type": "application/json"}
+                if api_token:
+                    headers["Authorization"] = f"Bearer {api_token}"
+                post_url = backend_url.rstrip("/") + "/api/purchase-orders"
+                resp = requests.post(post_url, json=create_payload, headers=headers, timeout=10)
+                if resp.ok:
+                    backend_result = resp.json()
+                    # append backend result to audit
+                    audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": "system", "actionType": "place_po", "outcome": "success", "details": {"backend": backend_result}})
+                    # update AgentWorkflows row tool_result to include backend response
+                    try:
+                        tr["backend_response"] = backend_result
+                        cur.execute("UPDATE AgentWorkflows SET tool_result = ? WHERE id = ?", (json.dumps(tr), workflow_id))
+                    except Exception:
+                        cur.execute("UPDATE AgentWorkflows SET tool_result = ? WHERE id = ?", (json.dumps({"note": "backend_success", "response": backend_result}), workflow_id))
+                    conn.commit()
+                else:
+                    err_text = resp.text
+                    audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": "system", "actionType": "place_po", "outcome": "error", "details": {"status_code": resp.status_code, "body": err_text}})
+            else:
+                audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": "system", "actionType": "place_po", "outcome": "skipped", "details": {"reason": "missing branch or supplier id"}})
+    except Exception as e:
+        audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": "system", "actionType": "place_po", "outcome": "exception", "details": {"error": str(e)}})
+
+    # persist audit changes
+    vr["auditLog"] = audit
+    cur.execute("UPDATE AgentWorkflows SET validation_result = ? WHERE id = ?", (json.dumps(vr), workflow_id))
+    conn.commit()
+    conn.close()
+
+    # If backend_result succeeded and send_notification tool is available, attempt to notify procurement
+    notify_result = None
+    try:
+        if backend_result is not None:
+            try:
+                # fire-and-forget notification via the allowed tool
+                execute_allowed_tool("send_notification", {
+                    "toRole": "Procurement",
+                    "subject": f"PO placed: {backend_result.get('number') if isinstance(backend_result, dict) else po_number}",
+                    "body": {"workflowId": workflow_id, "backend": backend_result}
+                })
+                notify_result = {"notified": True}
+            except Exception as e:
+                notify_result = {"notified": False, "error": str(e)}
+    except Exception:
+        notify_result = {"notified": False}
+
+    return {"id": workflow_id, "status": "approved", "validation_result": vr, "backend_result": backend_result, "notification": notify_result}
+
+
+@app.post("/workflows/{workflow_id}/reject")
+def workflows_reject(workflow_id: int, body: dict[str, Any]):
+    approver = body.get("approverRole", "Manager")
+    reason = body.get("reason", "rejected by user")
+    _ensure_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT validation_result FROM AgentWorkflows WHERE id = ?", (workflow_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    validation_result = row[0]
+    try:
+        vr = json.loads(validation_result) if validation_result else {"auditLog": []}
+    except Exception:
+        vr = {"auditLog": []}
+    audit = vr.get("auditLog", [])
+    audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": approver, "actionType": "approval", "outcome": "rejected", "details": {"reason": reason}})
+    vr["auditLog"] = audit
+    cur.execute("UPDATE AgentWorkflows SET validation_result = ?, status = ? WHERE id = ?", (json.dumps(vr), "rejected", workflow_id))
+    conn.commit()
+    conn.close()
+    return {"id": workflow_id, "status": "rejected", "validation_result": vr}
 
 
 if __name__ == "__main__":
