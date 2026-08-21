@@ -362,10 +362,9 @@ public class BookingsController : ControllerBase
     }
     
 
-    // ── Equipment reservation (cross-component link to Inventory) ─────
-    // Minimal placeholder pending Student 3's fuller Inventory module -
-    // see InventoryController.cs.
-    /// <summary>Reserves inventory equipment against a booking, decrementing stock.</summary>
+    // ── Equipment reservation (cross-component link to Equipment) ─────
+    // See EquipmentController.cs. Distinct from the Inventory module.
+    /// <summary>Reserves equipment against a booking, decrementing stock.</summary>
     [HttpPost("{id}/equipment")]
     [Authorize(Roles = "Admin,Manager,Staff")]
     public async Task<IActionResult> ReserveEquipment(Guid id, [FromBody] ReserveEquipmentDto dto)
@@ -373,8 +372,8 @@ public class BookingsController : ControllerBase
         var booking = await _db.Bookings.FindAsync(id);
         if (booking == null || booking.DeletedAt != null) return NotFound();
 
-        var item = await _db.InventoryItems.FirstOrDefaultAsync(i => i.Id == dto.InventoryItemId);
-        if (item == null) return NotFound(new { message = "Inventory item not found." });
+        var item = await _db.EquipmentItems.FirstOrDefaultAsync(i => i.Id == dto.EquipmentItemId);
+        if (item == null) return NotFound(new { message = "Equipment item not found." });
         if (item.CurrentStock < dto.Quantity)
             return BadRequest(new { message = $"Only {item.CurrentStock} {item.Unit} of {item.Name} in stock." });
 
@@ -383,7 +382,7 @@ public class BookingsController : ControllerBase
         {
             TenantId = booking.TenantId,
             BookingId = id,
-            InventoryItemId = dto.InventoryItemId,
+            EquipmentItemId = dto.EquipmentItemId,
             Quantity = dto.Quantity
         };
         _db.EquipmentReservations.Add(reservation);
@@ -401,7 +400,7 @@ public class BookingsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == reservationId && r.BookingId == id);
         if (reservation == null) return NotFound();
 
-        var item = await _db.InventoryItems.FindAsync(reservation.InventoryItemId);
+        var item = await _db.EquipmentItems.FindAsync(reservation.EquipmentItemId);
         if (item != null) item.CurrentStock += reservation.Quantity;
 
         _db.EquipmentReservations.Remove(reservation);
@@ -1009,4 +1008,4 @@ public record CreateRecurringBookingDto(
     DateTime EndDate
 );
 public record BulkItemResult(Guid? BookingId, Guid ResourceId, DateTime StartTime, bool Success, string? Reason);
-public record ReserveEquipmentDto(Guid InventoryItemId, decimal Quantity);
+public record ReserveEquipmentDto(Guid EquipmentItemId, decimal Quantity);

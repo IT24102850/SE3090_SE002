@@ -1,8 +1,10 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using SmeBackend.Authorization;
 using SmeBackend.Data;
 using SmeBackend.Middleware;
 using SmeBackend.Services;
@@ -43,7 +45,7 @@ builder.Services.AddSwaggerGen(c =>
         Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer"
     });
-    
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -84,11 +86,11 @@ builder.Services.AddAuthorization(options =>
     // Policy for Admin only
     options.AddPolicy("AdminOnly", policy =>
         policy.RequireRole("Admin"));
-    
+
     // Manager and above
     options.AddPolicy("ManagerPlus", policy =>
         policy.RequireRole("Admin", "Manager"));
-    
+
     // Staff and above
     options.AddPolicy("StaffPlus", policy =>
         policy.RequireRole("Admin", "Manager", "Staff"));
@@ -96,7 +98,12 @@ builder.Services.AddAuthorization(options =>
     // Customer and above
     options.AddPolicy("CustomerPlus", policy =>
         policy.RequireRole("Admin", "Manager", "Staff", "Customer"));
+
+    // Inventory module's branch-scoped resource policies (InventoryRead,
+    // InventoryWrite, PurchaseOrderRead, PurchaseOrderWrite).
+    InventoryAuthorizationPolicies.AddInventoryPolicies(options);
 });
+builder.Services.AddSingleton<IAuthorizationHandler, InventoryAccessHandler>();
 
 // Custom services
 builder.Services.AddScoped<IJwtService, JwtService>();
@@ -131,8 +138,8 @@ app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 
 app.UseAuthentication();
-app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 
@@ -143,6 +150,12 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+
+    if (app.Environment.IsDevelopment())
+    {
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+        await DevelopmentUserSeeder.SeedAsync(db, tenantContext);
+    }
 }
 
 app.Run();

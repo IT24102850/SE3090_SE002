@@ -1,84 +1,39 @@
-// In Resource.cs
-public class Resource : IAuditableEntity
-{
-    // No other changes needed here as all properties are already defined.
-    // ...
-}
+# Mobile inventory app
 
-// In BookingType.cs
-public class BookingType : IAuditableEntity
-{
-    // No other changes needed here.
-    // ...
-}
-// You can place this in a new file, e.g., /Models/ComplexTypes/LocationData.cs
-public class LocationData
-{
-    public string? Floor { get; set; }
-    public string? Building { get; set; }
-}
-# SME Platform – Flutter Mobile (Auth Module)
+This Flutter scaffold shares the web client's login contract:
 
-Fully working **Login / Register** screens with:
+- `POST /api/auth/login` with `{ "email", "password" }`.
+- Response containing `accessToken` or `token`.
+- JWT roles: `Admin`, `Manager`, and `Staff`; plus `tenant_id`.
 
-- **Riverpod** (`StateNotifierProvider`) for auth state
-- **flutter_secure_storage** for JWT + user persistence
-- **Dio** HTTP client with automatic Bearer token injection
-- Session restore on cold start
-- Role-based Dashboard (Admin / Manager / Staff / Customer)
+Tokens are stored with `flutter_secure_storage`, using Android encrypted shared
+preferences and the iOS Keychain. The app clears expired or malformed tokens on
+startup. It never stores passwords.
 
-## Project structure
+Authenticated inventory feature screens should obtain their request client from
+`auth.authenticatedClient()`. The shared client adds `Authorization: Bearer
+<token>` to every request; screens must never read or persist the token.
 
-```
-lib/
-├── main.dart
-├── models/
-│   └── user_model.dart
-├── providers/
-│   └── auth_provider.dart      ← AuthState + AuthNotifier
-├── screens/
-│   ├── login_screen.dart
-│   ├── register_screen.dart
-│   └── dashboard_screen.dart
-└── services/
-    ├── api_service.dart        ← Dio + JWT interceptor
-    └── secure_storage_service.dart
+## Offline stock count
+
+The **Stock count** tab saves a cached inventory catalog and each physical count
+locally. A saved count is an absolute on-hand quantity; when the app reconnects,
+it reloads the server quantity and submits only the required adjustment. Pending
+counts are retained until the server accepts them, and the Sync button can be
+used to retry manually.
+
+## Run
+
+After generating platform folders with `flutter create .`, fetch packages and run
+against the local API:
+
+```powershell
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:5107
 ```
 
-## Setup
+`10.0.2.2` is the Android emulator's route to the host machine. On a physical
+device, replace it with the computer's LAN IP address. For an iOS simulator, use
+`http://localhost:5107`.
 
-1. Copy this folder into your monorepo as `mobile/` (or open it directly in Android Studio / VS Code).
-2. Run:
-   ```bash
-   flutter pub get
-   ```
-3. Update the API base URL in `lib/services/api_service.dart`:
-   ```dart
-   static const String baseUrl = 'http://10.0.2.2:5298/api'; // Android emulator
-   // iOS Simulator → http://localhost:5298/api
-   // Physical device → http://<your-LAN-IP>:5298/api
-   ```
-4. Make sure the ASP.NET Core API is running and exposes:
-   - `POST /api/auth/login`  → `{ accessToken, user: { id, email, fullName, role, tenantId, ... } }`
-   - `POST /api/tenant/onboard` → same response shape after creating tenant + admin
-
-5. Run:
-   ```bash
-   flutter run
-   ```
-
-## Auth flow
-
-1. App starts → `initializeAuth()` reads token + user from secure storage.
-2. If valid → show `DashboardScreen`.
-3. Login / Register success → save token & user JSON → state becomes authenticated → UI switches automatically.
-4. Logout / 401 → clear storage → back to `LoginScreen`.
-
-## Dependencies
-
-| Package                  | Purpose                          |
-|--------------------------|----------------------------------|
-| flutter_riverpod         | State management                 |
-| dio                      | HTTP client                      |
-| flutter_secure_storage   | Encrypted token storage          |
-| go_router                | (ready for later routing)        |
+The Android app requires a minimum SDK level of 23 for secure encrypted storage.

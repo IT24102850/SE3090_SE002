@@ -22,6 +22,16 @@ import BranchesPage from './features/branches/BranchesPage';
 import BusinessSettingsPage from './features/settings/BusinessSettingsPage';
 import BusinessProfilePage from './features/settings/BusinessProfilePage';
 import MyProfilePage from './features/settings/MyProfilePage';
+import './features/inventory/inventory.css';
+import { ToastProvider as InventoryToastProvider } from './features/inventory/ui/ToastContext';
+import { InventoryManagerPage } from './features/inventory/pages/InventoryManagerPage';
+import { StockMovementLogPage } from './features/inventory/pages/StockMovementLogPage';
+import { PurchaseOrderManagerPage } from './features/inventory/pages/PurchaseOrderManagerPage';
+import { AgentWorkflowMonitorPage } from './features/inventory/pages/AgentWorkflowMonitor';
+import { LowStockAlertsPage } from './features/inventory/pages/LowStockAlertsPage';
+import { BranchOverviewPage } from './features/inventory/pages/BranchOverviewPage';
+import { AnalyticsDashboardPage } from './features/inventory/pages/AnalyticsDashboardCharts';
+import { ForbiddenPage } from './features/inventory/pages/ForbiddenPage';
 
 const AuthInitializer = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
@@ -32,6 +42,19 @@ const AuthInitializer = ({ children }: { children: React.ReactNode }) => {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <AppLayout>{children}</AppLayout>;
+}
+
+// Inventory pages were ported from their own app and use their own toast
+// context (different API shape than shared/components/Toast) - nest it
+// locally rather than touch every already-working booking page.
+function InventoryShell({ children }: { children: React.ReactNode }) {
+  return (
+    <InventoryToastProvider>
+      <AppLayout>
+        <div className="inventory-scope">{children}</div>
+      </AppLayout>
+    </InventoryToastProvider>
+  );
 }
 
 function App() {
@@ -175,6 +198,72 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
                     <Shell><div><h1 className="page-title">Admin Panel</h1></div></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* ── Inventory module ───────────────────────────────── */}
+              <Route
+                path="/inventory"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <InventoryShell><InventoryManagerPage /></InventoryShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/stock-movements"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <InventoryShell><StockMovementLogPage /></InventoryShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/purchase-orders"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <InventoryShell><PurchaseOrderManagerPage /></InventoryShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/agent-workflows"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <InventoryShell><AgentWorkflowMonitorPage /></InventoryShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/low-stock-alerts"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <InventoryShell><LowStockAlertsPage /></InventoryShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/branch-overview"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <InventoryShell><BranchOverviewPage /></InventoryShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/inventory-analytics"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <InventoryShell><AnalyticsDashboardPage /></InventoryShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/unauthorized"
+                element={
+                  <ProtectedRoute>
+                    <ForbiddenPage />
                   </ProtectedRoute>
                 }
               />
