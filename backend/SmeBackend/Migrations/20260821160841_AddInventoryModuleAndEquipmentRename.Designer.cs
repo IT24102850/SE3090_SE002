@@ -13,8 +13,8 @@ using SmeBackend.Data;
 namespace SmeBackend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260821100257_InitialMergedSchema")]
-    partial class InitialMergedSchema
+    [Migration("20260821160841_AddInventoryModuleAndEquipmentRename")]
+    partial class AddInventoryModuleAndEquipmentRename
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
