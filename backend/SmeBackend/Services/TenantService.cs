@@ -34,6 +34,7 @@ public class TenantService : ITenantService
             {
                 Name = dto.BusinessName,
                 BusinessType = dto.BusinessType,
+                SubType = dto.SubType,
                 LogoUrl = dto.LogoUrl,
                 IsActive = true
             };

@@ -9,6 +9,15 @@ using SmeBackend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Railway (and most PaaS hosts) assign the listen port via $PORT at runtime
+// rather than appsettings/launchSettings - bind to it when present so the
+// container isn't unreachable. Local dev is unaffected (PORT is unset).
+var railwayPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(railwayPort))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{railwayPort}");
+}
+
 // Add services
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -21,7 +30,10 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "SME Platform API", Version = "v1" });
-    
+
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, "SmeBackend.xml");
+    if (File.Exists(xmlPath)) c.IncludeXmlComments(xmlPath);
+
     // Add JWT Authentication to Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -90,6 +102,11 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddHostedService<SmeBackend.Services.ReminderDispatchService>();
+builder.Services.AddHttpClient<SmeBackend.Services.IPlannerAgentService, SmeBackend.Services.PlannerAgentService>();
+builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.StubReminderChannelSender>();
+builder.Services.AddHttpClient<SmeBackend.Services.IPushNotificationSender, SmeBackend.Services.FcmPushNotificationSender>();
+builder.Services.AddScoped<SmeBackend.Services.ICloudinaryImageService, SmeBackend.Services.CloudinaryImageService>();
 
 // CORS
 builder.Services.AddCors(options =>
@@ -105,11 +122,10 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Middleware pipeline
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// Swagger stays on in every environment (not just Development) - the
+// assignment spec requires a working deployed Swagger URL for grading.
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
@@ -117,6 +133,8 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
+
+app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 
 app.MapControllers();
 

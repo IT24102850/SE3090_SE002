@@ -21,17 +21,24 @@ public class AuthController : ControllerBase
         _jwtService = jwtService;
     }
     
+    // Public customer self-registration: signs the caller up as a Customer of
+    // an existing, active tenant. Role is never client-supplied (see
+    // RegisterDto) — this is the only role this endpoint can ever create.
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponseDto>> Register([FromBody] RegisterDto dto)
     {
+        var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.Id == dto.TenantId);
+        if (tenant == null || !tenant.IsActive)
+            return BadRequest(new { message = "This business is not available for sign-up." });
+
         // Check if email exists
         if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
             return BadRequest(new { message = "Email already registered" });
-        
+
         // Hash password with BCrypt
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
-        
+
         var user = new User
         {
             Email = dto.Email,
@@ -40,9 +47,9 @@ public class AuthController : ControllerBase
             Phone = dto.Phone,
             TenantId = dto.TenantId,
             BranchId = dto.BranchId,
-            Role = dto.Role
+            Role = UserRole.Customer
         };
-        
+
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
         
@@ -90,20 +97,51 @@ public class AuthController : ControllerBase
     {
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (userId == null) return Unauthorized();
-        
+
         var user = await _context.Users.FindAsync(Guid.Parse(userId));
         if (user == null) return NotFound();
-        
+
         return Ok(MapToUserDto(user));
     }
-    
+
+    // FR-C2: self-service profile update. Email/Role/TenantId are
+    // intentionally not editable here.
+    [HttpPut("me")]
+    [Authorize]
+    public async Task<ActionResult<UserResponseDto>> UpdateCurrentUser([FromBody] UpdateProfileDto dto)
+    {
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null) return Unauthorized();
+
+        var user = await _context.Users.FindAsync(Guid.Parse(userId));
+        if (user == null) return NotFound();
+
+        if (!string.IsNullOrWhiteSpace(dto.FullName)) user.FullName = dto.FullName;
+        if (dto.Phone != null) user.Phone = dto.Phone;
+        if (dto.Address != null) user.Address = dto.Address;
+        if (dto.InsuranceProvider != null) user.InsuranceProvider = dto.InsuranceProvider;
+        if (dto.InsuranceNumber != null) user.InsuranceNumber = dto.InsuranceNumber;
+        if (dto.MedicalNotes != null) user.MedicalNotes = dto.MedicalNotes;
+        if (dto.ProfilePictureUrl != null) user.ProfilePictureUrl = dto.ProfilePictureUrl;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+        return Ok(MapToUserDto(user));
+    }
+
     private static UserResponseDto MapToUserDto(User user) => new()
     {
         Id = user.Id,
         Email = user.Email,
         FullName = user.FullName,
+        Phone = user.Phone,
         Role = user.Role.ToString(),
         TenantId = user.TenantId,
-        BranchId = user.BranchId
+        BranchId = user.BranchId,
+        Address = user.Address,
+        InsuranceProvider = user.InsuranceProvider,
+        InsuranceNumber = user.InsuranceNumber,
+        MedicalNotes = user.MedicalNotes,
+        ProfilePictureUrl = user.ProfilePictureUrl
     };
 }

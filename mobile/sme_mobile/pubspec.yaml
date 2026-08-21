@@ -1,0 +1,41 @@
+name: sme_mobile
+description: Universal SME Management Platform - Flutter Mobile App
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  # State Management
+  flutter_riverpod: ^2.5.1
+  # HTTP Client
+  dio: ^5.4.3+1
+  # Secure Storage for JWT tokens
+  flutter_secure_storage: ^9.2.2
+  # Navigation
+  go_router: ^14.2.0
+  # QR check-in (FR-B7): generate on the patient's booking, scan on staff's check-in screen
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.2.3
+  # Push notifications (FCM). Inert until a real Firebase project's config
+  # files are added - see services/push_notification_service.dart.
+  firebase_core: ^3.6.0
+  firebase_messaging: ^15.1.3
+  # Business Profile: tap-to-call/email/website/social links.
+  url_launcher: ^6.3.1
+  # Business Profile editor (Admin/Manager): pick logo/cover/gallery images.
+  # XFile's readAsBytes() is cross-platform (works on web, unlike dart:io
+  # File), matching how this app is actually tested (flutter run -d chrome).
+  image_picker: ^1.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

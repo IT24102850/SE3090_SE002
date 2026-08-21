@@ -31,7 +31,8 @@ namespace SmeBackend.Migrations
 
                     b.Property<string>("ApprovalStatus")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("timestamp with time zone");
@@ -61,9 +62,13 @@ namespace SmeBackend.Migrations
                     b.Property<string>("PlanJson")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -79,40 +84,11 @@ namespace SmeBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AgentWorkflows");
-                });
+                    b.HasIndex("CreatedAt");
 
-            modelBuilder.Entity("SmeBackend.Models.AnalyticsSnapshot", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                    b.HasIndex("TenantId", "Status");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Dimension")
-                        .HasColumnType("text");
-
-                    b.Property<string>("MetricType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("MetricValue")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("SnapshotDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("AnalyticsSnapshots");
+                    b.ToTable("agent_workflows", (string)null);
                 });
 
             modelBuilder.Entity("SmeBackend.Models.AvailabilitySlot", b =>
@@ -136,7 +112,7 @@ namespace SmeBackend.Migrations
                     b.Property<bool>("IsBooked")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("ResourceId")
+                    b.Property<Guid?>("ResourceId")
                         .HasColumnType("uuid");
 
                     b.Property<TimeSpan>("StartTime")
@@ -147,9 +123,14 @@ namespace SmeBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ResourceId");
+                    b.HasIndex("BookingId");
 
-                    b.ToTable("AvailabilitySlots");
+                    b.HasIndex("ResourceId", "Date");
+
+                    b.HasIndex("ResourceId", "Date", "StartTime", "EndTime")
+                        .IsUnique();
+
+                    b.ToTable("availability_slots", (string)null);
                 });
 
             modelBuilder.Entity("SmeBackend.Models.Booking", b =>
@@ -158,12 +139,33 @@ namespace SmeBackend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("BookingType")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("BranchId")
+                    b.Property<Guid?>("ApprovedBy")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("AttendeeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("BookedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BookedFor")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BookingTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("CheckInAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("CheckOutAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -171,34 +173,79 @@ namespace SmeBackend.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid");
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("Duration")
-                        .HasColumnType("integer");
+                    b.Property<DateTime>("EndTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FormData")
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("Notes")
-                        .HasColumnType("text");
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
-                    b.Property<Guid?>("ResourceId")
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("ReminderSent")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ResourceId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("ScheduledDateTime")
+                    b.Property<DateTime>("StartTime")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Title")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal?>("TotalCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.ToTable("Bookings");
+                    b.HasIndex("BookingTypeId", "StartTime");
+
+                    b.HasIndex("TenantId", "BookedBy");
+
+                    b.HasIndex("TenantId", "EndTime");
+
+                    b.HasIndex("TenantId", "StartTime");
+
+                    b.HasIndex("TenantId", "Status");
+
+                    b.HasIndex("ResourceId", "StartTime", "EndTime");
+
+                    b.HasIndex("TenantId", "StartTime", "EndTime");
+
+                    b.ToTable("bookings", (string)null);
                 });
 
             modelBuilder.Entity("SmeBackend.Models.BookingReminder", b =>
@@ -207,12 +254,13 @@ namespace SmeBackend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("BookingId")
+                    b.Property<Guid?>("BookingId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Channel")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -222,7 +270,8 @@ namespace SmeBackend.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -231,7 +280,9 @@ namespace SmeBackend.Migrations
 
                     b.HasIndex("BookingId");
 
-                    b.ToTable("BookingReminders");
+                    b.HasIndex("Status");
+
+                    b.ToTable("booking_reminders", (string)null);
                 });
 
             modelBuilder.Entity("SmeBackend.Models.BookingType", b =>
@@ -240,18 +291,66 @@ namespace SmeBackend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BookingUnit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("BufferMinutesAfter")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BufferMinutesBefore")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CancellationPolicy")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ColorHex")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
                     b.Property<string>("ConfigJson")
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CustomFormSchema")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("DefaultDurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("MaxParticipants")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("RequiresApproval")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -259,9 +358,19 @@ namespace SmeBackend.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
-                    b.ToTable("BookingTypes");
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Name");
+
+                    b.HasIndex("TenantId", "Status");
+
+                    b.ToTable("booking_types", (string)null);
                 });
 
             modelBuilder.Entity("SmeBackend.Models.Branch", b =>
@@ -301,7 +410,7 @@ namespace SmeBackend.Migrations
                     b.ToTable("Branches");
                 });
 
-            modelBuilder.Entity("SmeBackend.Models.DynamicForm", b =>
+            modelBuilder.Entity("SmeBackend.Models.DeviceToken", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -310,39 +419,43 @@ namespace SmeBackend.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("FormType")
+                    b.Property<string>("Platform")
                         .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("SchemaJson")
-                        .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("UiSchemaJson")
-                        .HasColumnType("text");
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("ValidationRulesJson")
-                        .HasColumnType("text");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
-                    b.ToTable("DynamicForms");
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "UserId");
+
+                    b.ToTable("device_tokens", (string)null);
                 });
 
-            modelBuilder.Entity("SmeBackend.Models.EquipmentMaintenance", b =>
+            modelBuilder.Entity("SmeBackend.Models.EquipmentReservation", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<decimal>("Cost")
-                        .HasColumnType("numeric");
+                    b.Property<Guid>("BookingId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -350,105 +463,23 @@ namespace SmeBackend.Migrations
                     b.Property<Guid>("InventoryItemId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("MaintenanceDate")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
-                    b.Property<DateTime>("NextDueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BookingId");
 
                     b.HasIndex("InventoryItemId");
 
-                    b.ToTable("EquipmentMaintenances");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.FormSubmission", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DataJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("DynamicFormId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("EntityId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("SubmittedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DynamicFormId");
-
-                    b.ToTable("FormSubmissions");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.InsuranceClaim", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("ApprovedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("ClaimAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("InvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("PolicyNumber")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("RejectionReason")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("SubmittedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.ToTable("InsuranceClaims");
+                    b.ToTable("equipment_reservations", (string)null);
                 });
 
             modelBuilder.Entity("SmeBackend.Models.InventoryItem", b =>
@@ -511,98 +542,6 @@ namespace SmeBackend.Migrations
                     b.ToTable("InventoryItems");
                 });
 
-            modelBuilder.Entity("SmeBackend.Models.Invoice", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("BookingId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Discount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("DueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("FinalAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("InvoiceNumber")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("Tax")
-                        .HasColumnType("numeric");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("TotalAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Invoices");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.InvoiceItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("InvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("UnitPrice")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.ToTable("InvoiceItems");
-                });
-
             modelBuilder.Entity("SmeBackend.Models.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -628,7 +567,8 @@ namespace SmeBackend.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -638,122 +578,11 @@ namespace SmeBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Notifications");
-                });
+                    b.HasIndex("CreatedAt");
 
-            modelBuilder.Entity("SmeBackend.Models.Payment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                    b.HasIndex("TenantId", "UserId", "IsRead");
 
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("GatewayResponse")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("InvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Method")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("PaidAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("TransactionRef")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.ToTable("Payments");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.PurchaseOrder", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("ExpectedDelivery")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("SupplierId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("TotalAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SupplierId");
-
-                    b.ToTable("PurchaseOrders");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.PurchaseOrderItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("InventoryItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PurchaseOrderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Quantity")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("ReceivedQuantity")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("UnitPrice")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InventoryItemId");
-
-                    b.HasIndex("PurchaseOrderId");
-
-                    b.ToTable("PurchaseOrderItems");
+                    b.ToTable("notifications", (string)null);
                 });
 
             modelBuilder.Entity("SmeBackend.Models.RecurringPattern", b =>
@@ -762,7 +591,7 @@ namespace SmeBackend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("BookingId")
+                    b.Property<Guid?>("BookingId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
@@ -777,7 +606,8 @@ namespace SmeBackend.Migrations
 
                     b.Property<string>("Frequency")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -786,7 +616,7 @@ namespace SmeBackend.Migrations
 
                     b.HasIndex("BookingId");
 
-                    b.ToTable("RecurringPatterns");
+                    b.ToTable("recurring_patterns", (string)null);
                 });
 
             modelBuilder.Entity("SmeBackend.Models.Resource", b =>
@@ -795,25 +625,60 @@ namespace SmeBackend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("BranchId")
+                    b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
 
                     b.Property<int?>("Capacity")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CustomAttributes")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal?>("HourlyRate")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("LinkedUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LocationMetadata")
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
-                    b.Property<string>("ResourceType")
+                    b.Property<string>("Specialty")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -821,9 +686,25 @@ namespace SmeBackend.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
-                    b.ToTable("Resources");
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "BranchId");
+
+                    b.HasIndex("TenantId", "Category");
+
+                    b.HasIndex("TenantId", "Name");
+
+                    b.HasIndex("TenantId", "Status");
+
+                    b.ToTable("resources", (string)null);
                 });
 
             modelBuilder.Entity("SmeBackend.Models.ResourceSchedule", b =>
@@ -844,7 +725,16 @@ namespace SmeBackend.Migrations
                     b.Property<bool>("IsAvailable")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("ResourceId")
+                    b.Property<TimeSpan?>("LunchBreakEnd")
+                        .HasColumnType("interval");
+
+                    b.Property<TimeSpan?>("LunchBreakStart")
+                        .HasColumnType("interval");
+
+                    b.Property<decimal?>("MaxDailyBookedHours")
+                        .HasColumnType("numeric");
+
+                    b.Property<Guid?>("ResourceId")
                         .HasColumnType("uuid");
 
                     b.Property<TimeSpan>("StartTime")
@@ -855,12 +745,12 @@ namespace SmeBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ResourceId");
+                    b.HasIndex("ResourceId", "DayOfWeek");
 
-                    b.ToTable("ResourceSchedules");
+                    b.ToTable("resource_schedules", (string)null);
                 });
 
-            modelBuilder.Entity("SmeBackend.Models.StockMovement", b =>
+            modelBuilder.Entity("SmeBackend.Models.ResourceScheduleException", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -869,75 +759,13 @@ namespace SmeBackend.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("InventoryItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Quantity")
-                        .HasColumnType("numeric");
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Reason")
                         .HasColumnType("text");
 
-                    b.Property<Guid?>("ReferenceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ReferenceType")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InventoryItemId");
-
-                    b.ToTable("StockMovements");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.Subscription", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
-
-                    b.Property<bool>("AutoRenew")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("BillingCycle")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("EndDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PlanName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("StartDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("TenantId")
+                    b.Property<Guid>("ResourceId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -945,51 +773,10 @@ namespace SmeBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Subscriptions");
-                });
+                    b.HasIndex("ResourceId", "Date")
+                        .IsUnique();
 
-            modelBuilder.Entity("SmeBackend.Models.Supplier", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Address")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ContactPerson")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("PaymentTerms")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Phone")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Suppliers");
+                    b.ToTable("resource_schedule_exceptions", (string)null);
                 });
 
             modelBuilder.Entity("SmeBackend.Models.Tenant", b =>
@@ -998,12 +785,39 @@ namespace SmeBackend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Amenities")
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal?>("AverageRating")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("BusinessHours")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("BusinessType")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("CancellationCutoffHours")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContactEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactPhone")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CoverImageUrl")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GalleryImageUrls")
+                        .HasColumnType("jsonb");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -1015,8 +829,29 @@ namespace SmeBackend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ProfileUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RescheduleCutoffHours")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReviewCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ShortTagline")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SocialLinks")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SubType")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Website")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -1050,8 +885,7 @@ namespace SmeBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "ModuleName")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
 
                     b.ToTable("TenantModules");
                 });
@@ -1061,6 +895,9 @@ namespace SmeBackend.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Address")
+                        .HasColumnType("text");
 
                     b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
@@ -1076,8 +913,17 @@ namespace SmeBackend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("InsuranceNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InsuranceProvider")
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("MedicalNotes")
+                        .HasColumnType("text");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -1085,6 +931,9 @@ namespace SmeBackend.Migrations
 
                     b.Property<string>("Phone")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProfilePictureUrl")
                         .HasColumnType("text");
 
                     b.Property<int>("Role")
@@ -1100,9 +949,6 @@ namespace SmeBackend.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("Email")
-                        .IsUnique();
-
                     b.HasIndex("TenantId");
 
                     b.ToTable("Users");
@@ -1113,8 +959,26 @@ namespace SmeBackend.Migrations
                     b.HasOne("SmeBackend.Models.Resource", "Resource")
                         .WithMany()
                         .HasForeignKey("ResourceId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Resource");
+                });
+
+            modelBuilder.Entity("SmeBackend.Models.Booking", b =>
+                {
+                    b.HasOne("SmeBackend.Models.BookingType", "BookingType")
+                        .WithMany("Bookings")
+                        .HasForeignKey("BookingTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("SmeBackend.Models.Resource", "Resource")
+                        .WithMany("Bookings")
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BookingType");
 
                     b.Navigation("Resource");
                 });
@@ -1124,8 +988,7 @@ namespace SmeBackend.Migrations
                     b.HasOne("SmeBackend.Models.Booking", "Booking")
                         .WithMany()
                         .HasForeignKey("BookingId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Booking");
                 });
@@ -1141,92 +1004,7 @@ namespace SmeBackend.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("SmeBackend.Models.EquipmentMaintenance", b =>
-                {
-                    b.HasOne("SmeBackend.Models.InventoryItem", "InventoryItem")
-                        .WithMany()
-                        .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("InventoryItem");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.FormSubmission", b =>
-                {
-                    b.HasOne("SmeBackend.Models.DynamicForm", "DynamicForm")
-                        .WithMany()
-                        .HasForeignKey("DynamicFormId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("DynamicForm");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.InsuranceClaim", b =>
-                {
-                    b.HasOne("SmeBackend.Models.Invoice", "Invoice")
-                        .WithMany()
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Invoice");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.InvoiceItem", b =>
-                {
-                    b.HasOne("SmeBackend.Models.Invoice", "Invoice")
-                        .WithMany()
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Invoice");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.Payment", b =>
-                {
-                    b.HasOne("SmeBackend.Models.Invoice", "Invoice")
-                        .WithMany()
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Invoice");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.PurchaseOrder", b =>
-                {
-                    b.HasOne("SmeBackend.Models.Supplier", "Supplier")
-                        .WithMany()
-                        .HasForeignKey("SupplierId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Supplier");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.PurchaseOrderItem", b =>
-                {
-                    b.HasOne("SmeBackend.Models.InventoryItem", "InventoryItem")
-                        .WithMany()
-                        .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("SmeBackend.Models.PurchaseOrder", "PurchaseOrder")
-                        .WithMany()
-                        .HasForeignKey("PurchaseOrderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("InventoryItem");
-
-                    b.Navigation("PurchaseOrder");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.RecurringPattern", b =>
+            modelBuilder.Entity("SmeBackend.Models.EquipmentReservation", b =>
                 {
                     b.HasOne("SmeBackend.Models.Booking", "Booking")
                         .WithMany()
@@ -1234,10 +1012,48 @@ namespace SmeBackend.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("SmeBackend.Models.InventoryItem", "InventoryItem")
+                        .WithMany()
+                        .HasForeignKey("InventoryItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Booking");
+
+                    b.Navigation("InventoryItem");
+                });
+
+            modelBuilder.Entity("SmeBackend.Models.RecurringPattern", b =>
+                {
+                    b.HasOne("SmeBackend.Models.Booking", "Booking")
+                        .WithMany()
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.Navigation("Booking");
                 });
 
+            modelBuilder.Entity("SmeBackend.Models.Resource", b =>
+                {
+                    b.HasOne("SmeBackend.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Branch");
+                });
+
             modelBuilder.Entity("SmeBackend.Models.ResourceSchedule", b =>
+                {
+                    b.HasOne("SmeBackend.Models.Resource", "Resource")
+                        .WithMany()
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Resource");
+                });
+
+            modelBuilder.Entity("SmeBackend.Models.ResourceScheduleException", b =>
                 {
                     b.HasOne("SmeBackend.Models.Resource", "Resource")
                         .WithMany()
@@ -1246,17 +1062,6 @@ namespace SmeBackend.Migrations
                         .IsRequired();
 
                     b.Navigation("Resource");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.StockMovement", b =>
-                {
-                    b.HasOne("SmeBackend.Models.InventoryItem", "InventoryItem")
-                        .WithMany()
-                        .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("InventoryItem");
                 });
 
             modelBuilder.Entity("SmeBackend.Models.TenantModule", b =>
@@ -1285,6 +1090,16 @@ namespace SmeBackend.Migrations
                     b.Navigation("Branch");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("SmeBackend.Models.BookingType", b =>
+                {
+                    b.Navigation("Bookings");
+                });
+
+            modelBuilder.Entity("SmeBackend.Models.Resource", b =>
+                {
+                    b.Navigation("Bookings");
                 });
 #pragma warning restore 612, 618
         }

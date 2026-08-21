@@ -15,4 +15,10 @@ public class AgentWorkflow : BaseEntity, ITenantScoped
     public string? FinalOutcome { get; set; }
     public string? ErrorLog { get; set; }
     public DateTime? CompletedAt { get; set; }
+
+    // Set only for customer-initiated workflows (FindAndBook). Null for
+    // staff-initiated ones (CreateWorkflow/ProposeSchedule) - lets
+    // Approve/Reject/Apply know whether there's a specific customer to
+    // notify, and backs GET /agent/workflow/mine.
+    public Guid? RequestedByUserId { get; set; }
 }
