@@ -25,6 +25,13 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/branches', label: 'Branches', icon: '📍', roles: ['Admin'] },
   { path: '/business-profile', label: 'Business Profile', icon: '🏪', roles: ['Admin', 'Manager'] },
   { path: '/settings', label: 'Business Settings', icon: '⚙️', roles: ['Admin'] },
+  { path: '/inventory', label: 'Inventory Manager', icon: '📦', roles: ['Admin', 'Manager', 'Staff'] },
+  { path: '/stock-movements', label: 'Stock Movements', icon: '🔄', roles: ['Admin', 'Manager', 'Staff'] },
+  { path: '/purchase-orders', label: 'Purchase Orders', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
+  { path: '/low-stock-alerts', label: 'Low Stock Alerts', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
+  { path: '/branch-overview', label: 'Branch Overview', icon: '🏬', roles: ['Admin', 'Manager', 'Staff'] },
+  { path: '/agent-workflows', label: 'Agent Workflows', icon: '🛰️', roles: ['Admin', 'Manager', 'Staff'] },
+  { path: '/inventory-analytics', label: 'Inventory Analytics', icon: '📉', roles: ['Admin', 'Manager'] },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {
