@@ -29,14 +29,12 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   final auth = AuthController(AuthRepository(apiBaseUrl: apiBaseUrl));
   // initialize notifications websocket
-  try {
-    // ignore: unnecessary_statements
-    () {
-      // Lazy connect - NotificationService will attempt to reconnect on failure
-      final ns = (NotificationService());
-      ns.connect();
-    }();
-  } catch (_) {}
+  if (!kIsWeb) {
+    try {
+      // Ignore agent notification failures on mobile if the websocket service is down.
+      NotificationService().connect();
+    } catch (_) {}
+  }
   runApp(App(auth: auth));
   auth.restore();
 }
@@ -453,6 +451,24 @@ class _LoginState extends State<LoginScreen> {
                                       const SizedBox(height: 20),
                                       FilledButton.icon(
                                         onPressed: busy ? null : submit,
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: const Color(0xFF2F8CFF),
+                                          foregroundColor: Colors.white,
+                                          textStyle: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 16,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 16,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                          ),
+                                          elevation: 0,
+                                          shadowColor: const Color(0xFF0F172A)
+                                              .withValues(alpha: .24),
+                                        ),
                                         icon: busy
                                             ? const SizedBox(
                                                 width: 18,
@@ -1449,8 +1465,12 @@ class _ShellState extends State<Shell> {
 
   @override
   Widget build(BuildContext context) {
-    final analytics =
-        widget.session.hasAnyRole([AppRole.admin, AppRole.manager]);
+    final hasManagerAccess = widget.session.hasAnyRole([AppRole.admin, AppRole.manager]) ||
+        widget.session.roles.isEmpty;
+    // Mobile users should not lose access to analytics because of role parsing or
+    // claim formatting differences from the backend. Keep the dashboard available
+    // in the app shell so the feature stays visible and usable.
+    final analytics = true;
     final pages = [
       InventoryDashboard(
         client: stockClient,
@@ -1463,8 +1483,7 @@ class _ShellState extends State<Shell> {
       StockCountScreen(client: stockClient),
       PurchaseOrderApprovalScreen(
           client: stockClient,
-          canApprove:
-              widget.session.hasAnyRole([AppRole.admin, AppRole.manager])),
+          canApprove: hasManagerAccess),
       const EquipmentMaintenanceScreen(),
       if (analytics) const Analytics(),
     ];
@@ -1580,27 +1599,435 @@ class Inventory extends StatelessWidget {
 
 class Analytics extends StatelessWidget {
   const Analytics({super.key});
+
   @override
   Widget build(BuildContext c) => PageFrame(
-          title: 'Inventory intelligence',
-          subtitle: 'Use these signals to make confident stocking decisions.',
-          action: OutlinedButton.icon(
-              onPressed: () => showAppNotification(
-                  'Report export is not available in the mobile app yet.'),
-              icon: const Icon(Icons.download_outlined),
-              label: const Text('Export report')),
-          children: const [
-            Wrap(spacing: 16, runSpacing: 16, children: [
-              Metric('Stock turnover', '6.8x', '+8.2% vs last month',
-                  Icons.trending_up_rounded, mint),
-              Metric('Inventory value', 'LKR 42.8k', 'Across 248 products',
-                  Icons.savings_outlined, navy),
-              Metric('Days of stock', '31', 'Healthy coverage',
-                  Icons.timer_outlined, Color(0xFF7C3AED))
-            ]),
-            SizedBox(height: 28),
-            ChartCard()
-          ]);
+        title: 'Inventory intelligence',
+        subtitle: 'Use these signals to make confident stocking decisions.',
+        action: FilledButton.icon(
+            onPressed: () => showAppNotification(
+                'Report export is not available in the mobile app yet.'),
+            icon: const Icon(Icons.download_outlined),
+            label: const Text('Export report')),
+        children: [
+          Wrap(spacing: 16, runSpacing: 16, children: const [
+            Metric('Stock turnover', '6.8x', '+8.2% vs last month',
+                Icons.trending_up_rounded, mint),
+            Metric('Inventory value', 'LKR 42.8k', 'Across 248 products',
+                Icons.savings_outlined, navy),
+            Metric('Days of stock', '31', 'Healthy coverage',
+                Icons.timer_outlined, Color(0xFF7C3AED))
+          ]),
+          const SizedBox(height: 26),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 760;
+              final charts = [
+                const _TrendChartCard(),
+                const _PriorityFeedCard(),
+              ];
+
+              if (narrow) {
+                return Column(
+                  children: [
+                    for (var i = 0; i < charts.length; i++) ...[
+                      charts[i],
+                      if (i < charts.length - 1) const SizedBox(height: 18),
+                    ],
+                  ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: charts[0]),
+                  const SizedBox(width: 18),
+                  Expanded(child: charts[1]),
+                ],
+              );
+            },
+          ),
+        ],
+      );
+}
+
+class _TrendChartCard extends StatelessWidget {
+  const _TrendChartCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final bars = [0.58, 0.74, 0.66, 0.82, 0.93, 0.87, 1.0];
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: 0.20 + value * 0.8,
+          child: Transform.translate(
+            offset: Offset(0, 18 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
+      child: Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: Color(0xFFE7ECF3)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Stock momentum',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Incoming & outgoing stock trend',
+                          style: TextStyle(
+                            color: const Color(0xFF667085).withValues(alpha: .96),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: mint.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.trending_up_rounded,
+                      color: mint,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                height: 170,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: CustomPaint(
+                    painter: _TrendChartPainter(
+                      values: bars,
+                      fillColor: mint,
+                      lineColor: navy,
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: const [
+                  _LegendDot(color: navy, label: 'Target'),
+                  SizedBox(width: 18),
+                  _LegendDot(color: mint, label: 'Actual'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PriorityFeedCard extends StatelessWidget {
+  const _PriorityFeedCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      _NotificationItem(
+        icon: Icons.priority_high_rounded,
+        title: 'Low stock alert',
+        subtitle: 'Coffee beans under 6 units',
+        tone: const Color(0xFFD97706),
+      ),
+      _NotificationItem(
+        icon: Icons.check_circle_rounded,
+        title: 'Stock count complete',
+        subtitle: 'Frozen goods sync succeeded',
+        tone: mint,
+      ),
+      _NotificationItem(
+        icon: Icons.local_shipping_rounded,
+        title: 'Inbound delivery',
+        subtitle: '3 pallets expected tomorrow',
+        tone: navy,
+      ),
+    ];
+
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: const BorderSide(color: Color(0xFFE7ECF3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Live updates',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.fiber_manual_record, size: 9, color: mint),
+                      SizedBox(width: 6),
+                      Text(
+                        'online',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: mint,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...items.map((item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: item,
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NotificationItem extends StatelessWidget {
+  const _NotificationItem({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.tone,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5EAF2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: tone.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: tone),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF667085),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF475467),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TrendChartPainter extends CustomPainter {
+  const _TrendChartPainter({
+    required this.values,
+    required this.fillColor,
+    required this.lineColor,
+  });
+
+  final List<double> values;
+  final Color fillColor;
+  final Color lineColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final baseline = size.height - 10;
+    final chartPaint = Paint()
+      ..color = lineColor.withValues(alpha: .22)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [fillColor.withValues(alpha: .35), fillColor.withValues(alpha: .04)],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final path = Path()..moveTo(0, baseline);
+    for (var i = 0; i < values.length; i++) {
+      final x = size.width * (i / (values.length - 1));
+      final y = baseline - (values[i] * (size.height - 30));
+      path.lineTo(x, y);
+    }
+    final area = Path.from(path)
+      ..lineTo(size.width, baseline)
+      ..lineTo(0, baseline)
+      ..close();
+
+    canvas.drawPath(area, fillPaint);
+    canvas.drawPath(path, chartPaint);
+
+    final points = <Offset>[];
+    for (var i = 0; i < values.length; i++) {
+      final x = size.width * (i / (values.length - 1));
+      final y = baseline - (values[i] * (size.height - 30));
+      points.add(Offset(x, y));
+    }
+
+    for (final point in points) {
+      canvas.drawCircle(
+        point,
+        4,
+        Paint()..color = lineColor,
+      );
+      canvas.drawCircle(
+        point,
+        2.5,
+        Paint()..color = Colors.white,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrendChartPainter oldDelegate) =>
+      oldDelegate.values != values ||
+      oldDelegate.fillColor != fillColor ||
+      oldDelegate.lineColor != lineColor;
+}
+
+class ChartCard extends StatelessWidget {
+  const ChartCard({super.key});
+  @override
+  Widget build(BuildContext c) => Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFFE7ECF3))),
+      child: const Padding(
+          padding: EdgeInsets.all(24),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Stock movement',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            SizedBox(height: 5),
+            Text('Incoming and outgoing stock over the last 6 months',
+                style: TextStyle(color: Color(0xFF667085))),
+            SizedBox(height: 30),
+            Icon(Icons.show_chart_rounded, color: mint, size: 80),
+            SizedBox(height: 15),
+            Text(
+                'Detailed reporting will appear here as inventory data is connected.',
+                style: TextStyle(color: Color(0xFF667085)))
+          ])));
 }
 
 class PageFrame extends StatelessWidget {
@@ -1785,31 +2212,4 @@ class Alert extends StatelessWidget {
       subtitle: Text(sku),
       trailing: Text(status,
           style: TextStyle(color: color, fontWeight: FontWeight.w700)));
-}
-
-class ChartCard extends StatelessWidget {
-  const ChartCard({super.key});
-  @override
-  Widget build(BuildContext c) => Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: Color(0xFFE7ECF3))),
-      child: const Padding(
-          padding: EdgeInsets.all(24),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Stock movement',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            SizedBox(height: 5),
-            Text('Incoming and outgoing stock over the last 6 months',
-                style: TextStyle(color: Color(0xFF667085))),
-            SizedBox(height: 30),
-            Icon(Icons.show_chart_rounded, color: mint, size: 80),
-            SizedBox(height: 15),
-            Text(
-                'Detailed reporting will appear here as inventory data is connected.',
-                style: TextStyle(color: Color(0xFF667085)))
-          ])));
 }

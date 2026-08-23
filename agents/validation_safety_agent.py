@@ -62,6 +62,15 @@ def _make_audit(actionType: str, actorRole: str, outcome: str, details: dict[str
     }
 
 
+def _to_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def evaluate_validation_safety(payload: ValidationSafetyInput) -> ValidationSafetyOutput:
     """Evaluate ValidationSafetyInput and return ValidationSafetyOutput.
 
@@ -69,6 +78,8 @@ def evaluate_validation_safety(payload: ValidationSafetyInput) -> ValidationSafe
     - role-based permission checks using ACTION_MIN_ROLE and ROLE_LEVELS
     - schema validation (required fields present)
     - business-rule compliance:
+      * low stock below reorder level automatically triggers a PO recommendation
+      * purchase orders exceeding the approved budget require approval
       * apply_discount: discount_percentage <= 20
       * schedule_appointment: duration_minutes <= 120 (2 hours)
     - safe-failure fallback: on unexpected exception return isAllowed=False, requiredApprovals=['Admin'], rejectionReason set, and auditLog contains exception details
@@ -115,6 +126,47 @@ def evaluate_validation_safety(payload: ValidationSafetyInput) -> ValidationSafe
                 }
 
         # Business rules
+        if action in {"create_purchase_order", "generate_purchase_order"}:
+            current_stock = _to_float(payload.payload.get("current_stock", payload.payload.get("currentStock")))
+            reorder_level = _to_float(payload.payload.get("reorder_level", payload.payload.get("reorderLevel")))
+            quantity = _to_float(payload.payload.get("quantity"))
+            unit_cost = _to_float(payload.payload.get("unit_cost", payload.payload.get("unitCost")))
+            total_cost = _to_float(payload.payload.get("totalCost"))
+            budget_limit = _to_float(payload.payload.get("budget_limit", payload.payload.get("budgetLimit", payload.payload.get("budget"))))
+
+            if current_stock is not None and reorder_level is not None and current_stock < reorder_level:
+                audit_log.append(_make_audit("business_check", "System", "ok", {"reason": "stock_below_reorder_level", "current_stock": current_stock, "reorder_level": reorder_level}))
+                # A below-reorder item must trigger a PO, not a rejection.
+                if budget_limit is not None and total_cost is not None and total_cost > budget_limit:
+                    audit_log.append(_make_audit("budget_check", "System", "requires_approval", {"totalCost": total_cost, "budgetLimit": budget_limit}))
+                    return {
+                        "isAllowed": False,
+                        "requiredApprovals": ["Manager", "Procurement"],
+                        "rejectionReason": "po_exceeds_budget_limit",
+                        "auditLog": audit_log,
+                    }
+                if budget_limit is not None and total_cost is None and quantity is not None and unit_cost is not None:
+                    estimated_total = quantity * unit_cost
+                    if estimated_total > budget_limit:
+                        audit_log.append(_make_audit("budget_check", "System", "requires_approval", {"estimatedTotal": estimated_total, "budgetLimit": budget_limit}))
+                        return {
+                            "isAllowed": False,
+                            "requiredApprovals": ["Manager", "Procurement"],
+                            "rejectionReason": "po_exceeds_budget_limit",
+                            "auditLog": audit_log,
+                        }
+                audit_log.append(_make_audit("final_decision", "PolicyEngine", "ok", {"action": action, "trigger": "low_stock"}))
+                return {"isAllowed": True, "requiredApprovals": [], "rejectionReason": None, "auditLog": audit_log}
+
+            if budget_limit is not None and total_cost is not None and total_cost > budget_limit:
+                audit_log.append(_make_audit("budget_check", "System", "requires_approval", {"totalCost": total_cost, "budgetLimit": budget_limit}))
+                return {
+                    "isAllowed": False,
+                    "requiredApprovals": ["Manager", "Procurement"],
+                    "rejectionReason": "po_exceeds_budget_limit",
+                    "auditLog": audit_log,
+                }
+
         if action == "apply_discount":
             try:
                 disc = float(payload.payload.get("discount_percentage"))

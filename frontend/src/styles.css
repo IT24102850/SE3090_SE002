@@ -50,7 +50,29 @@ input { padding: .7rem; border: 1px solid #c8cfdd; border-radius: .35rem; font: 
 .login-heading { display: flex; align-items: center; gap: .75rem; }.login-heading p { margin: 0 0 .15rem; color: #a5c8ff; font-size: .68rem; font-weight: 800; letter-spacing: .12em; }.login-heading h1 { margin: 0; font-size: 1.5rem; }.login-brand-mark { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; color: #fff; font-size: 1.35rem; background: #007aff; border-radius: .75rem; }.login-intro { margin: -.3rem 0 .15rem; color: rgba(255,255,255,.72); }
 .login-card label { color: rgba(255,255,255,.92); font-size: .85rem; text-shadow: 0 1px 2px rgba(0,0,0,.4); }.login-card input:not([type=checkbox]) { width: 100%; padding: .78rem .85rem; color: #fff; background: rgba(0,0,0,.3); border-color: rgba(255,255,255,.23); border-radius: .75rem; }.login-card input:not([type=checkbox]):focus { color: #0f172a; background: rgba(255,255,255,.96); border-color: #38bdf8; outline: 3px solid rgba(56,189,248,.3); }
 .password-field { position: relative; }.password-field input { padding-right: 4.9rem !important; }.password-toggle { position: absolute; right: .45rem; bottom: .43rem; padding: .35rem .55rem; color: #0f172a; font-size: .72rem; font-weight: 800; background: rgba(255,255,255,.9); border-radius: .5rem; }.remember { display: flex; align-items: center; gap: .5rem; margin-top: -.2rem; font-weight: 400; }.remember input { width: 1rem; height: 1rem; accent-color: #38bdf8; }
-.login-card > button, .reset-button { min-height: 2.8rem; border-radius: .75rem; }.login-card > button:not(.secondary):not(.demo-button) { background: #007aff; box-shadow: 0 4px 16px rgba(0,122,255,.4); }.reset-button { color: white; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.25); }.demo-button { color: #dbeafe; background: transparent; border: 1px solid rgba(191,219,254,.35); }.security-note { margin: 0; text-align: center; color: rgba(255,255,255,.7); font-size: .75rem; }.login-card .error { padding: .65rem .75rem; color: #fecaca; background: rgba(127,29,29,.35); border-radius: .6rem; }.has-error { animation: login-shake .35s ease-in-out; }
+.login-card > button, .reset-button { min-height: 2.8rem; border-radius: .75rem; }
+.login-card > .login-submit,
+.login-card > .login-demo,
+.login-card > .login-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+.login-card > button:not(.secondary):not(.demo-button) {
+  background: linear-gradient(135deg, #2f8cff, #0b65f2);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(28,117,255,.38), inset 0 1px 0 rgba(255,255,255,.4);
+  border: 1px solid rgba(147,197,253,.7);
+}
+.login-card > .login-submit { background: linear-gradient(135deg, #2f8cff, #0b65f2); color: #fff; }
+.reset-button,
+.login-card > .login-reset { color: white; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); }
+.demo-button,
+.login-card > .login-demo { color: #dbeafe; background: rgba(255,255,255,.05); border: 1px solid rgba(191,219,254,.35); }
+.security-note { margin: 0; text-align: center; color: rgba(255,255,255,.7); font-size: .75rem; }.login-card .error { padding: .65rem .75rem; color: #fecaca; background: rgba(127,29,29,.35); border-radius: .6rem; }.has-error { animation: login-shake .35s ease-in-out; }
 @keyframes login-shake { 20%,60% { transform: translateX(-8px); } 40%,80% { transform: translateX(8px); } }
 @media (max-width: 480px) { .login-page { align-items: start; padding-top: 1rem; overflow-y: auto; }.login-scene { min-height: 540px; }.login-card { padding: 1.35rem; }.owl-wrapper { top: 0; } }
 

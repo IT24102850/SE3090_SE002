@@ -16,20 +16,34 @@ class NotificationService {
   WebSocketChannel? _channel;
 
   void connect([String? wsUrl]) {
-    if (_channel != null) return; // already connected
-    final defaultUrl = kIsWeb ? 'ws://localhost:8000/ws/workflows' : 'ws://10.0.2.2:8000/ws/workflows';
+    if (kIsWeb) return;
+    if (_channel != null || _reconnectTimer != null) return;
+
+    final defaultUrl = 'ws://10.0.2.2:8000/ws/workflows';
     final url = wsUrl ?? defaultUrl;
+    Uri? uri;
     try {
-      _channel = WebSocketChannel.connect(Uri.parse(url));
-      _channel!.stream.listen((message) {
-        try {
-          final data = jsonDecode(message as String) as Map<String, dynamic>;
-          _controller.add(data);
-        } catch (e) {
-          // ignore malformed
-        }
-      }, onDone: _onDone, onError: (err) => _reconnect());
-    } catch (e) {
+      uri = Uri.parse(url);
+    } catch (_) {
+      return;
+    }
+
+    try {
+      _channel = WebSocketChannel.connect(uri);
+      _channel!.stream.listen(
+        (message) {
+          try {
+            final data = jsonDecode(message as String) as Map<String, dynamic>;
+            _controller.add(data);
+          } catch (_) {
+            // ignore malformed payloads
+          }
+        },
+        onDone: _onDone,
+        onError: (_) => _reconnect(),
+      );
+    } catch (_) {
+      _channel = null;
       _reconnect();
     }
   }
