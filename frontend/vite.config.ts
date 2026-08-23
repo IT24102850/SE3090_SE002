@@ -8,5 +8,12 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:5107'
     }
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.ts',
+    pool: 'threads',
+    fileParallelism: false
   }
 });
