@@ -16,10 +16,30 @@
 ## Getting Started
 See `/docs/` for setup instructions.
 
+## Railway deployment
+
+The root [`railway.toml`](railway.toml) publishes `backend/SmeBackend` and
+configures Railway's deployment health check. Create a Railway service from
+this repository and set these variables:
+
+- `ASPNETCORE_ENVIRONMENT=Production`
+- `Jwt__Key` — a long, private signing key (at least 32 bytes)
+- `ConnectionStrings__DefaultConnection` — the PostgreSQL connection string.
+  For a Railway PostgreSQL service, use its `PGHOST`, `PGPORT`, `PGDATABASE`,
+  `PGUSER`, and `PGPASSWORD` reference variables to build an Npgsql connection
+  string, with `Ssl Mode=Require;Trust Server Certificate=true`.
+
+After deployment, substitute the generated Railway domain below:
+
+- Health/readiness: `https://<railway-domain>/health` (200 only when PostgreSQL is reachable)
+- Liveness: `https://<railway-domain>/health/live`
+- Swagger UI: `https://<railway-domain>/swagger`
+- OpenAPI JSON: `https://<railway-domain>/swagger/v1/swagger.json`
+
 ## Live URLs
-- API: [pending]
+- API: [pending — add the generated Railway domain after the first deployment]
 - React: [pending]
-- Swagger: [pending]
+- Swagger: `https://<railway-domain>/swagger`
 - Demo Video: [pending]
 
 ## License
