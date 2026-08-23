@@ -1,11 +1,11 @@
 {
-    "name": "sme_inventory_app",
-    "short_name": "sme_inventory_app",
+    "name": "Stockwise Inventory",
+    "short_name": "Stockwise",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F5F7FA",
+    "theme_color": "#12355B",
+    "description": "Inventory operations for growing teams.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

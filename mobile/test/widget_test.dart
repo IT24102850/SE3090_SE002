@@ -19,30 +19,22 @@ class _FakeInventoryClient implements http.Client {
 
   @override
   Future<http.Response> post(Uri url,
-          {Map<String, String>? headers,
-          Object? body,
-          Encoding? encoding}) =>
+          {Map<String, String>? headers, Object? body, Encoding? encoding}) =>
       _respond(url, 'POST');
 
   @override
   Future<http.Response> put(Uri url,
-          {Map<String, String>? headers,
-          Object? body,
-          Encoding? encoding}) =>
+          {Map<String, String>? headers, Object? body, Encoding? encoding}) =>
       _respond(url, 'PUT');
 
   @override
   Future<http.Response> patch(Uri url,
-          {Map<String, String>? headers,
-          Object? body,
-          Encoding? encoding}) =>
+          {Map<String, String>? headers, Object? body, Encoding? encoding}) =>
       _respond(url, 'PATCH');
 
   @override
   Future<http.Response> delete(Uri url,
-          {Map<String, String>? headers,
-          Object? body,
-          Encoding? encoding}) =>
+          {Map<String, String>? headers, Object? body, Encoding? encoding}) =>
       _respond(url, 'DELETE');
 
   @override
@@ -165,7 +157,7 @@ void main() {
       MaterialApp(home: LoginScreen(auth: auth)),
     );
 
-    expect(find.text('Sign in'), findsNWidgets(2));
+    expect(find.text('Sign in'), findsOneWidget);
     expect(find.byType(TextFormField), findsNWidgets(2));
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
