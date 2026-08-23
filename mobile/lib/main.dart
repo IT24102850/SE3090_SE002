@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth/app_role.dart';
 import 'auth/app_notifications.dart';
@@ -22,31 +23,95 @@ const navy = Color(0xFF12355B),
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   final auth = AuthController(AuthRepository(apiBaseUrl: apiBaseUrl));
-  runApp(App(auth: auth));
+  final themes = ThemeController();
+  runApp(App(auth: auth, themes: themes));
   auth.restore();
+  themes.restore();
 }
 
 class App extends StatelessWidget {
-  const App({super.key, required this.auth});
+  const App({super.key, required this.auth, required this.themes});
   final AuthController auth;
+  final ThemeController themes;
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-      animation: auth,
+      animation: Listenable.merge([auth, themes]),
       builder: (_, __) => MaterialApp(
           title: 'Stockwise',
           debugShowCheckedModeBanner: false,
           scaffoldMessengerKey: appMessengerKey,
-          theme: appTheme(),
+          theme: appTheme(themes.current),
           home: auth.isRestoring
               ? const _BootScreen()
               : auth.session == null
-                  ? LoginScreen(auth: auth)
-                  : Shell(auth: auth, session: auth.session!)));
+                  ? LoginScreen(auth: auth, themes: themes)
+                  : Shell(auth: auth, session: auth.session!, themes: themes)));
 }
 
-ThemeData appTheme() {
+enum AppThemeChoice { light, dark, young }
+
+extension AppThemeChoiceDetails on AppThemeChoice {
+  String get label => switch (this) {
+        AppThemeChoice.light => 'Clean light',
+        AppThemeChoice.dark => 'Midnight dark',
+        AppThemeChoice.young => 'Young violet',
+      };
+
+  IconData get icon => switch (this) {
+        AppThemeChoice.light => Icons.light_mode_outlined,
+        AppThemeChoice.dark => Icons.dark_mode_outlined,
+        AppThemeChoice.young => Icons.auto_awesome_rounded,
+      };
+}
+
+class ThemeController extends ChangeNotifier {
+  static const _storageKey = 'stockwise.theme';
+  AppThemeChoice current = AppThemeChoice.light;
+
+  Future<void> restore() async {
+    try {
+      final value =
+          (await SharedPreferences.getInstance()).getString(_storageKey);
+      current = AppThemeChoice.values
+              .where((choice) => choice.name == value)
+              .firstOrNull ??
+          current;
+    } catch (_) {
+      // Theme persistence should never block access to the app.
+    }
+    notifyListeners();
+  }
+
+  Future<void> select(AppThemeChoice choice) async {
+    if (choice == current) return;
+    current = choice;
+    notifyListeners();
+    try {
+      await (await SharedPreferences.getInstance())
+          .setString(_storageKey, choice.name);
+    } catch (_) {
+      // Keep the selected theme for the current session if storage is unavailable.
+    }
+  }
+}
+
+ThemeData appTheme(AppThemeChoice choice) {
+  final isDark = choice == AppThemeChoice.dark;
+  final isYoung = choice == AppThemeChoice.young;
+  final primary = isYoung ? const Color(0xFF7C3AED) : mint;
+  final secondary = isYoung ? const Color(0xFFF97316) : navy;
+  final surface = isDark ? const Color(0xFF182230) : Colors.white;
+  final background = isDark
+      ? const Color(0xFF101828)
+      : isYoung
+          ? const Color(0xFFFFF7FF)
+          : canvas;
+  final onSurface = isDark ? const Color(0xFFF1F5F9) : ink;
+  final outline = isDark ? const Color(0xFF344054) : const Color(0xFFE5EAF0);
   final scheme = ColorScheme.fromSeed(
-      seedColor: mint, brightness: Brightness.light, surface: Colors.white);
+      seedColor: primary,
+      brightness: isDark ? Brightness.dark : Brightness.light,
+      surface: surface);
   OutlineInputBorder border(
           {Color color = const Color(0xFFD4DCE6), double width = 1}) =>
       OutlineInputBorder(
@@ -54,35 +119,39 @@ ThemeData appTheme() {
           borderSide: BorderSide(color: color, width: width));
   return ThemeData(
       useMaterial3: true,
-      colorScheme: scheme.copyWith(primary: mint, secondary: navy),
-      scaffoldBackgroundColor: canvas,
+      colorScheme: scheme.copyWith(
+          primary: primary,
+          secondary: secondary,
+          surface: surface,
+          onSurface: onSurface),
+      scaffoldBackgroundColor: background,
       fontFamily: 'Roboto',
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
           backgroundColor: Colors.transparent,
-          foregroundColor: ink,
+          foregroundColor: onSurface,
           elevation: 0,
           scrolledUnderElevation: 0),
       cardTheme: CardThemeData(
           elevation: 0,
-          color: Colors.white,
+          color: surface,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
-              side: const BorderSide(color: Color(0xFFE5EAF0)))),
+              side: BorderSide(color: outline))),
       inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: Colors.white,
+          fillColor: surface,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           border: border(),
           enabledBorder: border(),
-          focusedBorder: border(color: mint, width: 2),
+          focusedBorder: border(color: primary, width: 2),
           errorBorder: border(color: const Color(0xFFB42318)),
           focusedErrorBorder: border(color: const Color(0xFFB42318), width: 2)),
       filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(52),
-              backgroundColor: mint,
+              backgroundColor: primary,
               foregroundColor: Colors.white,
               textStyle: const TextStyle(fontWeight: FontWeight.w800),
               shape: RoundedRectangleBorder(
@@ -90,28 +159,29 @@ ThemeData appTheme() {
       outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
               minimumSize: const Size.fromHeight(50),
-              foregroundColor: navy,
-              side: const BorderSide(color: Color(0xFFCBD5E1)),
+              foregroundColor: primary,
+              side: BorderSide(color: outline),
               textStyle: const TextStyle(fontWeight: FontWeight.w700),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14)))),
       navigationBarTheme: NavigationBarThemeData(
           height: 72,
-          backgroundColor: Colors.white,
-          indicatorColor: mint.withValues(alpha: .14),
+          backgroundColor: surface,
+          indicatorColor: primary.withValues(alpha: .16),
           labelTextStyle: WidgetStateProperty.all(
               const TextStyle(fontSize: 11, fontWeight: FontWeight.w700))));
 }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, required this.auth});
+  const LoginScreen({super.key, required this.auth, this.themes});
   final AuthController auth;
+  final ThemeController? themes;
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class Login extends LoginScreen {
-  const Login({super.key, required super.auth});
+  const Login({super.key, required super.auth, super.themes});
 }
 
 class _LoginScreenState extends State<LoginScreen> {
@@ -160,14 +230,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: ListView(
                       padding: const EdgeInsets.fromLTRB(24, 44, 24, 28),
                       children: [
-                        const BrandLockup(),
+                        Row(children: [
+                          const Expanded(child: BrandLockup()),
+                          if (widget.themes != null)
+                            ThemePicker(themes: widget.themes!)
+                        ]),
                         const SizedBox(height: 42),
                         Text('Welcome back',
                             style: Theme.of(context)
                                 .textTheme
                                 .headlineMedium
                                 ?.copyWith(
-                                    fontWeight: FontWeight.w900, color: ink)),
+                                    fontWeight: FontWeight.w900,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface)),
                         const SizedBox(height: 8),
                         const Text(
                             'Sign in to manage stock, counts, and approvals.',
@@ -258,9 +335,14 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class Shell extends StatefulWidget {
-  const Shell({super.key, required this.auth, required this.session});
+  const Shell(
+      {super.key,
+      required this.auth,
+      required this.session,
+      required this.themes});
   final AuthController auth;
   final AuthSession session;
+  final ThemeController themes;
   @override
   State<Shell> createState() => _ShellState();
 }
@@ -338,6 +420,7 @@ class _ShellState extends State<Shell> {
             toolbarHeight: 72,
             title: const BrandLockup(compact: true),
             actions: [
+              ThemePicker(themes: widget.themes),
               IconButton(
                   onPressed: confirmLogout,
                   tooltip: 'Sign out',
@@ -389,11 +472,44 @@ class BrandLockup extends StatelessWidget {
                           letterSpacing: 1.2,
                           fontWeight: FontWeight.w900,
                           fontSize: compact ? 15 : 18,
-                          color: ink)),
-                  const Text('Inventory operations',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF60758A)))
+                          color: Theme.of(context).colorScheme.onSurface)),
+                  Text('Inventory operations',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: .62)))
                 ])
           ]);
+}
+
+class ThemePicker extends StatelessWidget {
+  const ThemePicker({super.key, required this.themes});
+  final ThemeController themes;
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<AppThemeChoice>(
+        tooltip: 'Choose theme',
+        icon: Icon(themes.current.icon),
+        onSelected: themes.select,
+        itemBuilder: (context) => AppThemeChoice.values
+            .map((choice) => PopupMenuItem(
+                  value: choice,
+                  child: Row(children: [
+                    Icon(choice.icon,
+                        color: choice == themes.current
+                            ? Theme.of(context).colorScheme.primary
+                            : null),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(choice.label)),
+                    if (choice == themes.current)
+                      Icon(Icons.check_rounded,
+                          color: Theme.of(context).colorScheme.primary),
+                  ]),
+                ))
+            .toList(),
+      );
 }
 
 class InlineError extends StatelessWidget {
