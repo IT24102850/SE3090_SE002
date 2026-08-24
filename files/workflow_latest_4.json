@@ -1,0 +1,53 @@
+﻿{
+    "id":  7,
+    "created_at":  "2026-08-24T13:21:46.593668Z",
+    "actionType":  "generate_purchase_order",
+    "payload":  {
+                    "current_stock":  5,
+                    "unit_cost":  12.5,
+                    "totalCost":  250,
+                    "reorder_level":  25,
+                    "predicted_demand":  30,
+                    "supplierId":  "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                    "budget_limit":  1000,
+                    "branchId":  "33333333-3333-4333-8333-333333333333",
+                    "tenant_id":  "11111111-1111-4111-8111-111111111111",
+                    "quantity":  20,
+                    "inventoryItemId":  "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+                },
+    "userRole":  "Manager",
+    "tenantId":  "11111111-1111-4111-8111-111111111111",
+    "riskLevel":  "low",
+    "validation_result":  {
+                              "isAllowed":  false,
+                              "requiredApprovals":  [
+
+                                                    ],
+                              "rejectionReason":  "invalid_schema: missing fields [\u0027inventory_item_id\u0027]",
+                              "auditLog":  [
+                                               {
+                                                   "timestamp":  "2026-08-24T13:21:46.593803Z",
+                                                   "actorRole":  "System",
+                                                   "actionType":  "input_validation",
+                                                   "outcome":  "ok",
+                                                   "details":  {
+                                                                   "userRole":  "Manager"
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:21:46.593847Z",
+                                                   "actorRole":  "System",
+                                                   "actionType":  "schema_check",
+                                                   "outcome":  "rejected",
+                                                   "details":  {
+                                                                   "missing":  [
+                                                                                   "inventory_item_id"
+                                                                               ]
+                                                               }
+                                               }
+                                           ]
+                          },
+    "tool_result":  null,
+    "llm_response":  null,
+    "status":  "blocked"
+}

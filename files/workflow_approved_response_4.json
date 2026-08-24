@@ -1,0 +1,44 @@
+﻿{
+    "id":  7,
+    "status":  "approved",
+    "validation_result":  {
+                              "isAllowed":  false,
+                              "requiredApprovals":  [
+
+                                                    ],
+                              "rejectionReason":  "invalid_schema: missing fields [\u0027inventory_item_id\u0027]",
+                              "auditLog":  [
+                                               {
+                                                   "timestamp":  "2026-08-24T13:21:46.593803Z",
+                                                   "actorRole":  "System",
+                                                   "actionType":  "input_validation",
+                                                   "outcome":  "ok",
+                                                   "details":  {
+                                                                   "userRole":  "Manager"
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:21:46.593847Z",
+                                                   "actorRole":  "System",
+                                                   "actionType":  "schema_check",
+                                                   "outcome":  "rejected",
+                                                   "details":  {
+                                                                   "missing":  [
+                                                                                   "inventory_item_id"
+                                                                               ]
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:21:46.662576Z",
+                                                   "actorRole":  "Manager",
+                                                   "actionType":  "approval",
+                                                   "outcome":  "approved",
+                                                   "details":  {
+                                                                   "note":  "Approve and place PO on mock backend"
+                                                               }
+                                               }
+                                           ]
+                          },
+    "backend_result":  null,
+    "notification":  null
+}

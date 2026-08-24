@@ -1,0 +1,63 @@
+﻿{
+    "id":  6,
+    "status":  "approved",
+    "validation_result":  {
+                              "isAllowed":  true,
+                              "requiredApprovals":  [
+
+                                                    ],
+                              "rejectionReason":  null,
+                              "auditLog":  [
+                                               {
+                                                   "timestamp":  "2026-08-24T13:21:02.822758Z",
+                                                   "actorRole":  "System",
+                                                   "actionType":  "input_validation",
+                                                   "outcome":  "ok",
+                                                   "details":  {
+                                                                   "userRole":  "Manager"
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:21:02.822771Z",
+                                                   "actorRole":  "System",
+                                                   "actionType":  "business_check",
+                                                   "outcome":  "ok",
+                                                   "details":  {
+                                                                   "reason":  "stock_below_reorder_level",
+                                                                   "current_stock":  5.0,
+                                                                   "reorder_level":  25.0
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:21:02.822774Z",
+                                                   "actorRole":  "PolicyEngine",
+                                                   "actionType":  "final_decision",
+                                                   "outcome":  "ok",
+                                                   "details":  {
+                                                                   "action":  "generate_purchase_order",
+                                                                   "trigger":  "low_stock"
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:21:11.072850Z",
+                                                   "actorRole":  "Manager",
+                                                   "actionType":  "approval",
+                                                   "outcome":  "approved",
+                                                   "details":  {
+                                                                   "note":  "Approve to place PO via mock backend"
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:21:11.075559Z",
+                                                   "actorRole":  "system",
+                                                   "actionType":  "place_po",
+                                                   "outcome":  "skipped",
+                                                   "details":  {
+                                                                   "reason":  "missing branch or supplier id"
+                                                               }
+                                               }
+                                           ]
+                          },
+    "backend_result":  null,
+    "notification":  null
+}

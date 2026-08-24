@@ -1,0 +1,41 @@
+﻿AI-Powered Inventory Reorder demo run - 2026-08-24T18:52:40.9975322+05:30
+
+Components started:
+- Backend (dotnet) on http://localhost:5107 (AGENT_SERVICE_SECRET=secret-abc-123)
+- Agent Workflows service (FastAPI) on http://127.0.0.1:11435 (BACKEND_URL -> mock)
+- Mock backend at http://127.0.0.1:5200 (accepted create-po calls)
+
+Recorded files:
+- agent_execute_response.json
+- agent_execute_response_2.json
+- agent_execute_response_3.json
+- agent_execute_response_4.json
+- agent_execute_response_5.json
+- workflow_approved_response.json
+- workflow_approved_response_2.json
+- workflow_approved_response_3.json
+- workflow_approved_response_4.json
+- workflow_approved_response_5.json
+- workflow_latest.json
+- workflow_latest_2.json
+- workflow_latest_3.json
+- workflow_latest_4.json
+- workflow_latest_5.json
+
+Key steps performed:
+1) Executed agent workflow (generate_purchase_order) as Manager -> agent created a draft PO (tool_result) and returned status completed.
+   - see files\agent_execute_response_5.json
+2) Approved workflow via POST /workflows/{id}/approve -> agent attempted to place PO in backend.
+   - agent called mock backend and received Created response (mock PO number MOCK-PO-12345)
+   - see files\workflow_approved_response_5.json and files\agent_execute_response_5.json
+3) Agent attempted to notify Procurement via send_notification tool; the tool failed because tenant_id was not present in notification payload (validation error).
+
+How to reproduce interactively:
+ - Ensure backend (dotnet) running on 5107 with AGENT_SERVICE_SECRET set
+ - Start agent service with BACKEND_URL pointing to your backend and AGENT_SERVICE_SECRET set
+ - Trigger workflow: POST http://127.0.0.1:11435/workflows/execute with actionType=generate_purchase_order and required payload fields
+ - Approve via: POST http://127.0.0.1:11435/workflows/{id}/approve with approverRole=Manager
+
+Notes and next steps:
+- Real device QR scan would normally trigger the mobile app to call backend which then triggers the agent; here we simulated by calling agent service directly.
+- To test push notifications to the Flutter app, implement send_notification to integrate with FCM and ensure tenant_id is supplied.

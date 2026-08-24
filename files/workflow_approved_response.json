@@ -1,0 +1,44 @@
+﻿{
+    "id":  4,
+    "status":  "approved",
+    "validation_result":  {
+                              "isAllowed":  false,
+                              "requiredApprovals":  [
+
+                                                    ],
+                              "rejectionReason":  "invalid_schema: missing fields [\u0027totalCost\u0027]",
+                              "auditLog":  [
+                                               {
+                                                   "timestamp":  "2026-08-24T13:18:18.837780Z",
+                                                   "actorRole":  "System",
+                                                   "actionType":  "input_validation",
+                                                   "outcome":  "ok",
+                                                   "details":  {
+                                                                   "userRole":  "Manager"
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:18:18.837793Z",
+                                                   "actorRole":  "System",
+                                                   "actionType":  "schema_check",
+                                                   "outcome":  "rejected",
+                                                   "details":  {
+                                                                   "missing":  [
+                                                                                   "totalCost"
+                                                                               ]
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:18:27.021517Z",
+                                                   "actorRole":  "Manager",
+                                                   "actionType":  "approval",
+                                                   "outcome":  "approved",
+                                                   "details":  {
+                                                                   "note":  "Approved in demo run"
+                                                               }
+                                               }
+                                           ]
+                          },
+    "backend_result":  null,
+    "notification":  null
+}

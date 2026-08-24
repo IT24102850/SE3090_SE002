@@ -1,0 +1,63 @@
+﻿{
+    "id":  5,
+    "status":  "approved",
+    "validation_result":  {
+                              "isAllowed":  true,
+                              "requiredApprovals":  [
+
+                                                    ],
+                              "rejectionReason":  null,
+                              "auditLog":  [
+                                               {
+                                                   "timestamp":  "2026-08-24T13:18:41.195539Z",
+                                                   "actorRole":  "System",
+                                                   "actionType":  "input_validation",
+                                                   "outcome":  "ok",
+                                                   "details":  {
+                                                                   "userRole":  "Manager"
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:18:41.195553Z",
+                                                   "actorRole":  "System",
+                                                   "actionType":  "business_check",
+                                                   "outcome":  "ok",
+                                                   "details":  {
+                                                                   "reason":  "stock_below_reorder_level",
+                                                                   "current_stock":  5.0,
+                                                                   "reorder_level":  25.0
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:18:41.195557Z",
+                                                   "actorRole":  "PolicyEngine",
+                                                   "actionType":  "final_decision",
+                                                   "outcome":  "ok",
+                                                   "details":  {
+                                                                   "action":  "generate_purchase_order",
+                                                                   "trigger":  "low_stock"
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:19:12.733000Z",
+                                                   "actorRole":  "Manager",
+                                                   "actionType":  "approval",
+                                                   "outcome":  "approved",
+                                                   "details":  {
+                                                                   "note":  "Approved for placement"
+                                                               }
+                                               },
+                                               {
+                                                   "timestamp":  "2026-08-24T13:19:12.735626Z",
+                                                   "actorRole":  "system",
+                                                   "actionType":  "place_po",
+                                                   "outcome":  "skipped",
+                                                   "details":  {
+                                                                   "reason":  "missing branch or supplier id"
+                                                               }
+                                               }
+                                           ]
+                          },
+    "backend_result":  null,
+    "notification":  null
+}
