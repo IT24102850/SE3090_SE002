@@ -313,7 +313,7 @@ export function AgentWorkflowMonitorPage() {
                           <XAxis dataKey="x" />
                           <YAxis />
                           <Tooltip />
-                          <Line type="monotone" dataKey="y" stroke="#7c3aed" strokeWidth={3} dot={false} isAnimationActive={true} animationDuration={900} />
+                          <Line type="monotone" dataKey="y" stroke="#8B5CF6" strokeWidth={3} dot={false} isAnimationActive={true} animationDuration={900} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>

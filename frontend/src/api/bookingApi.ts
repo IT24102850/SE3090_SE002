@@ -1,4 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
 import type {
   AgentWorkflow,
   AvailabilityDay,
@@ -23,16 +24,43 @@ import type {
 // backend instead of the local dev server - see frontend/.env.example.
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api';
 
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: API_BASE_URL,
+  prepareHeaders: (headers) => {
+    const token = localStorage.getItem('token');
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return headers;
+  },
+});
+
+// Access tokens live 2 hours (JwtService.GenerateAccessToken) and there is no
+// refresh endpoint to renew them, so a session simply dies mid-use. Without
+// this wrapper RTK Query swallowed the resulting 401s: every page kept
+// rendering the logged-in shell off the stale `user` object in localStorage
+// while each table showed its "nothing found" empty state, which reads as
+// missing data rather than an expired login. Drop the dead session and bounce
+// to /login - the same thing axiosConfig.ts already does for the axios half
+// of the app.
+const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
+  args,
+  api,
+  extraOptions,
+) => {
+  const result = await rawBaseQuery(args, api, extraOptions);
+  // Guard on the token still being present so concurrent 401s (this page
+  // fires several queries at once) only redirect once, and so a genuine 401
+  // while already logged out can't loop us back into /login.
+  if (result.error?.status === 401 && localStorage.getItem('token')) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+  }
+  return result;
+};
+
 export const bookingApi = createApi({
   reducerPath: 'bookingApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: API_BASE_URL,
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem('token');
-      if (token) headers.set('Authorization', `Bearer ${token}`);
-      return headers;
-    },
-  }),
+  baseQuery: baseQueryWithAuth,
   tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification'],
   endpoints: (builder) => ({
     // ── Branches ──────────────────────────────────────────

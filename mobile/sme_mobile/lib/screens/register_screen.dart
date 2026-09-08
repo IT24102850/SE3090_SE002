@@ -125,7 +125,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     const SizedBox(height: 16),
                     const Text(
-                      'Grow with SME Platform',
+                      'Grow with Unify',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.bold),
                     ),

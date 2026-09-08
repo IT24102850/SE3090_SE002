@@ -35,7 +35,7 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SME Platform'),
+        title: const Text('Unify'),
         actions: [
           const _NotificationBellAction(),
           IconButton(
@@ -55,8 +55,11 @@ class DashboardScreen extends ConsumerWidget {
           children: [
             UserAccountsDrawerHeader(
               decoration: const BoxDecoration(color: AppColors.ink),
-              accountName: Text(user.fullName),
-              accountEmail: Text(user.email),
+              // Explicit light text: this header keeps a dark fill while the
+              // rest of the theme is light, so the inherited colour can't be
+              // relied on to stay legible here.
+              accountName: Text(user.fullName, style: const TextStyle(color: Color(0xFFF3F4F6), fontWeight: FontWeight.w600)),
+              accountEmail: Text(user.email, style: const TextStyle(color: Color(0xFFC7CCD4))),
               currentAccountPicture: CircleAvatar(
                 backgroundColor: role.color,
                 child: Text(

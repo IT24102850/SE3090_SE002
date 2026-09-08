@@ -140,6 +140,7 @@ export const TOURISM_SUB_TYPES = [
   'Cultural / heritage tours',
   'Multi-day packages',
   'Accommodation',
+  'Villa / Hotel',
   'Vehicle rental / transport',
   'Wellness / Ayurveda',
   'Cycling tours',
@@ -261,14 +262,14 @@ export interface ConflictPair {
 }
 
 export const STATUS_COLORS: Record<BookingStatus, { fg: string; bg: string; tone: 'good' | 'warning' | 'critical' | 'neutral' | 'primary' }> = {
-  Pending: { fg: '#92400e', bg: '#d97706', tone: 'warning' },
-  Confirmed: { fg: '#1d4ed8', bg: '#2563eb', tone: 'primary' },
-  CheckedIn: { fg: '#0f766e', bg: '#0d9488', tone: 'good' },
-  InProgress: { fg: '#5b21b6', bg: '#7c3aed', tone: 'primary' },
-  Completed: { fg: '#065f46', bg: '#059669', tone: 'good' },
-  Cancelled: { fg: '#475569', bg: '#64748b', tone: 'neutral' },
-  NoShow: { fg: '#991b1b', bg: '#dc2626', tone: 'critical' },
-  Rejected: { fg: '#991b1b', bg: '#b91c1c', tone: 'critical' },
+  Pending: { fg: '#92400e', bg: '#FBBF24', tone: 'warning' },
+  Confirmed: { fg: '#1d4ed8', bg: '#8B5CF6', tone: 'primary' },
+  CheckedIn: { fg: '#0f766e', bg: '#22D3EE', tone: 'good' },
+  InProgress: { fg: '#5b21b6', bg: '#E040FB', tone: 'primary' },
+  Completed: { fg: '#065f46', bg: '#4ADE80', tone: 'good' },
+  Cancelled: { fg: '#475569', bg: '#7C7C85', tone: 'neutral' },
+  NoShow: { fg: '#991b1b', bg: '#F87171', tone: 'critical' },
+  Rejected: { fg: '#991b1b', bg: '#EF4444', tone: 'critical' },
 };
 
 export const RESOURCE_CATEGORIES: ResourceCategory[] = ['Room', 'Equipment', 'Vehicle', 'Staff', 'Desk', 'Other'];

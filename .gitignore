@@ -61,3 +61,8 @@ Thumbs.db
 .env*
 tmp-edge/
 vite-start-output.txt
+
+# Generated design-canvas payload (~2.9MB of embedded editor code).
+# Regenerate with design/unify-ui-kit/build.mjs + the seed helper; the
+# .dc.html artboards and canvas.json in that folder are the real source.
+design/unify-ui-kit/unify-design-system.html

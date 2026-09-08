@@ -1,0 +1,421 @@
+================================================================================
+MOONLIT BAY (WELIGAMA) - BOOKING TYPES & PACKAGES
+Research + proposed seed data for the Unify platform
+Compiled: 2026-09-08
+================================================================================
+
+HOW TO READ THIS FILE
+---------------------
+Every line is tagged so you never mistake research for invention:
+
+  [VERIFIED]  Sourced from a public listing. URL in the SOURCES section.
+  [MARKET]    A real going rate for this activity in the Weligama/Mirissa
+              area, from published operator pricing. Not Moonlit Bay's own
+              price - they may charge differently.
+  [PROPOSED]  Designed by me for this system. NOT a real Moonlit Bay
+              offering. Confirm with the owner before publishing.
+
+This follows the rule already written into docs/tourism-business-template.md
+section 3: "Don't fabricate a plausible-looking rating for a real,
+identifiable business - leave it unset if unknown." Moonlit Bay is a real
+business, so its packages are marked [PROPOSED], not presented as fact.
+
+
+================================================================================
+1. THE BUSINESS - VERIFIED FACTS
+================================================================================
+
+[VERIFIED] Name:      Moonlit Bay Weligama
+[VERIFIED] Address:   No. 189, Kapparatota, Fishermen Bay Hotel Road,
+                      81700 Weligama, Southern Province, Sri Lanka
+[VERIFIED] Type:      Small family-run guesthouse / lodge
+[VERIFIED] Rooms:     3 double rooms, each with balcony and private bathroom
+                      (described as clean, modern, spacious)
+[VERIFIED] Location:  In a working fishermen's area; beach roughly 50 m away
+[VERIFIED] Rating:    9.1 (Booking.com guest score)
+[VERIFIED] Meals:     Breakfast repeatedly singled out in guest reviews
+[VERIFIED] Nightly:   LKR 2,823 - 6,333 depending on dates (Google Hotels
+                      range); Booking.com has shown LKR 3,824 incl. taxes/fees
+
+NOT VERIFIED - do not enter these until the owner confirms:
+  - Review count (a rating was found, a count was not - leave unset)
+  - Exact room names, max occupancy per room, child policy
+  - Check-in / check-out times
+  - Whether they run ANY activities themselves, or only refer guests out
+  - Air-conditioning, kitchen access, airport pickup
+
+IMPORTANT: This is a 3-room guesthouse, not a resort. That single fact drives
+everything below - MaxParticipants is tiny, the whole property is 6-8 guests,
+and any "package" is really the room plus activities bought in from local
+operators. Size the data to the business, not to the template.
+
+
+================================================================================
+2. ARCHETYPE MAPPING (per docs/tourism-business-template.md)
+================================================================================
+
+Primary archetype: H. Homestay / eco-lodge
+  Resource.Category = Room
+  BookingType.BookingUnit = "Night"
+  One Resource row per room (3 rows).
+
+Secondary (activities): archetype B (instructor-led) and A (fixed-departure
+excursion), only if Moonlit Bay actually sells them. If they merely refer
+guests to a surf school, DO NOT create these booking types - an unbookable
+booking type is worse than none.
+
+Package archetype: F. Multi-day package
+  BookingUnit = "Package", RequiresApproval = true
+  Note the known limitation in section 6 of the template doc: a true
+  multi-resource package is not modelled. Each package below is therefore
+  one Resource of Category=Other representing "the package", with the
+  itinerary carried in ConfigJson. That is the documented simplification,
+  not an oversight.
+
+
+================================================================================
+3. RESOURCES TO CREATE
+================================================================================
+
+R1  Name:        Sea View Double - Room 1
+    Category:    Room
+    Status:      Available   <-- the customer app filters on this exact
+                                 string; any other value hides the room
+    HourlyRate:  4000.00
+                 CORRECTION (verified in the app code): do NOT leave this
+                 null. Despite the name, for a BookingUnit of Night or
+                 DateRange this column holds the PER-UNIT price - the
+                 booking total is computed as hourlyRate * nights in
+                 booking_flow_screen.dart:626-628. Leaving it null means
+                 no price on the card and a null booking total.
+    CustomAttributes:
+    {
+      "subtype": "Accommodation",
+      "capacity": 2,
+      "pricing": { "adult": 4000, "currency": "LKR" },
+      "includes": ["breakfast", "private bathroom", "balcony"],
+      "languagesSpoken": ["English", "Sinhala"],
+      "rating": 9.1
+    }
+    Note: rating 9.1 is the sourced Booking.com score. reviewCount is
+    deliberately OMITTED - no real number was found.
+
+R2  Sea View Double - Room 2    (identical shape to R1)
+R3  Sea View Double - Room 3    (identical shape to R1)
+
+R4  Name:        Package Coordinator
+    Category:    Other
+    Purpose:     The single bookable resource that multi-day packages hang
+                 off, per the template's documented simplification.
+    CustomAttributes: { "subtype": "MultiDayPackage", "capacity": 6 }
+
+
+================================================================================
+4. BOOKING TYPES
+================================================================================
+Field names below map 1:1 onto backend/SmeBackend/Models/BookingType.cs.
+Watch the DB limits: Name <= 100 chars, Slug <= 50, Description <= 500,
+ColorHex <= 7.
+
+--------------------------------------------------------------------------
+BT1  Room Night                                              [PROPOSED]
+--------------------------------------------------------------------------
+Name:                    Room Night
+Slug:                    room-night
+Description:             One night in a double room with balcony, private
+                         bathroom and breakfast, 50 m from Weligama beach.
+ColorHex:                #2563EB
+Status:                  Active
+BookingUnit:             Night
+DefaultDurationMinutes:  1440
+RequiresApproval:        false
+MaxParticipants:         2
+BufferMinutesBefore:     0
+BufferMinutesAfter:      120        (room turnover / cleaning)
+ConfigJson:
+{
+  "checkInTime": "14:00",
+  "checkOutTime": "11:00",
+  "breakfastIncluded": true,
+  "basePricePerNight": { "amount": 4000, "currency": "LKR" },
+  "priceSource": "midpoint of the LKR 2,823-6,333 published range"
+}
+CancellationPolicy:
+{ "freeCancellationHours": 48, "refundPercent": 100,
+  "lateCancellationRefundPercent": 0 }
+
+--------------------------------------------------------------------------
+BT2  Beginner Surf Lesson (group)                            [PROPOSED]
+--------------------------------------------------------------------------
+Only create if Moonlit Bay sells lessons themselves.
+Name:                    Beginner Surf Lesson
+Slug:                    surf-lesson-group
+Description:             Two-hour beginner group lesson on Weligama's sandy
+                         beach break. Board, rash vest and instructor
+                         included. Suitable for absolute first-timers.
+ColorHex:                #0EA5E9
+Status:                  Active
+BookingUnit:             Slot
+DefaultDurationMinutes:  120
+RequiresApproval:        false
+MaxParticipants:         4
+BufferMinutesAfter:      30         (board rinse / changeover)
+ConfigJson:
+{
+  "pricing": { "adult": 3000, "currency": "LKR" },
+  "weatherDependent": true,
+  "includes": ["soft-top board", "rash vest", "instructor"],
+  "skillLevel": "Beginner",
+  "season": { "note": "Weligama beach break works year-round" }
+}
+
+--------------------------------------------------------------------------
+BT3  Private Surf Lesson                                     [PROPOSED]
+--------------------------------------------------------------------------
+Name:                    Private Surf Lesson
+Slug:                    surf-lesson-private
+Description:             90-minute one-to-one lesson with board hire
+                         included. Faster progress than the group session.
+ColorHex:                #0284C7
+BookingUnit:             Slot
+DefaultDurationMinutes:  90
+MaxParticipants:         1
+ConfigJson:
+{ "pricing": { "adult": 6000, "currency": "LKR" }, "weatherDependent": true }
+
+--------------------------------------------------------------------------
+BT4  Surfboard Rental                                        [PROPOSED]
+--------------------------------------------------------------------------
+Name:                    Surfboard Rental
+Slug:                    surfboard-rental
+Description:             Soft-top 8-9 ft foam board hired by the day.
+                         Self-guided, no instructor.
+ColorHex:                #38BDF8
+BookingUnit:             DateRange
+DefaultDurationMinutes:  1440
+MaxParticipants:         1
+BufferMinutesAfter:      15
+ConfigJson:
+{ "pricing": { "perDay": 1000, "perHour": 800, "currency": "LKR" } }
+
+--------------------------------------------------------------------------
+BT5  Mirissa Whale Watching Excursion                        [PROPOSED]
+--------------------------------------------------------------------------
+Departs Mirissa harbour, ~15 min from Weligama. Almost certainly resold
+from a licensed operator rather than run in-house - confirm before listing.
+Name:                    Mirissa Whale Watching Excursion
+Slug:                    whale-watching-mirissa
+Description:             Early-morning blue whale and dolphin cruise from
+                         Mirissa harbour. Includes breakfast pack, water,
+                         life jacket, government tax and harbour fees.
+ColorHex:                #1D4ED8
+BookingUnit:             Slot
+DefaultDurationMinutes:  300        (~5 h door to door - see template s.4:
+                                    use the REAL duration, not the default)
+RequiresApproval:        true       (harbour slot must be confirmed)
+MaxParticipants:         6          (whole guesthouse, not the boat)
+BufferMinutesBefore:     60         (pre-dawn transfer to the harbour)
+ConfigJson:
+{
+  "pricing": { "adult": 16000, "child": 10000, "currency": "LKR" },
+  "childAgeRange": "4-10",
+  "departureTime": "06:00",
+  "pointsOfDeparture": ["Mirissa Harbour"],
+  "weatherDependent": true,
+  "season": { "months": ["Nov","Dec","Jan","Feb","Mar","Apr"],
+              "note": "peak Dec-Apr; sightings drop sharply off-season" },
+  "includes": ["breakfast pack", "water", "life jacket", "government tax"]
+}
+
+--------------------------------------------------------------------------
+BT6  Sri Lankan Cooking Class                                [PROPOSED]
+--------------------------------------------------------------------------
+Name:                    Sri Lankan Cooking Class
+Slug:                    cooking-class
+Description:             Hands-on evening class cooking rice and curry with
+                         the family, eaten together afterwards.
+ColorHex:                #F59E0B
+BookingUnit:             Slot
+DefaultDurationMinutes:  180
+MaxParticipants:         6
+ConfigJson:
+{ "pricing": { "adult": 4500, "currency": "LKR" },
+  "priceConfidence": "UNVERIFIED - no published Weligama rate found",
+  "startTime": "17:00" }
+WARNING: the 4,500 figure is a placeholder. Searches turned up cooking
+classes in Weligama but no published price. Get a real number from the
+owner before this goes live.
+
+--------------------------------------------------------------------------
+BT7  Airport Transfer (CMB <-> Weligama)                     [PROPOSED]
+--------------------------------------------------------------------------
+Name:                    Airport Transfer
+Slug:                    airport-transfer
+Description:             Private air-conditioned car between Bandaranaike
+                         International (CMB) and the guesthouse. Roughly a
+                         3-hour drive each way.
+ColorHex:                #64748B
+BookingUnit:             Slot
+DefaultDurationMinutes:  180
+RequiresApproval:        true
+MaxParticipants:         3
+ConfigJson:
+{ "pricing": { "perVehicle": 18000, "currency": "LKR" },
+  "direction": ["arrival", "departure"],
+  "note": "market range LKR 17,000-20,000 for a private car" }
+
+--------------------------------------------------------------------------
+BT8  Multi-Day Package                                       [PROPOSED]
+--------------------------------------------------------------------------
+The umbrella type for everything in section 5.
+Name:                    Multi-Day Package
+Slug:                    multi-day-package
+Description:             Bundled stay plus activities, booked as one
+                         reservation and confirmed by the host.
+ColorHex:                #7C3AED
+BookingUnit:             Package
+DefaultDurationMinutes:  4320       (set per package - this is the 3-night)
+RequiresApproval:        true
+MaxParticipants:         6
+CancellationPolicy:
+{ "freeCancellationHours": 168, "refundPercent": 100,
+  "lateCancellationRefundPercent": 50,
+  "note": "7-day cutoff - activity operators are pre-paid" }
+
+
+================================================================================
+5. PACKAGES - WITH FULL PRICE BUILD-UP
+================================================================================
+All [PROPOSED]. Every component price is [MARKET] or [VERIFIED]; only the
+bundling and the discount are mine. Room assumed at LKR 4,000/night.
+Prices are per person unless the line says "per vehicle" or "per room".
+
+--------------------------------------------------------------------------
+PKG-1  "Surf & Stay"  -  3 nights                    LKR 21,000
+--------------------------------------------------------------------------
+  3 x room night              @ 4,000  =  12,000
+  3 x group surf lesson       @ 3,000  =   9,000
+  2 x day board rental        @ 1,000  =   2,000
+                              components  23,000
+                              package     21,000   (saves 2,000 / 8.7%)
+  Breakfast included daily.
+  Best for: first-time surfers, the core Weligama customer.
+  DurationMinutes: 4320   RequiresApproval: true   MaxParticipants: 2
+
+--------------------------------------------------------------------------
+PKG-2  "Weligama Surf Camp"  -  5 nights             LKR 35,000
+--------------------------------------------------------------------------
+  5 x room night              @ 4,000  =  20,000
+  5 x group surf lesson       @ 3,000  =  15,000
+  5 x day board rental        @ 1,000  =   5,000
+                              components  40,000
+                              package     35,000   (saves 5,000 / 12.5%)
+  Best for: the 5-7 night surf-camp stay Weligama is known for.
+  DurationMinutes: 7200   RequiresApproval: true   MaxParticipants: 4
+
+--------------------------------------------------------------------------
+PKG-3  "Whale & Wave"  -  2 nights                   LKR 25,500
+--------------------------------------------------------------------------
+  2 x room night              @  4,000 =   8,000
+  1 x whale watching (adult)  @ 16,000 =  16,000
+  1 x group surf lesson       @  3,000 =   3,000
+                              components  27,000
+                              package     25,500   (saves 1,500 / 5.6%)
+  SEASONAL: only sell Nov-Apr. Off-season the whale trip is the whole
+  value of this package and sightings collapse. Use ResourceScheduleException
+  or the season block in ConfigJson to keep it off the calendar May-Oct.
+  DurationMinutes: 2880   RequiresApproval: true   MaxParticipants: 4
+
+--------------------------------------------------------------------------
+PKG-4  "South Coast Explorer"  -  7 nights           LKR 85,000
+--------------------------------------------------------------------------
+  7 x room night              @  4,000 =  28,000
+  2 x airport transfer        @ 18,000 =  36,000   (per vehicle, both ways)
+  1 x whale watching (adult)  @ 16,000 =  16,000
+  3 x group surf lesson       @  3,000 =   9,000
+  1 x cooking class           @  4,500 =   4,500
+                              components  93,500
+                              package     85,000   (saves 8,500 / 9.1%)
+  NOTE: transfers are 39% of this package (36,000 of 93,500). If the guest
+  arranges their own airport transport, the remaining components come to
+  57,500; the same ~9% bundle discount gives LKR 52,000, which is a far
+  easier sell. Consider listing both variants.
+  DurationMinutes: 10080  RequiresApproval: true   MaxParticipants: 3
+
+--------------------------------------------------------------------------
+PKG-5  "Slow Mornings" couples escape  -  3 nights   LKR 30,000
+--------------------------------------------------------------------------
+  Priced for TWO people together, not per person.
+  3 x room night              @  4,000 =  12,000   (one room, two guests)
+  2 x private surf lesson     @  6,000 =  12,000   (one each)
+  2 x cooking class           @  4,500 =   9,000   (one each)
+                              components  33,000
+                              package     30,000   (saves 3,000 / 9.1%)
+  Best for: couples; leans on the breakfast and the family hosting, which
+  is what guests actually praise in the reviews.
+  DurationMinutes: 4320   RequiresApproval: true   MaxParticipants: 2
+
+
+================================================================================
+6. SANITY CHECKS BEFORE YOU SEED
+================================================================================
+
+1. CAPACITY. Three rooms, ~6 guests total. MaxParticipants on any package
+   must never exceed what the rooms hold. PKG-2 at 4 people already needs
+   two of the three rooms.
+
+2. THE ROOM RATE IS AN ASSUMPTION. LKR 4,000 sits mid-range of the
+   published LKR 2,823-6,333. Every package total above is arithmetic on
+   that one number - change it and all five totals move. Get the real rate
+   first if you can.
+
+3. FOREIGNER vs LOCAL PRICING. The whale-watching figures are the foreign
+   tourist rate. Sri Lankan operators very often run a separate, much lower
+   local rate. If this platform serves both, that is a real modelling gap -
+   and note the template doc already flags that per-ticket-type pricing
+   (adult vs child in one booking) is NOT natively supported.
+
+4. ACTIVITIES MAY NOT BE THEIRS. Nothing found confirms Moonlit Bay runs
+   surf lessons, whale trips or cooking classes. A small guesthouse
+   typically refers guests to neighbours. Only create BT2-BT7 for what they
+   genuinely sell and can be held accountable for.
+
+5. THE COOKING CLASS PRICE IS INVENTED. LKR 4,500 is a placeholder, flagged
+   again here because it feeds PKG-4 and PKG-5.
+
+6. SEASONALITY IS REAL. Whale watching is Nov-Apr on this coast. Weligama's
+   surf works year-round, which is exactly why the surf packages are the
+   safer year-round product and the whale package is not.
+
+
+================================================================================
+7. SOURCES
+================================================================================
+Property listing (address, 3 rooms, 9.1 rating, ~50 m to beach):
+  https://www.booking.com/hotel/lk/moonlit-bay-weligama.html
+  https://www.tripadvisor.com/Hotel_Review-g612380-d10150330-Reviews-Moonlit_Bay_Weligama-Weligama_Matara_Southern_Province.html
+  https://www.trip.com/hotels/weligama-hotel-detail-4677397/moonlit-bay-weligama/
+
+Surf lesson and board rental rates:
+  https://freedomsrilanka.com/surf/
+  https://www.srilanka-spirit.com/guides/surf-board-rental-sri-lanka/
+  https://travel-surf.com/destination/sri-lanka/weligama/
+  https://beyondwildplaces.com/learning-to-surf-in-sri-lanka-beginners/
+
+Mirissa whale watching pricing:
+  https://www.whalewatchingmirissa.lk/whale-watching-mirissa-price-everything-you-need-to-know/
+  https://srilankatourisminfo.com/mirissa-whale-watching-best-season-prices-ethical-tours/
+  https://ellahype.com/2026/01/01/whale-watching-in-mirissa-best-time-cost-ethics-what-to-expect/
+
+Airport transfer pricing:
+  https://justgoexploring.com/destinations/colombo-to-weligama/
+  https://airporttransfer.lk/en/blog/how-to-get/colombo-airport-to-weligama/
+  https://mirissacabs.com/colombo-airport-to-weligama/
+
+Weligama activities context:
+  https://onlybyland.com/things-to-do-in-weligama/
+  https://www.kateandmikestravels.com/post/weligama-beach-sri-lanka/
+
+================================================================================
+END
+================================================================================

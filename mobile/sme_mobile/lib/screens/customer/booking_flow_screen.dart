@@ -787,7 +787,7 @@ class _StepperButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppColors.border),
         ),
-        child: Icon(icon, size: 18, color: onTap == null ? Colors.grey.shade400 : AppColors.ink),
+        child: Icon(icon, size: 18, color: onTap == null ? AppColors.textMuted : AppColors.textPrimary),
       ),
     );
   }

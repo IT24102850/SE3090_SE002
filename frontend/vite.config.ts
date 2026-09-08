@@ -14,11 +14,11 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Universal SME Management Platform',
-        short_name: 'SME Platform',
+        name: 'Unify',
+        short_name: 'Unify',
         description: 'Multi-tenant SaaS for booking, resources, billing, and inventory across any business type.',
         theme_color: '#2563eb',
-        background_color: '#0f172a',
+        background_color: '#F1EFEC',
         display: 'standalone',
         start_url: '/dashboard',
         icons: [

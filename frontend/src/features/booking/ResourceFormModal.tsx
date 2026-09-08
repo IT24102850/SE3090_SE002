@@ -201,7 +201,7 @@ export default function ResourceFormModal({
             <textarea className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
 
-          <div className="field field-full" style={{ borderTop: '1px solid var(--border, #e5e7eb)', paddingTop: 12, marginTop: 4 }}>
+          <div className="field field-full" style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12, marginTop: 4 }}>
             <label style={{ fontWeight: 600 }}>Additional details</label>
             <p style={{ fontSize: 12, opacity: 0.7, margin: '2px 0 8px' }}>
               Optional - rating, per-person pricing, and what's included. Useful for tourism, restaurant, and other

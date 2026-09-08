@@ -26,11 +26,14 @@ const LoginPage = () => {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '5rem auto', padding: '2rem', boxShadow: '0 0 10px rgba(0,0,0,0.1)' }}>
-      <h2>Login to SME Platform</h2>
+    <div className="card card-pad" style={{ maxWidth: '400px', margin: '5rem auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+        <img src="/unify-logo.svg" alt="" width={40} height={40} />
+        <h2 style={{ margin: 0 }}>Login to Unify</h2>
+      </div>
       
       {error && (
-        <div style={{ padding: '0.75rem', background: '#fee2e2', color: '#dc2626', borderRadius: '4px', marginBottom: '1rem' }}>
+        <div className="banner banner-critical">
           {error}
         </div>
       )}
@@ -43,7 +46,7 @@ const LoginPage = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            style={{ width: '100%', padding: '0.5rem', marginTop: '0.25rem' }}
+            className="input" style={{ marginTop: '0.25rem' }}
           />
         </div>
 
@@ -54,22 +57,14 @@ const LoginPage = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            style={{ width: '100%', padding: '0.5rem', marginTop: '0.25rem' }}
+            className="input" style={{ marginTop: '0.25rem' }}
           />
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            background: loading ? '#9ca3af' : '#2563eb',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-          }}
+          className="btn btn-primary" style={{ width: '100%', padding: '0.75rem' }}
         >
           {loading ? 'Signing in...' : 'Sign In'}
         </button>

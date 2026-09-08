@@ -246,7 +246,7 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Check back soon, or ask your business to register on SME Platform.',
+              'Check back soon, or ask your business to register on Unify.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
             ),

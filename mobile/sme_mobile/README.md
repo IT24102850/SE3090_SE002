@@ -1,4 +1,4 @@
-# SME Platform – Flutter Mobile (Auth Module)
+# Unify – Flutter Mobile (Auth Module)
 
 Fully working **Login / Register** screens with:
 

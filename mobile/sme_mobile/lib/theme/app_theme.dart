@@ -1,29 +1,68 @@
 import 'package:flutter/material.dart';
 
-/// Shared design tokens for the SME Platform mobile app, so every screen
+/// Shared design tokens for the Unify mobile app, so every screen
 /// pulls from the same palette instead of hardcoding hex values inline.
+///
+/// Warm light theme: an off-white canvas, white cards on generous radii,
+/// dark navy chrome, and coral as the single highlight against Unify blue.
+/// Mirrors the web app's frontend/src/shared/style/tokens.css value for
+/// value, so the two clients stay in step.
 class AppColors {
   static const primary = Color(0xFF2563EB);
-  static const primaryDark = Color(0xFF1E3A8A);
-  static const ink = Color(0xFF0F172A);
-  static const success = Color(0xFF059669);
+  static const primaryDark = Color(0xFF1D4ED8);
+
+  /// Foreground for anything sitting *on* [primary]. Blue is dark enough
+  /// that white clears contrast comfortably.
+  static const onPrimary = Color(0xFFFFFFFF);
+
+  /// Highlight used for chart peaks and emphasis — the coral the light
+  /// dashboard pattern reserves for the one element that should pull focus.
+  static const accentHigh = Color(0xFFF2596F);
+
+  /// Third hue, for sections that must read as distinct from [primary].
+  static const accentCyan = Color(0xFF06B6D4);
+
+  /// Dark chrome — app bars, drawer headers, gradient starts. Kept dark on
+  /// purpose: with no sidebar on mobile, the app bar is what carries the
+  /// dark-rail-against-light-content contrast the web layout gets from its
+  /// sidebar. Not a text colour: use [textPrimary] for foreground.
+  static const ink = Color(0xFF111827);
+
+  static const success = Color(0xFF16A34A);
   static const purple = Color(0xFF7C3AED);
   static const amber = Color(0xFFD97706);
   static const danger = Color(0xFFDC2626);
-  static const surface = Color(0xFFF4F6FB);
-  static const border = Color(0xFFE2E8F0);
 
-  /// The dark navy → blue hero gradient used on the landing screen, reused
-  /// across auth screens and booking flow headers for a consistent premium
-  /// identity.
+  /// Scaffold background — warm off-white, not pure white, so white cards
+  /// read as raised above it.
+  static const surface = Color(0xFFF1EFEC);
+
+  /// Raised surfaces: cards, sheets, list rows.
+  static const card = Color(0xFFFFFFFF);
+  static const cardMuted = Color(0xFFF7F5F2);
+
+  static const border = Color(0x12101828);
+  static const borderStrong = Color(0x24101828);
+
+  static const textPrimary = Color(0xFF131A24);
+  static const textSecondary = Color(0xFF5B6472);
+  static const textMuted = Color(0xFF8A93A0);
+
+  /// The hero gradient used on the landing screen, reused across auth
+  /// screens and booking flow headers. Coral, matching the web hero card —
+  /// these surfaces carry white text, so they stay saturated even though
+  /// the rest of the theme went light.
   static const heroGradient = LinearGradient(
-    colors: [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF2563EB)],
+    colors: [Color(0xFFFF9A6C), Color(0xFFF2596F), Color(0xFFD93A5B)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
+  /// Ramps [accent] toward near-black rather than starting from it, so the
+  /// role/business hue stays recognisable at the top-left while the far
+  /// corner is still dark enough for white text to clear contrast.
   static LinearGradient heroGradientFor(Color accent) => LinearGradient(
-        colors: [ink, accent.withValues(alpha: 0.85)],
+        colors: [accent, Color.lerp(accent, const Color(0xFF0B1020), 0.45)!],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       );
@@ -41,15 +80,20 @@ class GlassStyle {
     );
   }
 
-  static BoxDecoration elevatedCard({double radius = 18}) {
+  /// A solid raised card for the normal (non-hero) parts of a screen. On the
+  /// light canvas this is white lifted by a wide, faint shadow — the inverse
+  /// of the dark theme, where a shadow read as nothing against near-black and
+  /// the card had to be defined by its border alone.
+  static BoxDecoration elevatedCard({double radius = 20}) {
     return BoxDecoration(
-      color: Colors.white,
+      color: AppColors.card,
       borderRadius: BorderRadius.circular(radius),
-      boxShadow: [
+      border: Border.all(color: AppColors.border, width: 1),
+      boxShadow: const [
         BoxShadow(
-          color: AppColors.ink.withValues(alpha: 0.06),
+          color: Color(0x0F101828),
           blurRadius: 24,
-          offset: const Offset(0, 8),
+          offset: Offset(0, 8),
         ),
       ],
     );
@@ -61,6 +105,13 @@ class AppTheme {
     final scheme = ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       brightness: Brightness.light,
+    ).copyWith(
+      surface: AppColors.surface,
+      primary: AppColors.primary,
+      onPrimary: AppColors.onPrimary,
+      // Without this, fromSeed picks its own near-black and text drifts away
+      // from the token value the rest of the app uses.
+      onSurface: AppColors.textPrimary,
     );
 
     final inputBorder = OutlineInputBorder(
@@ -70,32 +121,37 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      brightness: Brightness.light,
       colorScheme: scheme,
       scaffoldBackgroundColor: AppColors.surface,
       fontFamily: 'Roboto',
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.ink,
-        foregroundColor: Colors.white,
+        // NOT textPrimary — that token is near-black now, and this bar is
+        // dark navy. Foreground here has to be written literally.
+        foregroundColor: Color(0xFFF3F4F6),
         elevation: 0,
         centerTitle: false,
         titleTextStyle: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w700,
-          color: Colors.white,
+          color: Color(0xFFF3F4F6),
         ),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: Colors.white,
+        color: AppColors.card,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: AppColors.border),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white,
+        fillColor: AppColors.cardMuted,
+        hintStyle: const TextStyle(color: AppColors.textMuted),
+        labelStyle: const TextStyle(color: AppColors.textSecondary),
         border: inputBorder,
         enabledBorder: inputBorder,
         focusedBorder: inputBorder.copyWith(
@@ -107,16 +163,19 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           elevation: 0,
           backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.onPrimary,
           padding: const EdgeInsets.symmetric(vertical: 15),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          // Pill CTAs, matching the web theme's `border-radius: 999px`.
+          shape: const StadiumBorder(),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.textPrimary,
+          side: const BorderSide(color: AppColors.borderStrong),
           padding: const EdgeInsets.symmetric(vertical: 15),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: const StadiumBorder(),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -126,10 +185,30 @@ class AppTheme {
       ),
       dividerTheme: const DividerThemeData(color: AppColors.border, space: 1),
       snackBarTheme: SnackBarThemeData(
+        // Stays dark: a light snackbar on a light canvas barely registers as
+        // an overlay, and this is transient feedback that must be noticed.
         backgroundColor: AppColors.ink,
+        contentTextStyle: const TextStyle(color: Color(0xFFF3F4F6)),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.card,
+        surfaceTintColor: Colors.transparent,
+      ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: AppColors.cardMuted,
+        surfaceTintColor: Colors.transparent,
+      ),
+      popupMenuTheme: const PopupMenuThemeData(
+        color: AppColors.cardMuted,
+        surfaceTintColor: Colors.transparent,
+      ),
+      drawerTheme: const DrawerThemeData(
+        backgroundColor: AppColors.card,
+        surfaceTintColor: Colors.transparent,
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: AppColors.primary),
     );
   }
 }
@@ -200,7 +279,7 @@ class RoleTheme {
         );
       default:
         return const RoleTheme(
-          color: Colors.grey,
+          color: AppColors.textSecondary,
           title: 'User',
           icon: Icons.person_outline,
           actions: [],
@@ -210,6 +289,9 @@ class RoleTheme {
 }
 
 /// Business-type → icon/color, used anywhere a tenant is listed.
+/// Hues are the saturated variants: the pale tints these used to carry were
+/// chosen to survive a near-black canvas, and they wash out entirely on the
+/// light one.
 class BusinessTypeVisual {
   final IconData icon;
   final Color color;
@@ -219,19 +301,19 @@ class BusinessTypeVisual {
   static BusinessTypeVisual of(String businessType) {
     switch (businessType) {
       case 'Clinic':
-        return const BusinessTypeVisual(Icons.local_hospital, Colors.red);
+        return const BusinessTypeVisual(Icons.local_hospital, Color(0xFFDC2626));
       case 'Restaurant':
-        return const BusinessTypeVisual(Icons.restaurant, Colors.orange);
+        return const BusinessTypeVisual(Icons.restaurant, Color(0xFFEA580C));
       case 'Gym':
-        return const BusinessTypeVisual(Icons.fitness_center, Colors.blue);
+        return const BusinessTypeVisual(Icons.fitness_center, Color(0xFF2563EB));
       case 'School':
-        return const BusinessTypeVisual(Icons.school, Colors.green);
+        return const BusinessTypeVisual(Icons.school, Color(0xFF16A34A));
       case 'RealEstate':
-        return const BusinessTypeVisual(Icons.home_work, Colors.teal);
+        return const BusinessTypeVisual(Icons.home_work, Color(0xFF0D9488));
       case 'Tourism':
-        return const BusinessTypeVisual(Icons.flight_takeoff, Colors.purple);
+        return const BusinessTypeVisual(Icons.flight_takeoff, Color(0xFF7C3AED));
       default:
-        return const BusinessTypeVisual(Icons.store, Colors.blueGrey);
+        return const BusinessTypeVisual(Icons.store, Color(0xFF64748B));
     }
   }
 }
@@ -258,13 +340,13 @@ class BookingStatusVisual {
       case 'Completed':
         return const BookingStatusVisual(color: AppColors.success, icon: Icons.task_alt_rounded, label: 'Completed');
       case 'Cancelled':
-        return const BookingStatusVisual(color: Colors.grey, icon: Icons.cancel_outlined, label: 'Cancelled');
+        return const BookingStatusVisual(color: AppColors.textSecondary, icon: Icons.cancel_outlined, label: 'Cancelled');
       case 'NoShow':
         return const BookingStatusVisual(color: AppColors.danger, icon: Icons.person_off_outlined, label: 'No-show');
       case 'Rejected':
         return const BookingStatusVisual(color: AppColors.danger, icon: Icons.block_rounded, label: 'Rejected');
       default:
-        return const BookingStatusVisual(color: Colors.grey, icon: Icons.help_outline, label: 'Unknown');
+        return const BookingStatusVisual(color: AppColors.textSecondary, icon: Icons.help_outline, label: 'Unknown');
     }
   }
 }

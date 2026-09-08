@@ -1,0 +1,79 @@
+{
+  "artboards": [
+    {
+      "file": "Dashboard.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1600,
+      "h": 900
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 1720,
+      "y": 0,
+      "w": 1600,
+      "h": 900
+    },
+    {
+      "file": "BookingManager.dc.html",
+      "x": 0,
+      "y": 1060,
+      "w": 1600,
+      "h": 900
+    },
+    {
+      "file": "MultiBranch.dc.html",
+      "x": 1720,
+      "y": 1060,
+      "w": 1600,
+      "h": 900
+    },
+    {
+      "file": "Inventory.dc.html",
+      "x": 0,
+      "y": 2120,
+      "w": 1600,
+      "h": 900
+    },
+    {
+      "file": "AIPlanner.dc.html",
+      "x": 1720,
+      "y": 2120,
+      "w": 1600,
+      "h": 900
+    },
+    {
+      "file": "StaffBranches.dc.html",
+      "x": 0,
+      "y": 3180,
+      "w": 1600,
+      "h": 900
+    },
+    {
+      "file": "DesignSystem.dc.html",
+      "x": 1720,
+      "y": 3180,
+      "w": 1600,
+      "h": 900
+    }
+  ],
+  "annotations": [
+    {
+      "id": "kit-intro",
+      "x": 0,
+      "y": -160,
+      "w": 760,
+      "text": "Unify — warm near-black UI kit\nBuilt to the reference dashboard: flat #0A0A0B canvas (no gradient wash), warm orange accent, icon rail, and the reference micro-chart family. 8 artboards at 1600×900."
+    },
+    {
+      "id": "note-nav",
+      "x": 1720,
+      "y": -160,
+      "w": 700,
+      "text": "Resource Manager shows the rail section list open — all 18 NAV_ITEMS stay reachable behind 6 grouped rail icons, so the narrow rail costs no function."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

@@ -31,7 +31,7 @@ builder.Services.AddEndpointsApiExplorer();
 // Swagger with JWT auth support
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "SME Platform API", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Unify API", Version = "v1" });
 
     var xmlPath = Path.Combine(AppContext.BaseDirectory, "SmeBackend.xml");
     if (File.Exists(xmlPath)) c.IncludeXmlComments(xmlPath);
@@ -134,8 +134,16 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
+
+// Locally the Flutter web app and the Vite dev server both call the plain
+// HTTP endpoint; redirecting them to the HTTPS port makes the browser drop
+// the Origin header on the redirected request, which then fails CORS. In
+// Development, serve HTTP as-is - hosted environments still get the redirect.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseMiddleware<TenantResolutionMiddleware>();

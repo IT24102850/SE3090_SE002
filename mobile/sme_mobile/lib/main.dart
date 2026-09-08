@@ -50,7 +50,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     }
 
     return MaterialApp(
-      title: 'SME Platform',
+      title: 'Unify',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: PushNotificationService.messengerKey,
       theme: AppTheme.light(),

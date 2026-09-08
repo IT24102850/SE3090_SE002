@@ -382,7 +382,7 @@ class _BranchChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : AppColors.ink,
+            color: selected ? AppColors.onPrimary : AppColors.textPrimary,
           ),
         ),
       ),

@@ -3,8 +3,9 @@ html, body, #root {
   min-height: 100%;
 }
 
+/* Colour and font come from shared/style/tokens.css; this only guarantees a
+   dark ground before that stylesheet resolves, so there is no white flash. */
 body {
-  font-family: Arial, Helvetica, sans-serif;
-  background: #f7f7f7;
-  color: #111;
+  background: #0A0A0B;
+  color: #FFFFFF;
 }

@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "node scripts/check-nav-parity.mjs && tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:nav": "node scripts/check-nav-parity.mjs"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",

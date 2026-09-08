@@ -50,19 +50,19 @@ const RegisterPage = () => {
   };
 
   return (
-    <div style={{ maxWidth: '500px', margin: '3rem auto', padding: '2rem', boxShadow: '0 0 10px rgba(0,0,0,0.1)' }}>
+    <div className="card card-pad" style={{ maxWidth: '500px', margin: '3rem auto' }}>
       <h2>Register Your Business</h2>
       
       {error && (
-        <div style={{ padding: '0.75rem', background: '#fee2e2', color: '#dc2626', borderRadius: '4px', marginBottom: '1rem' }}>
+        <div className="banner banner-critical">
           {error}
         </div>
       )}
 
       <form onSubmit={handleSubmit}>
         <h4>Business Info</h4>
-        <input name="businessName" placeholder="Business Name" value={form.businessName} onChange={handleChange} required style={inputStyle} />
-        <select name="businessType" value={form.businessType} onChange={handleChange} style={inputStyle}>
+        <input name="businessName" placeholder="Business Name" value={form.businessName} onChange={handleChange} required className="input" style={inputStyle} />
+        <select name="businessType" value={form.businessType} onChange={handleChange} className="input" style={inputStyle}>
           <option value="Clinic">Clinic</option>
           <option value="Restaurant">Restaurant</option>
           <option value="Gym">Gym</option>
@@ -72,21 +72,21 @@ const RegisterPage = () => {
           <option value="General">General</option>
         </select>
         {form.businessType === 'Tourism' && (
-          <select name="subType" value={form.subType} onChange={handleChange} style={inputStyle}>
+          <select name="subType" value={form.subType} onChange={handleChange} className="input" style={inputStyle}>
             <option value="">Select tourism sub-type...</option>
             {TOURISM_SUB_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         )}
-        <input name="address" placeholder="Address" value={form.address} onChange={handleChange} style={inputStyle} />
-        <input name="phone" placeholder="Business Phone" value={form.phone} onChange={handleChange} style={inputStyle} />
+        <input name="address" placeholder="Address" value={form.address} onChange={handleChange} className="input" style={inputStyle} />
+        <input name="phone" placeholder="Business Phone" value={form.phone} onChange={handleChange} className="input" style={inputStyle} />
 
         <h4 style={{ marginTop: '1rem' }}>Admin Account</h4>
-        <input name="adminFullName" placeholder="Full Name" value={form.adminFullName} onChange={handleChange} required style={inputStyle} />
-        <input name="adminEmail" type="email" placeholder="Admin Email" value={form.adminEmail} onChange={handleChange} required style={inputStyle} />
-        <input name="adminPassword" type="password" placeholder="Password" value={form.adminPassword} onChange={handleChange} required style={inputStyle} />
-        <input name="adminPhone" placeholder="Phone" value={form.adminPhone} onChange={handleChange} style={inputStyle} />
+        <input name="adminFullName" placeholder="Full Name" value={form.adminFullName} onChange={handleChange} required className="input" style={inputStyle} />
+        <input name="adminEmail" type="email" placeholder="Admin Email" value={form.adminEmail} onChange={handleChange} required className="input" style={inputStyle} />
+        <input name="adminPassword" type="password" placeholder="Password" value={form.adminPassword} onChange={handleChange} required className="input" style={inputStyle} />
+        <input name="adminPhone" placeholder="Phone" value={form.adminPhone} onChange={handleChange} className="input" style={inputStyle} />
 
-        <button type="submit" disabled={loading} style={{ ...inputStyle, background: loading ? '#9ca3af' : '#059669', color: 'white', cursor: loading ? 'not-allowed' : 'pointer' }}>
+        <button type="submit" disabled={loading} className="btn btn-primary" style={{ ...inputStyle, marginTop: '0.5rem' }}>
           {loading ? 'Creating Account...' : 'Create Business Account'}
         </button>
       </form>
@@ -96,10 +96,7 @@ const RegisterPage = () => {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  padding: '0.5rem',
   marginBottom: '0.75rem',
-  borderRadius: '4px',
-  border: '1px solid #d1d5db',
 };
 
 export default RegisterPage;

@@ -40,7 +40,7 @@ class LandingScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    'SME Platform',
+                    'Unify',
                     style: theme.textTheme.headlineMedium?.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -64,7 +64,7 @@ class LandingScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(24),
               child: _AudienceCard(
-                accentColor: const Color(0xFF059669),
+                accentColor: AppColors.accentCyan,
                 icon: Icons.storefront_outlined,
                 title: 'For Business Owners',
                 subtitle:
@@ -73,7 +73,7 @@ class LandingScreen extends StatelessWidget {
                   label: 'Register My Business',
                   icon: Icons.add_business,
                   isFilled: true,
-                  color: const Color(0xFF059669),
+                  color: AppColors.accentCyan,
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const RegisterScreen()),
@@ -83,7 +83,7 @@ class LandingScreen extends StatelessWidget {
                   label: 'I Already Have an Account',
                   icon: Icons.login,
                   isFilled: false,
-                  color: const Color(0xFF059669),
+                  color: AppColors.accentCyan,
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -143,32 +143,32 @@ class LandingScreen extends StatelessWidget {
                   _TrustBadge(
                       icon: Icons.local_hospital,
                       label: 'Clinic',
-                      color: Colors.red),
+                      color: Color(0xFFF87171)),
                   SizedBox(width: 12),
                   _TrustBadge(
                       icon: Icons.restaurant,
                       label: 'Restaurant',
-                      color: Colors.orange),
+                      color: Color(0xFFFB923C)),
                   SizedBox(width: 12),
                   _TrustBadge(
                       icon: Icons.fitness_center,
                       label: 'Gym',
-                      color: Colors.blue),
+                      color: Color(0xFF60A5FA)),
                   SizedBox(width: 12),
                   _TrustBadge(
                       icon: Icons.school,
                       label: 'Tuition',
-                      color: Colors.green),
+                      color: Color(0xFF4ADE80)),
                   SizedBox(width: 12),
                   _TrustBadge(
                       icon: Icons.home_work,
                       label: 'Real Estate',
-                      color: Colors.teal),
+                      color: Color(0xFF2DD4BF)),
                   SizedBox(width: 12),
                   _TrustBadge(
                       icon: Icons.flight_takeoff,
                       label: 'Tourism',
-                      color: Colors.purple),
+                      color: Color(0xFFC4B5FD)),
                 ],
               ),
             ),
@@ -181,7 +181,7 @@ class LandingScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
             Text(
-              '© 2026 SME Platform',
+              '© 2026 Unify',
               style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
             ),
             const SizedBox(height: 16),

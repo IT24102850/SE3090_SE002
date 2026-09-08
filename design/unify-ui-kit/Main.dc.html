@@ -1,0 +1,286 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #FF6B2C; text-decoration: none; }
+    a:hover { color: #FF8A57; }
+  </style>
+</helmet>
+<div style="width:1600px;height:900px;overflow:hidden;position:relative;background:#0A0A0B;color:#FFFFFF;font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif">
+  <div style="position:absolute;left:0;top:0;bottom:0;width:76px;display:flex;flex-direction:column;align-items:center;padding:18px 0 20px;gap:10px;z-index:5">
+  <div style="margin-bottom:8px"><svg width="38" height="38" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs><linearGradient id="ug4" x1="8" y1="12" x2="56" y2="52" gradientUnits="userSpaceOnUse">
+    <stop offset="0%" stop-color="#FFC940"></stop><stop offset="100%" stop-color="#FF5A1F"></stop></linearGradient></defs>
+  <rect width="64" height="64" rx="18" fill="#FF6B2C"></rect>
+  <path d="M18 18V36C18 43.732 24.268 50 32 50C39.732 50 46 43.732 46 36V18" stroke="#1A0B04" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path>
+  <circle cx="32" cy="36" r="3.5" fill="#1A0B04"></circle>
+</svg></div>
+  <div style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.07);color:#B4B4B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5L12 4l8 6.5V20a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1z"></path></svg></div><div style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.07);color:#B4B4B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a2 2 0 012-2h14a2 2 0 012 2v13a2 2 0 01-2 2H5a2 2 0 01-2-2zM3 9h18M8 3v4M16 3v4"></path></svg></div><div style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#F2F2F3;color:#0A0A0B;box-shadow:0 4px 18px -4px rgba(0,0,0,0.9)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5a1 1 0 011-1h9a1 1 0 011 1v16M15 21V9h4a1 1 0 011 1v11M4 21h17M8 8h3M8 12h3M8 16h3"></path></svg></div><div style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.07);color:#B4B4B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8.5v7l-9 5-9-5v-7l9-5zM3.2 7.9L12 13l8.8-5.1M12 13v7.5"></path></svg></div><div style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.07);color:#B4B4B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path></svg></div><div style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.07);color:#B4B4B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 100-6.4 3.2 3.2 0 000 6.4M19.4 14.5l1.6 1.2-1.8 3.1-1.9-.7a7.6 7.6 0 01-1.8 1l-.3 2h-3.6l-.3-2a7.6 7.6 0 01-1.8-1l-1.9.7-1.8-3.1 1.6-1.2a7.7 7.7 0 010-2l-1.6-1.2 1.8-3.1 1.9.7a7.6 7.6 0 011.8-1l.3-2h3.6l.3 2c.64.25 1.24.59 1.8 1l1.9-.7 1.8 3.1-1.6 1.2c.07.66.07 1.34 0 2z"></path></svg></div>
+  <div style="margin-top:auto;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(140deg,#FFC940,#FF5A1F);flex-shrink:0">SH</div>
+</div>
+  <div style="position:absolute;left:76px;top:78px;width:214px;padding:12px;background:rgba(255,255,255,0.042);border:1px solid rgba(255,255,255,0.07);border-radius:16px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);background:#141416;z-index:6;box-shadow:0 24px 60px -20px rgba(0,0,0,0.95)">
+  <div style="font-size:9.5px;color:#6B6B70;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;padding:2px 8px 9px">Resources</div>
+  <div style="display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:10px;font-size:12px;background:#FF6B2C1F;color:#FF6B2C;font-weight:650">
+      <span style="display:flex;flex-shrink:0;opacity:1"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5a1 1 0 011-1h9a1 1 0 011 1v16M15 21V9h4a1 1 0 011 1v11M4 21h17M8 8h3M8 12h3M8 16h3"></path></svg></span>
+      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Resource Manager</span></div><div style="display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:10px;font-size:12px;color:#B4B4B8;font-weight:500">
+      <span style="display:flex;flex-shrink:0;opacity:0.6"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20v-1.5a4 4 0 00-4-4H7a4 4 0 00-4 4V20M9.5 10.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7M21 20v-1.5a4 4 0 00-3-3.8M16.5 3.9a4 4 0 010 7.2"></path></svg></span>
+      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Staff</span></div><div style="display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:10px;font-size:12px;color:#B4B4B8;font-weight:500">
+      <span style="display:flex;flex-shrink:0;opacity:0.6"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-5.6 7-11a7 7 0 10-14 0c0 5.4 7 11 7 11zM12 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5"></path></svg></span>
+      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Branches</span></div>
+  </div>
+</div>
+  <div style="margin-left:76px;height:100%;padding:14px 16px 16px 0;display:flex;flex-direction:column;gap:14px">
+    <div style="position:relative;height:176px;flex-shrink:0;border-radius:20px;overflow:hidden;background:#0E0D0D;border:1px solid rgba(255,255,255,0.07);display:flex;flex-direction:column;justify-content:space-between;padding:18px 22px">
+  <div style="position:absolute;top:-40%;left:50%;transform:translateX(-50%);width:78%;height:180%;background:radial-gradient(ellipse at center, rgba(255,150,80,0.10), transparent 62%);pointer-events:none"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 120%, rgba(0,0,0,0.55), transparent 60%);pointer-events:none"></div>
+  <svg style="position:absolute;inset:0;width:100%;height:100%;opacity:0.32;mix-blend-mode:overlay;pointer-events:none" aria-hidden="true">
+  <filter id="gr5"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"></feTurbulence></filter>
+  <rect width="100%" height="100%" filter="url(#gr5)"></rect></svg>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;position:relative;z-index:3">
+  <div style="width:200px;flex-shrink:0;padding-top:3px">
+    <div style="font-size:15px;font-weight:700;color:#FFFFFF;letter-spacing:-0.025em">Unify</div>
+    <div style="font-size:11.5px;color:#9A9A9F;margin-top:2px">Resources · Resource Manager</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+    <div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;color:#D4D4D8"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;color:#fff;background:linear-gradient(140deg,#FFC940,#FF5A1F)">SH</span>
+      <span>
+        <div style="font-size:12.5px;color:#FFFFFF;font-weight:650;letter-spacing:-0.015em">Sakun Hansaka</div>
+        <div style="font-size:11px;color:#9A9A9F;margin-top:1px">Admin</div>
+      </span>
+    </div>
+  </div>
+</div>
+  <div style="text-align:center;position:relative;z-index:3;margin:-6px 0 0">
+    <div style="font-size:21px;font-weight:700;color:#FFFFFF;letter-spacing:-0.03em;line-height:1.2">Hey, Need help?</div>
+    <div style="font-size:26px;font-weight:500;color:rgba(255,255,255,0.5);letter-spacing:-0.035em;line-height:1.25;margin-top:3px">
+      <span style="display:inline-block;width:2px;height:22px;background:#FF6B2C;vertical-align:-4px;margin-right:3px"></span>Just ask me anything
+    </div>
+  </div>
+  <div style="display:flex;justify-content:flex-end"><div style="display:flex;align-items:center;gap:9px;position:relative;z-index:3">
+  <div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;color:#D4D4D8;flex-shrink:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-3.6-3.6"></path></svg></div><div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;color:#D4D4D8;flex-shrink:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9a2.1 2.1 0 00-3-3L5 17z"></path></svg></div>
+  <div style="display:flex;align-items:center;gap:8px;height:34px;padding:0 13px;border-radius:999px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.07);font-size:11.5px;color:#D4D4D8;white-space:nowrap">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9A9A9F" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a2 2 0 012-2h14a2 2 0 012 2v13a2 2 0 01-2 2H5a2 2 0 01-2-2zM3 9h18M8 3v4M16 3v4"></path></svg><span>1 – 8 Sep, 2026</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6B6B70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 14px;border-radius:999px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.07);font-size:11.5px;color:#D4D4D8;white-space:nowrap">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span>New resource</span>
+  </div>
+  <div style="display:flex;align-items:center;height:34px;padding:0 15px;border-radius:999px;background:#FF6B2C;color:#160800;font-size:11.5px;font-weight:700;white-space:nowrap">Create a Report</div>
+</div></div>
+</div>
+    <div style="display:grid;grid-template-columns:repeat(4, minmax(0,1fr));gap:14px;flex-shrink:0"><div style="background:rgba(255,255,255,0.042);border:1px solid rgba(255,255,255,0.07);border-radius:18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:15px;min-width:0;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-shrink:0">
+  <span style="display:flex;align-items:center;gap:10px;min-width:0">
+    <span style="width:30px;height:30px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#FF6B2C22;color:#FF6B2C"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5a1 1 0 011-1h9a1 1 0 011 1v16M15 21V9h4a1 1 0 011 1v11M4 21h17M8 8h3M8 12h3M8 16h3"></path></svg></span>
+    <span style="font-size:13px;font-weight:650;color:#FFFFFF;letter-spacing:-0.018em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Total Resources</span>
+  </span>
+  <span style="font-size:10.5px;color:#6B6B70;white-space:nowrap;flex-shrink:0">All branches</span>
+</div><svg width="232" height="44" viewBox="0 0 232 44" fill="none" style="display:block" aria-hidden="true"><rect x="0.0" y="29.0" width="13.6" height="15.0" rx="5.2" fill="#FF6B2C" opacity="0.55"></rect><rect x="24.3" y="24.0" width="13.6" height="20.0" rx="5.2" fill="#FF6B2C" opacity="0.55"></rect><rect x="48.5" y="25.7" width="13.6" height="18.3" rx="5.2" fill="#FF6B2C" opacity="0.55"></rect><rect x="72.8" y="19.0" width="13.6" height="25.0" rx="5.2" fill="#FF6B2C" opacity="0.55"></rect><rect x="97.0" y="20.7" width="13.6" height="23.3" rx="5.2" fill="#FF6B2C" opacity="0.55"></rect><rect x="121.3" y="14.0" width="13.6" height="30.0" rx="5.2" fill="#FF6B2C" opacity="0.55"></rect><rect x="145.6" y="15.7" width="13.6" height="28.3" rx="5.2" fill="#FF6B2C" opacity="0.55"></rect><rect x="169.8" y="9.0" width="13.6" height="35.0" rx="5.2" fill="#FF6B2C" opacity="0.55"></rect><rect x="194.1" y="10.7" width="13.6" height="33.3" rx="5.2" fill="#FF6B2C" opacity="0.55"></rect><rect x="218.4" y="4.0" width="13.6" height="40.0" rx="5.2" fill="#FFC940" opacity="1"></rect></svg><div style="margin-top:auto;padding-top:12px">
+  <div style="display:flex;align-items:baseline;gap:3px;line-height:1">
+    <span style="font-size:26px;font-weight:700;color:#FFFFFF;letter-spacing:-0.04em">24</span>
+    
+  </div>
+  <div style="display:flex;align-items:center;gap:5px;margin-top:6px">
+    <span style="color:#FF6B2C;display:flex"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>
+    <span style="font-size:10.5px;color:#6B6B70">+3 this week</span>
+  </div>
+</div></div><div style="background:rgba(255,255,255,0.042);border:1px solid rgba(255,255,255,0.07);border-radius:18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:15px;min-width:0;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-shrink:0">
+  <span style="display:flex;align-items:center;gap:10px;min-width:0">
+    <span style="width:30px;height:30px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#FF6B2C22;color:#FF6B2C"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>
+    <span style="font-size:13px;font-weight:650;color:#FFFFFF;letter-spacing:-0.018em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Available Now</span>
+  </span>
+  <span style="font-size:10.5px;color:#6B6B70;white-space:nowrap;flex-shrink:0">Live</span>
+</div><svg width="232" height="44" viewBox="0 0 232 44" fill="none" style="display:block" aria-hidden="true">
+  <defs><linearGradient id="sg3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FF6B2C" stop-opacity="0.3"></stop><stop offset="100%" stop-color="#FF6B2C" stop-opacity="0"></stop></linearGradient></defs>
+  <path d="M0.0,41.0 C16.6,41.0 16.6,29.0 33.1,29.0 C49.7,29.0 49.7,35.0 66.3,35.0 C82.9,35.0 82.9,17.0 99.4,17.0 C116.0,17.0 116.0,23.0 132.6,23.0 C149.1,23.0 149.1,11.0 165.7,11.0 C182.3,11.0 182.3,17.0 198.9,17.0 C215.4,17.0 215.4,5.0 232.0,5.0 L232,44 L0,44 Z" fill="url(#sg3)"></path>
+  <path d="M0.0,41.0 C16.6,41.0 16.6,29.0 33.1,29.0 C49.7,29.0 49.7,35.0 66.3,35.0 C82.9,35.0 82.9,17.0 99.4,17.0 C116.0,17.0 116.0,23.0 132.6,23.0 C149.1,23.0 149.1,11.0 165.7,11.0 C182.3,11.0 182.3,17.0 198.9,17.0 C215.4,17.0 215.4,5.0 232.0,5.0" stroke="#FF6B2C" stroke-width="1.9" stroke-linecap="round" fill="none"></path>
+  <circle cx="232.0" cy="5.0" r="2.6" fill="#FF6B2C"></circle>
+</svg><div style="margin-top:auto;padding-top:12px">
+  <div style="display:flex;align-items:baseline;gap:3px;line-height:1">
+    <span style="font-size:26px;font-weight:700;color:#FFFFFF;letter-spacing:-0.04em">18</span>
+    
+  </div>
+  <div style="display:flex;align-items:center;gap:5px;margin-top:6px">
+    <span style="color:#FF6B2C;display:flex"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>
+    <span style="font-size:10.5px;color:#6B6B70">Ready to book</span>
+  </div>
+</div></div><div style="background:rgba(255,255,255,0.042);border:1px solid rgba(255,255,255,0.07);border-radius:18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:15px;min-width:0;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-shrink:0">
+  <span style="display:flex;align-items:center;gap:10px;min-width:0">
+    <span style="width:30px;height:30px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#FF6B2C22;color:#FF6B2C"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path></svg></span>
+    <span style="font-size:13px;font-weight:650;color:#FFFFFF;letter-spacing:-0.018em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Utilization</span>
+  </span>
+  <span style="font-size:10.5px;color:#6B6B70;white-space:nowrap;flex-shrink:0">Last 7 days</span>
+</div><div style="display:flex;align-items:center;gap:14px"><div style="position:relative;width:74px;height:74px;flex-shrink:0">
+  <svg width="74" height="74" viewBox="0 0 74 74" style="display:block;transform:rotate(-90deg)" aria-hidden="true">
+    <circle cx="37" cy="37" r="33.5" stroke="rgba(255,255,255,0.09)" stroke-width="7" fill="none"></circle>
+    <circle cx="37" cy="37" r="33.5" stroke="#FF6B2C" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="141.0 210.5"></circle>
+  </svg>
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+    <span style="font-size:15px;font-weight:700;color:#FFFFFF;letter-spacing:-0.035em;line-height:1">67%</span>
+    
+  </div>
+</div><div style="display:flex;flex-direction:column;gap:7px;flex-grow:1;min-width:0"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:9.5px;color:#6B6B70;width:58px;flex-shrink:0">Rooms</span><span style="display:block;width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:88%;height:100%;border-radius:999px;background:#FF6B2C"></span></span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:9.5px;color:#6B6B70;width:58px;flex-shrink:0">Equipment</span><span style="display:block;width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:54%;height:100%;border-radius:999px;background:#FFC940"></span></span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:9.5px;color:#6B6B70;width:58px;flex-shrink:0">Vehicles</span><span style="display:block;width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:41%;height:100%;border-radius:999px;background:#7DD3FC"></span></span></div></div></div><div style="margin-top:auto;padding-top:12px">
+  <div style="display:flex;align-items:baseline;gap:3px;line-height:1">
+    <span style="font-size:26px;font-weight:700;color:#FFFFFF;letter-spacing:-0.04em">67</span>
+    <span style="font-size:13px;font-weight:600;color:#9A9A9F;letter-spacing:-0.02em">%</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:5px;margin-top:6px">
+    <span style="color:#FF6B2C;display:flex"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>
+    <span style="font-size:10.5px;color:#6B6B70">Up 5 pts vs last week</span>
+  </div>
+</div></div><div style="background:rgba(255,255,255,0.042);border:1px solid rgba(255,255,255,0.07);border-radius:18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:15px;min-width:0;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-shrink:0">
+  <span style="display:flex;align-items:center;gap:10px;min-width:0">
+    <span style="width:30px;height:30px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#FBBF2422;color:#FBBF24"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4.2L2.8 20h18.4zM12 10v4M12 17.2h.01"></path></svg></span>
+    <span style="font-size:13px;font-weight:650;color:#FFFFFF;letter-spacing:-0.018em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Alerts</span>
+  </span>
+  <span style="font-size:10.5px;color:#6B6B70;white-space:nowrap;flex-shrink:0">Needs action</span>
+</div><svg width="232" height="44" viewBox="0 0 232 44" fill="none" style="display:block" aria-hidden="true"><rect x="0.0" y="30.7" width="13.6" height="13.3" rx="5.2" fill="#FBBF24" opacity="0.55"></rect><rect x="24.3" y="41.0" width="13.6" height="3.0" rx="5.2" fill="#FBBF24" opacity="0.55"></rect><rect x="48.5" y="17.3" width="13.6" height="26.7" rx="5.2" fill="#FBBF24" opacity="0.55"></rect><rect x="72.8" y="30.7" width="13.6" height="13.3" rx="5.2" fill="#FBBF24" opacity="0.55"></rect><rect x="97.0" y="4.0" width="13.6" height="40.0" rx="5.2" fill="#FBBF24" opacity="0.55"></rect><rect x="121.3" y="17.3" width="13.6" height="26.7" rx="5.2" fill="#FBBF24" opacity="0.55"></rect><rect x="145.6" y="4.0" width="13.6" height="40.0" rx="5.2" fill="#FBBF24" opacity="0.55"></rect><rect x="169.8" y="4.0" width="13.6" height="40.0" rx="5.2" fill="#FBBF24" opacity="0.55"></rect><rect x="194.1" y="17.3" width="13.6" height="26.7" rx="5.2" fill="#FBBF24" opacity="0.55"></rect><rect x="218.4" y="4.0" width="13.6" height="40.0" rx="5.2" fill="#FFC940" opacity="1"></rect></svg><div style="margin-top:auto;padding-top:12px">
+  <div style="display:flex;align-items:baseline;gap:3px;line-height:1">
+    <span style="font-size:26px;font-weight:700;color:#FFFFFF;letter-spacing:-0.04em">3</span>
+    
+  </div>
+  <div style="display:flex;align-items:center;gap:5px;margin-top:6px">
+    <span style="color:#FBBF24;display:flex"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4.2L2.8 20h18.4zM12 10v4M12 17.2h.01"></path></svg></span>
+    <span style="font-size:10.5px;color:#6B6B70">Low stock items</span>
+  </div>
+</div></div></div><div style="display:flex;gap:14px;min-width:0;flex-grow:1;min-height:0;"><div style="background:rgba(255,255,255,0.042);border:1px solid rgba(255,255,255,0.07);border-radius:18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:16px;flex-grow:1;min-width:0;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-shrink:0">
+  <span style="display:flex;align-items:center;gap:10px;min-width:0">
+    <span style="width:30px;height:30px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#FF6B2C22;color:#FF6B2C"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V5a1 1 0 011-1h9a1 1 0 011 1v16M15 21V9h4a1 1 0 011 1v11M4 21h17M8 8h3M8 12h3M8 16h3"></path></svg></span>
+    <span style="font-size:13px;font-weight:650;color:#FFFFFF;letter-spacing:-0.018em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">All resources</span>
+  </span>
+  <span style="font-size:10.5px;color:#6B6B70;white-space:nowrap;flex-shrink:0">Sorted by name · 24 total</span>
+</div><div style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap"><span style="padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:#FF6B2C;color:#160800">All resources</span><span style="padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:rgba(255,255,255,0.055);color:#9A9A9F;border:1px solid rgba(255,255,255,0.07)">Room</span><span style="padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:rgba(255,255,255,0.055);color:#9A9A9F;border:1px solid rgba(255,255,255,0.07)">Equipment</span><span style="padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:rgba(255,255,255,0.055);color:#9A9A9F;border:1px solid rgba(255,255,255,0.07)">Vehicle</span><span style="padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:rgba(255,255,255,0.055);color:#9A9A9F;border:1px solid rgba(255,255,255,0.07)">Staff</span><span style="padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:rgba(255,255,255,0.055);color:#9A9A9F;border:1px solid rgba(255,255,255,0.07)">Desk</span></div><div style="display:flex;flex-direction:column;min-width:0">
+  <div style="display:grid;grid-template-columns:minmax(0,2.3fr) 108px minmax(0,1.15fr) 140px 124px;gap:14px;align-items:center;padding:0 12px 9px"><span style="font-size:9.5px;font-weight:700;color:#6B6B70;letter-spacing:0.08em;text-transform:uppercase">Resource</span><span style="font-size:9.5px;font-weight:700;color:#6B6B70;letter-spacing:0.08em;text-transform:uppercase">Category</span><span style="font-size:9.5px;font-weight:700;color:#6B6B70;letter-spacing:0.08em;text-transform:uppercase">Capacity</span><span style="font-size:9.5px;font-weight:700;color:#6B6B70;letter-spacing:0.08em;text-transform:uppercase">Rate</span><span style="font-size:9.5px;font-weight:700;color:#6B6B70;letter-spacing:0.08em;text-transform:uppercase">Status</span></div>
+  <div style="display:grid;grid-template-columns:minmax(0,2.3fr) 108px minmax(0,1.15fr) 140px 124px;gap:14px;align-items:center;padding:9px 12px;border-top:1px solid rgba(255,255,255,0.045);background:rgba(255,255,255,0.03);border-radius:12px;border-top-color:transparent;"><span style="display:flex;align-items:center;gap:11px;min-width:0">
+  <span style="width:32px;height:32px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#FF6B2C22;color:#FF6B2C"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18v-9M3 13h18v5M3 18h18M7.5 10.5h3.2a2 2 0 012 2v.5h-7.2v-.5a2 2 0 012-2z"></path></svg></span>
+  <span style="min-width:0">
+    <span style="display:block;font-size:12.5px;font-weight:600;color:#FFFFFF;letter-spacing:-0.014em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sea View Double — Room 1</span>
+    <span style="display:block;font-size:10px;color:#6B6B70;margin-top:2px">MB-R1 · Weligama</span>
+  </span></span><span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:7px;font-size:10.5px;font-weight:600;white-space:nowrap;color:#FF6B2C;background:#FF6B2C17;border:1px solid #FF6B2C2B">Room</span><span style="display:flex;flex-direction:column;gap:5px;min-width:0">
+  <span style="font-size:11px;color:#C4C4C8;font-weight:600">2 of 2 guests</span><span style="display:block;width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:100%;height:100%;border-radius:999px;background:#FF6B2C"></span></span></span><span style="font-size:12px;color:#E8E8EA;font-weight:650;letter-spacing:-0.005em;white-space:nowrap">LKR 4,000</span><span style="font-size:10px;color:#6B6B70;font-weight:500;letter-spacing:-0.005em;white-space:nowrap"> / night</span><span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;white-space:nowrap;color:#4ADE80;background:#4ADE801C;border:1px solid #4ADE8033">
+  <span style="width:5px;height:5px;border-radius:50%;background:#4ADE80"></span>Available</span></div><div style="display:grid;grid-template-columns:minmax(0,2.3fr) 108px minmax(0,1.15fr) 140px 124px;gap:14px;align-items:center;padding:9px 12px;border-top:1px solid rgba(255,255,255,0.045);"><span style="display:flex;align-items:center;gap:11px;min-width:0">
+  <span style="width:32px;height:32px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#FF6B2C22;color:#FF6B2C"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18v-9M3 13h18v5M3 18h18M7.5 10.5h3.2a2 2 0 012 2v.5h-7.2v-.5a2 2 0 012-2z"></path></svg></span>
+  <span style="min-width:0">
+    <span style="display:block;font-size:12.5px;font-weight:600;color:#FFFFFF;letter-spacing:-0.014em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sea View Double — Room 2</span>
+    <span style="display:block;font-size:10px;color:#6B6B70;margin-top:2px">MB-R2 · Weligama</span>
+  </span></span><span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:7px;font-size:10.5px;font-weight:600;white-space:nowrap;color:#FF6B2C;background:#FF6B2C17;border:1px solid #FF6B2C2B">Room</span><span style="display:flex;flex-direction:column;gap:5px;min-width:0">
+  <span style="font-size:11px;color:#C4C4C8;font-weight:600">2 of 2 guests</span><span style="display:block;width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:100%;height:100%;border-radius:999px;background:#FF6B2C"></span></span></span><span style="font-size:12px;color:#E8E8EA;font-weight:650;letter-spacing:-0.005em;white-space:nowrap">LKR 4,000</span><span style="font-size:10px;color:#6B6B70;font-weight:500;letter-spacing:-0.005em;white-space:nowrap"> / night</span><span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;white-space:nowrap;color:#FFC940;background:#FFC9401C;border:1px solid #FFC94033">
+  <span style="width:5px;height:5px;border-radius:50%;background:#FFC940"></span>Reserved</span></div><div style="display:grid;grid-template-columns:minmax(0,2.3fr) 108px minmax(0,1.15fr) 140px 124px;gap:14px;align-items:center;padding:9px 12px;border-top:1px solid rgba(255,255,255,0.045);"><span style="display:flex;align-items:center;gap:11px;min-width:0">
+  <span style="width:32px;height:32px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#FF6B2C22;color:#FF6B2C"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18v-9M3 13h18v5M3 18h18M7.5 10.5h3.2a2 2 0 012 2v.5h-7.2v-.5a2 2 0 012-2z"></path></svg></span>
+  <span style="min-width:0">
+    <span style="display:block;font-size:12.5px;font-weight:600;color:#FFFFFF;letter-spacing:-0.014em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sea View Double — Room 3</span>
+    <span style="display:block;font-size:10px;color:#6B6B70;margin-top:2px">MB-R3 · Weligama</span>
+  </span></span><span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:7px;font-size:10.5px;font-weight:600;white-space:nowrap;color:#FF6B2C;background:#FF6B2C17;border:1px solid #FF6B2C2B">Room</span><span style="display:flex;flex-direction:column;gap:5px;min-width:0">
+  <span style="font-size:11px;color:#C4C4C8;font-weight:600">1 of 2 guests</span><span style="display:block;width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:50%;height:100%;border-radius:999px;background:#FF6B2C"></span></span></span><span style="font-size:12px;color:#E8E8EA;font-weight:650;letter-spacing:-0.005em;white-space:nowrap">LKR 4,000</span><span style="font-size:10px;color:#6B6B70;font-weight:500;letter-spacing:-0.005em;white-space:nowrap"> / night</span><span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;white-space:nowrap;color:#4ADE80;background:#4ADE801C;border:1px solid #4ADE8033">
+  <span style="width:5px;height:5px;border-radius:50%;background:#4ADE80"></span>Available</span></div><div style="display:grid;grid-template-columns:minmax(0,2.3fr) 108px minmax(0,1.15fr) 140px 124px;gap:14px;align-items:center;padding:9px 12px;border-top:1px solid rgba(255,255,255,0.045);"><span style="display:flex;align-items:center;gap:11px;min-width:0">
+  <span style="width:32px;height:32px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#FFC94022;color:#FFC940"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20c3-6 7.5-12.5 13.5-16C19.5 10.5 14 18 5 20zM5 20l3.5-3"></path></svg></span>
+  <span style="min-width:0">
+    <span style="display:block;font-size:12.5px;font-weight:600;color:#FFFFFF;letter-spacing:-0.014em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Soft-Top Surfboard 8′0</span>
+    <span style="display:block;font-size:10px;color:#6B6B70;margin-top:2px">MB-SB2 · Surf Annex</span>
+  </span></span><span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:7px;font-size:10.5px;font-weight:600;white-space:nowrap;color:#FFC940;background:#FFC94017;border:1px solid #FFC9402B">Equipment</span><span style="display:flex;flex-direction:column;gap:5px;min-width:0">
+  <span style="font-size:11px;color:#C4C4C8;font-weight:600">1 of 4 boards</span><span style="display:block;width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:25%;height:100%;border-radius:999px;background:#FF6B2C"></span></span></span><span style="font-size:12px;color:#E8E8EA;font-weight:650;letter-spacing:-0.005em;white-space:nowrap">LKR 1,000</span><span style="font-size:10px;color:#6B6B70;font-weight:500;letter-spacing:-0.005em;white-space:nowrap"> / day</span><span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;white-space:nowrap;color:#4ADE80;background:#4ADE801C;border:1px solid #4ADE8033">
+  <span style="width:5px;height:5px;border-radius:50%;background:#4ADE80"></span>Available</span></div><div style="display:grid;grid-template-columns:minmax(0,2.3fr) 108px minmax(0,1.15fr) 140px 124px;gap:14px;align-items:center;padding:9px 12px;border-top:1px solid rgba(255,255,255,0.045);"><span style="display:flex;align-items:center;gap:11px;min-width:0">
+  <span style="width:32px;height:32px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#7DD3FC22;color:#7DD3FC"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l1.5-5h13L20 17M8 12V6h8v6M12 6V3M3 20c1.6 0 1.6-1 3.2-1s1.6 1 3.2 1 1.6-1 3.2-1 1.6 1 3.2 1 1.6-1 3.2-1"></path></svg></span>
+  <span style="min-width:0">
+    <span style="display:block;font-size:12.5px;font-weight:600;color:#FFFFFF;letter-spacing:-0.014em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Whale Watching Boat</span>
+    <span style="display:block;font-size:10px;color:#6B6B70;margin-top:2px">MB-BT1 · Mirissa Harbour</span>
+  </span></span><span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:7px;font-size:10.5px;font-weight:600;white-space:nowrap;color:#7DD3FC;background:#7DD3FC17;border:1px solid #7DD3FC2B">Vehicle</span><span style="display:flex;flex-direction:column;gap:5px;min-width:0">
+  <span style="font-size:11px;color:#C4C4C8;font-weight:600">5 of 6 seats</span><span style="display:block;width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:83%;height:100%;border-radius:999px;background:#FF6B2C"></span></span></span><span style="font-size:12px;color:#E8E8EA;font-weight:650;letter-spacing:-0.005em;white-space:nowrap">LKR 16,000</span><span style="font-size:10px;color:#6B6B70;font-weight:500;letter-spacing:-0.005em;white-space:nowrap"> / seat</span><span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;white-space:nowrap;color:#FBBF24;background:#FBBF241C;border:1px solid #FBBF2433">
+  <span style="width:5px;height:5px;border-radius:50%;background:#FBBF24"></span>Maintenance</span></div><div style="display:grid;grid-template-columns:minmax(0,2.3fr) 108px minmax(0,1.15fr) 140px 124px;gap:14px;align-items:center;padding:9px 12px;border-top:1px solid rgba(255,255,255,0.045);"><span style="display:flex;align-items:center;gap:11px;min-width:0">
+  <span style="width:32px;height:32px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#7DD3FC22;color:#7DD3FC"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5h15M6 16.5v2h2.5v-2M15.5 16.5v2H18v-2M4.5 16.5l1.6-5.4A2 2 0 018 9.6h8a2 2 0 011.9 1.5l1.6 5.4M7.5 13.5h.01M16.5 13.5h.01"></path></svg></span>
+  <span style="min-width:0">
+    <span style="display:block;font-size:12.5px;font-weight:600;color:#FFFFFF;letter-spacing:-0.014em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Airport Transfer Car</span>
+    <span style="display:block;font-size:10px;color:#6B6B70;margin-top:2px">MB-CAR1 · Weligama</span>
+  </span></span><span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:7px;font-size:10.5px;font-weight:600;white-space:nowrap;color:#7DD3FC;background:#7DD3FC17;border:1px solid #7DD3FC2B">Vehicle</span><span style="display:flex;flex-direction:column;gap:5px;min-width:0">
+  <span style="font-size:11px;color:#C4C4C8;font-weight:600">2 of 3 seats</span><span style="display:block;width:100%;height:4px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:67%;height:100%;border-radius:999px;background:#FF6B2C"></span></span></span><span style="font-size:12px;color:#E8E8EA;font-weight:650;letter-spacing:-0.005em;white-space:nowrap">LKR 18,000</span><span style="font-size:10px;color:#6B6B70;font-weight:500;letter-spacing:-0.005em;white-space:nowrap"> / trip</span><span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;white-space:nowrap;color:#FFC940;background:#FFC9401C;border:1px solid #FFC94033">
+  <span style="width:5px;height:5px;border-radius:50%;background:#FFC940"></span>Reserved</span></div>
+</div><div style="margin-top:auto;padding-top:14px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(255,255,255,0.045)">
+           <span style="font-size:11px;color:#6B6B70;font-weight:500;letter-spacing:-0.005em;white-space:nowrap">Showing 6 of 24 resources</span>
+           <span style="display:flex;gap:6px"><span style="width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;background:#FF6B2C;color:#160800">1</span><span style="width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#6B6B70;border:1px solid rgba(255,255,255,0.07)">2</span><span style="width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#6B6B70;border:1px solid rgba(255,255,255,0.07)">3</span><span style="width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#6B6B70;border:1px solid rgba(255,255,255,0.07)">4</span></span>
+         </div></div><div style="display:flex;flex-direction:column;gap:14px;min-width:0;width:360px;flex-shrink:0;"><div style="background:rgba(255,255,255,0.042);border:1px solid rgba(255,255,255,0.07);border-radius:18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:16px;flex-grow:1;min-width:0;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-shrink:0">
+  <span style="display:flex;align-items:center;gap:10px;min-width:0">
+    <span style="width:30px;height:30px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#FF6B2C22;color:#FF6B2C"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a2 2 0 012-2h14a2 2 0 012 2v13a2 2 0 01-2 2H5a2 2 0 01-2-2zM3 9h18M8 3v4M16 3v4"></path></svg></span>
+    <span style="font-size:13px;font-weight:650;color:#FFFFFF;letter-spacing:-0.018em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Weekly Availability</span>
+  </span>
+  <span style="font-size:10.5px;color:#6B6B70;white-space:nowrap;flex-shrink:0">Sep 1 – 7</span>
+</div><div style="display:flex;flex-direction:column;gap:4px">
+  <div style="display:grid;grid-template-columns:58px repeat(7, minmax(0,1fr));gap:4px;align-items:center"><span></span>
+    <span style="font-size:9px;color:#6B6B70;text-align:center;font-weight:600">M</span><span style="font-size:9px;color:#6B6B70;text-align:center;font-weight:600">T</span><span style="font-size:9px;color:#6B6B70;text-align:center;font-weight:600">W</span><span style="font-size:9px;color:#6B6B70;text-align:center;font-weight:600">T</span><span style="font-size:9px;color:#6B6B70;text-align:center;font-weight:600">F</span><span style="font-size:9px;color:#6B6B70;text-align:center;font-weight:600">S</span><span style="font-size:9px;color:#6B6B70;text-align:center;font-weight:600">S</span></div>
+  <div style="display:grid;grid-template-columns:58px repeat(7, minmax(0,1fr));gap:4px;align-items:center">
+    <span style="font-size:10px;color:#9A9A9F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Rooms</span>
+    <span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.44"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.57"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.66"></span><span style="height:24px;border-radius:6px;background:#FFC940;opacity:0.87"></span><span style="height:24px;border-radius:6px;background:#FFC940;opacity:1.00"></span><span style="height:24px;border-radius:6px;background:#FFC940;opacity:1.00"></span><span style="height:24px;border-radius:6px;background:#FFC940;opacity:0.91"></span>
+  </div><div style="display:grid;grid-template-columns:58px repeat(7, minmax(0,1fr));gap:4px;align-items:center">
+    <span style="font-size:10px;color:#9A9A9F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Boards</span>
+    <span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.31"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.40"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.53"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.66"></span><span style="height:24px;border-radius:6px;background:#FFC940;opacity:0.83"></span><span style="height:24px;border-radius:6px;background:#FFC940;opacity:0.96"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.74"></span>
+  </div><div style="display:grid;grid-template-columns:58px repeat(7, minmax(0,1fr));gap:4px;align-items:center">
+    <span style="font-size:10px;color:#9A9A9F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Boats</span>
+    <span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.27"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.27"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.40"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.48"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.74"></span><span style="height:24px;border-radius:6px;background:#FFC940;opacity:0.91"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.61"></span>
+  </div><div style="display:grid;grid-template-columns:58px repeat(7, minmax(0,1fr));gap:4px;align-items:center">
+    <span style="font-size:10px;color:#9A9A9F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Cars</span>
+    <span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.48"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.53"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.44"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.57"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.70"></span><span style="height:24px;border-radius:6px;background:#FFC940;opacity:0.83"></span><span style="height:24px;border-radius:6px;background:#FF6B2C;opacity:0.66"></span>
+  </div>
+</div><div style="display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:13px">
+             <span style="font-size:10px;color:#6B6B70;font-weight:500;letter-spacing:-0.005em;white-space:nowrap">Quiet</span>
+             <span style="flex-grow:1;height:5px;border-radius:999px;background:linear-gradient(90deg, rgba(255,107,44,0.16), #FFC940)"></span>
+             <span style="font-size:10px;color:#6B6B70;font-weight:500;letter-spacing:-0.005em;white-space:nowrap">Full</span>
+           </div></div><div style="background:rgba(255,255,255,0.042);border:1px solid rgba(255,255,255,0.07);border-radius:18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:16px;flex-grow:1;min-width:0;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-shrink:0">
+  <span style="display:flex;align-items:center;gap:10px;min-width:0">
+    <span style="width:30px;height:30px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#FF6B2C22;color:#FF6B2C"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19h16M6.5 16V9.5M11 16V5M15.5 16v-4M20 16v-8"></path></svg></span>
+    <span style="font-size:13px;font-weight:650;color:#FFFFFF;letter-spacing:-0.018em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">By Category</span>
+  </span>
+  
+</div><div style="display:flex;flex-direction:column;gap:12px">
+             <div>
+               <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">
+                 <span style="font-size:11.5px;color:#E8E8EA;font-weight:600">Rooms</span>
+                 <span style="font-size:11.5px;color:#FF6B2C;font-weight:700;letter-spacing:-0.02em">88%</span></div>
+               <span style="display:block;width:100%;height:5px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:88%;height:100%;border-radius:999px;background:#FF6B2C"></span></span>
+               <div style="font-size:9.5px;color:#6B6B70;margin-top:5px">3 resources</div></div><div>
+               <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">
+                 <span style="font-size:11.5px;color:#E8E8EA;font-weight:600">Equipment</span>
+                 <span style="font-size:11.5px;color:#FFC940;font-weight:700;letter-spacing:-0.02em">54%</span></div>
+               <span style="display:block;width:100%;height:5px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:54%;height:100%;border-radius:999px;background:#FFC940"></span></span>
+               <div style="font-size:9.5px;color:#6B6B70;margin-top:5px">9 resources</div></div><div>
+               <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">
+                 <span style="font-size:11.5px;color:#E8E8EA;font-weight:600">Vehicles</span>
+                 <span style="font-size:11.5px;color:#7DD3FC;font-weight:700;letter-spacing:-0.02em">41%</span></div>
+               <span style="display:block;width:100%;height:5px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:41%;height:100%;border-radius:999px;background:#7DD3FC"></span></span>
+               <div style="font-size:9.5px;color:#6B6B70;margin-top:5px">4 resources</div></div><div>
+               <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">
+                 <span style="font-size:11.5px;color:#E8E8EA;font-weight:600">Staff</span>
+                 <span style="font-size:11.5px;color:#4ADE80;font-weight:700;letter-spacing:-0.02em">72%</span></div>
+               <span style="display:block;width:100%;height:5px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:72%;height:100%;border-radius:999px;background:#4ADE80"></span></span>
+               <div style="font-size:9.5px;color:#6B6B70;margin-top:5px">6 resources</div></div><div>
+               <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">
+                 <span style="font-size:11.5px;color:#E8E8EA;font-weight:600">Desks</span>
+                 <span style="font-size:11.5px;color:#9A9A9F;font-weight:700;letter-spacing:-0.02em">18%</span></div>
+               <span style="display:block;width:100%;height:5px;border-radius:999px;background:rgba(255,255,255,0.09);overflow:hidden">
+  <span style="display:block;width:18%;height:100%;border-radius:999px;background:#9A9A9F"></span></span>
+               <div style="font-size:9.5px;color:#6B6B70;margin-top:5px">2 resources</div></div>
+           </div></div></div></div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

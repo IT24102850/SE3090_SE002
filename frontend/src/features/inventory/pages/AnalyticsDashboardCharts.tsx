@@ -117,13 +117,25 @@ const bookingUtilization = [
 ];
 
 const chartColors = {
-  blue: '#2563eb',
-  green: '#059669',
-  amber: '#d97706',
-  red: '#dc2626',
-  slate: '#64748b',
-  sky: '#0ea5e9',
+  blue: '#8B5CF6',
+  green: '#4ADE80',
+  amber: '#FBBF24',
+  red: '#F87171',
+  slate: '#9A9A9F',
+  sky: '#22D3EE',
 };
+
+// Recharts paints its own chrome; without these it renders a white tooltip
+// and near-black axis text on the dark canvas.
+const axisTick = { fill: '#9A9A9F', fontSize: 12 };
+const gridStroke = 'rgba(255,255,255,0.07)';
+const tooltipStyle = {
+  background: '#231E33',
+  border: '1px solid rgba(255,255,255,0.16)',
+  borderRadius: 10,
+  color: '#FFFFFF',
+};
+const tooltipItem = { color: '#C4C4C8' };
 
 async function apiGet<T>(path: string, token: string | null): Promise<T> {
   const response = await fetch(path, {
@@ -267,10 +279,10 @@ export function AnalyticsDashboardPage() {
                     <stop offset="100%" stopColor={chartColors.green} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="#eef2f7" vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <YAxis tickFormatter={compact} tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} width={54} />
-                <Tooltip formatter={(value: any) => currency(Number(value))} contentStyle={{ borderColor: '#e7ecf3', borderRadius: 8 }} />
+                <CartesianGrid stroke={gridStroke} vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
+                <YAxis tickFormatter={compact} tickLine={false} axisLine={false} tick={axisTick} width={54} />
+                <Tooltip formatter={(value: any) => currency(Number(value))} contentStyle={tooltipStyle} itemStyle={tooltipItem} labelStyle={tooltipItem} />
                 <Area type="monotone" dataKey="revenue" stroke={chartColors.green} strokeWidth={3} fill="url(#revenue-fill)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -288,10 +300,10 @@ export function AnalyticsDashboardPage() {
           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={stockLevels} layout="vertical" margin={{ top: 8, right: 20, left: 12, bottom: 8 }}>
-                <CartesianGrid stroke="#eef2f7" horizontal={false} />
-                <XAxis type="number" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <YAxis type="category" dataKey="name" width={112} tickLine={false} axisLine={false} tick={{ fill: '#334155', fontSize: 12 }} />
-                <Tooltip />
+                <CartesianGrid stroke={gridStroke} horizontal={false} />
+                <XAxis type="number" tickLine={false} axisLine={false} tick={axisTick} />
+                <YAxis type="category" dataKey="name" width={112} tickLine={false} axisLine={false} tick={{ fill: '#C4C4C8', fontSize: 12 }} />
+                <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItem} labelStyle={tooltipItem} />
                 <Legend />
                 <Bar dataKey="quantity" name="On hand" radius={[0, 6, 6, 0]} fill={chartColors.amber} />
                 <Line dataKey="reorderLevel" name="Reorder" stroke={chartColors.red} strokeWidth={2} dot={false} />
@@ -312,10 +324,10 @@ export function AnalyticsDashboardPage() {
           <div className="chart-box chart-box-sm">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data.patients.buckets} margin={{ top: 8, right: 20, left: 0, bottom: 8 }}>
-                <CartesianGrid stroke="#eef2f7" vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} width={36} />
-                <Tooltip />
+                <CartesianGrid stroke={gridStroke} vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
+                <YAxis tickLine={false} axisLine={false} tick={axisTick} width={36} />
+                <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItem} labelStyle={tooltipItem} />
                 <Line type="monotone" dataKey="newPatients" name="New patients" stroke={chartColors.blue} strokeWidth={3} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
@@ -333,13 +345,13 @@ export function AnalyticsDashboardPage() {
           <div className="chart-box chart-box-sm">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={bookingUtilization} margin={{ top: 8, right: 20, left: 0, bottom: 8 }}>
-                <CartesianGrid stroke="#eef2f7" vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <YAxis tickFormatter={(value: any) => `${value}%`} tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} width={42} />
-                <Tooltip formatter={(value: any) => `${value}%`} />
+                <CartesianGrid stroke={gridStroke} vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
+                <YAxis tickFormatter={(value: any) => `${value}%`} tickLine={false} axisLine={false} tick={axisTick} width={42} />
+                <Tooltip formatter={(value: any) => `${value}%`} contentStyle={tooltipStyle} itemStyle={tooltipItem} labelStyle={tooltipItem} />
                 <Legend />
                 <Bar dataKey="booked" stackId="slots" name="Booked" fill={chartColors.sky} radius={[6, 6, 0, 0]} />
-                <Bar dataKey="available" stackId="slots" name="Available" fill="#cbd5e1" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="available" stackId="slots" name="Available" fill="rgba(255,255,255,0.14)" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -357,10 +369,10 @@ export function AnalyticsDashboardPage() {
           <div className="chart-box chart-box-sm">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={usageRows} margin={{ top: 8, right: 20, left: 0, bottom: 8 }}>
-                <CartesianGrid stroke="#eef2f7" vertical={false} />
-                <XAxis dataKey="sku" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} width={42} />
-                <Tooltip />
+                <CartesianGrid stroke={gridStroke} vertical={false} />
+                <XAxis dataKey="sku" tickLine={false} axisLine={false} tick={axisTick} />
+                <YAxis tickLine={false} axisLine={false} tick={axisTick} width={42} />
+                <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItem} labelStyle={tooltipItem} />
                 <Legend />
                 <Bar dataKey="received" name="Received" fill={chartColors.green} radius={[6, 6, 0, 0]} />
                 <Bar dataKey="issued" name="Issued" fill={chartColors.amber} radius={[6, 6, 0, 0]} />
@@ -392,7 +404,7 @@ export function AnalyticsDashboardPage() {
                       <Cell key={item.sku} fill={item.status === 'OutOfStock' ? chartColors.red : item.fillRate < 35 ? chartColors.amber : chartColors.green} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: any) => `${value}%`} />
+                  <Tooltip formatter={(value: any) => `${value}%`} contentStyle={tooltipStyle} itemStyle={tooltipItem} labelStyle={tooltipItem} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
-        android:label="sme_mobile"
+        android:label="Unify"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

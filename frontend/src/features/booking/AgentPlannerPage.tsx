@@ -16,7 +16,7 @@ import { formatTime } from '../../shared/dateUtils';
 import type { AgentWorkflow, WorkflowStep } from './types';
 
 const STATUS_TONE: Record<string, string> = {
-  Pending: 'var(--color-warning, #d97706)',
+  Pending: 'var(--color-warning)',
   Approved: 'var(--color-primary)',
   NotRequired: 'var(--color-good)',
   Rejected: 'var(--color-critical)',
@@ -246,7 +246,7 @@ function WorkflowCard({
             padding: '4px 10px',
             borderRadius: 20,
             color: '#fff',
-            background: STATUS_TONE[workflow.approvalStatus] ?? '#64748b',
+            background: STATUS_TONE[workflow.approvalStatus] ?? 'var(--color-neutral)',
           }}
         >
           {workflow.status}

@@ -1,34 +1,59 @@
+/* Unify design tokens — warm light theme.
+   Soft off-white canvas, pure-white cards on generous radii, a dark navy
+   sidebar rail for contrast, and coral as the single "look here" accent
+   against the Unify blue. Modelled on the light analytics-dashboard
+   pattern: light ground, floating rounded cards, one gradient hero card,
+   pastel chips, and muted neutrals everywhere else so the accent carries.
+   Class names and structure are unchanged from the violet theme; only
+   colour, radii and shadow values move, so no component markup changed. */
+
 :root {
-  --color-bg: #f4f6fb;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f8fafc;
-  --color-border: #e2e8f0;
-  --color-border-strong: #cbd5e1;
+  color-scheme: light;
 
-  --color-text: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-muted: #94a3b8;
+  --color-bg: #F1EFEC;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #F7F5F2;
+  --color-surface-raised: #FFFFFF;
+  --color-border: rgba(16, 24, 40, 0.07);
+  --color-border-strong: rgba(16, 24, 40, 0.14);
 
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-soft: #eff6ff;
+  --color-text: #131A24;
+  --color-text-secondary: #5B6472;
+  --color-text-muted: #8A93A0;
 
-  --color-good: #059669;
-  --color-good-soft: #ecfdf5;
-  --color-warning: #d97706;
-  --color-warning-soft: #fffbeb;
-  --color-critical: #dc2626;
-  --color-critical-soft: #fef2f2;
-  --color-neutral: #64748b;
-  --color-neutral-soft: #f1f5f9;
+  /* Primary stays Unify blue so the logo sits in its own palette. Coral is
+     the secondary highlight — the reference uses it for the one bar/stat
+     that should pull the eye, never as a general-purpose fill. */
+  --color-primary: #2563EB;
+  --color-primary-hover: #1D4ED8;
+  --color-primary-soft: rgba(37, 99, 235, 0.10);
+  --color-primary-contrast: #FFFFFF;
+  --color-accent-high: #F2596F;
+  --color-accent-soft: rgba(242, 89, 111, 0.12);
+  --color-accent-cyan: #06B6D4;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  --gradient-brand: linear-gradient(135deg, #06B6D4 0%, #2563EB 100%);
+  --gradient-coral: linear-gradient(135deg, #FF9A6C 0%, #F2596F 100%);
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
+  --color-good: #16A34A;
+  --color-good-soft: rgba(22, 163, 74, 0.11);
+  --color-warning: #D97706;
+  --color-warning-soft: rgba(217, 119, 6, 0.12);
+  --color-critical: #DC2626;
+  --color-critical-soft: rgba(220, 38, 38, 0.09);
+  --color-neutral: #6B7280;
+  --color-neutral-soft: rgba(16, 24, 40, 0.05);
+
+  /* Generous radii are most of what makes the reference read as "soft". */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+
+  /* Diffuse, low-opacity shadows — on a light ground a heavy shadow reads
+     as dirt, so lift comes from blur and spread, not darkness. */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 24px 60px rgba(16, 24, 40, 0.12);
 
   --space-1: 4px;
   --space-2: 8px;
@@ -37,7 +62,7 @@
   --space-5: 24px;
   --space-6: 32px;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -57,6 +82,13 @@ body {
 a { color: inherit; }
 
 button, input, select, textarea { font-family: inherit; }
+
+/* Light scrollbars, tinted to the canvas rather than pure grey. */
+* { scrollbar-color: rgba(16, 24, 40, 0.2) transparent; scrollbar-width: thin; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(16, 24, 40, 0.16); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(16, 24, 40, 0.28); background-clip: content-box; }
 
 /* ── Layout shell ─────────────────────────────────────────── */
 .app-shell {
@@ -90,7 +122,7 @@ button, input, select, textarea { font-family: inherit; }
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0 0 4px 0;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
 }
 
 .page-subtitle {
@@ -100,16 +132,22 @@ button, input, select, textarea { font-family: inherit; }
 }
 
 /* ── Sidebar ──────────────────────────────────────────────── */
+/* The rail stays dark against the light canvas — that contrast is the
+   backbone of the reference layout. Because it is a dark island in a light
+   theme, its greys are written literally here: the --color-text-* tokens
+   are tuned for dark-on-light and would wash out on this panel. */
 .sidebar {
   width: 240px;
   flex-shrink: 0;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: #111827;
+  color: #C7CCD4;
   min-height: 100vh;
   padding: var(--space-4) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  border-right: none;
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
 }
 
 .sidebar-brand {
@@ -119,18 +157,18 @@ button, input, select, textarea { font-family: inherit; }
   padding: var(--space-2);
   font-weight: 700;
   font-size: 1.05rem;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  color: #fff;
 }
 
+/* The Unify mark is an SVG that carries its own rounded-square background,
+   so no fill is applied here. */
 .sidebar-brand-mark {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
+  display: block;
+  flex-shrink: 0;
 }
 
 .sidebar-nav { display: flex; flex-direction: column; gap: 2px; }
@@ -139,39 +177,43 @@ button, input, select, textarea { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-radius: var(--radius-sm);
-  color: #cbd5e1;
+  color: #B4B4B8;
   text-decoration: none;
   font-size: 0.9rem;
   transition: background 0.12s ease, color 0.12s ease;
 }
 
-.sidebar-link:hover { background: rgba(255,255,255,0.06); color: #fff; }
-.sidebar-link.active { background: rgba(59,130,246,0.18); color: #93c5fd; font-weight: 600; }
+.sidebar-link:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
+/* Reference pattern: the active item is a soft filled pill, not a tinted
+   label — legible on a dark rail without needing a bright accent colour. */
+.sidebar-link.active { background: rgba(255, 255, 255, 0.13); color: #FFFFFF; font-weight: 600; }
 
 .sidebar-footer {
   margin-top: auto;
   padding: var(--space-2);
-  border-top: 1px solid rgba(255,255,255,0.08);
+  /* Literal, not var(--color-border): that token is a near-black tint now
+     and would be invisible on this dark panel. */
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: var(--space-3);
 }
 
-.sidebar-user { font-size: 0.85rem; color: #e2e8f0; font-weight: 600; }
-.sidebar-role { font-size: 0.75rem; color: #94a3b8; margin-top: 2px; }
+.sidebar-user { font-size: 0.85rem; color: #F3F4F6; font-weight: 600; }
+.sidebar-role { font-size: 0.75rem; color: #98A1AE; margin-top: 2px; }
 
 .sidebar-logout {
   margin-top: var(--space-3);
   width: 100%;
-  background: rgba(220,38,38,0.15);
-  color: #fca5a5;
-  border: 1px solid rgba(220,38,38,0.3);
+  background: rgba(248, 113, 113, 0.12);
+  color: #F87171;
+  border: 1px solid rgba(248, 113, 113, 0.3);
   padding: 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 0.8rem;
 }
-.sidebar-logout:hover { background: rgba(220,38,38,0.25); }
+.sidebar-logout:hover { background: rgba(248, 113, 113, 0.2); }
 
 /* ── Mobile nav toggle / overlay ──────────────────────────── */
 .mobile-menu-toggle {
@@ -220,7 +262,9 @@ button, input, select, textarea { font-family: inherit; }
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  /* Lift comes from a wide, faint shadow rather than a dark edge — that is
+     what keeps white cards reading as "floating" on the warm ground. */
+  box-shadow: var(--shadow-md);
 }
 
 .card-pad { padding: var(--space-5); }
@@ -235,8 +279,9 @@ button, input, select, textarea { font-family: inherit; }
 .stat-tile {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  box-shadow: var(--shadow-sm);
 }
 
 .stat-tile-label {
@@ -244,14 +289,14 @@ button, input, select, textarea { font-family: inherit; }
   color: var(--color-text-secondary);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
 .stat-tile-value {
   font-size: 1.7rem;
   font-weight: 700;
   margin-top: 4px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
 }
 
 .stat-tile-sub { font-size: 0.78rem; color: var(--color-text-muted); margin-top: 2px; }
@@ -262,8 +307,10 @@ button, input, select, textarea { font-family: inherit; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 9px 16px;
-  border-radius: var(--radius-sm);
+  padding: 9px 18px;
+  /* Fully rounded: the reference's CTAs are pills, and this single value
+     does more to match its feel than any colour change. */
+  border-radius: 999px;
   border: 1px solid transparent;
   font-size: 0.87rem;
   font-weight: 600;
@@ -273,17 +320,17 @@ button, input, select, textarea { font-family: inherit; }
 }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-.btn-primary { background: var(--color-primary); color: #fff; }
+.btn-primary { background: var(--color-primary); color: var(--color-primary-contrast); font-weight: 700; }
 .btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
 
 .btn-secondary { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border-strong); }
 .btn-secondary:hover:not(:disabled) { background: var(--color-surface-muted); }
 
-.btn-danger { background: var(--color-critical-soft); color: var(--color-critical); border-color: #fecaca; }
-.btn-danger:hover:not(:disabled) { background: #fee2e2; }
+.btn-danger { background: var(--color-critical-soft); color: var(--color-critical); border-color: rgba(220, 38, 38, 0.25); }
+.btn-danger:hover:not(:disabled) { background: rgba(220, 38, 38, 0.16); }
 
 .btn-ghost { background: transparent; color: var(--color-text-secondary); }
-.btn-ghost:hover:not(:disabled) { background: var(--color-surface-muted); color: var(--color-text); }
+.btn-ghost:hover:not(:disabled) { background: rgba(16, 24, 40, 0.05); color: var(--color-text); }
 
 .btn-sm { padding: 6px 10px; font-size: 0.78rem; }
 .btn-icon { padding: 8px; }
@@ -297,15 +344,18 @@ button, input, select, textarea { font-family: inherit; }
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   font-size: 0.88rem;
-  background: var(--color-surface);
+  background: var(--color-surface-muted);
   color: var(--color-text);
   width: 100%;
 }
+.input::placeholder, textarea.input::placeholder { color: var(--color-text-muted); }
 .input:focus, select.input:focus, textarea.input:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-soft);
 }
+/* Native select popups render light unless the option list is told otherwise. */
+select.input option { background: var(--color-surface-muted); color: var(--color-text); }
 
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 var(--space-3); }
 .form-grid .field-full { grid-column: 1 / -1; }
@@ -331,14 +381,15 @@ button, input, select, textarea { font-family: inherit; }
   text-transform: uppercase;
   letter-spacing: 0.03em;
   white-space: nowrap;
+  border: 1px solid transparent;
 }
 .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
-.badge-good { background: var(--color-good-soft); color: var(--color-good); }
-.badge-warning { background: var(--color-warning-soft); color: var(--color-warning); }
-.badge-critical { background: var(--color-critical-soft); color: var(--color-critical); }
-.badge-neutral { background: var(--color-neutral-soft); color: var(--color-neutral); }
-.badge-primary { background: var(--color-primary-soft); color: var(--color-primary); }
+.badge-good { background: var(--color-good-soft); color: var(--color-good); border-color: rgba(22, 163, 74, 0.24); }
+.badge-warning { background: var(--color-warning-soft); color: var(--color-warning); border-color: rgba(217, 119, 6, 0.24); }
+.badge-critical { background: var(--color-critical-soft); color: var(--color-critical); border-color: rgba(220, 38, 38, 0.22); }
+.badge-neutral { background: var(--color-neutral-soft); color: var(--color-neutral); border-color: var(--color-border); }
+.badge-primary { background: var(--color-primary-soft); color: var(--color-primary); border-color: rgba(37, 99, 235, 0.32); }
 
 /* ── Tables ───────────────────────────────────────────────── */
 .table-wrap { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--color-border); }
@@ -347,11 +398,11 @@ table.data-table th {
   text-align: left;
   padding: 11px 14px;
   background: var(--color-surface-muted);
-  color: var(--color-text-secondary);
-  font-weight: 600;
-  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.07em;
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
@@ -361,7 +412,7 @@ table.data-table td {
   vertical-align: middle;
 }
 table.data-table tr:last-child td { border-bottom: none; }
-table.data-table tbody tr:hover { background: var(--color-surface-muted); }
+table.data-table tbody tr:hover { background: rgba(16, 24, 40, 0.028); }
 
 .empty-state {
   text-align: center;
@@ -374,13 +425,14 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
 /* ── Modal ────────────────────────────────────────────────── */
 .modal-backdrop {
   position: fixed; inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(16, 24, 40, 0.45);
   display: flex; align-items: center; justify-content: center;
   z-index: 50;
   padding: var(--space-4);
 }
 .modal {
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   width: 100%;
@@ -410,9 +462,11 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   font-size: 0.86rem;
   margin-bottom: var(--space-4);
 }
-.banner-critical { background: var(--color-critical-soft); color: #991b1b; border: 1px solid #fecaca; }
-.banner-warning { background: var(--color-warning-soft); color: #92400e; border: 1px solid #fde68a; }
-.banner-good { background: var(--color-good-soft); color: #065f46; border: 1px solid #a7f3d0; }
+/* Text moves to the saturated hue itself — on a light tinted field the pale
+   dark-theme text colours had almost no contrast. */
+.banner-critical { background: var(--color-critical-soft); color: #B91C1C; border: 1px solid rgba(220, 38, 38, 0.22); }
+.banner-warning { background: var(--color-warning-soft); color: #B45309; border: 1px solid rgba(217, 119, 6, 0.24); }
+.banner-good { background: var(--color-good-soft); color: #15803D; border: 1px solid rgba(22, 163, 74, 0.24); }
 
 .toast-stack {
   position: fixed;
@@ -430,12 +484,12 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   font-size: 0.85rem;
-  color: #fff;
+  border: 1px solid var(--color-border);
   animation: toast-in 0.18s ease;
 }
-.toast-success { background: #059669; }
-.toast-error { background: #dc2626; }
-.toast-info { background: #334155; }
+.toast-success { background: #ECFDF3; color: #15803D; border-color: rgba(22, 163, 74, 0.28); }
+.toast-error { background: #FEF2F2; color: #B91C1C; border-color: rgba(220, 38, 38, 0.26); }
+.toast-info { background: var(--color-surface-raised); color: var(--color-text); }
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -453,7 +507,7 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
   background: var(--color-surface-muted);
   border-right: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
@@ -469,8 +523,8 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   gap: 4px;
   transition: background 0.12s ease;
 }
-.calendar-cell.is-outside { background: var(--color-surface-muted); }
-.calendar-cell.is-today .calendar-date { background: var(--color-primary); color: #fff; }
+.calendar-cell.is-outside { background: rgba(16, 24, 40, 0.022); }
+.calendar-cell.is-today .calendar-date { background: var(--color-primary); color: var(--color-primary-contrast); }
 .calendar-cell.is-drop-target { background: var(--color-primary-soft); }
 .calendar-date {
   font-size: 0.75rem;
@@ -489,7 +543,7 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1px solid rgba(0,0,0,0.06);
+  border: 1px solid rgba(0, 0, 0, 0.35);
 }
 .calendar-event:active { cursor: grabbing; }
 .calendar-event-more { font-size: 0.68rem; color: var(--color-text-muted); padding: 0 4px; }
@@ -513,8 +567,9 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   top: 8px;
   height: 30px;
   border-radius: 6px;
-  color: #fff;
+  color: #FFFFFF;
   font-size: 0.68rem;
+  font-weight: 600;
   display: flex;
   align-items: center;
   padding: 0 8px;
@@ -555,8 +610,8 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
 
 .spinner {
   width: 18px; height: 18px;
-  border: 2px solid rgba(255,255,255,0.4);
-  border-top-color: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.25);
+  border-top-color: var(--color-primary-contrast);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   display: inline-block;
@@ -573,7 +628,7 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
     z-index: 50;
     transform: translateX(-100%);
     transition: transform 0.2s ease;
-    box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,0.25));
+    box-shadow: var(--shadow-lg);
   }
   .sidebar.open { transform: translateX(0); }
 
@@ -581,11 +636,171 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(15,23,42,0.5);
+    background: rgba(0, 0, 0, 0.6);
     z-index: 45;
   }
 
   .app-content { padding-top: calc(var(--space-5) + 44px); }
 
   .form-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Dashboard hero ───────────────────────────────────────────
+   The one saturated surface in the theme — the reference's gradient
+   "headline stat" card. Everything inside it is written in literal
+   white-alphas rather than --color-text-* tokens, because those are tuned
+   for dark-on-light and would disappear against the coral. The tenant
+   photograph is still there, but sunk far under the gradient so it reads
+   as texture rather than as a picture. */
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: none;
+  background: var(--gradient-coral);
+  box-shadow: var(--shadow-md);
+  color: #FFFFFF;
+  margin-bottom: var(--space-5);
+  isolation: isolate;
+}
+
+.hero-media {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  /* Much lower than the dark theme's 0.5: on a light gradient the photo
+     fights the numbers instead of sitting behind them. */
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  z-index: -2;
+}
+
+/* Coral gradient, deepest on the left where the copy sits so the headline
+   figure always has a solid field behind it. */
+.hero-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(100deg, rgba(242, 89, 111, 0.96) 0%, rgba(244, 114, 108, 0.9) 45%, rgba(255, 154, 108, 0.78) 100%),
+    radial-gradient(55% 120% at 88% 20%, rgba(255, 190, 130, 0.5), transparent 70%);
+}
+
+.hero-body { position: relative; padding: var(--space-5) var(--space-5) var(--space-5); }
+
+.hero-eyebrow {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+  margin: 0 0 6px;
+}
+
+.hero-title {
+  margin: 0;
+  font-size: 2.1rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.hero-figure {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  margin-top: var(--space-3);
+}
+
+.hero-sub { margin: 6px 0 0; color: rgba(255, 255, 255, 0.86); font-size: 0.86rem; }
+
+/* Segmented activity bar — the reference's multi-hue progress strip. */
+.hero-activity { display: flex; gap: 3px; margin-top: var(--space-4); height: 6px; }
+.hero-activity span { border-radius: 999px; }
+
+.hero-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-3); }
+.hero-legend-row { display: flex; align-items: center; gap: 7px; font-size: 0.8rem; }
+.hero-legend-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.hero-legend-name { color: rgba(255, 255, 255, 0.78); }
+.hero-legend-value { color: #FFFFFF; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Glass tiles that float over the hero photograph. */
+.hero-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); margin-top: var(--space-5); }
+/* Frosted white tiles over the coral, the light-theme inverse of the dark
+   theme's smoked-glass ones. */
+.hero-tile {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.hero-tile-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(255, 255, 255, 0.8); }
+.hero-tile-value { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.04em; margin-top: 5px; line-height: 1; color: #FFFFFF; }
+.hero-tile-sub { font-size: 0.72rem; color: rgba(255, 255, 255, 0.75); margin-top: 5px; }
+
+@media (max-width: 720px) {
+  .hero-title { font-size: 1.6rem; }
+  .hero-figure { font-size: 2.2rem; }
+}
+
+/* ── Sidebar sections ─────────────────────────────────────────
+   19 flat links overflowed the viewport; grouping them keeps the list short
+   without moving anything further than one click away. */
+.sidebar-section { display: flex; flex-direction: column; }
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 9px 12px;
+  margin-top: 2px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: left;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.sidebar-section-header:hover { background: rgba(255, 255, 255, 0.05); color: #C4C4C8; }
+/* The section you are in stays legible even while collapsed. */
+.sidebar-section-header.has-active { color: var(--color-primary); }
+
+.sidebar-section-label { flex-grow: 1; min-width: 0; }
+
+.sidebar-section-count {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+  padding: 1px 7px;
+  flex-shrink: 0;
+}
+
+.sidebar-section-chevron {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.sidebar-section-chevron.open { transform: rotate(90deg); }
+
+.sidebar-section-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: var(--space-2);
+  margin-left: 6px;
+  border-left: 1px solid var(--color-border);
 }

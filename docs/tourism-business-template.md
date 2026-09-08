@@ -26,6 +26,7 @@ almost everything:
 | F. Multi-day package | Round-Sri-Lanka tours, honeymoon packages | One vehicle+driver or coordinator, duration in days, high value -> approval required |
 | G. Wellness/Ayurveda retreat | Spa treatments, Ayurveda programs | One therapist or treatment room, duration = session length |
 | H. Homestay/eco-lodge | Village homestays, boutique eco-lodges | One room, duration = nights (or per-day booking type) |
+| I. Villa/hotel | Boutique hotels, resort villas, private pool villas | One room (or whole villa), duration = nights |
 
 ## 2. `Resource.Category` mapping
 
@@ -39,6 +40,7 @@ almost everything:
 | F. Multi-day package | `Vehicle` or `Other` | `Vehicle` when a specific car/van+driver is being booked; `Other` for packages with no single physical resource |
 | G. Wellness/Ayurveda retreat | `Staff` (therapist) or `Room` (treatment room) | Pick whichever is the actual bottleneck resource |
 | H. Homestay/eco-lodge | `Room` | Duration-based booking (nights), same as the Restaurant demo's table-booking pattern but with day-length slots |
+| I. Villa/hotel | `Room` | Same as H; kept as a separate subtype since guest expectations (private pool, whole-villa booking) differ from a homestay |
 
 ## 3. Universal `CustomAttributes` JSON schema
 
@@ -49,7 +51,7 @@ richer data here means better "find me the best X" results later.
 
 ```jsonc
 {
-  "subtype": "WildlifeExcursion | WatersportsLesson | EquipmentRental | GuidedTrek | CulturalTour | MultiDayPackage | WellnessRetreat | Accommodation",
+  "subtype": "WildlifeExcursion | WatersportsLesson | EquipmentRental | GuidedTrek | CulturalTour | MultiDayPackage | WellnessRetreat | Accommodation | VillaHotel",
   "capacity": 120,
   "pricing": { "adult": 7500, "child": 4000, "currency": "LKR" },
   "difficultyLevel": "Easy | Moderate | Challenging",
