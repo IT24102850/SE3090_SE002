@@ -1,68 +1,187 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Stockwise inventory operations for SMEs.">
+  <meta name="description" content="SME Inventory — stock, procurement and analytics workspace.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Stockwise">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SME Inventory">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>Stockwise | Inventory operations</title>
+  <title>SME Inventory | Stock, Procurement & Analytics</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    html, body { margin: 0; min-height: 100%; background: #F5F7FA; font-family: Arial, sans-serif; }
-    #stockwise-startup { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; color: #102A43; }
-    .startup-card { width: min(420px, 100%); box-sizing: border-box; padding: 28px; background: #fff; border: 1px solid #E5EAF0; border-radius: 22px; box-shadow: 0 18px 45px rgba(16, 42, 67, .10); }
-    .startup-brand { display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: 1px; }
-    .startup-mark { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 14px; color: #fff; background: #12355B; font-size: 22px; }
-    .startup-card p { margin: 22px 0 0; color: #60758A; line-height: 1.5; }
-    .startup-card button { margin-top: 20px; padding: 11px 16px; border: 0; border-radius: 10px; color: #fff; background: #0C8B7C; font-weight: 700; cursor: pointer; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: #0B0F19;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #F8FAFC;
+      overflow: hidden;
+    }
+    #sme-inventory-startup {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: radial-gradient(circle at 50% 28%, #1E1B4B 0%, #0F172A 45%, #0B0F19 100%);
+      z-index: 9999;
+      transition: opacity 0.35s ease-out;
+    }
+    .startup-card {
+      width: min(420px, 92vw);
+      padding: 36px 30px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 50px rgba(99, 102, 241, 0.16);
+      text-align: center;
+    }
+    .brand-logo {
+      width: 58px;
+      height: 58px;
+      margin: 0 auto 16px;
+      border-radius: 17px;
+      background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #D946EF 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 12px 28px rgba(99, 102, 241, 0.38);
+    }
+    .brand-logo svg {
+      width: 30px;
+      height: 30px;
+      fill: none;
+      stroke: #FFFFFF;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .brand-title {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #FFFFFF 20%, #C7D2FE 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin: 0 0 4px;
+    }
+    .brand-sub {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: #818CF8;
+      text-transform: uppercase;
+      margin: 0 0 22px;
+    }
+    .loader-track {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.09);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+      margin: 20px 0 16px;
+    }
+    .loader-bar {
+      position: absolute;
+      top: 0;
+      left: -45%;
+      height: 100%;
+      width: 45%;
+      background: linear-gradient(90deg, #6366F1, #06B6D4, #8B5CF6);
+      border-radius: 999px;
+      animation: hubLoader 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    @keyframes hubLoader {
+      0% { left: -45%; width: 35%; }
+      50% { width: 55%; }
+      100% { left: 100%; width: 40%; }
+    }
+    .startup-status {
+      margin: 0 0 6px;
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #E2E8F0;
+    }
+    .startup-detail {
+      margin: 0 0 22px;
+      font-size: 12px;
+      color: #94A3B8;
+      line-height: 1.4;
+    }
+    .reload-btn {
+      padding: 10px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      color: #94A3B8;
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .reload-btn:hover {
+      background: rgba(255, 255, 255, 0.09);
+      color: #FFFFFF;
+      border-color: rgba(99, 102, 241, 0.4);
+    }
   </style>
 </head>
 <body>
-  <div id="stockwise-startup" role="status">
+  <div id="sme-inventory-startup" role="status">
     <div class="startup-card">
-      <div class="startup-brand"><span class="startup-mark">&#9638;</span><span>STOCKWISE</span></div>
-      <p>Starting your inventory workspace&hellip;</p>
-      <button type="button" onclick="window.location.reload()">Reload app</button>
+      <div class="brand-logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+        </svg>
+      </div>
+      <h1 class="brand-title">SME INVENTORY</h1>
+      <p class="brand-sub">STOCK &bull; PROCUREMENT &bull; ANALYTICS</p>
+      
+      <div class="loader-track">
+        <div class="loader-bar"></div>
+      </div>
+      
+      <p class="startup-status">Starting your SME Inventory workspace&hellip;</p>
+      <p class="startup-detail">Connecting to stock, procurement &amp; analytics</p>
+      <button type="button" class="reload-btn" onclick="window.location.reload()">Reload app</button>
     </div>
   </div>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
   <script>
-    const startup = document.getElementById('stockwise-startup');
-    new MutationObserver(() => {
-      if (document.querySelector('flutter-view canvas, flutter-view flt-scene, flt-glass-pane canvas, flt-glass-pane flt-scene')) startup.remove();
-    }).observe(document.body, { childList: true, subtree: true });
+    const startup = document.getElementById('sme-inventory-startup');
+    let startupHidden = false;
+    const hideStartup = () => {
+      if (!startup || startupHidden) return;
+      startupHidden = true;
+      startup.style.opacity = '0';
+      startup.style.pointerEvents = 'none';
+      setTimeout(() => startup.remove(), 350);
+    };
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('flutter-view, flt-glass-pane, flutter-view canvas, flt-glass-pane canvas')) {
+        hideStartup();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    // Never leave the bootstrap card blocking the app if Flutter changes its
+    // rendered DOM structure or starts without creating a canvas immediately.
+    window.setTimeout(hideStartup, 10000);
   </script>
-  <script src="flutter_bootstrap.js" async onerror="document.querySelector('#stockwise-startup p').textContent = 'The app engine could not start. Reload the app after Flutter finishes building.'"></script>
+  <script src="flutter_bootstrap.js" async onerror="document.querySelector('.startup-status').textContent = 'The app engine could not start. Reload the app after Flutter finishes building.'"></script>
 </body>
 </html>

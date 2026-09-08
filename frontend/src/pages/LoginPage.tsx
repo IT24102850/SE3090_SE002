@@ -2,8 +2,10 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createDemoToken, useAuth } from '../auth/AuthContext';
 import { useToast } from '../ui/ToastContext';
+import { Icon } from '../ui/Icon';
 
 type LoginResponse = { accessToken?: string; token?: string };
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 
 type OwlMood = 'idle' | 'email' | 'covered' | 'peeking' | 'error';
 
@@ -187,22 +189,77 @@ export function LoginPage() {
   const [focused, setFocused] = useState<'email' | 'password' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const mood: OwlMood = error ? 'error' : focused === 'password' ? (showPassword ? 'peeking' : 'covered') : focused === 'email' ? 'email' : 'idle';
-  function reset() { setEmail(''); setPassword(''); setShowPassword(false); setError(null); }
+  const [selectedRole, setSelectedRole] = useState<'Admin' | 'Manager' | 'Staff'>('Admin');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('upgradehub-theme') as 'dark' | 'light') || 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+      document.documentElement.classList.add('theme-light');
+      document.documentElement.classList.remove('theme-dark');
+      document.body.classList.add('theme-light');
+      document.body.classList.remove('theme-dark');
+    } else {
+      document.documentElement.classList.add('theme-dark');
+      document.documentElement.classList.remove('theme-light');
+      document.body.classList.add('theme-dark');
+      document.body.classList.remove('theme-light');
+    }
+    localStorage.setItem('upgradehub-theme', theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }
+
+  const mood: OwlMood = error
+    ? 'error'
+    : focused === 'password'
+    ? showPassword
+      ? 'peeking'
+      : 'covered'
+    : focused === 'email'
+    ? 'email'
+    : 'idle';
+
+  function reset() {
+    setEmail('');
+    setPassword('');
+    setShowPassword(false);
+    setError(null);
+  }
+
+  function handleSelectRole(role: 'Admin' | 'Manager' | 'Staff') {
+    setSelectedRole(role);
+    setEmail(`${role.toLowerCase()}@smeinventory.local`);
+    setPassword('upgrade123');
+    setError(null);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const body = (await response.json().catch(() => ({}))) as LoginResponse;
+      const endpoint = `${apiBaseUrl}/api/auth/login`;
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+      } catch (caught) {
+        const detail = caught instanceof Error ? ` ${caught.message}` : '';
+        throw new Error(`Cannot reach the API at ${endpoint}.${detail}`);
+      }
+      const body = (await response.json().catch(() => ({}))) as LoginResponse & { message?: string };
       const token = body.accessToken ?? body.token;
-      if (!response.ok || !token) throw new Error('Login failed. Check your credentials and try again.');
+      if (!response.ok || !token) {
+        throw new Error(body.message ?? `Login failed (HTTP ${response.status}). Check your credentials and try again.`);
+      }
       setToken(token);
       notify('Signed in successfully.');
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
@@ -216,33 +273,256 @@ export function LoginPage() {
     }
   }
 
-  function demoSignIn() {
-    setToken(createDemoToken('Admin'));
-    notify('Demo sign-in successful.');
-    navigate('/analytics', { replace: true });
+  function demoSignIn(role: 'Admin' | 'Manager' | 'Staff' = selectedRole) {
+    setToken(createDemoToken(role));
+    notify(`Demo sign-in successful as ${role}.`, 'success');
+    navigate(role === 'Staff' ? '/inventory' : '/analytics', { replace: true });
   }
 
   return (
-    <main className="login-page">
-      <div className="login-scene" aria-label="SME Inventory sign in">
-        <div className="owl-wrapper"><LoginOwl mood={mood} /></div>
-        <form className={`login-card ${error ? 'has-error' : ''}`} onSubmit={submit}>
-          <div className="login-heading"><span className="login-brand-mark">▦</span><div><p>SME INVENTORY</p><h1>Welcome back</h1></div></div>
-          <p className="login-intro">Sign in to keep your inventory moving.</p>
-          <label>Email address <input type="email" autoComplete="username" placeholder="you@company.com" value={email} onFocus={() => setFocused('email')} onBlur={() => setFocused(null)} onChange={(e) => setEmail(e.target.value)} required /></label>
-          <label className="password-field">Password <input type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="••••••••" value={password} onFocus={() => setFocused('password')} onBlur={() => setFocused(null)} onChange={(e) => setPassword(e.target.value)} required /><button className="password-toggle" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} onMouseDown={(e) => e.preventDefault()} onClick={() => setShowPassword((value) => !value)}>{showPassword ? 'Hide' : 'Show'}</button></label>
-          {error && <p className="error" role="alert">{error}</p>}
-          <label className="remember"><input type="checkbox" />Remember me</label>
-          <button disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in'}</button>
-          <button className="secondary reset-button" type="button" onClick={reset}>Reset</button>
-          {import.meta.env.DEV && (
-            <button className="demo-button" type="button" onClick={demoSignIn}>
-              Demo sign in as Admin
-            </button>
-          )}
-          <p className="security-note">⌁ Your session is secured and encrypted.</p>
-        </form>
+    <main className="login-fullscreen-container">
+      {/* Ambient background glow orbs */}
+      <div className="login-ambient-orb login-ambient-orb-1" aria-hidden="true" />
+      <div className="login-ambient-orb login-ambient-orb-2" aria-hidden="true" />
+
+      {/* Top status & controls bar */}
+      <div className="login-top-bar">
+        <div className="login-status-chip">
+          <span className="login-status-dot" aria-hidden="true" />
+          <span>SYSTEM OPERATIONAL • V2.4</span>
+        </div>
+
+        <button
+          type="button"
+          className="login-theme-toggle"
+          onClick={toggleTheme}
+          aria-label="Toggle color theme"
+        >
+          <Icon name={theme === 'dark' ? 'moon' : 'sun'} size={14} />
+          <span>{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
+        </button>
       </div>
+
+      {/* Center Stage: Split view with Operations Panel + Sign In Card */}
+      <div className="login-center-stage">
+        {/* Left Side: Operations Highlight Panel */}
+        <div className="login-operations-panel">
+          <div className="operations-kicker">
+            <Icon name="sparkles" size={13} />
+            <span>ENTERPRISE SUITE</span>
+          </div>
+          <h2>Smart Inventory & Real-Time POS</h2>
+          <p>
+            Autonomous supply chain intelligence, multi-branch network sync, and automated agent workflows.
+          </p>
+
+          <div className="operations-flow">
+            <div className="operation-step">
+              <div className="operation-icon">
+                <Icon name="inventory" size={18} />
+              </div>
+              <div>
+                <strong>Smart Stock Tracking</strong>
+                <small>AI-predicted runouts & dynamic reorder triggers</small>
+              </div>
+            </div>
+
+            <div className="operation-step">
+              <div className="operation-icon">
+                <Icon name="branch" size={18} />
+              </div>
+              <div>
+                <strong>Multi-Branch Rebalancing</strong>
+                <small>Instant transfer requests across regional hubs</small>
+              </div>
+            </div>
+
+            <div className="operation-step">
+              <div className="operation-icon">
+                <Icon name="workflow" size={18} />
+              </div>
+              <div>
+                <strong>Autonomous Agent Workflows</strong>
+                <small>Auto-drafted purchase orders with confidence guards</small>
+              </div>
+            </div>
+          </div>
+
+          <div className="operations-trust">
+            <div className="trust-check" aria-hidden="true">
+              <Icon name="approve" size={14} />
+            </div>
+            <div>
+              <strong>Bank-Grade 256-Bit TLS Security</strong>
+              <small>Zero-trust token validation & role-based isolation</small>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Elevated Glass Sign-In Card */}
+        <div className="login-card-centered">
+          {/* Interactive Mascot with eye-tracking */}
+          <div className="login-owl-container" aria-hidden="true">
+            <LoginOwl mood={mood} />
+          </div>
+
+          <div className="auth-header-centered">
+            <div className="auth-logo-badge-lg">SME</div>
+            <div>
+              <span className="auth-portal-tag">ENTERPRISE GATEWAY</span>
+              <h1>Welcome back</h1>
+              <p className="auth-sub">Select your operational role or enter credentials</p>
+            </div>
+          </div>
+
+          {/* Quick Role Switcher */}
+          <div className="role-selector-grid" role="group" aria-label="Select role">
+            <button
+              type="button"
+              className={`role-select-card ${selectedRole === 'Admin' ? 'active' : ''}`}
+              onClick={() => handleSelectRole('Admin')}
+            >
+              <strong>Admin</strong>
+              <small>Full Analytics</small>
+            </button>
+            <button
+              type="button"
+              className={`role-select-card ${selectedRole === 'Manager' ? 'active' : ''}`}
+              onClick={() => handleSelectRole('Manager')}
+            >
+              <strong>Manager</strong>
+              <small>Stock & POs</small>
+            </button>
+            <button
+              type="button"
+              className={`role-select-card ${selectedRole === 'Staff' ? 'active' : ''}`}
+              onClick={() => handleSelectRole('Staff')}
+            >
+              <strong>Staff</strong>
+              <small>Inventory Ops</small>
+            </button>
+          </div>
+
+          <form className={`login-card-form ${error ? 'has-error' : ''}`} onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
+            <label className="form-field">
+              <span>Email address</span>
+              <input
+                type="email"
+                autoComplete="username"
+                placeholder="you@company.com"
+                value={email}
+                onFocus={() => setFocused('email')}
+                onBlur={() => setFocused(null)}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </label>
+
+            <label className="form-field" style={{ position: 'relative' }}>
+              <span>Password</span>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={password}
+                  onFocus={() => setFocused('password')}
+                  onBlur={() => setFocused(null)}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  style={{ paddingRight: 48 }}
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  style={{
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    padding: '4px 8px',
+                    fontSize: 11,
+                    fontWeight: 800,
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: 6,
+                    color: 'var(--ink-secondary)',
+                  }}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </label>
+
+            {error && <p className="modal-error" role="alert">{error}</p>}
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={submitting}
+              style={{
+                width: '100%',
+                padding: '12px',
+                fontSize: 14,
+                marginTop: 4,
+                background: 'var(--brand-gradient)',
+                boxShadow: '0 8px 24px rgba(99, 102, 241, 0.4)',
+              }}
+            >
+              {submitting ? 'Authenticating…' : 'Sign in to Dashboard'}
+            </button>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
+              <button className="btn btn-secondary" type="button" onClick={reset} style={{ padding: '8px' }}>
+                Reset
+              </button>
+              <button
+                className="btn btn-secondary demo-button"
+                type="button"
+                onClick={() => demoSignIn(selectedRole)}
+                style={{ padding: '8px', border: '1px solid rgba(99, 102, 241, 0.4)', color: 'var(--brand-primary)' }}
+              >
+                1-Click Demo ({selectedRole})
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Bottom project information and platform trust footer */}
+      <footer className="login-screen-footer">
+        <div className="footer-dev-profile">
+          <div className="footer-avatar-ring">
+            <div className="footer-avatar-inner">SME</div>
+            <span className="footer-verified-badge" title="Platform online">✓</span>
+          </div>
+          <div className="footer-dev-meta">
+            <span className="footer-dev-kicker">SME INVENTORY</span>
+            <span className="footer-dev-name">Universal SME Management Platform</span>
+            <div className="footer-dev-badges">
+              <span className="dev-tag-pill dev-tag-role">INVENTORY ANALYTICS</span>
+              <span className="dev-tag-pill dev-tag-edu">SME OPERATIONS</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="footer-dev-quote-box">
+          <p className="footer-quote-text">
+            "A connected workspace for stock visibility, purchase approvals, maintenance, and business analytics."
+          </p>
+        </div>
+
+        <div className="footer-meta-box">
+          <span className="footer-security-pill">
+            <Icon name="shield" size={11} />
+            <span>256-BIT ENCRYPTED</span>
+          </span>
+          <span className="footer-copyright">© 2026 SME Inventory Management. All rights reserved.</span>
+        </div>
+      </footer>
     </main>
   );
 }

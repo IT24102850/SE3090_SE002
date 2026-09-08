@@ -19,11 +19,10 @@ import {
 } from 'recharts';
 import { useAuth } from '../auth/AuthContext';
 import { Badge, type BadgeTone } from '../ui/Badge';
+import { Icon } from '../ui/Icon';
 
 type RevenueBucket = { date: string; label: string; revenue: number };
 type RevenueReport = { totalRevenue: number; buckets: RevenueBucket[]; dataSourceNote?: string };
-type PatientBucket = { date: string; label: string; newPatients: number };
-type PatientCountReport = { totalPatients: number; newPatients: number; buckets: PatientBucket[] };
 type InventoryUsageItem = {
   inventoryItemId: string;
   itemName?: string;
@@ -50,7 +49,6 @@ type InventoryItem = {
 type InventoryListResponse = { items: InventoryItem[]; totalCount: number };
 type AnalyticsData = {
   revenue: RevenueReport;
-  patients: PatientCountReport;
   usage: InventoryUsageReport;
   lowStock: InventoryListResponse;
   usedFallback: boolean;
@@ -66,20 +64,6 @@ const fallbackRevenue: RevenueReport = {
     { date: '2026-08-13', label: 'Aug 13', revenue: 131000 },
     { date: '2026-08-14', label: 'Aug 14', revenue: 156500 },
     { date: '2026-08-15', label: 'Aug 15', revenue: 120000 },
-  ],
-};
-
-const fallbackPatients: PatientCountReport = {
-  totalPatients: 1248,
-  newPatients: 78,
-  buckets: [
-    { date: '2026-08-09', label: 'Aug 09', newPatients: 8 },
-    { date: '2026-08-10', label: 'Aug 10', newPatients: 13 },
-    { date: '2026-08-11', label: 'Aug 11', newPatients: 9 },
-    { date: '2026-08-12', label: 'Aug 12', newPatients: 14 },
-    { date: '2026-08-13', label: 'Aug 13', newPatients: 11 },
-    { date: '2026-08-14', label: 'Aug 14', newPatients: 16 },
-    { date: '2026-08-15', label: 'Aug 15', newPatients: 7 },
   ],
 };
 
@@ -105,16 +89,6 @@ const fallbackLowStock: InventoryListResponse = {
     { id: 'milk', name: 'Whole Milk 1L Small', sku: 'SKU-00811', quantity: 18, reorderLevel: 80, status: 'LowStock' },
   ],
 };
-
-const bookingUtilization = [
-  { label: 'Mon', booked: 68, available: 32 },
-  { label: 'Tue', booked: 74, available: 26 },
-  { label: 'Wed', booked: 81, available: 19 },
-  { label: 'Thu', booked: 72, available: 28 },
-  { label: 'Fri', booked: 88, available: 12 },
-  { label: 'Sat', booked: 63, available: 37 },
-  { label: 'Sun', booked: 41, available: 59 },
-];
 
 const chartColors = {
   blue: '#2563eb',
@@ -151,14 +125,21 @@ function statusTone(status: string): BadgeTone {
   return 'green';
 }
 
-function KpiCard({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: BadgeTone }) {
+function KpiCard({ label, value, detail, tone, iconName }: { label: string; value: string; detail: string; tone: BadgeTone; iconName?: string }) {
+  const bubbleClass = tone === 'green' ? 'metric-emerald' : tone === 'blue' ? 'metric-cyan' : tone === 'amber' ? 'metric-amber' : 'metric-purple';
+  const defaultIcon = tone === 'green' ? 'chart' : tone === 'blue' ? 'user' : tone === 'amber' ? 'inventory' : 'predict';
   return (
-    <article className="kpi-card analytics-kpi">
-      <div className="kpi-top">
-        <span className="kpi-label">{label}</span>
-        <Badge tone={tone}>{detail}</Badge>
+    <article className="metric-card kpi-card analytics-kpi">
+      <div className={`metric-icon-bubble ${bubbleClass}`} aria-hidden="true">
+        <Icon name={iconName || defaultIcon} size={22} />
       </div>
-      <div className="kpi-value">{value}</div>
+      <div className="metric-info">
+        <div className="kpi-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="metric-label kpi-label">{label}</span>
+          <Badge tone={tone}>{detail}</Badge>
+        </div>
+        <div className="metric-value kpi-value">{value}</div>
+      </div>
     </article>
   );
 }
@@ -167,7 +148,6 @@ export function AnalyticsDashboardPage() {
   const { token } = useAuth();
   const [data, setData] = useState<AnalyticsData>({
     revenue: fallbackRevenue,
-    patients: fallbackPatients,
     usage: fallbackUsage,
     lowStock: fallbackLowStock,
     usedFallback: true,
@@ -179,9 +159,8 @@ export function AnalyticsDashboardPage() {
 
     async function load() {
       setLoading(true);
-      const [revenue, patients, usage, lowStock] = await Promise.allSettled([
+      const [revenue, usage, lowStock] = await Promise.allSettled([
         apiGet<RevenueReport>('/api/reports/revenue', token),
-        apiGet<PatientCountReport>('/api/reports/patient-count', token),
         apiGet<InventoryUsageReport>('/api/reports/inventory-usage', token),
         apiGet<InventoryListResponse>('/api/inventory/low-stock?pageSize=8', token),
       ]);
@@ -190,10 +169,9 @@ export function AnalyticsDashboardPage() {
 
       setData({
         revenue: revenue.status === 'fulfilled' ? revenue.value : fallbackRevenue,
-        patients: patients.status === 'fulfilled' ? patients.value : fallbackPatients,
         usage: usage.status === 'fulfilled' ? usage.value : fallbackUsage,
         lowStock: lowStock.status === 'fulfilled' ? lowStock.value : fallbackLowStock,
-        usedFallback: [revenue, patients, usage, lowStock].some((result) => result.status === 'rejected'),
+        usedFallback: [revenue, usage, lowStock].some((result) => result.status === 'rejected'),
       });
       setLoading(false);
     }
@@ -225,29 +203,25 @@ export function AnalyticsDashboardPage() {
     }))
   ), [data.usage.items]);
 
-  const averageBooking = Math.round(
-    bookingUtilization.reduce((sum, day) => sum + day.booked, 0) / bookingUtilization.length
-  );
-
   return (
     <div className="page dashboard-page analytics-page">
       <header className="page-head">
         <div>
           <p className="eyebrow">OPERATIONS / ANALYTICS</p>
           <h1>Analytics dashboard</h1>
-          <p className="page-sub">Revenue trends, inventory pressure, patient growth, and booking capacity in one view.</p>
+          <p className="page-sub">Revenue trends, stock pressure, purchasing activity, and inventory movement in one view.</p>
         </div>
         <div className="page-actions">
           {loading && <Badge tone="blue">Loading live data</Badge>}
-          {!loading && data.usedFallback && <Badge tone="amber">Using sample fallback</Badge>}
+          {!loading && data.usedFallback && <Badge tone="amber">Live analytics unavailable</Badge>}
         </div>
       </header>
 
       <section className="kpi-grid" aria-label="Key metrics">
         <KpiCard label="Revenue" value={currency(data.revenue.totalRevenue)} detail="30 days" tone="green" />
-        <KpiCard label="Patients" value={compact(data.patients.totalPatients)} detail={`+${data.patients.newPatients} new`} tone="blue" />
+        <KpiCard label="Stock received" value={compact(data.usage.totalReceivedQuantity)} detail="30 days" tone="blue" />
         <KpiCard label="Stock issued" value={compact(data.usage.totalIssuedQuantity)} detail={`${compact(data.usage.netQuantity)} net`} tone="amber" />
-        <KpiCard label="Booking utilization" value={`${averageBooking}%`} detail="weekly avg" tone="violet" />
+        <KpiCard label="Low-stock items" value={compact(data.lowStock.totalCount)} detail="needs attention" tone="violet" />
       </section>
 
       <section className="analytics-grid analytics-grid-primary">
@@ -305,18 +279,20 @@ export function AnalyticsDashboardPage() {
         <article className="panel analytics-panel">
           <div className="panel-head">
             <div>
-              <h2>Patient counts</h2>
-              <p>New patient registrations by day</p>
+              <h2>Top item movement</h2>
+              <p>Received versus issued quantities by tracked item</p>
             </div>
           </div>
           <div className="chart-box chart-box-sm">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data.patients.buckets} margin={{ top: 8, right: 20, left: 0, bottom: 8 }}>
+              <LineChart data={usageRows} margin={{ top: 8, right: 20, left: 0, bottom: 8 }}>
                 <CartesianGrid stroke="#eef2f7" vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                <XAxis dataKey="sku" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
                 <YAxis tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} width={36} />
                 <Tooltip />
-                <Line type="monotone" dataKey="newPatients" name="New patients" stroke={chartColors.blue} strokeWidth={3} dot={{ r: 4 }} />
+                <Legend />
+                <Line type="monotone" dataKey="received" name="Received" stroke={chartColors.blue} strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="issued" name="Issued" stroke={chartColors.amber} strokeWidth={3} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -325,21 +301,21 @@ export function AnalyticsDashboardPage() {
         <article className="panel analytics-panel">
           <div className="panel-head">
             <div>
-              <h2>Booking utilization</h2>
-              <p>Booked capacity versus available appointment slots</p>
+              <h2>Reorder coverage</h2>
+              <p>On-hand quantity compared with reorder thresholds</p>
             </div>
-            <Badge tone="slate">Sample</Badge>
+            <Badge tone="slate">Live stock</Badge>
           </div>
           <div className="chart-box chart-box-sm">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={bookingUtilization} margin={{ top: 8, right: 20, left: 0, bottom: 8 }}>
+              <BarChart data={stockLevels} margin={{ top: 8, right: 20, left: 0, bottom: 8 }}>
                 <CartesianGrid stroke="#eef2f7" vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <YAxis tickFormatter={(value) => `${value}%`} tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} width={42} />
-                <Tooltip formatter={(value) => `${value}%`} />
+                <XAxis dataKey="sku" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} width={42} />
+                <Tooltip />
                 <Legend />
-                <Bar dataKey="booked" stackId="slots" name="Booked" fill={chartColors.sky} radius={[6, 6, 0, 0]} />
-                <Bar dataKey="available" stackId="slots" name="Available" fill="#cbd5e1" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="quantity" name="On hand" fill={chartColors.sky} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="reorderLevel" name="Reorder level" fill="#cbd5e1" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

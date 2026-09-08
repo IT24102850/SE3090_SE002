@@ -1,11 +1,11 @@
 {
-    "name": "Stockwise Inventory",
-    "short_name": "Stockwise",
+    "name": "SME Inventory | Stock, Procurement & Analytics",
+    "short_name": "SME Inventory",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#F5F7FA",
-    "theme_color": "#12355B",
-    "description": "Inventory operations for growing teams.",
+    "background_color": "#0B0F19",
+    "theme_color": "#6366F1",
+    "description": "Modern POS, Inventory & Service Center Operations.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

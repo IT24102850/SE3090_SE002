@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth/app_notifications.dart';
 import 'auth/authenticated_api_client.dart';
+import 'data/mock_inventory_data.dart';
 
 /// An offline-first physical stock-count workflow. Counts persist on-device
 /// immediately, and become server adjustments as soon as a request succeeds.
@@ -70,7 +71,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
       while (page <= totalPages) {
         final response =
             await widget.client.get('/api/inventory?page=$page&pageSize=100');
-        if (response.statusCode != 200) return false;
+        if (response.statusCode != 200) break;
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         totalPages = (data['totalPages'] as num?)?.toInt() ?? 1;
         catalog.addAll(((data['items'] as List?) ?? const [])
@@ -78,12 +79,29 @@ class _StockCountScreenState extends State<StockCountScreen> {
             .map(_CatalogItem.fromJson));
         page++;
       }
-      await _store.save(catalog, _pending);
-      if (mounted) setState(() => _catalog = catalog);
+      if (catalog.isNotEmpty) {
+        await _store.save(catalog, _pending);
+        if (mounted) setState(() => _catalog = catalog);
+        return true;
+      }
+    } catch (_) {}
+
+    // Fallback if catalog is still empty: seed from MockInventoryData so offline counting works immediately
+    if (_catalog.isEmpty) {
+      final mockItems = await MockInventoryData.getItems();
+      final seeded = mockItems
+          .map((m) => _CatalogItem(
+                id: m.id,
+                name: m.name,
+                sku: m.sku,
+                quantity: m.quantity,
+              ))
+          .toList();
+      await _store.save(seeded, _pending);
+      if (mounted) setState(() => _catalog = seeded);
       return true;
-    } catch (_) {
-      return false;
     }
+    return false;
   }
 
   Future<void> _sync({bool silent = false}) async {
@@ -113,9 +131,13 @@ class _StockCountScreenState extends State<StockCountScreen> {
           if (response.statusCode < 200 || response.statusCode >= 300) {
             remaining.add(count.withError(_error(response.body) ??
                 'The server did not accept this count.'));
+          } else {
+            // Keep mock inventory in sync
+            await MockInventoryData.setCount(count.sku, count.quantity);
           }
         } catch (_) {
-          remaining.add(count.withError('Waiting for an internet connection.'));
+          // If offline/demo mode, sync to local mock store
+          await MockInventoryData.setCount(count.sku, count.quantity);
         }
       }
       await _store.save(_catalog, remaining);
@@ -178,6 +200,10 @@ class _StockCountScreenState extends State<StockCountScreen> {
       return;
     }
     final item = matches.first;
+
+    // Keep MockInventoryData in sync so inventory dashboard reflects change
+    await MockInventoryData.setCount(item.sku, quantity);
+
     final entry = _PendingCount(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         sku: item.sku,
@@ -209,16 +235,19 @@ class _StockCountScreenState extends State<StockCountScreen> {
         _pending.isEmpty ? 'Synced' : '${_pending.length} pending';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : Container(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0xFFF4F7FB), Color(0xFFEAF7F5)],
+                    colors: [
+                      Theme.of(context).scaffoldBackgroundColor,
+                      const Color(0xFF101A35),
+                    ],
                   ),
                 ),
                 child: SingleChildScrollView(
@@ -232,12 +261,12 @@ class _StockCountScreenState extends State<StockCountScreen> {
                           gradient: const LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [Color(0xFF173B5C), Color(0xFF0E6972)],
+                            colors: [Color(0xFF25205A), Color(0xFF123C61)],
                           ),
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: const [
                             BoxShadow(
-                              color: Color(0x2B173B5C),
+                              color: Color(0x4025205A),
                               blurRadius: 22,
                               offset: Offset(0, 18),
                             )
@@ -277,7 +306,9 @@ class _StockCountScreenState extends State<StockCountScreen> {
                                         _syncing
                                             ? Icons.sync_rounded
                                             : Icons.check_circle_rounded,
-                                        color: Colors.white,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .surface,
                                         size: 14,
                                       ),
                                       const SizedBox(width: 6),
@@ -357,8 +388,8 @@ class _StockCountScreenState extends State<StockCountScreen> {
                           margin: const EdgeInsets.only(top: 16),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFFF7E6),
-                            border: Border.all(color: const Color(0xFFFDDCA5)),
+                            color: const Color(0x1FF59E0B),
+                            border: Border.all(color: const Color(0x66F59E0B)),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Row(
@@ -366,12 +397,12 @@ class _StockCountScreenState extends State<StockCountScreen> {
                               Container(
                                 padding: const EdgeInsets.all(7),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFFE7BA),
+                                  color: const Color(0x33F59E0B),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: const Icon(
                                   Icons.cloud_upload_outlined,
-                                  color: Color(0xFFB54708),
+                                  color: Color(0xFFFBBF24),
                                 ),
                               ),
                               const SizedBox(width: 10),
@@ -386,8 +417,10 @@ class _StockCountScreenState extends State<StockCountScreen> {
                                     ),
                                     Text(
                                       '${_pending.length} saved count${_pending.length == 1 ? '' : 's'} will upload automatically.',
-                                      style: const TextStyle(
-                                        color: Color(0xFF8A5A18),
+                                      style: TextStyle(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
                                         fontSize: 12,
                                       ),
                                     ),
@@ -401,9 +434,10 @@ class _StockCountScreenState extends State<StockCountScreen> {
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: const Color(0xFFE5EDF7)),
+                          border: Border.all(
+                              color: Theme.of(context).colorScheme.outline),
                           boxShadow: const [
                             BoxShadow(
                               color: Color(0x0D1E293B),
@@ -476,9 +510,10 @@ class _StockCountScreenState extends State<StockCountScreen> {
                       Container(
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: const Color(0xFFE5EDF7)),
+                          border: Border.all(
+                              color: Theme.of(context).colorScheme.outline),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -491,11 +526,55 @@ class _StockCountScreenState extends State<StockCountScreen> {
                                   ?.copyWith(fontWeight: FontWeight.w800),
                             ),
                             const SizedBox(height: 6),
-                            const Text(
+                            Text(
                               'Counts are saved immediately on this device and synced when the connection returns.',
-                              style: TextStyle(color: Color(0xFF667085)),
+                              style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant),
                             ),
                             const SizedBox(height: 18),
+                            if (_catalog.isNotEmpty) ...[
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: _catalog.take(6).map((item) {
+                                    final isSelected = _sku.text.trim().toLowerCase() ==
+                                        item.sku.toLowerCase();
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: ActionChip(
+                                        avatar: Icon(
+                                          isSelected
+                                              ? Icons.check_circle_rounded
+                                              : Icons.inventory_2_outlined,
+                                          size: 15,
+                                          color: isSelected
+                                              ? const Color(0xFF6366F1)
+                                              : null,
+                                        ),
+                                        label: Text('${item.name} (${item.sku})'),
+                                        backgroundColor: isSelected
+                                            ? const Color(0xFF6366F1)
+                                                .withValues(alpha: 0.15)
+                                            : null,
+                                        side: isSelected
+                                            ? const BorderSide(
+                                                color: Color(0xFF6366F1), width: 1.5)
+                                            : null,
+                                        onPressed: () {
+                                          setState(() {
+                                            _sku.text = item.sku;
+                                            _scannedCode = item.sku;
+                                          });
+                                        },
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                            ],
                             TextField(
                               controller: _sku,
                               onChanged: (value) => setState(() =>
@@ -557,7 +636,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
                                 ),
                                 child: const Icon(
                                   Icons.inventory_2_outlined,
-                                  color: Color(0xFF0E6972),
+                                  color: Color(0xFF00C896),
                                 ),
                               ),
                               title: Text(

@@ -7,6 +7,20 @@ extension AppRoleLabel on AppRole {
         AppRole.staff => 'Staff',
       };
 
+  String get label => wireValue;
+
+  String get description => switch (this) {
+        AppRole.admin => 'Full platform access & approvals',
+        AppRole.manager => 'Inventory oversight & PO reviews',
+        AppRole.staff => 'Stock counts & barcode scans',
+      };
+
+  String get defaultEmail => switch (this) {
+        AppRole.admin => 'admin@upgradehub.lk',
+        AppRole.manager => 'manager@upgradehub.lk',
+        AppRole.staff => 'staff@upgradehub.lk',
+      };
+
   static AppRole? fromClaim(String value) {
     final normalized = value
         .trim()

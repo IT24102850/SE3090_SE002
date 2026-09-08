@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { Badge, type BadgeTone } from '../ui/Badge';
+import { Icon } from '../ui/Icon';
 import { useToast } from '../ui/ToastContext';
 
 type POStatus = 'Draft' | 'InReview' | 'Placed' | 'InTransit' | 'Received' | 'Cancelled';
@@ -90,7 +91,7 @@ const fallbackOrders: PurchaseOrder[] = [
     updatedAt: '2026-08-12T14:30:00Z',
     timeline: [
       { status: 'Draft', at: '2026-08-08T10:00:00Z', by: 'Kavindu' },
-      { status: 'InReview', at: '2026-08-08T11:20:00Z', by: 'Hasaranga', note: 'Approved supplier quote' },
+      { status: 'InReview', at: '2026-08-08T11:20:00Z', by: 'Inventory Admin', note: 'Approved supplier quote' },
       { status: 'Placed', at: '2026-08-09T09:15:00Z', by: 'Kavindu' },
       { status: 'InTransit', at: '2026-08-12T14:30:00Z', by: 'Nadeesha', note: 'Courier dispatched — ETA Aug 16' },
     ],
@@ -107,7 +108,7 @@ const fallbackOrders: PurchaseOrder[] = [
     updatedAt: '2026-08-10T16:00:00Z',
     timeline: [
       { status: 'Draft', at: '2026-08-06T08:30:00Z', by: 'Nadeesha' },
-      { status: 'InReview', at: '2026-08-06T10:00:00Z', by: 'Hasaranga' },
+      { status: 'InReview', at: '2026-08-06T10:00:00Z', by: 'Inventory Admin' },
       { status: 'Placed', at: '2026-08-07T09:00:00Z', by: 'Nadeesha' },
       { status: 'InTransit', at: '2026-08-09T11:45:00Z', by: 'MetroPack Ltd' },
       { status: 'Received', at: '2026-08-10T16:00:00Z', by: 'Nadeesha', note: 'GRN-4395 posted' },
@@ -125,7 +126,7 @@ const fallbackOrders: PurchaseOrder[] = [
     updatedAt: '2026-08-08T08:20:00Z',
     timeline: [
       { status: 'Draft', at: '2026-08-05T07:45:00Z', by: 'Nadeesha' },
-      { status: 'InReview', at: '2026-08-05T12:00:00Z', by: 'Hasaranga' },
+      { status: 'InReview', at: '2026-08-05T12:00:00Z', by: 'Inventory Admin' },
       { status: 'Placed', at: '2026-08-08T08:20:00Z', by: 'Nadeesha' },
     ],
   },
@@ -141,7 +142,7 @@ const fallbackOrders: PurchaseOrder[] = [
     updatedAt: '2026-08-04T15:00:00Z',
     timeline: [
       { status: 'Draft', at: '2026-08-04T13:10:00Z', by: 'Dinesh' },
-      { status: 'InReview', at: '2026-08-04T15:00:00Z', by: 'Hasaranga', note: 'Awaiting manager sign-off' },
+      { status: 'InReview', at: '2026-08-04T15:00:00Z', by: 'Inventory Admin', note: 'Awaiting manager sign-off' },
     ],
   },
   {
@@ -156,7 +157,7 @@ const fallbackOrders: PurchaseOrder[] = [
     updatedAt: '2026-08-02T11:30:00Z',
     timeline: [
       { status: 'Draft', at: '2026-08-01T09:00:00Z', by: 'Kavindu' },
-      { status: 'Cancelled', at: '2026-08-02T11:30:00Z', by: 'Hasaranga', note: 'Duplicate order — merged into PO-2147' },
+      { status: 'Cancelled', at: '2026-08-02T11:30:00Z', by: 'Inventory Admin', note: 'Duplicate order — merged into PO-2147' },
     ],
   },
 ];
@@ -325,7 +326,7 @@ export function PurchaseOrderManagerPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [page, setPage] = useState(1);
 
-  const performer = user?.id === 'demo-user' ? 'Hasaranga' : 'Staff';
+  const performer = user?.id === 'demo-user' ? 'Inventory Admin' : 'Staff';
 
   useEffect(() => {
     let cancelled = false;
@@ -472,14 +473,38 @@ export function PurchaseOrderManagerPage() {
       </header>
 
       {usedFallback && !loading && (
-        <p className="page-banner">Showing demo data — connect to the API to sync live purchase orders.</p>
+        <p className="page-banner">Live purchase orders are unavailable. Reconnect to the SME Inventory API and refresh.</p>
       )}
 
       <section className="stat-strip" aria-label="Purchase order summary">
-        <div className="stat"><span className="stat-value">{stats.total}</span><span className="stat-label">Total POs</span></div>
-        <div className="stat"><span className="stat-value">{stats.open}</span><span className="stat-label">Open orders</span></div>
-        <div className="stat"><span className="stat-value">{stats.inTransit}</span><span className="stat-label">In transit</span></div>
-        <div className="stat"><span className="stat-value">{formatPrice(stats.value)}</span><span className="stat-label">Pipeline value</span></div>
+        <div className="stat">
+          <div className="metric-icon-bubble metric-purple"><Icon name="po" /></div>
+          <div>
+            <span className="stat-value">{stats.total}</span>
+            <span className="stat-label">Total POs</span>
+          </div>
+        </div>
+        <div className="stat">
+          <div className="metric-icon-bubble metric-cyan"><Icon name="clock" /></div>
+          <div>
+            <span className="stat-value">{stats.open}</span>
+            <span className="stat-label">Open orders</span>
+          </div>
+        </div>
+        <div className="stat">
+          <div className="metric-icon-bubble metric-amber"><Icon name="box" /></div>
+          <div>
+            <span className="stat-value">{stats.inTransit}</span>
+            <span className="stat-label">In transit</span>
+          </div>
+        </div>
+        <div className="stat">
+          <div className="metric-icon-bubble metric-emerald"><Icon name="chart" /></div>
+          <div>
+            <span className="stat-value">{formatPrice(stats.value)}</span>
+            <span className="stat-label">Pipeline value</span>
+          </div>
+        </div>
       </section>
 
       <div className="po-layout">

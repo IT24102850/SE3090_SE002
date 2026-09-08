@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge, type BadgeTone } from '../ui/Badge';
+import { useAuth } from '../auth/AuthContext';
 
 type MovementType = 'Receive' | 'Issue' | 'Adjustment';
 
@@ -38,7 +39,7 @@ type MovementTypeFilter = (typeof movementTypes)[number];
 const reasonFilters = ['All reason codes', ...reasonCodes.map((reason) => reason.code)] as const;
 type ReasonFilter = (typeof reasonFilters)[number];
 
-const users = ['All users', 'Kavindu', 'Nadeesha', 'Dinesh', 'Hasaranga'] as const;
+const users = ['All users', 'Kavindu', 'Nadeesha', 'Dinesh', 'Inventory Admin'] as const;
 type UserFilter = (typeof users)[number];
 
 const initialMovements: MovementEntry[] = [
@@ -48,12 +49,12 @@ const initialMovements: MovementEntry[] = [
   { id: 'mov-004', occurredAt: '2026-08-14T14:20:00Z', item: 'Craft Paper Cups 12oz (x50)', sku: 'SKU-00612', movementType: 'Issue', quantity: -6, reasonCode: 'ISS-001', reasonLabel: 'Production use', reference: 'SHIFT-PM', performedBy: 'Dinesh' },
   { id: 'mov-005', occurredAt: '2026-08-14T11:05:00Z', item: 'Premium Coffee Beans', sku: 'SKU-00132', movementType: 'Receive', quantity: 40, reasonCode: 'REC-003', reasonLabel: 'PO receipt', reference: 'GRN-4418', performedBy: 'Kavindu', purchaseOrder: 'PO-2147', notes: 'Partial delivery — balance expected Aug 16' },
   { id: 'mov-006', occurredAt: '2026-08-13T17:30:00Z', item: 'Packaging Boxes — Medium', sku: 'SKU-00598', movementType: 'Issue', quantity: -24, reasonCode: 'ISS-003', reasonLabel: 'Transfer out', reference: 'TRF-COL-03', performedBy: 'Nadeesha', notes: 'Sent to Colombo outlet' },
-  { id: 'mov-007', occurredAt: '2026-08-13T10:15:00Z', item: 'Brown Sugar 500g', sku: 'SKU-00902', movementType: 'Adjustment', quantity: 3, reasonCode: 'ADJ-001', reasonLabel: 'Cycle count correction', reference: 'CC-0813', performedBy: 'Hasaranga' },
+  { id: 'mov-007', occurredAt: '2026-08-13T10:15:00Z', item: 'Brown Sugar 500g', sku: 'SKU-00902', movementType: 'Adjustment', quantity: 3, reasonCode: 'ADJ-001', reasonLabel: 'Cycle count correction', reference: 'CC-0813', performedBy: 'Inventory Admin' },
   { id: 'mov-008', occurredAt: '2026-08-12T15:48:00Z', item: 'Butter Croissants (x12)', sku: 'SKU-00451', movementType: 'Issue', quantity: -8, reasonCode: 'ISS-002', reasonLabel: 'Waste / spoilage', reference: 'WST-120', performedBy: 'Dinesh', notes: 'End-of-day unsold stock' },
   { id: 'mov-009', occurredAt: '2026-08-12T09:22:00Z', item: 'Napkins — Kraft (x200)', sku: 'SKU-01033', movementType: 'Receive', quantity: 20, reasonCode: 'REC-002', reasonLabel: 'Transfer in', reference: 'TRF-KDY-01', performedBy: 'Nadeesha' },
   { id: 'mov-010', occurredAt: '2026-08-11T13:00:00Z', item: 'Whole Milk 1L (Small)', sku: 'SKU-00811', movementType: 'Issue', quantity: -15, reasonCode: 'ISS-001', reasonLabel: 'Production use', performedBy: 'Nadeesha' },
   { id: 'mov-011', occurredAt: '2026-08-11T08:05:00Z', item: 'Colombia Supremo Beans 1kg', sku: 'SKU-00128', movementType: 'Receive', quantity: 60, reasonCode: 'REC-003', reasonLabel: 'PO receipt', reference: 'GRN-4402', performedBy: 'Kavindu', purchaseOrder: 'PO-2147' },
-  { id: 'mov-012', occurredAt: '2026-08-10T18:40:00Z', item: 'Premium Coffee Beans', sku: 'SKU-00132', movementType: 'Adjustment', quantity: -1, reasonCode: 'ADJ-001', reasonLabel: 'Cycle count correction', reference: 'CC-0810', performedBy: 'Hasaranga', notes: 'Scale variance on shelf count' },
+  { id: 'mov-012', occurredAt: '2026-08-10T18:40:00Z', item: 'Premium Coffee Beans', sku: 'SKU-00132', movementType: 'Adjustment', quantity: -1, reasonCode: 'ADJ-001', reasonLabel: 'Cycle count correction', reference: 'CC-0810', performedBy: 'Inventory Admin', notes: 'Scale variance on shelf count' },
   { id: 'mov-013', occurredAt: '2026-08-10T11:18:00Z', item: 'Craft Paper Cups 12oz (x50)', sku: 'SKU-00612', movementType: 'Receive', quantity: 30, reasonCode: 'REC-001', reasonLabel: 'Supplier delivery', reference: 'GRN-4395', performedBy: 'Nadeesha', purchaseOrder: 'PO-2146' },
   { id: 'mov-014', occurredAt: '2026-08-09T16:02:00Z', item: 'Vanilla Syrup 750ml', sku: 'SKU-00324', movementType: 'Issue', quantity: -4, reasonCode: 'ISS-001', reasonLabel: 'Production use', performedBy: 'Kavindu' },
   { id: 'mov-015', occurredAt: '2026-08-09T09:50:00Z', item: 'Packaging Boxes — Medium', sku: 'SKU-00598', movementType: 'Receive', quantity: 50, reasonCode: 'REC-003', reasonLabel: 'PO receipt', reference: 'GRN-4388', performedBy: 'Nadeesha', purchaseOrder: 'PO-2146' },
@@ -84,7 +85,10 @@ function UserChip({ name }: { name: string }) {
 }
 
 export function StockMovementLogPage() {
-  const [movements] = useState(initialMovements);
+  const { token } = useAuth();
+  const [movements, setMovements] = useState<MovementEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState('');
   const [type, setType] = useState<MovementTypeFilter>(movementTypes[0]);
   const [reason, setReason] = useState<ReasonFilter>(reasonFilters[0]);
@@ -92,6 +96,45 @@ export function StockMovementLogPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    let active = true;
+    async function loadMovements() {
+      setLoading(true);
+      setLoadError('');
+      try {
+        const response = await fetch('/api/inventory/movements?pageSize=100', {
+          headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
+        });
+        if (!response.ok) throw new Error(`Movement request failed (${response.status})`);
+        const data = await response.json();
+        if (!active) return;
+        setMovements((data ?? []).map((movement: any): MovementEntry => ({
+          id: movement.id,
+          occurredAt: movement.occurredAt,
+          item: movement.item,
+          sku: movement.sku,
+          movementType: movement.movementType as MovementType,
+          quantity: Number(movement.quantity),
+          reasonCode: movement.movementType === 'Receive' ? 'REC-001' : movement.movementType === 'Adjustment' ? 'ADJ-001' : 'ISS-001',
+          reasonLabel: movement.notes ?? movement.reference ?? movement.movementType,
+          reference: movement.reference ?? undefined,
+          performedBy: 'Inventory operator',
+          notes: movement.notes ?? undefined,
+        })));
+      } catch (error) {
+        console.error(error);
+        if (active) {
+          setMovements(initialMovements);
+          setLoadError('Live movement history is unavailable. Showing the last known view.');
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void loadMovements();
+    return () => { active = false; };
+  }, [token]);
 
   const filtered = useMemo(() => {
     const queryLower = query.trim().toLowerCase();
@@ -150,6 +193,8 @@ export function StockMovementLogPage() {
           <p className="page-sub">Filterable history of receives, issues, and adjustments with reason codes and user attribution.</p>
         </div>
       </header>
+      {loadError && <p className="page-notice">{loadError}</p>}
+      {loading && <div className="panel p-6">Loading live movement history…</div>}
 
       <section className="stat-strip" aria-label="Movement summary">
         <div className="stat"><span className="stat-value">{stats.count}</span><span className="stat-label">Movements</span></div>
