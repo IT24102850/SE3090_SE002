@@ -51,7 +51,7 @@ public class AppDbContext : DbContext
     public DbSet<Invoice> Invoices { get; set; } = null!;
     public DbSet<InvoiceItem> InvoiceItems { get; set; } = null!;
     public DbSet<Payment> Payments { get; set; } = null!;
-    public DbSet<Subscription> SubscripOnModelCreatingtions { get; set; } = null!;
+    public DbSet<Subscription> Subscriptions { get; set; } = null!;
     public DbSet<InsuranceClaim> InsuranceClaims { get; set; } = null!;
     public DbSet<DynamicForm> DynamicForms { get; set; } = null!;
     public DbSet<FormSubmission> FormSubmissions { get; set; } = null!;
