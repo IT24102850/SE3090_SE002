@@ -7,6 +7,7 @@ using System.Security.Claims;
 using SmeBackend.Authorization;
 using SmeBackend.Data;
 using SmeBackend.Tenancy;
+using SmeBackend.Models;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -97,10 +98,38 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+    await db.Users.IgnoreQueryFilters()
+        .Where(user => user.Email == "admin@sme-demo.local")
+        .ExecuteDeleteAsync();
+
     if (app.Environment.IsDevelopment())
     {
-        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
-        await DevelopmentUserSeeder.SeedAsync(db, tenantContext);
+        var seedTenant = await db.Tenants
+            .IgnoreQueryFilters()
+            .Where(tenant => tenant.Name == "SME Demo Store")
+            .Select(tenant => new { tenant.Id })
+            .SingleOrDefaultAsync();
+
+        if (seedTenant is not null && !await db.Sales.IgnoreQueryFilters().AnyAsync(sale => sale.TenantId == seedTenant.Id))
+        {
+            scope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(seedTenant.Id);
+            var seedBranch = await db.Branches
+                .IgnoreQueryFilters()
+                .Where(branch => branch.TenantId == seedTenant.Id && branch.IsActive)
+                .OrderBy(branch => branch.CreatedAt)
+                .Select(branch => new { branch.Id })
+                .FirstOrDefaultAsync();
+
+            if (seedBranch is not null)
+            {
+                var now = DateTime.UtcNow;
+                db.Sales.AddRange(
+                    new Sale { TenantId = seedTenant.Id, BranchId = seedBranch.Id, OccurredAt = now.AddDays(-2), Amount = 42500m, Reference = "SALE-DEMO-001" },
+                    new Sale { TenantId = seedTenant.Id, BranchId = seedBranch.Id, OccurredAt = now.AddDays(-1), Amount = 58750m, Reference = "SALE-DEMO-002" },
+                    new Sale { TenantId = seedTenant.Id, BranchId = seedBranch.Id, OccurredAt = now.AddHours(-4), Amount = 31600m, Reference = "SALE-DEMO-003" });
+                await db.SaveChangesAsync();
+            }
+        }
     }
 }
 

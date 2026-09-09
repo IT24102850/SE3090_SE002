@@ -104,7 +104,9 @@ export function AppLayout() {
   };
 
   const roleName = user?.roles?.[0] ?? 'Admin';
-  const roleInitial = (user?.id ?? roleName ?? 'A').toString()[0]?.toUpperCase();
+  const username = user?.email?.split('@')[0]?.trim();
+  const displayName = username || user?.name?.trim() || roleName;
+  const roleInitial = displayName[0]?.toUpperCase() ?? 'A';
 
   return (
     <div className="app-shell">
@@ -128,6 +130,12 @@ export function AppLayout() {
               </NavLink>
             </>
           )}
+          {hasAnyRole(['Admin']) && (
+            <NavLink to="/manage-users" className={({ isActive }) => (isActive ? 'active nav-item' : 'nav-item')}>
+              <div className="nav-icon"><Icon name="branch" /></div>
+              <span>Manage Users</span>
+            </NavLink>
+          )}
 
           <div className="sidebar-section-title">Operations</div>
           {hasAnyRole(['Admin', 'Manager', 'Staff']) && (
@@ -144,7 +152,7 @@ export function AppLayout() {
             </NavLink>
           )}
 
-          {hasAnyRole(['Admin', 'Manager', 'Staff']) && (
+          {hasAnyRole(['Admin', 'Manager']) && (
             <NavLink to="/purchase-orders" className={({ isActive }) => (isActive ? 'active nav-item' : 'nav-item')}>
               <div className="nav-icon"><Icon name="po" /></div>
               <span>Purchase Orders</span>
@@ -158,7 +166,7 @@ export function AppLayout() {
             </NavLink>
           )}
 
-          {hasAnyRole(['Admin', 'Manager', 'Staff']) && (
+          {hasAnyRole(['Admin', 'Manager']) && (
             <NavLink to="/branch-overview" className={({ isActive }) => (isActive ? 'active nav-item' : 'nav-item')}>
               <div className="nav-icon"><Icon name="branch" /></div>
               <span>Branches</span>
@@ -197,7 +205,7 @@ export function AppLayout() {
           <div className="sidebar-user-card">
             <div className="sidebar-user-avatar">{roleInitial}</div>
             <div className="sidebar-user-info">
-              <span className="sidebar-user-name">{user?.id ?? 'Administrator'}</span>
+              <span className="sidebar-user-name">{displayName}</span>
               <span className="sidebar-user-role">{user?.roles?.join(', ') ?? 'Admin'}</span>
             </div>
             <button
@@ -231,7 +239,7 @@ export function AppLayout() {
 
             <div className="user-profile-badge">
               <div className="user-avatar">{roleInitial}</div>
-              <span className="user-name">{user?.id ?? roleName}</span>
+              <span className="user-name">{displayName}</span>
               <span className="badge badge-violet" style={{ fontSize: 10, padding: '2px 8px' }}>{roleName}</span>
             </div>
 

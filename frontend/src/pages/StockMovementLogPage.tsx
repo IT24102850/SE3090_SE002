@@ -125,8 +125,8 @@ export function StockMovementLogPage() {
       } catch (error) {
         console.error(error);
         if (active) {
-          setMovements(initialMovements);
-          setLoadError('Live movement history is unavailable. Showing the last known view.');
+          setMovements([]);
+          setLoadError('Unable to load movement history from the database. Refresh and try again.');
         }
       } finally {
         if (active) setLoading(false);

@@ -34,6 +34,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Agent Workflows Service")
 
+
+@app.get("/")
+def service_root() -> dict[str, str]:
+    return {"service": "agent-workflows", "status": "ok"}
+
+
+@app.get("/health")
+def service_health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 # Enable CORS for the frontend dev server(s) so the browser can call this service.
 # In production, narrow allowed origins to your real frontend hosts.
 app.add_middleware(

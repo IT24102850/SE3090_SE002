@@ -45,6 +45,7 @@ type PurchaseOrderListResponse = {
   totalCount: number;
   totalPages: number;
 };
+type SupplierOption = { id: string; name: string };
 
 const PAGE_SIZE = 6;
 
@@ -177,6 +178,19 @@ async function apiGet<T>(path: string, token: string | null): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function apiPost<T>(path: string, token: string | null, body: unknown): Promise<T> {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`Request failed: ${path}`);
+  return response.json() as Promise<T>;
+}
+
 async function apiPut<T>(path: string, token: string | null, body: unknown): Promise<T> {
   const response = await fetch(path, {
     method: 'PUT',
@@ -277,15 +291,22 @@ function LifecycleTracker({ status, compact = false }: { status: POStatus; compa
 function CreatePoModal({
   onClose,
   onCreate,
+  suppliers,
 }: {
   onClose: () => void;
-  onCreate: (supplier: string) => void;
+  onCreate: (supplier: SupplierOption) => void;
+  suppliers: SupplierOption[];
 }) {
-  const [supplier, setSupplier] = useState(suppliers[0]);
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '');
+
+  useEffect(() => {
+    if (!supplierId && suppliers[0]) setSupplierId(suppliers[0].id);
+  }, [supplierId, suppliers]);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    onCreate(supplier);
+    const selected = suppliers.find((option) => option.id === supplierId);
+    if (selected) onCreate(selected);
   }
 
   return (
@@ -298,8 +319,8 @@ function CreatePoModal({
         <form className="modal-body" onSubmit={handleSubmit}>
           <label className="form-field form-field-wide">
             Supplier
-            <select value={supplier} onChange={(event) => setSupplier(event.target.value)}>
-              {suppliers.map((option) => <option key={option}>{option}</option>)}
+            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
+            {suppliers.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
             </select>
           </label>
           <p className="modal-hint">A draft PO will be created and can be advanced through the lifecycle.</p>
@@ -316,17 +337,18 @@ function CreatePoModal({
 export function PurchaseOrderManagerPage() {
   const { notify } = useToast();
   const { token, user } = useAuth();
-  const [orders, setOrders] = useState<PurchaseOrder[]>(fallbackOrders);
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [supplierOptions, setSupplierOptions] = useState<SupplierOption[]>([]);
   const [usedFallback, setUsedFallback] = useState(true);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(statusFilters[0]);
   const [supplierFilter, setSupplierFilter] = useState('All suppliers');
-  const [selectedId, setSelectedId] = useState<string | null>(fallbackOrders[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [page, setPage] = useState(1);
 
-  const performer = user?.id === 'demo-user' ? 'Inventory Admin' : 'Staff';
+  const performer = user?.roles[0] ?? 'Staff';
 
   useEffect(() => {
     let cancelled = false;
@@ -336,15 +358,18 @@ export function PurchaseOrderManagerPage() {
       try {
         const response = await apiGet<PurchaseOrderListResponse>('/api/purchase-orders?pageSize=50', token);
         if (cancelled) return;
-        if (response.items.length > 0) {
-          setOrders((prev) => {
-            const byNumber = new Map(prev.map((order) => [order.number, order]));
-            return response.items.map((item) => responseToOrder(item, byNumber.get(item.number)));
-          });
-          setUsedFallback(false);
-        }
+        setOrders((prev) => {
+          const byNumber = new Map(prev.map((order) => [order.number, order]));
+          return response.items.map((item) => responseToOrder(item, byNumber.get(item.number)));
+        });
+        setSelectedId((current) => response.items.some((item) => item.id === current) ? current : response.items[0]?.id ?? null);
+        setUsedFallback(false);
       } catch {
-        if (!cancelled) setUsedFallback(true);
+        if (!cancelled) {
+          setOrders([]);
+          setSelectedId(null);
+          setUsedFallback(true);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -352,6 +377,12 @@ export function PurchaseOrderManagerPage() {
 
     load();
     return () => { cancelled = true; };
+  }, [token]);
+
+  useEffect(() => {
+    void apiGet<{ items: SupplierOption[] }>('/api/suppliers', token)
+      .then((response) => setSupplierOptions(response.items))
+      .catch(() => setSupplierOptions([]));
   }, [token]);
 
   const filtered = useMemo(() => {
@@ -435,25 +466,27 @@ export function PurchaseOrderManagerPage() {
     notify(`${order.number} was cancelled.`, 'info');
   }
 
-  function createOrder(supplier: string) {
-    const now = new Date().toISOString();
+  async function createOrder(supplier: SupplierOption) {
+    if (!user?.branchId) {
+      notify('Your account is not assigned to a branch.', 'error');
+      return;
+    }
     const number = nextPoNumber(orders);
-    const created: PurchaseOrder = {
-      id: `local-${number}`,
-      number,
-      supplier,
-      branch: 'Main branch',
-      status: 'Draft',
-      amount: 0,
-      lineItems: 0,
-      createdAt: now,
-      updatedAt: now,
-      timeline: [{ status: 'Draft', at: now, by: performer }],
-    };
-    setOrders((prev) => [created, ...prev]);
-    setSelectedId(created.id);
-    setShowCreate(false);
-    notify(`${number} draft was created.`);
+    try {
+      const created = await apiPost<PurchaseOrderResponse>('/api/purchase-orders', token, {
+        number,
+        branchId: user.branchId,
+        supplierId: supplier.id,
+        status: 'Draft',
+      });
+      const order = responseToOrder(created);
+      setOrders((prev) => [order, ...prev]);
+      setSelectedId(order.id);
+      setShowCreate(false);
+      notify(`${number} draft was created.`);
+    } catch {
+      notify('Could not create the purchase order in the database.', 'error');
+    }
   }
 
   const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
@@ -647,7 +680,7 @@ export function PurchaseOrderManagerPage() {
         </aside>
       </div>
 
-      {showCreate && <CreatePoModal onClose={() => setShowCreate(false)} onCreate={createOrder} />}
+      {showCreate && <CreatePoModal onClose={() => setShowCreate(false)} onCreate={createOrder} suppliers={supplierOptions} />}
     </div>
   );
 }

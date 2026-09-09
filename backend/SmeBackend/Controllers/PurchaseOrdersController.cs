@@ -8,6 +8,7 @@ using SmeBackend.Models;
 namespace SmeBackend.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/purchase-orders")]
 public sealed class PurchaseOrdersController(
     AppDbContext db,
@@ -37,6 +38,7 @@ public sealed class PurchaseOrdersController(
         {
             return Unauthorized();
         }
+        branchId = ResolveBranchScope(branchId);
 
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
@@ -205,6 +207,18 @@ public sealed class PurchaseOrdersController(
 
     private bool TryGetTenantId(out Guid tenantId) =>
         Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out tenantId);
+
+    private Guid? ResolveBranchScope(Guid? requestedBranchId)
+    {
+        if (User.IsInRole(UserRole.Admin.ToString()) || requestedBranchId.HasValue)
+        {
+            return requestedBranchId;
+        }
+
+        return Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var branchId)
+            ? branchId
+            : null;
+    }
 
     private async Task<IReadOnlyList<PurchaseOrderResponse>> ToResponsesAsync(
         IReadOnlyList<PurchaseOrder> orders,

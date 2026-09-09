@@ -10,6 +10,7 @@ import { StockMovementLogPage } from './pages/StockMovementLogPage';
 import { LowStockAlertsPage } from './pages/LowStockAlertsPage';
 import { BranchOverviewPage } from './pages/BranchOverviewPage';
 import { AgentWorkflowMonitorPage } from './pages/AgentWorkflowMonitor';
+import { ManageUsersPage } from './pages/ManageUsersPage';
 
 export function App() {
   return (
@@ -19,10 +20,19 @@ export function App() {
         <Route element={<AppLayout />}>
           <Route path="/inventory" element={<InventoryManagerPage />} />
           <Route path="/stock-movements" element={<StockMovementLogPage />} />
-          <Route path="/purchase-orders" element={<PurchaseOrderManagerPage />} />
-          <Route path="/agent-workflows" element={<AgentWorkflowMonitorPage />} />
           <Route path="/low-stock-alerts" element={<LowStockAlertsPage />} />
+        </Route>
+      </Route>
+      <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager']} />}>
+        <Route element={<AppLayout />}>
+          <Route path="/purchase-orders" element={<PurchaseOrderManagerPage />} />
           <Route path="/branch-overview" element={<BranchOverviewPage />} />
+          <Route path="/agent-workflows" element={<AgentWorkflowMonitorPage />} />
+        </Route>
+        <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
+          <Route element={<AppLayout />}>
+            <Route path="/manage-users" element={<ManageUsersPage />} />
+          </Route>
         </Route>
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['Admin', 'Manager']} />}>

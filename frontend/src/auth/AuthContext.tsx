@@ -5,16 +5,21 @@ const tokenStorageKey = 'sme.access-token';
 
 type JwtPayload = {
   sub?: string;
+  name?: string;
+  email?: string;
   exp?: number;
   'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'?: string;
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'?: string;
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'?: string;
   role?: string | string[];
   roles?: string | string[];
   Role?: string | string[];
   'http://schemas.microsoft.com/ws/2008/06/identity/claims/role'?: string | string[];
   tenant_id?: string;
+  branch_id?: string;
 };
 
-export type AuthUser = { id?: string; roles: Role[]; tenantId?: string };
+export type AuthUser = { id?: string; name?: string; email?: string; roles: Role[]; tenantId?: string; branchId?: string };
 
 type AuthContextValue = {
   token: string | null;
@@ -45,7 +50,14 @@ function userFromToken(token: string | null): AuthUser | null {
   const roles = (Array.isArray(rawRoles) ? rawRoles : [rawRoles])
     .filter(isRole)
     .map((role) => (role.charAt(0).toUpperCase() + role.slice(1).toLowerCase()) as Role);
-  return { id: payload.sub ?? payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'], roles, tenantId: payload.tenant_id };
+  return {
+    id: payload.sub ?? payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'],
+    name: payload.name ?? payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'],
+    email: payload.email ?? payload['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'],
+    roles,
+    tenantId: payload.tenant_id,
+    branchId: payload.branch_id
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -77,21 +89,4 @@ export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
-}
-
-export function createDemoToken(role: Role): string {
-  const encode = (value: object) => btoa(JSON.stringify(value))
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-
-  const header = encode({ alg: 'none', typ: 'JWT' });
-  const payload = encode({
-    sub: 'demo-user',
-    role,
-    tenant_id: '00000000-0000-0000-0000-000000000001',
-    exp: Math.floor(Date.now() / 1000) + 60 * 60
-  });
-
-  return `${header}.${payload}.demo`;
 }

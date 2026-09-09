@@ -1366,6 +1366,37 @@ button {
   letter-spacing: .03em;
 }
 
+.form-field input,
+.form-field select,
+.form-field textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+}
+
+.form-field input::placeholder,
+.form-field textarea::placeholder {
+  color: var(--ink-muted);
+}
+
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, .18);
+}
+
+.form-field select option {
+  color: var(--ink);
+  background: var(--surface-raised);
+}
+
 .form-field-wide { grid-column: 1 / -1; }
 .timeline-section h3 { margin: 0 0 .75rem; font-size: .88rem; }
 .status-timeline { margin: 0; padding: 0; list-style: none; display: grid; gap: .85rem; }
@@ -2086,6 +2117,10 @@ body:has(.login-page) { padding-top: 0; }
 .login-card-form input { width: 100%; padding: 13px 14px; color: #f4f6ff; background: #19223a; border-color: #334267; border-radius: 11px; }
 .login-card-form input:focus { background: #1d2945; border-color: #6366f1; outline: 3px solid rgba(99, 102, 241, .2); }
 .login-card-form .modal-error { margin: 0; color: #fda4af; background: rgba(190, 24, 93, .16); }
+.login-success-message { margin: 0; padding: 11px 13px; color: #6ee7b7; background: rgba(16, 185, 129, .14); border: 1px solid rgba(52, 211, 153, .35); border-radius: 10px; font-size: 13px; line-height: 1.45; }
+.signup-success-message { display: grid; gap: 10px; padding: 18px; color: #dbeafe; background: rgba(16, 185, 129, .12); border: 1px solid rgba(52, 211, 153, .35); border-radius: 12px; line-height: 1.5; }
+.signup-success-message strong { color: #6ee7b7; font-size: 18px; }
+.signup-success-message p { color: #cbd5e1; font-size: 13px; }
 .login-screen-footer { width: min(1050px, 100%); margin: auto auto 0; padding: 13px 16px; background: rgba(17, 24, 44, .78); border: 1px solid #293555; border-radius: 16px; }
 .footer-dev-profile, .footer-meta-box { display: flex; gap: 10px; align-items: center; }
 .footer-avatar-ring { position: relative; display: grid; width: 43px; height: 43px; place-items: center; color: #fff; background: linear-gradient(135deg, #6366f1, #00c896); border-radius: 50%; }

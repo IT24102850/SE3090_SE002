@@ -24,6 +24,7 @@ public class AppDbContext : DbContext
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
     public DbSet<StockMovement> StockMovements { get; set; }
     public DbSet<Notification> Notifications { get; set; }
+    public DbSet<Sale> Sales { get; set; }
 
     private Guid? CurrentTenantId => _tenantContext.TenantId;
 
@@ -47,8 +48,8 @@ public class AppDbContext : DbContext
 
         // Tenant isolation filter
         modelBuilder.Entity<Tenant>().HasQueryFilter(t => t.IsActive);
-        modelBuilder.Entity<Branch>().HasQueryFilter(b => b.IsActive);
-        modelBuilder.Entity<User>().HasQueryFilter(u => u.Tenant.IsActive);
+        modelBuilder.Entity<Branch>().HasQueryFilter(b => b.TenantId == CurrentTenantId && b.IsActive);
+        modelBuilder.Entity<User>().HasQueryFilter(u => u.TenantId == CurrentTenantId && u.Tenant.IsActive);
         modelBuilder.Entity<InventoryCategory>().HasQueryFilter(c => c.TenantId == CurrentTenantId && c.Tenant.IsActive && c.IsActive);
         modelBuilder.Entity<InventoryUnit>().HasQueryFilter(u => u.TenantId == CurrentTenantId && u.Tenant.IsActive && u.IsActive);
         modelBuilder.Entity<InventoryItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId && item.IsActive);
@@ -56,6 +57,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(order => order.TenantId == CurrentTenantId);
         modelBuilder.Entity<StockMovement>().HasQueryFilter(movement => movement.TenantId == CurrentTenantId);
         modelBuilder.Entity<Notification>().HasQueryFilter(notification => notification.TenantId == CurrentTenantId);
+        modelBuilder.Entity<Sale>().HasQueryFilter(sale => sale.TenantId == CurrentTenantId);
 
         // Indexes
         modelBuilder.Entity<User>().HasIndex(u => u.Email).IsUnique();
@@ -69,6 +71,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.InventoryItemId, movement.OccurredAt });
         modelBuilder.Entity<Notification>().HasIndex(notification => new { notification.TenantId, notification.BranchId, notification.IsRead });
         modelBuilder.Entity<Notification>().HasIndex(notification => notification.CreatedAt);
+        modelBuilder.Entity<Sale>().HasIndex(sale => new { sale.TenantId, sale.BranchId, sale.OccurredAt });
 
         modelBuilder.Entity<InventoryItem>(entity =>
         {
@@ -111,6 +114,13 @@ public class AppDbContext : DbContext
             entity.Property(notification => notification.Title).HasMaxLength(150).IsRequired();
             entity.Property(notification => notification.Message).HasMaxLength(1000).IsRequired();
             entity.HasOne<Branch>().WithMany().HasForeignKey(notification => notification.BranchId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Sale>(entity =>
+        {
+            entity.Property(sale => sale.Amount).HasPrecision(18, 2);
+            entity.Property(sale => sale.Reference).HasMaxLength(100).IsRequired();
+            entity.HasOne<Branch>().WithMany().HasForeignKey(sale => sale.BranchId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // Purchase order items

@@ -199,17 +199,6 @@ export function AgentWorkflowMonitorPage() {
               <div style={{maxWidth:420, margin: '0 auto'}}>
                 <h3>No AI workflows yet</h3>
                 <p className="hint">Generate a workflow by posting to <code>/workflows/execute</code> or wait for the agent to produce suggestions.</p>
-                <div style={{marginTop:12}}>
-                  <button className="btn btn-primary" onClick={() => {
-                    // create a lightweight demo workflow
-                    const demo = {
-                      actionType: 'generate_purchase_order',
-                      payload: { current_stock: 3, reorder_level: 20, historicUsageDays: [2,3,4,2,1,5,3], estimatedUnitCost: 9.5, branchId: '11111111-1111-1111-1111-111111111111', supplierId: '22222222-2222-2222-2222-222222222222', budget_limit: 1000 },
-                      userRole: 'Manager', tenantId: 'tenant-demo'
-                    };
-                    fetch(`${workflowApiBaseUrl}/workflows/execute`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(demo) }).then(()=>fetchItems());
-                  }}>Create demo workflow</button>
-                </div>
               </div>
             </div>
           ) : (

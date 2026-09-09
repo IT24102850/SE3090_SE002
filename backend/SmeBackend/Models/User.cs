@@ -19,4 +19,5 @@ public class User : BaseEntity
     public string FullName { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.Customer;
+    public bool IsApproved { get; set; } = true;
 }

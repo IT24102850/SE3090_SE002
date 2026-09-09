@@ -269,8 +269,8 @@ export function InventoryManagerPage() {
       })));
     } catch (error) {
       console.error(error);
-      setItems(initialStock);
-      setLoadError('Live inventory is unavailable. Showing the last known view.');
+      setItems([]);
+      setLoadError('Unable to load inventory from the database. Refresh and try again.');
     } finally {
       setLoading(false);
     }

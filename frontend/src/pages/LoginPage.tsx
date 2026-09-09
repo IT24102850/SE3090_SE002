@@ -1,10 +1,10 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { createDemoToken, useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../ui/ToastContext';
 import { Icon } from '../ui/Icon';
 
-type LoginResponse = { accessToken?: string; token?: string };
+type LoginResponse = { accessToken?: string; token?: string; message?: string };
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 
 type OwlMood = 'idle' | 'email' | 'covered' | 'peeking' | 'error';
@@ -185,11 +185,16 @@ export function LoginPage() {
   const { notify } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [businessName, setBusinessName] = useState('');
+  const [isSignup, setIsSignup] = useState(false);
+  const [signupSubmitted, setSignupSubmitted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [focused, setFocused] = useState<'email' | 'password' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<'Admin' | 'Manager' | 'Staff'>('Admin');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('upgradehub-theme') as 'dark' | 'light') || 'dark';
   });
@@ -227,29 +232,28 @@ export function LoginPage() {
   function reset() {
     setEmail('');
     setPassword('');
+    setFullName('');
+    setBusinessName('');
+    setPhone('');
     setShowPassword(false);
     setError(null);
-  }
-
-  function handleSelectRole(role: 'Admin' | 'Manager' | 'Staff') {
-    setSelectedRole(role);
-    setEmail(`${role.toLowerCase()}@smeinventory.local`);
-    setPassword('upgrade123');
-    setError(null);
+    setSuccessMessage(null);
+    setSignupSubmitted(false);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
+    setSuccessMessage(null);
     try {
-      const endpoint = `${apiBaseUrl}/api/auth/login`;
+      const endpoint = `${apiBaseUrl}/api/auth/${isSignup ? 'signup' : 'login'}`;
       let response: Response;
       try {
         response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify(isSignup ? { fullName, businessName, email, password, phone } : { email, password }),
         });
       } catch (caught) {
         const detail = caught instanceof Error ? ` ${caught.message}` : '';
@@ -257,26 +261,32 @@ export function LoginPage() {
       }
       const body = (await response.json().catch(() => ({}))) as LoginResponse & { message?: string };
       const token = body.accessToken ?? body.token;
-      if (!response.ok || !token) {
+      if (!response.ok) {
         throw new Error(body.message ?? `Login failed (HTTP ${response.status}). Check your credentials and try again.`);
       }
+      if (isSignup) {
+        setPassword('');
+        setSignupSubmitted(true);
+        notify('Signup request received! We will let you know after Admin approval.', 'success');
+        return;
+      }
+      if (!token) throw new Error('Login failed because the server did not return an access token.');
       setToken(token);
       notify('Signed in successfully.');
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
       navigate(from ?? '/inventory', { replace: true });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Login failed.';
-      setError(message);
-      notify(message, 'error');
+      if (message.toLowerCase().includes('pending admin approval')) {
+        setSuccessMessage(message);
+        notify(message, 'success');
+      } else {
+        setError(message);
+        notify(message, 'error');
+      }
     } finally {
       setSubmitting(false);
     }
-  }
-
-  function demoSignIn(role: 'Admin' | 'Manager' | 'Staff' = selectedRole) {
-    setToken(createDemoToken(role));
-    notify(`Demo sign-in successful as ${role}.`, 'success');
-    navigate(role === 'Staff' ? '/inventory' : '/analytics', { replace: true });
   }
 
   return (
@@ -370,41 +380,40 @@ export function LoginPage() {
             <div className="auth-logo-badge-lg">SME</div>
             <div>
               <span className="auth-portal-tag">ENTERPRISE GATEWAY</span>
-              <h1>Welcome back</h1>
-              <p className="auth-sub">Select your operational role or enter credentials</p>
+              <h1>{isSignup ? (signupSubmitted ? 'Request received!' : 'Request access') : 'Welcome back'}</h1>
+              <p className="auth-sub">{isSignup ? (signupSubmitted ? 'Your account is waiting for Admin approval' : 'Submit your details for Admin approval') : 'Sign in with your account credentials'}</p>
             </div>
           </div>
 
-          {/* Quick Role Switcher */}
-          <div className="role-selector-grid" role="group" aria-label="Select role">
-            <button
-              type="button"
-              className={`role-select-card ${selectedRole === 'Admin' ? 'active' : ''}`}
-              onClick={() => handleSelectRole('Admin')}
-            >
-              <strong>Admin</strong>
-              <small>Full Analytics</small>
-            </button>
-            <button
-              type="button"
-              className={`role-select-card ${selectedRole === 'Manager' ? 'active' : ''}`}
-              onClick={() => handleSelectRole('Manager')}
-            >
-              <strong>Manager</strong>
-              <small>Stock & POs</small>
-            </button>
-            <button
-              type="button"
-              className={`role-select-card ${selectedRole === 'Staff' ? 'active' : ''}`}
-              onClick={() => handleSelectRole('Staff')}
-            >
-              <strong>Staff</strong>
-              <small>Inventory Ops</small>
-            </button>
-          </div>
-
           <form className={`login-card-form ${error ? 'has-error' : ''}`} onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
-            <label className="form-field">
+            {isSignup && signupSubmitted ? (
+              <>
+                <div className="signup-success-message" role="status">
+                  <strong>Thanks, {fullName || 'there'}!</strong>
+                  <p>Your signup request is safely in the queue. An Admin will review your details and assign your role and branch.</p>
+                  <p>You can sign in after approval. If you try before then, we will let you know that your request is still pending.</p>
+                </div>
+                <button className="btn btn-primary" type="button" onClick={() => { setIsSignup(false); setSignupSubmitted(false); setError(null); }}>
+                  Return to sign in
+                </button>
+              </>
+            ) : isSignup && (
+              <>
+                <label className="form-field">
+                  <span>Full name</span>
+                  <input type="text" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+                </label>
+                <label className="form-field">
+                  <span>Business name</span>
+                  <input type="text" autoComplete="organization" value={businessName} onChange={(e) => setBusinessName(e.target.value)} required />
+                </label>
+                <label className="form-field">
+                  <span>Phone number</span>
+                  <input type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                </label>
+              </>
+            )}
+            {!signupSubmitted && <><label className="form-field">
               <span>Email address</span>
               <input
                 type="email"
@@ -423,7 +432,7 @@ export function LoginPage() {
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
+                  autoComplete={isSignup ? 'new-password' : 'current-password'}
                   placeholder="••••••••"
                   value={password}
                   onFocus={() => setFocused('password')}
@@ -457,7 +466,8 @@ export function LoginPage() {
               </div>
             </label>
 
-            {error && <p className="modal-error" role="alert">{error}</p>}
+            {successMessage && <p className="login-success-message" role="status">{successMessage}</p>}
+            {error && <p className="modal-error" role="alert">{error}</p>}</>}
 
             <button
               type="submit"
@@ -472,20 +482,15 @@ export function LoginPage() {
                 boxShadow: '0 8px 24px rgba(99, 102, 241, 0.4)',
               }}
             >
-              {submitting ? 'Authenticating…' : 'Sign in to Dashboard'}
+              {submitting ? (isSignup ? 'Submitting request…' : 'Authenticating…') : (isSignup ? 'Submit signup request' : 'Sign in to Dashboard')}
             </button>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
               <button className="btn btn-secondary" type="button" onClick={reset} style={{ padding: '8px' }}>
                 Reset
               </button>
-              <button
-                className="btn btn-secondary demo-button"
-                type="button"
-                onClick={() => demoSignIn(selectedRole)}
-                style={{ padding: '8px', border: '1px solid rgba(99, 102, 241, 0.4)', color: 'var(--brand-primary)' }}
-              >
-                1-Click Demo ({selectedRole})
+              <button className="btn btn-secondary" type="button" onClick={() => { setIsSignup((current) => !current); setSignupSubmitted(false); setError(null); }}>
+                {isSignup ? 'Back to sign in' : 'Create account'}
               </button>
             </div>
           </form>

@@ -116,8 +116,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
     }
 
     try {
-      final usageRes =
-          await widget.client!.get('/api/reports/inventory-usage');
+      final usageRes = await widget.client!.get('/api/reports/inventory-usage');
       if (usageRes.statusCode == 200) {
         final data = jsonDecode(usageRes.body) as Map<String, dynamic>;
         final items = (data['items'] as List?) ?? [];
@@ -307,45 +306,50 @@ class _InsightsScreenState extends State<InsightsScreen> {
             const SizedBox(height: 14),
 
             // 4 High-Impact KPI Cards
-            GridView.count(
-              crossAxisCount: 2,
-              childAspectRatio: 1.28,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              children: [
-                _KpiMetricCard(
-                  title: 'Revenue',
-                  value: 'LKR ${_formatCompact(_totalRevenue)}',
-                  detail: '+14.2% vs last',
-                  icon: Icons.payments_outlined,
-                  color: const Color(0xFF6366F1),
-                  isPositive: true,
-                ),
-                _KpiMetricCard(
-                  title: 'Stock Received',
-                  value: '$_totalReceived units',
-                  detail: '30-day window',
-                  icon: Icons.move_to_inbox_outlined,
-                  color: const Color(0xFF06B6D4),
-                ),
-                _KpiMetricCard(
-                  title: 'Stock Issued',
-                  value: '$_totalIssued units',
-                  detail: '+$_netQuantity net',
-                  icon: Icons.outbox_rounded,
-                  color: const Color(0xFF10B981),
-                ),
-                _KpiMetricCard(
-                  title: 'Low Stock Alert',
-                  value: '${_lowStock.length} items',
-                  detail: 'Needs attention',
-                  icon: Icons.warning_amber_rounded,
-                  color: const Color(0xFFEF4444),
-                  isAlert: true,
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 900;
+                return GridView.count(
+                  crossAxisCount: wide ? 4 : 2,
+                  childAspectRatio: wide ? 2.45 : 1.28,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  children: [
+                    _KpiMetricCard(
+                      title: 'Revenue',
+                      value: 'LKR ${_formatCompact(_totalRevenue)}',
+                      detail: '+14.2% vs last',
+                      icon: Icons.payments_outlined,
+                      color: const Color(0xFF6366F1),
+                      isPositive: true,
+                    ),
+                    _KpiMetricCard(
+                      title: 'Stock Received',
+                      value: '$_totalReceived units',
+                      detail: '30-day window',
+                      icon: Icons.move_to_inbox_outlined,
+                      color: const Color(0xFF06B6D4),
+                    ),
+                    _KpiMetricCard(
+                      title: 'Stock Issued',
+                      value: '$_totalIssued units',
+                      detail: '+$_netQuantity net',
+                      icon: Icons.outbox_rounded,
+                      color: const Color(0xFF10B981),
+                    ),
+                    _KpiMetricCard(
+                      title: 'Low Stock Alert',
+                      value: '${_lowStock.length} items',
+                      detail: 'Needs attention',
+                      icon: Icons.warning_amber_rounded,
+                      color: const Color(0xFFEF4444),
+                      isAlert: true,
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 22),
 
@@ -381,8 +385,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6366F1)
-                                .withValues(alpha: 0.14),
+                            color:
+                                const Color(0xFF6366F1).withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -447,7 +451,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
                                 label: 'Received'),
                             const SizedBox(width: 10),
                             _ChartLegendDot(
-                                color: const Color(0xFFF59E0B), label: 'Issued'),
+                                color: const Color(0xFFF59E0B),
+                                label: 'Issued'),
                           ],
                         ),
                       ],
@@ -570,8 +575,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEF4444)
-                                .withValues(alpha: 0.14),
+                            color:
+                                const Color(0xFFEF4444).withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -605,8 +610,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Expanded(
                                   child: Text(
@@ -645,8 +649,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                             ),
                             const SizedBox(height: 4),
                             Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
                                   'SKU: ${item.sku}',
@@ -1070,7 +1073,8 @@ class _InventoryDualBarPainter extends CustomPainter {
         text: TextSpan(text: '${u.received}', style: valueStyle),
         textDirection: TextDirection.ltr,
       )..layout();
-      recTp.paint(canvas, Offset(recLeft + (barW - recTp.width) / 2, recTop - 13));
+      recTp.paint(
+          canvas, Offset(recLeft + (barW - recTp.width) / 2, recTop - 13));
 
       // Bar 2: Issued
       final issRatio = (u.issued / ceiling).clamp(0.0, 1.0);
@@ -1089,14 +1093,16 @@ class _InventoryDualBarPainter extends CustomPainter {
         text: TextSpan(text: '${u.issued}', style: valueStyle),
         textDirection: TextDirection.ltr,
       )..layout();
-      issTp.paint(canvas, Offset(issLeft + (barW - issTp.width) / 2, issTop - 13));
+      issTp.paint(
+          canvas, Offset(issLeft + (barW - issTp.width) / 2, issTop - 13));
 
       // Item Name Label below
       final nameTp = TextPainter(
         text: TextSpan(text: u.name, style: labelStyle),
         textDirection: TextDirection.ltr,
       )..layout();
-      nameTp.paint(canvas, Offset(slotCenterX - nameTp.width / 2, size.height - 16));
+      nameTp.paint(
+          canvas, Offset(slotCenterX - nameTp.width / 2, size.height - 16));
     }
   }
 
@@ -1302,7 +1308,9 @@ class _TimeframePill extends StatelessWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w800,
-            color: selected ? Colors.white : Theme.of(context).colorScheme.onSurface,
+            color: selected
+                ? Colors.white
+                : Theme.of(context).colorScheme.onSurface,
           ),
         ),
       ),

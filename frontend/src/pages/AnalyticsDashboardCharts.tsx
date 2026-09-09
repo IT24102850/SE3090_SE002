@@ -44,6 +44,7 @@ type InventoryItem = {
   sku: string;
   quantity: number;
   reorderLevel: number;
+  unitCost?: number;
   status: string;
 };
 type InventoryListResponse = { items: InventoryItem[]; totalCount: number };
@@ -51,6 +52,7 @@ type AnalyticsData = {
   revenue: RevenueReport;
   usage: InventoryUsageReport;
   lowStock: InventoryListResponse;
+  inventory: InventoryListResponse;
   usedFallback: boolean;
 };
 
@@ -147,10 +149,11 @@ function KpiCard({ label, value, detail, tone, iconName }: { label: string; valu
 export function AnalyticsDashboardPage() {
   const { token } = useAuth();
   const [data, setData] = useState<AnalyticsData>({
-    revenue: fallbackRevenue,
-    usage: fallbackUsage,
-    lowStock: fallbackLowStock,
-    usedFallback: true,
+    revenue: { totalRevenue: 0, buckets: [] },
+    usage: { totalReceivedQuantity: 0, totalIssuedQuantity: 0, netQuantity: 0, items: [] },
+    lowStock: { totalCount: 0, items: [] },
+    inventory: { totalCount: 0, items: [] },
+    usedFallback: false,
   });
   const [loading, setLoading] = useState(true);
 
@@ -159,19 +162,43 @@ export function AnalyticsDashboardPage() {
 
     async function load() {
       setLoading(true);
-      const [revenue, usage, lowStock] = await Promise.allSettled([
+      const [revenue, usage, lowStock, inventory] = await Promise.allSettled([
         apiGet<RevenueReport>('/api/reports/revenue', token),
         apiGet<InventoryUsageReport>('/api/reports/inventory-usage', token),
         apiGet<InventoryListResponse>('/api/inventory/low-stock?pageSize=8', token),
+        apiGet<InventoryListResponse>('/api/inventory?pageSize=100', token),
       ]);
 
       if (cancelled) return;
 
+      const inventoryData = inventory.status === 'fulfilled' ? inventory.value : { totalCount: 0, items: [] };
+      const liveUsage = usage.status === 'fulfilled' ? usage.value : { totalReceivedQuantity: 0, totalIssuedQuantity: 0, netQuantity: 0, items: [] };
+      const usageData = liveUsage.items.length > 0 || inventoryData.items.length === 0
+        ? liveUsage
+        : {
+            totalReceivedQuantity: 0,
+            totalIssuedQuantity: 0,
+            netQuantity: inventoryData.items.reduce((total, item) => total + item.quantity, 0),
+            items: inventoryData.items
+              .sort((left, right) => right.quantity - left.quantity)
+              .slice(0, 6)
+              .map((item) => ({
+                inventoryItemId: item.id,
+                itemName: item.name,
+                sku: item.sku,
+                receivedQuantity: item.quantity,
+                issuedQuantity: 0,
+                netQuantity: item.quantity,
+                movementCount: 0,
+              })),
+          };
+
       setData({
-        revenue: revenue.status === 'fulfilled' ? revenue.value : fallbackRevenue,
-        usage: usage.status === 'fulfilled' ? usage.value : fallbackUsage,
-        lowStock: lowStock.status === 'fulfilled' ? lowStock.value : fallbackLowStock,
-        usedFallback: [revenue, usage, lowStock].some((result) => result.status === 'rejected'),
+        revenue: revenue.status === 'fulfilled' ? revenue.value : { totalRevenue: 0, buckets: [] },
+        usage: usageData,
+        lowStock: lowStock.status === 'fulfilled' ? lowStock.value : { totalCount: 0, items: [] },
+        inventory: inventoryData,
+        usedFallback: [revenue, usage, lowStock, inventory].some((result) => result.status === 'rejected'),
       });
       setLoading(false);
     }
@@ -219,8 +246,8 @@ export function AnalyticsDashboardPage() {
 
       <section className="kpi-grid" aria-label="Key metrics">
         <KpiCard label="Revenue" value={currency(data.revenue.totalRevenue)} detail="30 days" tone="green" />
-        <KpiCard label="Stock received" value={compact(data.usage.totalReceivedQuantity)} detail="30 days" tone="blue" />
-        <KpiCard label="Stock issued" value={compact(data.usage.totalIssuedQuantity)} detail={`${compact(data.usage.netQuantity)} net`} tone="amber" />
+        <KpiCard label={data.usage.items.some((item) => item.movementCount > 0) ? 'Stock received' : 'Stock on hand'} value={compact(data.usage.items.some((item) => item.movementCount > 0) ? data.usage.totalReceivedQuantity : data.usage.netQuantity)} detail={data.usage.items.some((item) => item.movementCount > 0) ? '30 days' : `${compact(data.inventory.totalCount)} items`} tone="blue" />
+        <KpiCard label={data.usage.items.some((item) => item.movementCount > 0) ? 'Stock issued' : 'Inventory value'} value={data.usage.items.some((item) => item.movementCount > 0) ? compact(data.usage.totalIssuedQuantity) : currency(data.inventory.items.reduce((total, item) => total + item.quantity * (item.unitCost ?? 0), 0))} detail={data.usage.items.some((item) => item.movementCount > 0) ? `${compact(data.usage.netQuantity)} net` : 'current stock'} tone="amber" />
         <KpiCard label="Low-stock items" value={compact(data.lowStock.totalCount)} detail="needs attention" tone="violet" />
       </section>
 
