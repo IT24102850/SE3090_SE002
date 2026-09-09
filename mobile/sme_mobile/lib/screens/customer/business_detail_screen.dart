@@ -6,7 +6,9 @@ import '../../models/tourism_subtype.dart';
 import '../../providers/booking_providers.dart';
 import '../../providers/tenant_profile_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_text_styles.dart';
 import '../../widgets/business_profile_header.dart';
+import '../../widgets/ui/ui.dart';
 import '../../widgets/route_transitions.dart';
 import '../booking_dashboard_screen.dart';
 import 'booking_flow_screen.dart';
@@ -51,10 +53,9 @@ class _BusinessDetailScreenState extends ConsumerState<BusinessDetailScreen> {
     final visual = BusinessTypeVisual.of(tenant.businessType);
     final profileAsync = ref.watch(tenantProfileProvider(tenant.id));
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(title: Text(tenant.businessName), backgroundColor: AppColors.ink, foregroundColor: Colors.white, elevation: 0),
-      body: CustomScrollView(
+    return AppBackgroundScaffold(
+      appBar: GlassAppBar(title: tenant.businessName),
+      child: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
             child: BusinessProfileHeader(
@@ -71,21 +72,11 @@ class _BusinessDetailScreenState extends ConsumerState<BusinessDetailScreen> {
             child: branchesAsync.when(
               loading: () => const Padding(
                 padding: EdgeInsets.all(40),
-                child: Center(child: CircularProgressIndicator()),
+                child: AppLoader(),
               ),
-              error: (err, stack) => Padding(
-                padding: const EdgeInsets.all(32),
-                child: Center(
-                  child: Column(
-                    children: [
-                      const Text('Could not load this business.'),
-                      TextButton(
-                        onPressed: () => ref.invalidate(branchesProvider(tenant.id)),
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                ),
+              error: (err, stack) => ErrorState(
+                message: 'Could not load this business.',
+                onRetry: () => ref.invalidate(branchesProvider(tenant.id)),
               ),
               data: (branches) {
                 if (!_branchInitialized) {
@@ -96,9 +87,9 @@ class _BusinessDetailScreenState extends ConsumerState<BusinessDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (branches.length > 1) ...[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                        child: Text('Branches', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
+                        child: SectionHeader('Branches', padding: EdgeInsets.zero),
                       ),
                       SizedBox(
                         height: 44,
@@ -130,21 +121,21 @@ class _BusinessDetailScreenState extends ConsumerState<BusinessDetailScreen> {
                         padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                         child: Row(
                           children: [
-                            Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade600),
+                            const Icon(Icons.location_on_outlined, size: 16, color: AppColors.iconSecondary),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 branches.first.address.isNotEmpty ? branches.first.address : branches.first.name,
-                                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                                style: AppTextStyles.bodyMuted.copyWith(fontSize: 13),
                               ),
                             ),
                           ],
                         ),
                       ),
                     ],
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-                      child: Text('Book a resource', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 24, 20, 12),
+                      child: SectionHeader('Book a resource', padding: EdgeInsets.zero),
                     ),
                     _ResourceList(tenant: tenant, branchId: _selectedBranchId, visual: visual),
                     const SizedBox(height: 24),
@@ -184,36 +175,18 @@ class _ResourceListState extends ConsumerState<_ResourceList> {
     return resourcesAsync.when(
       loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: 32),
-        child: Center(child: CircularProgressIndicator()),
+        child: AppLoader(),
       ),
-      error: (err, stack) => Padding(
-        padding: const EdgeInsets.all(32),
-        child: Center(
-          child: Column(
-            children: [
-              const Text('Could not load resources.'),
-              TextButton(
-                onPressed: () => ref.invalidate(resourcesProvider(query)),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
+      error: (err, stack) => ErrorState(
+        message: 'Could not load resources.',
+        onRetry: () => ref.invalidate(resourcesProvider(query)),
       ),
       data: (resources) {
         final bookableAll = resources.where((r) => r.status == 'Available').toList();
         if (bookableAll.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.all(32),
-            child: Center(
-              child: Column(
-                children: [
-                  Icon(Icons.event_busy_outlined, size: 48, color: Colors.grey.shade400),
-                  const SizedBox(height: 12),
-                  const Text('Nothing available to book right now.', style: TextStyle(fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
+          return const EmptyState(
+            icon: Icons.event_busy_outlined,
+            message: 'Nothing available to book right now.',
           );
         }
 
@@ -293,12 +266,11 @@ class _ResourceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: GlassStyle.elevatedCard(),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Padding(
+    return GlassCard(
+      onTap: onTap,
+      borderRadius: AppRadii.row,
+      padding: EdgeInsets.zero,
+      child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
@@ -306,8 +278,9 @@ class _ResourceCard extends StatelessWidget {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: visual.color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
+                  color: AppColors.iconWell,
+                  borderRadius: BorderRadius.circular(AppRadii.control),
+                  border: Border.all(color: visual.color.withValues(alpha: 0.45)),
                 ),
                 child: Icon(visual.icon, color: visual.color, size: 24),
               ),
@@ -316,24 +289,27 @@ class _ResourceCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(resource.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                    Text(resource.name, style: AppTextStyles.subtitle),
                     if (resource.specialty != null && resource.specialty!.trim().isNotEmpty) ...[
                       const SizedBox(height: 2),
-                      Text(resource.specialty!, style: TextStyle(fontSize: 12, color: visual.color, fontWeight: FontWeight.w600)),
+                      Text(
+                        resource.specialty!,
+                        style: AppTextStyles.caption.copyWith(color: visual.color, fontWeight: FontWeight.w600),
+                      ),
                     ],
                     const SizedBox(height: 4),
                     Row(
                       children: [
                         if (resource.capacity != null) ...[
-                          Icon(Icons.groups_outlined, size: 13, color: Colors.grey.shade500),
+                          const Icon(Icons.groups_outlined, size: 13, color: AppColors.iconDisabled),
                           const SizedBox(width: 3),
-                          Text('${resource.capacity}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                          Text('${resource.capacity}', style: AppTextStyles.caption),
                           const SizedBox(width: 10),
                         ],
                         if (resource.hourlyRate != null) ...[
-                          Icon(Icons.payments_outlined, size: 13, color: Colors.grey.shade500),
+                          const Icon(Icons.payments_outlined, size: 13, color: AppColors.iconDisabled),
                           const SizedBox(width: 3),
-                          Text('LKR ${resource.hourlyRate!.toStringAsFixed(0)}/hr', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                          Text('LKR ${resource.hourlyRate!.toStringAsFixed(0)}/hr', style: AppTextStyles.caption),
                         ],
                       ],
                     ),
@@ -341,17 +317,26 @@ class _ResourceCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: visual.color,
-                  borderRadius: BorderRadius.circular(10),
+                  gradient: AppColors.buttonGradient,
+                  borderRadius: BorderRadius.circular(AppRadii.image),
+                  boxShadow: const [
+                    BoxShadow(color: AppColors.buttonGlow, blurRadius: 14, spreadRadius: -4),
+                  ],
                 ),
-                child: const Text('Book', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+                child: Text(
+                  'Book',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ],
           ),
         ),
-      ),
     );
   }
 }
@@ -373,16 +358,16 @@ class _BranchChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? color : Colors.white,
+          color: selected ? color : AppColors.inputFill,
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: selected ? color : AppColors.border),
+          border: Border.all(color: selected ? color : AppColors.inputBorder),
         ),
         child: Text(
           label,
-          style: TextStyle(
+          style: AppTextStyles.body.copyWith(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: selected ? AppColors.onPrimary : AppColors.textPrimary,
+            color: selected ? AppColors.onPrimary : AppColors.textBody,
           ),
         ),
       ),

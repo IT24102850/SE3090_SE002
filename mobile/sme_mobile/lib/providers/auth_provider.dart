@@ -267,6 +267,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? insuranceProvider,
     String? insuranceNumber,
     String? medicalNotes,
+    String? profilePictureUrl,
+    /// Send an explicit empty string to clear the photo; null just leaves
+    /// it untouched, matching how the other optional fields behave.
+    bool removeProfilePicture = false,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
@@ -278,6 +282,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         if (insuranceProvider != null) 'insuranceProvider': insuranceProvider,
         if (insuranceNumber != null) 'insuranceNumber': insuranceNumber,
         if (medicalNotes != null) 'medicalNotes': medicalNotes,
+        if (removeProfilePicture) 'profilePictureUrl': ''
+        else if (profilePictureUrl != null) 'profilePictureUrl': profilePictureUrl,
       });
 
       final user = User.fromJson(response.data as Map<String, dynamic>);

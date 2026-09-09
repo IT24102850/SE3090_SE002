@@ -31,6 +31,7 @@ dependencies:
   # XFile's readAsBytes() is cross-platform (works on web, unlike dart:io
   # File), matching how this app is actually tested (flutter run -d chrome).
   image_picker: ^1.1.2
+  google_fonts: ^6.3.2
 
 dev_dependencies:
   flutter_test:

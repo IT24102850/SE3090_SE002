@@ -13,7 +13,7 @@ namespace SmeBackend.Controllers;
 /// GalleryImageUrls.
 [ApiController]
 [Route("api/media")]
-[Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
+[Authorize]
 public class MediaController : ControllerBase
 {
     private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -27,6 +27,8 @@ public class MediaController : ControllerBase
     public MediaController(ICloudinaryImageService images) => _images = images;
 
     /// <summary>Uploads an image (jpg/png/webp, max 5MB) to Cloudinary and returns its URL + publicId.</summary>
+    /// <remarks>Branding images stay Admin/Manager-only; "avatar" is open to any
+    /// signed-in user because Staff and Customers set their own profile photo.</remarks>
     [HttpPost("upload")]
     public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] string purpose)
     {
@@ -34,6 +36,8 @@ public class MediaController : ControllerBase
             return BadRequest(new { message = "No file was uploaded." });
         if (!AllowedPurposes.Contains(purpose))
             return BadRequest(new { message = "purpose must be one of: logo, cover, gallery, avatar." });
+        if (!IsAvatar(purpose) && !User.IsInRole(Roles.Admin) && !User.IsInRole(Roles.Manager))
+            return Forbid();
         if (!AllowedContentTypes.Contains(file.ContentType))
             return BadRequest(new { message = "Only JPG, PNG, and WEBP images are allowed." });
         if (file.Length > MaxFileSizeBytes)
@@ -55,8 +59,11 @@ public class MediaController : ControllerBase
         }
     }
 
+    private static bool IsAvatar(string purpose) => string.Equals(purpose, "avatar", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Deletes an image from Cloudinary by its publicId (avoids orphaned storage when an admin removes it).</summary>
     [HttpDelete("{publicId}")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     public async Task<IActionResult> Delete(string publicId)
     {
         try

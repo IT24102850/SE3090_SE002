@@ -4,7 +4,9 @@ import '../../models/public_tenant_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/public_tenant_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_text_styles.dart';
 import '../../widgets/route_transitions.dart';
+import '../../widgets/ui/ui.dart';
 import '../login_screen.dart';
 import 'business_detail_screen.dart';
 import 'customer_register_screen.dart';
@@ -38,44 +40,53 @@ class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen>
   void _showSignInPrompt(PublicTenant tenant) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: AppColors.overlaySurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.pill)),
+      ),
       builder: (sheetContext) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: AppColors.purple.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.lock_outline_rounded, color: AppColors.purple, size: 28),
-              ),
-              const SizedBox(height: 16),
-              Text('Sign in to book with ${tenant.businessName}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text(
-                'Create a free account or sign in to see availability and book instantly.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-              ),
-              const SizedBox(height: 22),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.magenta.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.magenta.withValues(alpha: 0.4)),
+                  ),
+                  child: const Icon(Icons.lock_outline_rounded, color: AppColors.magenta, size: 28),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Sign in to book with ${tenant.businessName}',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.title.copyWith(fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Create a free account or sign in to see availability and book instantly.',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.bodyMuted.copyWith(fontSize: 13),
+                ),
+                const SizedBox(height: 24),
+                NeonButton(
+                  label: 'Sign In',
+                  height: 48,
                   onPressed: () {
                     Navigator.pop(sheetContext);
-                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginScreen()));
+                    Navigator.of(context)
+                        .push(MaterialPageRoute(builder: (_) => const LoginScreen()));
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.purple, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: const Text('Sign In', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: OutlinedButton(
+                const SizedBox(height: 10),
+                GhostButton(
+                  label: 'Create Account',
+                  height: 48,
                   onPressed: () async {
                     Navigator.pop(sheetContext);
                     final signedUp = await Navigator.of(context).push<bool>(
@@ -84,14 +95,13 @@ class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen>
                     // Signed up as this tenant's customer — continue straight
                     // into their business page instead of dropping back to the list.
                     if (signedUp == true && mounted) {
-                      Navigator.of(context).push(slideFadeRoute(BusinessDetailScreen(tenant: tenant)));
+                      Navigator.of(context)
+                          .push(slideFadeRoute(BusinessDetailScreen(tenant: tenant)));
                     }
                   },
-                  style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: const Text('Create Account'),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -102,65 +112,70 @@ class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen>
   Widget build(BuildContext context) {
     final tenantsAsync = ref.watch(publicTenantsProvider);
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(title: const Text('Find a Business')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
-              decoration: InputDecoration(
+    return AppBackgroundScaffold(
+      appBar: const GlassAppBar(title: 'Find a Business'),
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+              child: NeonInputField(
+                controller: _searchController,
                 hintText: 'Search by business or type…',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _query = '');
-                        },
-                      ),
+                icon: Icons.search,
+                clearable: true,
+                onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
               ),
             ),
-          ),
-          Expanded(
-            child: tenantsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, stack) => _ErrorState(onRetry: () => ref.invalidate(publicTenantsProvider)),
-              data: (tenants) {
-                final filtered = _query.isEmpty
-                    ? tenants
-                    : tenants
-                        .where((t) => t.businessName.toLowerCase().contains(_query) || t.businessType.toLowerCase().contains(_query))
-                        .toList();
+            Expanded(
+              child: tenantsAsync.when(
+                loading: () => const AppLoader(),
+                error: (err, stack) => ErrorState(
+                  message: 'Could not load businesses. Check your connection and try again.',
+                  onRetry: () => ref.invalidate(publicTenantsProvider),
+                ),
+                data: (tenants) {
+                  final filtered = _query.isEmpty
+                      ? tenants
+                      : tenants
+                          .where((t) =>
+                              t.businessName.toLowerCase().contains(_query) ||
+                              t.businessType.toLowerCase().contains(_query))
+                          .toList();
 
-                if (tenants.isEmpty) return const _EmptyState();
-                if (filtered.isEmpty) {
-                  return Center(
-                    child: Text('No businesses match "$_query".', style: TextStyle(color: Colors.grey.shade600)),
-                  );
-                }
+                  if (tenants.isEmpty) {
+                    return const EmptyState(
+                      icon: Icons.storefront_outlined,
+                      title: 'No businesses are available for booking right now.',
+                      message: 'Check back soon, or ask your business to register on Unify.',
+                    );
+                  }
+                  if (filtered.isEmpty) {
+                    return EmptyState(
+                      icon: Icons.search_off_rounded,
+                      message: 'No businesses match "$_query".',
+                    );
+                  }
 
-                return RefreshIndicator(
-                  onRefresh: () async => ref.invalidate(publicTenantsProvider),
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) => _TenantCard(
-                      tenant: filtered[index],
-                      onTap: () => _onTenantTap(filtered[index]),
+                  return RefreshIndicator(
+                    color: AppColors.cyan,
+                    backgroundColor: AppColors.overlaySurface,
+                    onRefresh: () async => ref.invalidate(publicTenantsProvider),
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) => _TenantCard(
+                        tenant: filtered[index],
+                        onTap: () => _onTenantTap(filtered[index]),
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -176,118 +191,57 @@ class _TenantCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final visual = BusinessTypeVisual.of(tenant.businessType);
 
-    return Container(
-      decoration: GlassStyle.elevatedCard(radius: 16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: visual.color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(visual.icon, color: visual.color, size: 26),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tenant.businessName,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(color: visual.color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                      child: Text(
-                        tenant.businessType,
-                        style: TextStyle(fontSize: 11, color: visual.color, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right, color: Colors.grey),
-            ],
+    return GlassCard(
+      onTap: onTap,
+      borderRadius: AppRadii.row,
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppColors.iconWell,
+              borderRadius: BorderRadius.circular(AppRadii.control),
+              border: Border.all(color: visual.color.withValues(alpha: 0.45)),
+            ),
+            child: Icon(visual.icon, color: visual.color, size: 26),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.storefront_outlined, size: 56, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            const Text(
-              'No businesses are available for booking right now.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w600),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tenant.businessName,
+                  style: AppTextStyles.subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                // The type pill carries the business hue, which is why this
+                // row is built by hand rather than as a GlassListTile.
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: visual.color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: visual.color.withValues(alpha: 0.35)),
+                  ),
+                  child: Text(
+                    tenant.businessType,
+                    style: AppTextStyles.caption.copyWith(
+                      fontSize: 11,
+                      color: visual.color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              'Check back soon, or ask your business to register on Unify.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final VoidCallback onRetry;
-  const _ErrorState({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.wifi_off_rounded, size: 56, color: AppColors.danger.withValues(alpha: 0.7)),
-            const SizedBox(height: 16),
-            const Text(
-              'Could not load businesses.',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Check your connection and try again.',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: AppColors.chevron, size: 22),
+        ],
       ),
     );
   }

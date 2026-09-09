@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/booking_providers.dart';
 import '../shared/date_format.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_text_styles.dart';
+import 'ui/ui.dart';
 
 /// Start/end date picker for Night/DateRange/Package booking types (see
 /// docs/tourism-business-template.md) - the counterpart to [DateSlotPicker]
@@ -24,7 +26,7 @@ class DateRangePicker extends ConsumerStatefulWidget {
     required this.bookingUnit,
     required this.onRangeSelected,
     this.config,
-    this.accentColor = AppColors.primary,
+    this.accentColor = AppColors.cyan,
     this.initialStart,
     this.initialEnd,
   });
@@ -68,17 +70,20 @@ class _DateRangePickerState extends ConsumerState<DateRangePicker> {
     return rangesAsync.when(
       loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: 32),
-        child: Center(child: CircularProgressIndicator()),
+        child: AppLoader(),
       ),
       error: (err, stack) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: Center(
           child: Column(
             children: [
-              Icon(Icons.wifi_off_rounded, color: AppColors.danger.withValues(alpha: 0.7), size: 36),
+              const Icon(Icons.wifi_off_rounded, color: AppColors.danger, size: 36),
               const SizedBox(height: 10),
-              const Text('Could not load availability.'),
-              TextButton(onPressed: () => ref.invalidate(unavailableRangesProvider(query)), child: const Text('Retry')),
+              Text('Could not load availability.', style: AppTextStyles.bodyMuted),
+              TextButton(
+                onPressed: () => ref.invalidate(unavailableRangesProvider(query)),
+                child: Text('Retry', style: AppTextStyles.body.copyWith(color: AppColors.cyan)),
+              ),
             ],
           ),
         ),
@@ -143,14 +148,13 @@ class _DateRangePickerState extends ConsumerState<DateRangePicker> {
             ),
             if (_minUnits > 1) ...[
               const SizedBox(height: 8),
-              Text('Minimum $_minUnits ${_isNight ? "nights" : "days"}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              Text('Minimum $_minUnits ${_isNight ? "nights" : "days"}', style: AppTextStyles.caption),
             ],
             if (_start != null && _end != null) ...[
               const SizedBox(height: 16),
-              ElevatedButton(
+              NeonButton(
+                label: 'Continue · ${formatDateRangeSummary(_start!, _end!, nights: _isNight)}',
                 onPressed: () => widget.onRangeSelected(_start!, _end!),
-                style: ElevatedButton.styleFrom(backgroundColor: widget.accentColor, foregroundColor: Colors.white),
-                child: Text('Continue · ${formatDateRangeSummary(_start!, _end!, nights: _isNight)}'),
               ),
             ],
           ],
@@ -171,18 +175,44 @@ class _DatePickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: enabled ? onTap : null,
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: const Icon(Icons.calendar_today_outlined),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          enabled: enabled,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label.toUpperCase(), style: AppTextStyles.label),
+        const SizedBox(height: 10),
+        InkWell(
+          borderRadius: BorderRadius.circular(AppRadii.control),
+          onTap: enabled ? onTap : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            decoration: BoxDecoration(
+              color: AppColors.inputFill,
+              borderRadius: BorderRadius.circular(AppRadii.control),
+              border: Border.all(
+                color: enabled ? AppColors.inputBorder : AppColors.hairline,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.calendar_today_outlined,
+                  size: 20,
+                  color: enabled ? AppColors.iconSecondary : AppColors.iconDisabled,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    value == null ? 'Select a date' : formatFullDate(value!),
+                    style: value == null
+                        ? AppTextStyles.body.copyWith(color: AppColors.textMuted)
+                        : AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        child: Text(value == null ? 'Select a date' : formatFullDate(value!)),
-      ),
+      ],
     );
   }
 }
@@ -193,14 +223,12 @@ class _ItineraryPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: GlassStyle.elevatedCard(),
+    return GlassCard(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Itinerary', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
+          const SectionHeader('Itinerary'),
           ...items.map((i) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
@@ -211,10 +239,19 @@ class _ItineraryPreview extends StatelessWidget {
                       height: 22,
                       alignment: Alignment.center,
                       margin: const EdgeInsets.only(right: 10, top: 1),
-                      decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.primary),
-                      child: Text('${i['day'] ?? ''}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.cyan),
+                      child: Text(
+                        '${i['day'] ?? ''}',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.onPrimary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                    Expanded(child: Text('${i['title'] ?? ''}', style: const TextStyle(fontSize: 13))),
+                    Expanded(
+                      child: Text('${i['title'] ?? ''}', style: AppTextStyles.body.copyWith(fontSize: 13)),
+                    ),
                   ],
                 ),
               )),

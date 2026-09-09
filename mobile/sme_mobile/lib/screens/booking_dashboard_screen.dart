@@ -8,8 +8,11 @@ import '../providers/tenant_profile_provider.dart';
 import '../registry/tourism_dashboard_registry.dart';
 import '../screens/customer/booking_flow_screen.dart';
 import '../widgets/business_profile_header.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../widgets/resource_card.dart';
 import '../widgets/route_transitions.dart';
+import '../widgets/ui/ui.dart';
 
 /// Replaces the generic "Book a resource" screen for Tourism tenants with a
 /// resolved sub-type. This ONE widget renders 11 visually and functionally
@@ -81,14 +84,11 @@ class _BookingDashboardScreenState extends ConsumerState<BookingDashboardScreen>
   Widget build(BuildContext context) {
     final profileAsync = ref.watch(tenantProfileProvider(widget.tenant.id));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.tenant.businessName),
-        backgroundColor: _config.themeColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: RefreshIndicator(
+    return AppBackgroundScaffold(
+      appBar: GlassAppBar(title: widget.tenant.businessName),
+      child: RefreshIndicator(
+        color: AppColors.cyan,
+        backgroundColor: AppColors.overlaySurface,
         onRefresh: () async {
           ref.invalidate(tenantProfileProvider(widget.tenant.id));
           await _loadResources();
@@ -115,19 +115,11 @@ class _BookingDashboardScreenState extends ConsumerState<BookingDashboardScreen>
 
   Widget _buildBody() {
     if (_loading) {
-      return const SliverFillRemaining(child: Center(child: CircularProgressIndicator()));
+      return const SliverFillRemaining(child: AppLoader());
     }
     if (_error != null) {
       return SliverFillRemaining(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_error!),
-              TextButton(onPressed: _loadResources, child: const Text('Retry')),
-            ],
-          ),
-        ),
+        child: ErrorState(message: _error!, onRetry: _loadResources),
       );
     }
 
@@ -135,7 +127,7 @@ class _BookingDashboardScreenState extends ConsumerState<BookingDashboardScreen>
       padding: const EdgeInsets.all(20),
       sliver: SliverList(
         delegate: SliverChildListDelegate([
-          Text(_config.heroActionLabel, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          Text(_config.heroActionLabel, style: AppTextStyles.title),
           const SizedBox(height: 16),
           if (_resources.isEmpty)
             _buildEmptyState()
@@ -160,11 +152,11 @@ class _BookingDashboardScreenState extends ConsumerState<BookingDashboardScreen>
         padding: const EdgeInsets.symmetric(vertical: 60),
         child: Column(
           children: [
-            Icon(_config.icon, size: 48, color: Colors.grey.shade400),
+            Icon(_config.icon, size: 48, color: AppColors.iconGhost),
             const SizedBox(height: 12),
             Text(
               'No ${_config.resourceTermPlural.toLowerCase()} available right now.',
-              style: TextStyle(color: Colors.grey.shade600),
+              style: AppTextStyles.bodyMuted,
             ),
           ],
         ),

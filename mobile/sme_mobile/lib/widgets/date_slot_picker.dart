@@ -4,6 +4,8 @@ import '../models/available_slot_model.dart';
 import '../providers/booking_providers.dart';
 import '../shared/date_format.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_text_styles.dart';
+import 'ui/ui.dart';
 
 /// Date strip (next 14 days) + available-slot grid for a resource/booking
 /// type/duration combo. Shared by the booking wizard's date step and the
@@ -23,7 +25,7 @@ class DateSlotPicker extends ConsumerStatefulWidget {
     required this.bookingTypeId,
     required this.durationMinutes,
     required this.onSlotSelected,
-    this.accentColor = AppColors.primary,
+    this.accentColor = AppColors.cyan,
     this.selectedSlotStartTime,
   });
 
@@ -71,10 +73,10 @@ class _DateSlotPickerState extends ConsumerState<DateSlotPicker> {
                   duration: const Duration(milliseconds: 180),
                   width: 56,
                   decoration: BoxDecoration(
-                    color: isSelected ? widget.accentColor : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    color: isSelected ? widget.accentColor : AppColors.inputFill,
+                    borderRadius: BorderRadius.circular(AppRadii.row),
                     border: Border.all(
-                      color: isSelected ? widget.accentColor : AppColors.border,
+                      color: isSelected ? widget.accentColor : AppColors.inputBorder,
                     ),
                     boxShadow: isSelected
                         ? [
@@ -91,16 +93,16 @@ class _DateSlotPickerState extends ConsumerState<DateSlotPicker> {
                     children: [
                       Text(
                         formatWeekday(day),
-                        style: TextStyle(
+                        style: AppTextStyles.caption.copyWith(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: isSelected ? Colors.white70 : Colors.grey.shade500,
+                          color: isSelected ? AppColors.onPrimary : AppColors.textMuted,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         '${day.day}',
-                        style: TextStyle(
+                        style: AppTextStyles.title.copyWith(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
                           color: isSelected ? AppColors.onPrimary : AppColors.textPrimary,
@@ -117,19 +119,19 @@ class _DateSlotPickerState extends ConsumerState<DateSlotPicker> {
         slotsAsync.when(
           loading: () => const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
-            child: Center(child: CircularProgressIndicator()),
+            child: AppLoader(),
           ),
           error: (err, stack) => Padding(
             padding: const EdgeInsets.symmetric(vertical: 32),
             child: Center(
               child: Column(
                 children: [
-                  Icon(Icons.wifi_off_rounded, color: AppColors.danger.withValues(alpha: 0.7), size: 36),
+                  const Icon(Icons.wifi_off_rounded, color: AppColors.danger, size: 36),
                   const SizedBox(height: 10),
-                  const Text('Could not load availability.'),
+                  Text('Could not load availability.', style: AppTextStyles.bodyMuted),
                   TextButton(
                     onPressed: () => ref.invalidate(availableSlotsProvider(query)),
-                    child: const Text('Retry'),
+                    child: Text('Retry', style: AppTextStyles.body.copyWith(color: AppColors.cyan)),
                   ),
                 ],
               ),
@@ -154,15 +156,15 @@ class _DateSlotPickerState extends ConsumerState<DateSlotPicker> {
                     duration: const Duration(milliseconds: 150),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: isSelected ? widget.accentColor : Colors.white,
-                      borderRadius: BorderRadius.circular(12),
+                      color: isSelected ? widget.accentColor : AppColors.inputFill,
+                      borderRadius: BorderRadius.circular(AppRadii.image),
                       border: Border.all(
-                        color: isSelected ? widget.accentColor : AppColors.border,
+                        color: isSelected ? widget.accentColor : AppColors.inputBorder,
                       ),
                     ),
                     child: Text(
                       formatTimeOfDay(slot.startLocal),
-                      style: TextStyle(
+                      style: AppTextStyles.body.copyWith(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w600,
                         color: isSelected ? AppColors.onPrimary : AppColors.textPrimary,
@@ -190,9 +192,9 @@ class _EmptySlots extends StatelessWidget {
       child: Center(
         child: Column(
           children: [
-            Icon(Icons.event_busy_outlined, color: Colors.grey.shade400, size: 36),
+            const Icon(Icons.event_busy_outlined, color: AppColors.iconGhost, size: 36),
             const SizedBox(height: 10),
-            Text(message, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600)),
+            Text(message, textAlign: TextAlign.center, style: AppTextStyles.bodyMuted),
           ],
         ),
       ),

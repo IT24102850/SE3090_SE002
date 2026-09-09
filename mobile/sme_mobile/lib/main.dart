@@ -3,11 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/auth_provider.dart';
-import 'screens/landing_screen.dart';
+import 'screens/unify_auth/unify_login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/profile_setup_screen.dart';
 import 'services/push_notification_service.dart';
 import 'theme/app_theme.dart';
+import 'widgets/ui/ui.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,7 +43,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     if (!auth.isInitialized) {
       home = const _SplashScreen();
     } else if (!auth.isAuthenticated) {
-      home = const LandingScreen(); // <-- THIS IS THE FIX
+      home = const UnifyLoginScreen();
     } else if (!auth.isProfileComplete) {
       home = const ProfileSetupScreen();
     } else {
@@ -53,7 +54,12 @@ class _MyAppState extends ConsumerState<MyApp> {
       title: 'Unify',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: PushNotificationService.messengerKey,
-      theme: AppTheme.light(),
+      theme: AppTheme.dark(),
+      // Dark-only by design: there is no light counterpart to fall back to,
+      // so the system setting must not be able to switch it.
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.dark,
+      scrollBehavior: const AppScrollBehavior(),
       home: home,
     );
   }
@@ -64,17 +70,15 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
+    return const AppBackgroundScaffold(
+      showParticles: true,
+      child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.business_center_rounded,
-                size: 64, color: Color(0xFF2563EB)),
+            Icon(Icons.business_center_rounded, size: 64, color: AppColors.cyan),
             SizedBox(height: 24),
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Loading…', style: TextStyle(color: Colors.grey)),
+            AppLoader(message: 'Loading…'),
           ],
         ),
       ),

@@ -1,220 +1,305 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-/// Shared design tokens for the Unify mobile app, so every screen
-/// pulls from the same palette instead of hardcoding hex values inline.
+import 'app_colors.dart';
+import 'app_text_styles.dart';
+
+/// Re-exported so the many screens that already `import 'theme/app_theme.dart'`
+/// keep resolving [AppColors] and [AppRadii] from their existing import.
+export 'app_colors.dart';
+
+/// Frosted-glass decoration for callers that need a [BoxDecoration] rather
+/// than the `GlassCard` widget — mostly places already composing their own
+/// [Container].
 ///
-/// Warm light theme: an off-white canvas, white cards on generous radii,
-/// dark navy chrome, and coral as the single highlight against Unify blue.
-/// Mirrors the web app's frontend/src/shared/style/tokens.css value for
-/// value, so the two clients stay in step.
-class AppColors {
-  static const primary = Color(0xFF2563EB);
-  static const primaryDark = Color(0xFF1D4ED8);
-
-  /// Foreground for anything sitting *on* [primary]. Blue is dark enough
-  /// that white clears contrast comfortably.
-  static const onPrimary = Color(0xFFFFFFFF);
-
-  /// Highlight used for chart peaks and emphasis — the coral the light
-  /// dashboard pattern reserves for the one element that should pull focus.
-  static const accentHigh = Color(0xFFF2596F);
-
-  /// Third hue, for sections that must read as distinct from [primary].
-  static const accentCyan = Color(0xFF06B6D4);
-
-  /// Dark chrome — app bars, drawer headers, gradient starts. Kept dark on
-  /// purpose: with no sidebar on mobile, the app bar is what carries the
-  /// dark-rail-against-light-content contrast the web layout gets from its
-  /// sidebar. Not a text colour: use [textPrimary] for foreground.
-  static const ink = Color(0xFF111827);
-
-  static const success = Color(0xFF16A34A);
-  static const purple = Color(0xFF7C3AED);
-  static const amber = Color(0xFFD97706);
-  static const danger = Color(0xFFDC2626);
-
-  /// Scaffold background — warm off-white, not pure white, so white cards
-  /// read as raised above it.
-  static const surface = Color(0xFFF1EFEC);
-
-  /// Raised surfaces: cards, sheets, list rows.
-  static const card = Color(0xFFFFFFFF);
-  static const cardMuted = Color(0xFFF7F5F2);
-
-  static const border = Color(0x12101828);
-  static const borderStrong = Color(0x24101828);
-
-  static const textPrimary = Color(0xFF131A24);
-  static const textSecondary = Color(0xFF5B6472);
-  static const textMuted = Color(0xFF8A93A0);
-
-  /// The hero gradient used on the landing screen, reused across auth
-  /// screens and booking flow headers. Coral, matching the web hero card —
-  /// these surfaces carry white text, so they stay saturated even though
-  /// the rest of the theme went light.
-  static const heroGradient = LinearGradient(
-    colors: [Color(0xFFFF9A6C), Color(0xFFF2596F), Color(0xFFD93A5B)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  /// Ramps [accent] toward near-black rather than starting from it, so the
-  /// role/business hue stays recognisable at the top-left while the far
-  /// corner is still dark enough for white text to clear contrast.
-  static LinearGradient heroGradientFor(Color accent) => LinearGradient(
-        colors: [accent, Color.lerp(accent, const Color(0xFF0B1020), 0.45)!],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      );
-}
-
-/// Frosted-glass container decoration for use on top of [AppColors.heroGradient]
-/// (or any dark/colored background) — a translucent white fill with a soft
-/// white border, the glassmorphism look used throughout the booking flow.
+/// Prefer `GlassCard` where you can: it adds the backdrop blur, which a bare
+/// decoration cannot.
 class GlassStyle {
-  static BoxDecoration card({double radius = 20, double alpha = 0.1}) {
+  const GlassStyle._();
+
+  /// Translucent panel over the app background.
+  static BoxDecoration card({double radius = AppRadii.card, double alpha = 0.06}) {
     return BoxDecoration(
       color: Colors.white.withValues(alpha: alpha),
       borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: Colors.white.withValues(alpha: alpha * 2), width: 1),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
     );
   }
 
-  /// A solid raised card for the normal (non-hero) parts of a screen. On the
-  /// light canvas this is white lifted by a wide, faint shadow — the inverse
-  /// of the dark theme, where a shadow read as nothing against near-black and
-  /// the card had to be defined by its border alone.
-  static BoxDecoration elevatedCard({double radius = 20}) {
+  /// The default panel for normal (non-hero) content. On a near-black canvas a
+  /// drop shadow reads as nothing, so the card is defined by its rim and fill
+  /// rather than by elevation.
+  static BoxDecoration elevatedCard({double radius = AppRadii.card}) {
     return BoxDecoration(
-      color: AppColors.card,
+      color: AppColors.glassFill,
       borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: AppColors.border, width: 1),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0F101828),
-          blurRadius: 24,
-          offset: Offset(0, 8),
-        ),
-      ],
+      border: Border.all(color: AppColors.glassBorder, width: 1),
     );
   }
 }
 
+/// Cyan ink splashes at low opacity, so taps register without flashing a grey
+/// Material ripple across the neon surfaces.
+class _NeonSplash extends InteractiveInkFeatureFactory {
+  const _NeonSplash();
+
+  @override
+  InteractiveInkFeature create({
+    required MaterialInkController controller,
+    required RenderBox referenceBox,
+    required Offset position,
+    required Color color,
+    required TextDirection textDirection,
+    bool containedInkWell = false,
+    RectCallback? rectCallback,
+    BorderRadius? borderRadius,
+    ShapeBorder? customBorder,
+    double? radius,
+    VoidCallback? onRemoved,
+  }) {
+    return InkRipple.splashFactory.create(
+      controller: controller,
+      referenceBox: referenceBox,
+      position: position,
+      color: AppColors.cyan.withValues(alpha: 0.12),
+      textDirection: textDirection,
+      containedInkWell: containedInkWell,
+      rectCallback: rectCallback,
+      borderRadius: borderRadius,
+      customBorder: customBorder,
+      radius: radius,
+      onRemoved: onRemoved,
+    );
+  }
+}
+
+/// Bouncing overscroll everywhere, and no Material glow — the blue-grey
+/// overscroll halo is one of the default accents this theme is removing.
+class AppScrollBehavior extends MaterialScrollBehavior {
+  const AppScrollBehavior();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) => const BouncingScrollPhysics();
+
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) => child;
+}
+
 class AppTheme {
-  static ThemeData light() {
+  const AppTheme._();
+
+  /// Light status-bar icons over the dark canvas. Applied by [dark] and by
+  /// `GlassAppBar`, so screens don't each have to set it.
+  static const overlayStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: AppColors.bgTop,
+    systemNavigationBarIconBrightness: Brightness.light,
+  );
+
+  /// The app's only theme. This design is dark-only by intent, so there is no
+  /// light counterpart and `MaterialApp` pins `themeMode: ThemeMode.dark`.
+  static ThemeData dark() {
     final scheme = ColorScheme.fromSeed(
-      seedColor: AppColors.primary,
-      brightness: Brightness.light,
+      seedColor: AppColors.cyan,
+      brightness: Brightness.dark,
     ).copyWith(
-      surface: AppColors.surface,
-      primary: AppColors.primary,
+      primary: AppColors.cyan,
       onPrimary: AppColors.onPrimary,
-      // Without this, fromSeed picks its own near-black and text drifts away
-      // from the token value the rest of the app uses.
+      secondary: AppColors.magenta,
+      onSecondary: AppColors.textPrimary,
+      surface: AppColors.bgTop,
       onSurface: AppColors.textPrimary,
+      error: AppColors.danger,
+      onError: AppColors.textPrimary,
+      outline: AppColors.glassBorder,
     );
 
-    final inputBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: AppColors.border),
-    );
+    OutlineInputBorder fieldBorder(Color color, {double width = 1}) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadii.control),
+          borderSide: BorderSide(color: color, width: width),
+        );
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
+      brightness: Brightness.dark,
       colorScheme: scheme,
-      scaffoldBackgroundColor: AppColors.surface,
-      fontFamily: 'Roboto',
-      appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.ink,
-        // NOT textPrimary — that token is near-black now, and this bar is
-        // dark navy. Foreground here has to be written literally.
-        foregroundColor: Color(0xFFF3F4F6),
+      // Transparent, not a flat fill: every screen paints AppBackground
+      // underneath, and a solid scaffold colour would hide it.
+      scaffoldBackgroundColor: AppColors.bgTop,
+      canvasColor: AppColors.bgTop,
+      splashFactory: const _NeonSplash(),
+      textTheme: AppTextStyles.textTheme(ThemeData(brightness: Brightness.dark).textTheme),
+      appBarTheme: AppBarTheme(
+        // Glass chrome is drawn by GlassAppBar; the default bar is stripped
+        // back so anything still using a plain AppBar doesn't paint a slab.
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: AppColors.textPrimary,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFFF3F4F6),
-        ),
+        systemOverlayStyle: overlayStyle,
+        titleTextStyle: AppTextStyles.title,
+        iconTheme: const IconThemeData(color: AppColors.iconPrimary),
       ),
+      iconTheme: const IconThemeData(color: AppColors.iconSecondary),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: AppColors.card,
+        color: AppColors.glassFill,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: AppColors.border),
+          borderRadius: BorderRadius.circular(AppRadii.card),
+          side: const BorderSide(color: AppColors.glassBorder),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.cardMuted,
-        hintStyle: const TextStyle(color: AppColors.textMuted),
-        labelStyle: const TextStyle(color: AppColors.textSecondary),
-        border: inputBorder,
-        enabledBorder: inputBorder,
-        focusedBorder: inputBorder.copyWith(
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        fillColor: AppColors.inputFill,
+        hintStyle: AppTextStyles.body.copyWith(color: AppColors.textMuted),
+        labelStyle: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+        prefixIconColor: AppColors.iconSecondary,
+        suffixIconColor: AppColors.iconSecondary,
+        border: fieldBorder(AppColors.inputBorder),
+        enabledBorder: fieldBorder(AppColors.inputBorder),
+        focusedBorder: fieldBorder(AppColors.cyan, width: 1.6),
+        errorBorder: fieldBorder(AppColors.danger),
+        focusedErrorBorder: fieldBorder(AppColors.danger, width: 1.6),
+        errorStyle: AppTextStyles.caption.copyWith(color: AppColors.danger),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           elevation: 0,
-          backgroundColor: AppColors.primary,
+          backgroundColor: AppColors.cyan,
           foregroundColor: AppColors.onPrimary,
-          padding: const EdgeInsets.symmetric(vertical: 15),
-          // Pill CTAs, matching the web theme's `border-radius: 999px`.
-          shape: const StadiumBorder(),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          disabledBackgroundColor: AppColors.glassBorder,
+          disabledForegroundColor: AppColors.textMuted,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.control)),
+          textStyle: AppTextStyles.button,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.textPrimary,
-          side: const BorderSide(color: AppColors.borderStrong),
-          padding: const EdgeInsets.symmetric(vertical: 15),
-          shape: const StadiumBorder(),
+          foregroundColor: AppColors.cyan,
+          side: BorderSide(color: AppColors.cyan.withValues(alpha: 0.5), width: 1.5),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.control)),
+          textStyle: AppTextStyles.button.copyWith(fontSize: 15),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: AppColors.primary,
-        ),
+        style: TextButton.styleFrom(foregroundColor: AppColors.cyan),
       ),
-      dividerTheme: const DividerThemeData(color: AppColors.border, space: 1),
+      dividerTheme: const DividerThemeData(color: AppColors.hairline, space: 1, thickness: 1),
+      listTileTheme: const ListTileThemeData(
+        iconColor: AppColors.iconSecondary,
+        textColor: AppColors.textPrimary,
+      ),
       snackBarTheme: SnackBarThemeData(
-        // Stays dark: a light snackbar on a light canvas barely registers as
-        // an overlay, and this is transient feedback that must be noticed.
-        backgroundColor: AppColors.ink,
-        contentTextStyle: const TextStyle(color: Color(0xFFF3F4F6)),
+        backgroundColor: AppColors.inputFill,
+        contentTextStyle: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: AppColors.card,
+        backgroundColor: AppColors.overlaySurface,
         surfaceTintColor: Colors.transparent,
+        modalBackgroundColor: AppColors.overlaySurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.pill)),
+        ),
       ),
-      dialogTheme: const DialogThemeData(
-        backgroundColor: AppColors.cardMuted,
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.overlaySurface,
         surfaceTintColor: Colors.transparent,
+        titleTextStyle: AppTextStyles.title,
+        contentTextStyle: AppTextStyles.body,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
-      popupMenuTheme: const PopupMenuThemeData(
-        color: AppColors.cardMuted,
+      popupMenuTheme: PopupMenuThemeData(
+        color: AppColors.overlaySurface,
         surfaceTintColor: Colors.transparent,
+        textStyle: AppTextStyles.body,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.row)),
       ),
       drawerTheme: const DrawerThemeData(
-        backgroundColor: AppColors.card,
+        backgroundColor: AppColors.bgMid,
         surfaceTintColor: Colors.transparent,
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(color: AppColors.primary),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: AppColors.cyan),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? AppColors.bgTop : AppColors.textMuted,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? AppColors.cyan : AppColors.inputFill,
+        ),
+        trackOutlineColor: WidgetStateProperty.all(AppColors.glassBorder),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? AppColors.cyan : Colors.transparent,
+        ),
+        checkColor: WidgetStateProperty.all(AppColors.onPrimary),
+        side: const BorderSide(color: AppColors.inputBorder, width: 1.5),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? AppColors.cyan : AppColors.inputBorder,
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.iconWell,
+        selectedColor: AppColors.cyan,
+        labelStyle: AppTextStyles.caption.copyWith(color: AppColors.textBody),
+        side: const BorderSide(color: AppColors.glassBorder),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.image)),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: AppColors.cyan,
+        unselectedLabelColor: AppColors.textMuted,
+        indicatorColor: AppColors.cyan,
+        dividerColor: AppColors.hairline,
+        labelStyle: AppTextStyles.subtitle,
+        unselectedLabelStyle: AppTextStyles.body,
+      ),
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: AppColors.overlaySurface,
+        surfaceTintColor: Colors.transparent,
+        headerBackgroundColor: AppColors.bgMid,
+        headerForegroundColor: AppColors.textPrimary,
+        todayForegroundColor: WidgetStateProperty.all(AppColors.cyan),
+        todayBorder: const BorderSide(color: AppColors.cyan),
+        dayForegroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? AppColors.onPrimary : AppColors.textBody,
+        ),
+        dayBackgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? AppColors.cyan : Colors.transparent,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      timePickerTheme: TimePickerThemeData(
+        backgroundColor: AppColors.overlaySurface,
+        dialBackgroundColor: AppColors.inputFill,
+        dialHandColor: AppColors.cyan,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: Colors.transparent,
+        selectedItemColor: AppColors.cyan,
+        unselectedItemColor: AppColors.textMuted,
+        elevation: 0,
+        type: BottomNavigationBarType.fixed,
+      ),
     );
   }
 }
 
-/// Role → visual identity, shared between the dashboard and the drawer so
-/// they can't drift out of sync with each other.
+/// Role → visual identity, shared between the dashboard and the drawer so they
+/// can't drift out of sync with each other.
 class RoleTheme {
   final Color color;
   final String title;
@@ -232,7 +317,7 @@ class RoleTheme {
     switch (role) {
       case 'Admin':
         return const RoleTheme(
-          color: AppColors.amber,
+          color: AppColors.warning,
           title: 'Tenant Admin',
           icon: Icons.admin_panel_settings,
           actions: [
@@ -245,7 +330,7 @@ class RoleTheme {
         );
       case 'Manager':
         return const RoleTheme(
-          color: AppColors.primary,
+          color: AppColors.electricBlue,
           title: 'Branch Manager',
           icon: Icons.manage_accounts,
           actions: [
@@ -268,7 +353,7 @@ class RoleTheme {
         );
       case 'Customer':
         return const RoleTheme(
-          color: AppColors.purple,
+          color: AppColors.violet,
           title: 'Customer',
           icon: Icons.person_outline,
           actions: [
@@ -279,7 +364,7 @@ class RoleTheme {
         );
       default:
         return const RoleTheme(
-          color: AppColors.textSecondary,
+          color: AppColors.cyan,
           title: 'User',
           icon: Icons.person_outline,
           actions: [],
@@ -288,10 +373,8 @@ class RoleTheme {
   }
 }
 
-/// Business-type → icon/color, used anywhere a tenant is listed.
-/// Hues are the saturated variants: the pale tints these used to carry were
-/// chosen to survive a near-black canvas, and they wash out entirely on the
-/// light one.
+/// Business-type → icon/colour, used anywhere a tenant is listed. Hues are
+/// picked to stay legible against the near-black canvas.
 class BusinessTypeVisual {
   final IconData icon;
   final Color color;
@@ -301,24 +384,24 @@ class BusinessTypeVisual {
   static BusinessTypeVisual of(String businessType) {
     switch (businessType) {
       case 'Clinic':
-        return const BusinessTypeVisual(Icons.local_hospital, Color(0xFFDC2626));
+        return const BusinessTypeVisual(Icons.local_hospital, AppColors.magenta);
       case 'Restaurant':
-        return const BusinessTypeVisual(Icons.restaurant, Color(0xFFEA580C));
+        return const BusinessTypeVisual(Icons.restaurant, AppColors.warning);
       case 'Gym':
-        return const BusinessTypeVisual(Icons.fitness_center, Color(0xFF2563EB));
+        return const BusinessTypeVisual(Icons.fitness_center, AppColors.electricBlue);
       case 'School':
-        return const BusinessTypeVisual(Icons.school, Color(0xFF16A34A));
+        return const BusinessTypeVisual(Icons.school, AppColors.success);
       case 'RealEstate':
-        return const BusinessTypeVisual(Icons.home_work, Color(0xFF0D9488));
+        return const BusinessTypeVisual(Icons.home_work, AppColors.cyan);
       case 'Tourism':
-        return const BusinessTypeVisual(Icons.flight_takeoff, Color(0xFF7C3AED));
+        return const BusinessTypeVisual(Icons.flight_takeoff, AppColors.violet);
       default:
-        return const BusinessTypeVisual(Icons.store, Color(0xFF64748B));
+        return const BusinessTypeVisual(Icons.store, AppColors.textMuted);
     }
   }
 }
 
-/// Booking status → color/icon/label, shared by the status pill, "My
+/// Booking status → colour/icon/label, shared by the status pill, "My
 /// Bookings" cards, and the confirmation screen.
 class BookingStatusVisual {
   final Color color;
@@ -330,23 +413,23 @@ class BookingStatusVisual {
   static BookingStatusVisual of(String status) {
     switch (status) {
       case 'Pending':
-        return const BookingStatusVisual(color: AppColors.amber, icon: Icons.hourglass_top_rounded, label: 'Pending');
+        return const BookingStatusVisual(color: AppColors.warning, icon: Icons.hourglass_top_rounded, label: 'Pending');
       case 'Confirmed':
-        return const BookingStatusVisual(color: AppColors.primary, icon: Icons.event_available_rounded, label: 'Confirmed');
+        return const BookingStatusVisual(color: AppColors.cyan, icon: Icons.event_available_rounded, label: 'Confirmed');
       case 'CheckedIn':
-        return const BookingStatusVisual(color: AppColors.purple, icon: Icons.how_to_reg_rounded, label: 'Checked in');
+        return const BookingStatusVisual(color: AppColors.violet, icon: Icons.how_to_reg_rounded, label: 'Checked in');
       case 'InProgress':
-        return const BookingStatusVisual(color: AppColors.purple, icon: Icons.play_circle_outline_rounded, label: 'In progress');
+        return const BookingStatusVisual(color: AppColors.violet, icon: Icons.play_circle_outline_rounded, label: 'In progress');
       case 'Completed':
         return const BookingStatusVisual(color: AppColors.success, icon: Icons.task_alt_rounded, label: 'Completed');
       case 'Cancelled':
-        return const BookingStatusVisual(color: AppColors.textSecondary, icon: Icons.cancel_outlined, label: 'Cancelled');
+        return const BookingStatusVisual(color: AppColors.textMuted, icon: Icons.cancel_outlined, label: 'Cancelled');
       case 'NoShow':
         return const BookingStatusVisual(color: AppColors.danger, icon: Icons.person_off_outlined, label: 'No-show');
       case 'Rejected':
         return const BookingStatusVisual(color: AppColors.danger, icon: Icons.block_rounded, label: 'Rejected');
       default:
-        return const BookingStatusVisual(color: AppColors.textSecondary, icon: Icons.help_outline, label: 'Unknown');
+        return const BookingStatusVisual(color: AppColors.textMuted, icon: Icons.help_outline, label: 'Unknown');
     }
   }
 }

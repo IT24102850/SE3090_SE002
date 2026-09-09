@@ -5,7 +5,9 @@ import '../../providers/api_service_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/booking_providers.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_text_styles.dart';
 import '../../widgets/route_transitions.dart';
+import '../../widgets/ui/ui.dart';
 import 'my_ai_requests_screen.dart';
 import 'my_bookings_screen.dart';
 
@@ -39,11 +41,11 @@ class _AiPlannerScreenState extends ConsumerState<AiPlannerScreen> {
   Future<void> _submit() async {
     final bookingTypeId = _bookingTypeId;
     if (bookingTypeId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Choose what you\'d like to book first.')));
+      AppSnackBar.info(context, 'Choose what you\'d like to book first.');
       return;
     }
     if (_objectiveController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Describe what you\'re looking for.')));
+      AppSnackBar.info(context, 'Describe what you\'re looking for.');
       return;
     }
 
@@ -73,9 +75,9 @@ class _AiPlannerScreenState extends ConsumerState<AiPlannerScreen> {
     final tenantId = ref.watch(authProvider).user?.tenantId ?? '';
     final bookingTypesAsync = ref.watch(bookingTypesProvider(tenantId));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Ask AI to book for you'),
+    return AppBackgroundScaffold(
+      appBar: GlassAppBar(
+        title: 'Ask AI to book for you',
         actions: [
           IconButton(
             icon: const Icon(Icons.history_rounded),
@@ -84,29 +86,27 @@ class _AiPlannerScreenState extends ConsumerState<AiPlannerScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+      child: SafeArea(
+        child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                gradient: AppColors.heroGradientFor(AppColors.purple),
-                borderRadius: BorderRadius.circular(18),
+                gradient: AppColors.heroGradientFor(AppColors.violet),
+                borderRadius: BorderRadius.circular(AppRadii.card),
+                border: Border.all(color: AppColors.glassBorder),
               ),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle),
-                    child: const Icon(Icons.auto_awesome, color: Colors.white),
-                  ),
+                  const IconWell(icon: Icons.auto_awesome, color: AppColors.violet, size: 44),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Text(
                       'Describe what you want in plain English. A 4-agent AI pipeline finds the best match, checks availability, and books it — or asks the business to approve it first.',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.92), fontSize: 13, height: 1.4),
+                      style: AppTextStyles.body.copyWith(fontSize: 13),
                     ),
                   ),
                 ],
@@ -114,34 +114,46 @@ class _AiPlannerScreenState extends ConsumerState<AiPlannerScreen> {
             ),
             const SizedBox(height: 24),
 
-            const Text('What do you want to book?', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-            const SizedBox(height: 8),
+            const SectionHeader('What do you want to book?'),
             bookingTypesAsync.when(
-              loading: () => const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: LinearProgressIndicator()),
-              error: (err, stack) => const Text('Could not load this business\'s services.', style: TextStyle(color: AppColors.danger)),
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: LinearProgressIndicator(
+                  color: AppColors.cyan,
+                  backgroundColor: AppColors.inputFill,
+                ),
+              ),
+              error: (err, stack) => Text(
+                'Could not load this business\'s services.',
+                style: AppTextStyles.body.copyWith(color: AppColors.danger),
+              ),
               data: (types) => _BookingTypeSelector(
                 types: types,
                 selectedId: _bookingTypeId,
                 onSelected: (id) => setState(() => _bookingTypeId = id),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
-            const Text('Tell the AI what you\'re looking for', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-            const SizedBox(height: 8),
-            TextField(
+            NeonInputField(
+              label: 'Tell the AI what you\'re looking for',
               controller: _objectiveController,
               maxLines: 3,
-              decoration: const InputDecoration(hintText: 'e.g. "Find me the earliest beginner-friendly slot this week"'),
+              hintText: 'e.g. "Find me the earliest beginner-friendly slot this week"',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
             Row(
               children: [
-                const Text('Within', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                const SizedBox(width: 10),
+                Text('Within', style: AppTextStyles.bodyMuted),
+                const SizedBox(width: 12),
                 DropdownButton<int>(
                   value: _withinDays,
+                  dropdownColor: AppColors.overlaySurface,
+                  borderRadius: BorderRadius.circular(AppRadii.control),
+                  underline: const SizedBox.shrink(),
+                  style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+                  icon: const Icon(Icons.expand_more_rounded, color: AppColors.iconSecondary),
                   items: const [3, 7, 14, 30]
                       .map((d) => DropdownMenuItem(value: d, child: Text('$d days')))
                       .toList(),
@@ -151,16 +163,11 @@ class _AiPlannerScreenState extends ConsumerState<AiPlannerScreen> {
             ),
             const SizedBox(height: 24),
 
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _submitting ? null : _submit,
-                icon: _submitting
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.auto_awesome, size: 18),
-                label: Text(_submitting ? 'Asking the AI planner…' : 'Find and book'),
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.purple),
-              ),
+            NeonButton(
+              label: _submitting ? 'Asking the AI planner…' : 'Find and book',
+              icon: Icons.auto_awesome,
+              isLoading: _submitting,
+              onPressed: _submitting ? null : _submit,
             ),
 
             if (_result != null) ...[
@@ -169,6 +176,7 @@ class _AiPlannerScreenState extends ConsumerState<AiPlannerScreen> {
             ],
           ],
         ),
+      ),
       ),
     );
   }
@@ -184,7 +192,7 @@ class _BookingTypeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (types.isEmpty) {
-      return Text('No bookable services yet.', style: TextStyle(color: Colors.grey.shade600));
+      return Text('No bookable services yet.', style: AppTextStyles.bodyMuted);
     }
     return Wrap(
       spacing: 8,
@@ -195,9 +203,14 @@ class _BookingTypeSelector extends StatelessWidget {
           label: Text(t.name),
           selected: selected,
           onSelected: (_) => onSelected(t.id),
-          selectedColor: AppColors.purple.withValues(alpha: 0.15),
-          labelStyle: TextStyle(color: selected ? AppColors.purple : null, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
-          side: BorderSide(color: selected ? AppColors.purple : AppColors.border),
+          backgroundColor: AppColors.iconWell,
+          selectedColor: AppColors.violet.withValues(alpha: 0.20),
+          labelStyle: AppTextStyles.body.copyWith(
+            fontSize: 13,
+            color: selected ? AppColors.textPrimary : AppColors.textBody,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          ),
+          side: BorderSide(color: selected ? AppColors.violet : AppColors.glassBorder),
         );
       }).toList(),
     );
@@ -212,17 +225,14 @@ class _ResultCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final (color, icon, title) = switch (result.status) {
       'Completed' => (AppColors.success, Icons.check_circle_rounded, 'Booked!'),
-      'AwaitingApproval' => (AppColors.amber, Icons.hourglass_top_rounded, 'Sent for approval'),
+      'AwaitingApproval' => (AppColors.warning, Icons.hourglass_top_rounded, 'Sent for approval'),
       _ => (AppColors.danger, Icons.error_outline_rounded, 'Could not book that'),
     };
 
-    return Container(
+    return GlassCard(
+      borderRadius: AppRadii.row,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
+      borderColor: color.withValues(alpha: 0.4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -230,24 +240,21 @@ class _ResultCard extends StatelessWidget {
             children: [
               Icon(icon, color: color),
               const SizedBox(width: 10),
-              Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15)),
+              Text(title, style: AppTextStyles.subtitle.copyWith(color: color)),
             ],
           ),
           const SizedBox(height: 8),
-          Text(result.message, style: const TextStyle(fontSize: 13.5, height: 1.4)),
+          Text(result.message, style: AppTextStyles.body.copyWith(fontSize: 13.5)),
           if (result.workflowId != null) ...[
             const SizedBox(height: 6),
-            Text('Workflow ${result.workflowId}', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+            Text('Workflow ${result.workflowId}', style: AppTextStyles.caption.copyWith(fontSize: 11)),
           ],
           if (result.isBooked) ...[
             const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(slideFadeRoute(const MyBookingsScreen())),
-                icon: const Icon(Icons.event_available_outlined, size: 16),
-                label: const Text('View my bookings'),
-              ),
+            GhostButton(
+              label: 'View my bookings',
+              icon: Icons.event_available_outlined,
+              onPressed: () => Navigator.of(context).push(slideFadeRoute(const MyBookingsScreen())),
             ),
           ],
         ],

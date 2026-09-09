@@ -7,9 +7,11 @@ import '../../providers/booking_providers.dart';
 import '../../providers/public_tenant_provider.dart';
 import '../../shared/color_utils.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_text_styles.dart';
 import '../../widgets/booking_qr_code.dart';
 import '../../widgets/date_slot_picker.dart';
 import '../../widgets/status_badge.dart';
+import '../../widgets/ui/ui.dart';
 
 class MyBookingsScreen extends ConsumerWidget {
   const MyBookingsScreen({super.key});
@@ -24,17 +26,20 @@ class MyBookingsScreen extends ConsumerWidget {
 
     return DefaultTabController(
       length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('My Bookings'),
-          bottom: const TabBar(
-            indicatorColor: Colors.white,
+      child: AppBackgroundScaffold(
+        appBar: const GlassAppBar(
+          title: 'My Bookings',
+          bottom: TabBar(
             tabs: [Tab(text: 'Upcoming'), Tab(text: 'Past'), Tab(text: 'Cancelled')],
           ),
         ),
-        body: bookingsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, stack) => _ErrorState(onRetry: () => ref.invalidate(myBookingsProvider)),
+        child: SafeArea(
+          child: bookingsAsync.when(
+          loading: () => const AppLoader(),
+          error: (err, stack) => ErrorState(
+            message: 'Could not load your bookings.',
+            onRetry: () => ref.invalidate(myBookingsProvider),
+          ),
           data: (bookings) {
             final upcoming = bookings.where((b) => b.isUpcoming).toList()
               ..sort((a, b) => a.startTime.compareTo(b.startTime));
@@ -51,6 +56,7 @@ class MyBookingsScreen extends ConsumerWidget {
               ],
             );
           },
+        ),
         ),
       ),
     );
@@ -73,25 +79,15 @@ class _BookingList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (bookings.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.event_note_outlined, size: 48, color: Colors.grey.shade400),
-              const SizedBox(height: 12),
-              Text(emptyMessage, style: TextStyle(color: Colors.grey.shade600)),
-            ],
-          ),
-        ),
-      );
+      return EmptyState(icon: Icons.event_note_outlined, message: emptyMessage);
     }
 
     return RefreshIndicator(
+      color: AppColors.cyan,
+      backgroundColor: AppColors.overlaySurface,
       onRefresh: () async => ref.invalidate(myBookingsProvider),
       child: ListView.separated(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         itemCount: bookings.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, i) => _BookingCard(
@@ -114,18 +110,24 @@ class _BookingCard extends ConsumerWidget {
   void _showQr(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('${booking.resourceName} check-in', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 16),
-            BookingQrCode(bookingId: booking.id),
-            const SizedBox(height: 12),
-            Text('Show this to reception on arrival', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-          ],
+      backgroundColor: AppColors.overlaySurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.pill)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${booking.resourceName} check-in', style: AppTextStyles.subtitle),
+              const SizedBox(height: 20),
+              BookingQrCode(bookingId: booking.id),
+              const SizedBox(height: 14),
+              Text('Show this to reception on arrival', style: AppTextStyles.caption),
+            ],
+          ),
         ),
       ),
     );
@@ -135,13 +137,19 @@ class _BookingCard extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cancel booking?'),
-        content: const Text('This cannot be undone.'),
+        title: Text('Cancel booking?', style: AppTextStyles.title),
+        content: Text('This cannot be undone.', style: AppTextStyles.body),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep it')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Keep it', style: AppTextStyles.body.copyWith(color: AppColors.textMuted)),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Cancel booking', style: TextStyle(color: AppColors.danger)),
+            child: Text(
+              'Cancel booking',
+              style: AppTextStyles.subtitle.copyWith(color: AppColors.danger),
+            ),
           ),
         ],
       ),
@@ -152,12 +160,10 @@ class _BookingCard extends ConsumerWidget {
       await cancelBooking(ref.read(apiServiceProvider), booking.id);
       ref.invalidate(myBookingsProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Booking cancelled.')));
+        AppSnackBar.success(context, 'Booking cancelled.');
       }
     } on BookingRequestException catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      if (context.mounted) AppSnackBar.error(context, e.message);
     }
   }
 
@@ -168,7 +174,10 @@ class _BookingCard extends ConsumerWidget {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: AppColors.overlaySurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.pill)),
+      ),
       builder: (sheetContext) {
         return Padding(
           padding: EdgeInsets.only(
@@ -182,7 +191,7 @@ class _BookingCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Reschedule ${booking.resourceName}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('Reschedule ${booking.resourceName}', style: AppTextStyles.title.copyWith(fontSize: 16)),
                 const SizedBox(height: 16),
                 Expanded(
                   child: SingleChildScrollView(
@@ -190,7 +199,7 @@ class _BookingCard extends ConsumerWidget {
                       resourceId: booking.resourceId,
                       bookingTypeId: booking.bookingTypeId,
                       durationMinutes: duration,
-                      accentColor: parseHexColor(booking.colorHex) ?? AppColors.primary,
+                      accentColor: parseHexColor(booking.colorHex) ?? AppColors.cyan,
                       onSlotSelected: (date, slot) {
                         picked = slot;
                         Navigator.pop(sheetContext);
@@ -216,21 +225,22 @@ class _BookingCard extends ConsumerWidget {
       );
       ref.invalidate(myBookingsProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Booking rescheduled.')));
+        AppSnackBar.success(context, 'Booking rescheduled.');
       }
     } on BookingConflictException catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (context.mounted) AppSnackBar.error(context, e.message);
     } on BookingRequestException catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (context.mounted) AppSnackBar.error(context, e.message);
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final color = parseHexColor(booking.colorHex) ?? AppColors.primary;
+    final color = parseHexColor(booking.colorHex) ?? AppColors.cyan;
 
-    return Container(
-      decoration: GlassStyle.elevatedCard(radius: 16),
+    return GlassCard(
+      borderRadius: AppRadii.row,
+      padding: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -245,8 +255,8 @@ class _BookingCard extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(tenantName, style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600)),
-                      Text('${booking.resourceName} · ${booking.bookingTypeName}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                      Text(tenantName, style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600)),
+                      Text('${booking.resourceName} · ${booking.bookingTypeName}', style: AppTextStyles.subtitle),
                     ],
                   ),
                 ),
@@ -259,22 +269,19 @@ class _BookingCard extends ConsumerWidget {
                 Icon(
                   booking.bookingUnit == 'Slot' ? Icons.access_time_rounded : Icons.calendar_today_outlined,
                   size: 14,
-                  color: Colors.grey.shade500,
+                  color: AppColors.iconDisabled,
                 ),
                 const SizedBox(width: 6),
-                Text(booking.scheduleSummary, style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
+                Text(booking.scheduleSummary, style: AppTextStyles.caption.copyWith(fontSize: 12.5)),
               ],
             ),
             if (showActions) ...[
               const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => _showQr(context),
-                  icon: const Icon(Icons.qr_code_rounded, size: 16),
-                  label: const Text('Show check-in QR'),
-                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10)),
-                ),
+              GhostButton(
+                label: 'Show check-in QR',
+                icon: Icons.qr_code_rounded,
+                height: 44,
+                onPressed: () => _showQr(context),
               ),
             ],
             if (showActions && (booking.isCancellable || (booking.isReschedulable && booking.bookingUnit == 'Slot'))) ...[
@@ -283,53 +290,27 @@ class _BookingCard extends ConsumerWidget {
                 children: [
                   if (booking.isReschedulable && booking.bookingUnit == 'Slot')
                     Expanded(
-                      child: OutlinedButton.icon(
+                      child: GhostButton(
+                        label: 'Reschedule',
+                        icon: Icons.edit_calendar_outlined,
+                        height: 44,
                         onPressed: () => _reschedule(context, ref),
-                        icon: const Icon(Icons.edit_calendar_outlined, size: 16),
-                        label: const Text('Reschedule'),
-                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10)),
                       ),
                     ),
                   if (booking.isReschedulable && booking.bookingUnit == 'Slot' && booking.isCancellable) const SizedBox(width: 10),
                   if (booking.isCancellable)
                     Expanded(
-                      child: OutlinedButton.icon(
+                      child: GhostButton(
+                        label: 'Cancel',
+                        icon: Icons.close_rounded,
+                        height: 44,
+                        color: AppColors.danger,
                         onPressed: () => _cancel(context, ref),
-                        icon: const Icon(Icons.close_rounded, size: 16, color: AppColors.danger),
-                        label: const Text('Cancel', style: TextStyle(color: AppColors.danger)),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          side: const BorderSide(color: AppColors.danger),
-                        ),
                       ),
                     ),
                 ],
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final VoidCallback onRetry;
-  const _ErrorState({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.wifi_off_rounded, size: 48, color: AppColors.danger.withValues(alpha: 0.7)),
-            const SizedBox(height: 16),
-            const Text('Could not load your bookings.', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry')),
           ],
         ),
       ),

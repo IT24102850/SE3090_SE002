@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/tenant_profile_model.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
+import 'ui/ui.dart';
 
 /// The ONE shared "TripAdvisor listing" header, used by both
 /// BookingDashboardScreen (Tourism tenants with a resolved sub-type) and
@@ -52,18 +55,18 @@ class BusinessProfileHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(businessName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(businessName, style: AppTextStyles.headlineSmall.copyWith(fontSize: 20)),
               if (p.shortTagline != null && p.shortTagline!.trim().isNotEmpty) ...[
                 const SizedBox(height: 4),
-                Text(p.shortTagline!, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                Text(p.shortTagline!, style: AppTextStyles.bodyMuted.copyWith(fontSize: 13)),
               ],
               if (address != null && address!.trim().isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500),
+                    const Icon(Icons.location_on_outlined, size: 14, color: AppColors.iconDisabled),
                     const SizedBox(width: 4),
-                    Expanded(child: Text(address!, style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600))),
+                    Expanded(child: Text(address!, style: AppTextStyles.caption.copyWith(fontSize: 12.5))),
                   ],
                 ),
               ],
@@ -73,14 +76,14 @@ class BusinessProfileHeader extends StatelessWidget {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.star_rounded, size: 16, color: Colors.amber.shade600),
+                    const Icon(Icons.star_rounded, size: 16, color: AppColors.warning),
                     const SizedBox(width: 4),
                     Text(
                       (p.averageRating ?? 0).toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                      style: AppTextStyles.subtitle.copyWith(fontSize: 13),
                     ),
                     const SizedBox(width: 4),
-                    Text('(${p.reviewCount})', style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600)),
+                    Text('(${p.reviewCount})', style: AppTextStyles.caption.copyWith(fontSize: 12.5)),
                   ],
                 ),
               ],
@@ -104,7 +107,7 @@ class BusinessProfileHeader extends StatelessWidget {
           child: _ContactAndHoursSection(profile: p, now: effectiveNow, themeColor: themeColor),
         ),
         const SizedBox(height: 8),
-        Divider(color: Colors.grey.shade200, height: 32),
+        const Divider(color: AppColors.hairline, height: 32),
       ],
     );
   }
@@ -145,7 +148,7 @@ class _Hero extends StatelessWidget {
               width: 76,
               height: 76,
               padding: const EdgeInsets.all(3),
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              decoration: const BoxDecoration(color: AppColors.bgMid, shape: BoxShape.circle),
               child: ClipOval(
                 child: profile.logoUrl != null
                     ? Image.network(
@@ -222,8 +225,8 @@ class _GalleryStrip extends StatelessWidget {
               errorBuilder: (context, error, stackTrace) => Container(
                 width: 84,
                 height: 84,
-                color: Colors.grey.shade200,
-                child: Icon(Icons.image_not_supported_outlined, color: Colors.grey.shade400),
+                color: AppColors.iconWell,
+                child: const Icon(Icons.image_not_supported_outlined, color: AppColors.iconGhost),
               ),
             ),
           ),
@@ -240,9 +243,12 @@ class _GalleryViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Deliberately black rather than the app gradient: a lightbox should put
+    // nothing but the photo on screen.
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, elevation: 0),
+      backgroundColor: AppColors.bgTop,
+      extendBodyBehindAppBar: true,
+      appBar: const GlassAppBar(),
       body: PageView.builder(
         controller: PageController(initialPage: initialIndex),
         itemCount: imageUrls.length,
@@ -250,7 +256,8 @@ class _GalleryViewer extends StatelessWidget {
           child: InteractiveViewer(
             child: Image.network(
               imageUrls[i],
-              errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 64),
+              errorBuilder: (context, error, stackTrace) =>
+                  const Icon(Icons.broken_image_outlined, color: AppColors.iconGhost, size: 64),
             ),
           ),
         ),
@@ -270,10 +277,10 @@ class _AboutSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('About', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+        const SectionHeader('About'),
         if (description != null && description!.trim().isNotEmpty) ...[
           const SizedBox(height: 8),
-          Text(description!, style: TextStyle(fontSize: 13, height: 1.5, color: Colors.grey.shade700)),
+          Text(description!, style: AppTextStyles.body.copyWith(fontSize: 13, height: 1.5)),
         ],
         if (amenities.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -283,8 +290,15 @@ class _AboutSection extends StatelessWidget {
             children: amenities
                 .map((a) => Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-                      child: Text(a, style: TextStyle(fontSize: 12, color: themeColor, fontWeight: FontWeight.w600)),
+                      decoration: BoxDecoration(
+                        color: themeColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: themeColor.withValues(alpha: 0.35)),
+                      ),
+                      child: Text(
+                        a,
+                        style: AppTextStyles.caption.copyWith(color: themeColor, fontWeight: FontWeight.w600),
+                      ),
                     ))
                 .toList(),
           ),
@@ -315,8 +329,7 @@ class _ContactAndHoursSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Contact & Hours', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 10),
+        const SectionHeader('Contact & Hours'),
         if (hasContact)
           Wrap(
             spacing: 10,
@@ -337,14 +350,13 @@ class _ContactAndHoursSection extends StatelessWidget {
           const SizedBox(height: 14),
           Row(
             children: [
-              Icon(Icons.access_time_rounded, size: 15, color: isOpen ? Colors.green.shade600 : Colors.grey.shade500),
+              Icon(Icons.access_time_rounded, size: 15, color: isOpen ? AppColors.success : AppColors.iconDisabled),
               const SizedBox(width: 6),
               Text(
                 today == null ? 'Hours not set for today' : (isOpen ? 'Open now' : 'Closed now'),
-                style: TextStyle(
+                style: AppTextStyles.subtitle.copyWith(
                   fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: isOpen ? Colors.green.shade600 : Colors.grey.shade600,
+                  color: isOpen ? AppColors.success : AppColors.textMuted,
                 ),
               ),
             ],
@@ -377,7 +389,7 @@ class _ContactChip extends StatelessWidget {
           children: [
             Icon(icon, size: 14, color: color),
             const SizedBox(width: 6),
-            Text(label, style: TextStyle(fontSize: 12.5, color: color, fontWeight: FontWeight.w600)),
+            Text(label, style: AppTextStyles.caption.copyWith(fontSize: 12.5, color: color, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -401,12 +413,20 @@ class _HourRow extends StatelessWidget {
             width: 90,
             child: Text(
               entry.dayOfWeek,
-              style: TextStyle(fontSize: 12.5, fontWeight: isToday ? FontWeight.w700 : FontWeight.w500, color: isToday ? Colors.black : Colors.grey.shade700),
+              style: AppTextStyles.body.copyWith(
+                fontSize: 12.5,
+                fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
+                color: isToday ? AppColors.textPrimary : AppColors.textBody,
+              ),
             ),
           ),
           Text(
             label,
-            style: TextStyle(fontSize: 12.5, fontWeight: isToday ? FontWeight.w700 : FontWeight.w400, color: isToday ? Colors.black : Colors.grey.shade600),
+            style: AppTextStyles.body.copyWith(
+              fontSize: 12.5,
+              fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
+              color: isToday ? AppColors.textPrimary : AppColors.textMuted,
+            ),
           ),
         ],
       ),
@@ -424,7 +444,11 @@ class _SkeletonState extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 10),
           width: width,
           height: height,
-          decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
+          decoration: BoxDecoration(
+            color: AppColors.glassFill,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.hairline),
+          ),
         );
 
     return Padding(
@@ -454,12 +478,22 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.wifi_off_rounded, size: 40, color: Colors.grey.shade400),
+            const Icon(Icons.wifi_off_rounded, size: 40, color: AppColors.iconGhost),
             const SizedBox(height: 12),
-            const Text('Could not load this business\'s profile.', textAlign: TextAlign.center),
+            Text(
+              'Could not load this business\'s profile.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMuted,
+            ),
             if (onRetry != null) ...[
-              const SizedBox(height: 12),
-              OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry')),
+              const SizedBox(height: 14),
+              GhostButton(
+                label: 'Retry',
+                icon: Icons.refresh,
+                height: 42,
+                expand: false,
+                onPressed: onRetry,
+              ),
             ],
           ],
         ),
