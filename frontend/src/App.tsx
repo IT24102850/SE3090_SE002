@@ -9,7 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './shared/components/AppLayout';
 import { ToastProvider } from './shared/components/Toast';
-import CalendarDashboardPage from './features/booking/CalendarDashboardPage';
+import DashboardRouter from './features/dashboard/DashboardRouter';
 import BookingManagerPage from './features/booking/BookingManagerPage';
 import ResourceManagerPage from './features/booking/ResourceManagerPage';
 import MultiBranchSchedulePage from './features/booking/MultiBranchSchedulePage';
@@ -71,7 +71,7 @@ function App() {
                 path="/dashboard"
                 element={
                   <ProtectedRoute>
-                    <Shell><CalendarDashboardPage /></Shell>
+                    <Shell><DashboardRouter /></Shell>
                   </ProtectedRoute>
                 }
               />

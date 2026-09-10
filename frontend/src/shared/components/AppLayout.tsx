@@ -4,6 +4,9 @@ import { useState, type ReactNode } from 'react';
 import { RootState } from '../../store/store';
 import { logout } from '../../store/authSlice';
 import NotificationBell from './NotificationBell';
+import { bookingApi } from '../../api/bookingApi';
+import { resetSubtypeCache } from '../../features/dashboard/subtype';
+import { useSubtypeConfig } from '../../features/dashboard/useSubtypeConfig';
 
 interface NavItem {
   path: string;
@@ -93,10 +96,32 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   // Role filtering happens inside each section; a section whose items are all
   // filtered out disappears rather than leaving an empty heading.
+  // Destinations are renamed to the tenant's own vocabulary - "Resources"
+  // becomes "Vessels & Crew" for a whale-watching operator, "Rooms" for a
+  // homestay. A sub-type's explicit navOverrides win; otherwise the generic
+  // resource/booking/equipment terms are used. Only labels and icons change,
+  // never paths, so scripts/check-nav-parity.mjs still matches every route.
+  const subtype = useSubtypeConfig();
+  const termLabels: Record<string, string> = {
+    '/resources': subtype.resourceTermPlural,
+    '/bookings': subtype.bookingTermPlural,
+    '/inventory': subtype.equipmentTerm,
+  };
+  const overrides = subtype.navOverrides ?? {};
+
   const sections = NAV_SECTIONS
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => !user || item.roles.includes(user.role)),
+      items: section.items
+        .filter((item) => !user || item.roles.includes(user.role))
+        .map((item) => {
+          const override = overrides[item.path];
+          return {
+            ...item,
+            label: override?.label ?? termLabels[item.path] ?? item.label,
+            icon: override?.icon ?? item.icon,
+          };
+        }),
     }))
     .filter((section) => section.items.length > 0);
 
@@ -119,6 +144,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   const handleLogout = () => {
     dispatch(logout());
+    // Both caches are keyed to the tenant that just logged out. RTK Query
+    // keeps its store across a logout, and the sub-type is memoised in a
+    // module variable, so without these two the next tenant to sign in on
+    // this browser sees the previous tenant's dashboard, sidebar labels and
+    // list data until a hard refresh.
+    dispatch(bookingApi.util.resetApiState());
+    resetSubtypeCache();
     navigate('/login');
   };
 

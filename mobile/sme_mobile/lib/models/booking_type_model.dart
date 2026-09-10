@@ -47,6 +47,56 @@ class BookingType {
     }
   }
 
+  /// What kind of product this is - `tour`, `package` or `addon` - from
+  /// ConfigJson's `category` key. Defaults to `tour` when the key is absent
+  /// or unrecognised, so every product written before the convention existed
+  /// still shows up as something bookable rather than vanishing into the
+  /// add-ons list. Mirrors the web registry's getProductCategory().
+  String get category {
+    final raw = config?['category'];
+    return (raw == 'tour' || raw == 'package' || raw == 'addon') ? raw as String : 'tour';
+  }
+
+  /// True for extras attached to a booking rather than booked on their own.
+  bool get isAddon => category == 'addon';
+
+  /// The operator's own emoji for this product, where their site uses one.
+  String? get icon {
+    final raw = config?['icon'];
+    return (raw is String && raw.isNotEmpty) ? raw : null;
+  }
+
+  Map<String, dynamic>? get _pricing {
+    final raw = config?['pricing'];
+    return raw is Map<String, dynamic> ? raw : null;
+  }
+
+  String get currency => _pricing?['currency']?.toString() ?? 'LKR';
+
+  /// Per-head prices. Null means "no such rate exists" - which is not the
+  /// same as free, so the UI omits a null rate and prints 0 as "Free".
+  num? get adultPrice => _pricing?['adult'] as num?;
+  num? get childPrice => _pricing?['child'] as num?;
+
+  /// Age bands the operator publishes with each rate, e.g. adult 12 and up.
+  /// Null when they publish no age split, which plenty of products do not -
+  /// the UI omits the band rather than inventing one.
+  int? get adultFromAge {
+    final raw = config?['agePolicy'];
+    return raw is Map<String, dynamic> ? (raw['adultFromAge'] as num?)?.toInt() : null;
+  }
+
+  int? get childUnderAge {
+    final raw = config?['agePolicy'];
+    return raw is Map<String, dynamic> ? (raw['childUnderAge'] as num?)?.toInt() : null;
+  }
+
+  /// What this product includes, per ConfigJson `includes`.
+  List<String> get includes {
+    final raw = config?['includes'];
+    return raw is List ? raw.whereType<String>().toList() : const [];
+  }
+
   factory BookingType.fromJson(Map<String, dynamic> json) {
     return BookingType(
       id: json['id'].toString(),

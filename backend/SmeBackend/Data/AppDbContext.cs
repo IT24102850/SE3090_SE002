@@ -32,6 +32,13 @@ public class AppDbContext : DbContext
     public DbSet<Notification> Notifications { get; set; } = null!;
     public DbSet<DeviceToken> DeviceTokens { get; set; } = null!;
 
+    // Fixed-departure excursion ops (whale watching, safari jeeps, ...) -
+    // archetype A in docs/tourism-business-template.md. Only tenants whose
+    // SubType selects a departure-board dashboard write to these.
+    public DbSet<Departure> Departures { get; set; } = null!;
+    public DbSet<SightingsLog> SightingsLogs { get; set; } = null!;
+    public DbSet<WeatherObservation> WeatherObservations { get; set; } = null!;
+
     // Equipment reserved as part of a booking (dive tanks, wheelchairs, ...) -
     // distinct from the full Inventory module below; see EquipmentItem.cs.
     public DbSet<EquipmentItem> EquipmentItems { get; set; } = null!;
@@ -124,6 +131,9 @@ public class AppDbContext : DbContext
             entity.HasIndex(b => new { b.TenantId, b.StartTime, b.EndTime });
             entity.HasIndex(b => new { b.ResourceId, b.StartTime, b.EndTime });
             entity.HasIndex(b => new { b.BookingTypeId, b.StartTime });
+            entity.HasIndex(b => b.DepartureId);
+
+            entity.Property(b => b.Source).HasMaxLength(50);
 
             entity.Property(b => b.Status)
                   .HasConversion<string>()
@@ -143,6 +153,81 @@ public class AppDbContext : DbContext
                   .WithMany(bt => bt.Bookings)
                   .HasForeignKey(b => b.BookingTypeId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            // SetNull, not Cascade: deleting a departure must never delete
+            // the guests' reservations - the weather-cancel flow relies on
+            // those bookings surviving so they can be rescheduled.
+            entity.HasOne<Departure>()
+                  .WithMany()
+                  .HasForeignKey(b => b.DepartureId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ==================== DEPARTURES ====================
+        modelBuilder.Entity<Departure>(entity =>
+        {
+            entity.ToTable("departures");
+            entity.HasQueryFilter(d => d.DeletedAt == null);
+
+            entity.HasIndex(d => new { d.TenantId, d.ScheduledDeparture });
+            entity.HasIndex(d => new { d.TenantId, d.Status });
+            entity.HasIndex(d => new { d.ResourceId, d.ScheduledDeparture }).IsUnique();
+
+            entity.Property(d => d.Status)
+                  .HasConversion<string>()
+                  .HasMaxLength(20);
+
+            entity.HasOne(d => d.Resource)
+                  .WithMany()
+                  .HasForeignKey(d => d.ResourceId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.BookingType)
+                  .WithMany()
+                  .HasForeignKey(d => d.BookingTypeId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ==================== SIGHTINGS LOG ====================
+        modelBuilder.Entity<SightingsLog>(entity =>
+        {
+            entity.ToTable("sightings_logs");
+            entity.HasQueryFilter(s => s.DeletedAt == null);
+
+            entity.HasIndex(s => new { s.TenantId, s.DepartureDateTime });
+            entity.HasIndex(s => new { s.TenantId, s.Species });
+            entity.HasIndex(s => s.DepartureId);
+
+            entity.Property(s => s.Species)
+                  .HasConversion<string>()
+                  .HasMaxLength(30);
+            entity.Property(s => s.Behaviour)
+                  .HasConversion<string>()
+                  .HasMaxLength(30);
+
+            entity.HasOne(s => s.Resource)
+                  .WithMany()
+                  .HasForeignKey(s => s.ResourceId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Cascade, unlike the other two FKs here: a sighting has no
+            // meaning once its departure is gone, whereas a departure and a
+            // vessel both outlive individual bookings.
+            entity.HasOne(s => s.Departure)
+                  .WithMany()
+                  .HasForeignKey(s => s.DepartureId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ==================== WEATHER OBSERVATIONS ====================
+        modelBuilder.Entity<WeatherObservation>(entity =>
+        {
+            entity.ToTable("weather_observations");
+
+            entity.HasIndex(w => new { w.TenantId, w.ObservedAt });
+            entity.HasIndex(w => w.DepartureId);
+
+            entity.Property(w => w.Source).HasMaxLength(50);
         });
 
         // ==================== RESOURCE SCHEDULES ====================

@@ -3,6 +3,15 @@ import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolk
 import type {
   AgentWorkflow,
   AvailabilityDay,
+  DepartureBoard,
+  DepartureManifest,
+  ExcursionKpis,
+  RescheduleOption,
+  SafetyPanel,
+  Sighting,
+  SightingAnalytics,
+  TicketLine,
+  WeatherObservation,
   AvailabilitySearchResult,
   AvailableSlotsResponse,
   Booking,
@@ -61,7 +70,7 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
 export const bookingApi = createApi({
   reducerPath: 'bookingApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification'],
+  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification', 'Departure', 'Sighting', 'Weather', 'Safety'],
   endpoints: (builder) => ({
     // ── Branches ──────────────────────────────────────────
     getBranches: builder.query<Branch[], { tenantId: string }>({
@@ -193,10 +202,20 @@ export const bookingApi = createApi({
       query: (id) => `/bookings/${id}`,
       providesTags: (_r, _e, id) => [{ type: 'Booking', id }],
     }),
-    createBooking: builder.mutation<unknown, Partial<Booking> & {
-      tenantId: string; resourceId: string; bookingTypeId: string; bookedBy: string;
-      startTime: string; endTime: string; priority: string;
-    }>({
+    // ticketBreakdown is asymmetric on purpose: the client POSTs an array
+    // of { type, qty } and the server returns the priced jsonb *string* it
+    // stored, so Booking's own string-typed field is omitted here rather
+    // than widened - only the write side takes an array.
+    createBooking: builder.mutation<
+      { id: string; totalCost?: number | null; capacityWarning?: string | null },
+      Omit<Partial<Booking>, 'ticketBreakdown'> & {
+        tenantId: string; resourceId: string; bookingTypeId: string; bookedBy: string;
+        startTime: string; endTime: string; priority: string;
+        ticketBreakdown?: TicketLine[];
+        departureId?: string;
+        formData?: string;
+      }
+    >({
       query: (body) => ({ url: '/bookings', method: 'POST', body }),
       invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }],
     }),
@@ -263,6 +282,223 @@ export const bookingApi = createApi({
       { tenantId: string; from: string; to: string }
     >({
       query: (params) => ({ url: '/bookings/reports/no-shows', params }),
+    }),
+
+    // ── Departure operations (fixed-departure excursions) ────────
+    // Only reached by sub-types whose registry config turns the departures
+    // module on; every other tenant never issues these requests.
+    getDepartureBoard: builder.query<DepartureBoard, { from?: string; days?: number }>({
+      query: (params) => ({ url: '/departures/board', params }),
+      providesTags: [{ type: 'Departure', id: 'LIST' }],
+    }),
+    getDepartureManifest: builder.query<DepartureManifest, string>({
+      query: (id) => `/departures/${id}/manifest`,
+      providesTags: (_r, _e, id) => [{ type: 'Departure', id }],
+    }),
+    createDeparture: builder.mutation<
+      { id: string; scheduledDeparture: string },
+      {
+        resourceId: string; bookingTypeId?: string; scheduledDeparture: string;
+        scheduledReturn?: string; captainUserId?: string; crew?: string;
+        licensedCapacity?: number; notes?: string;
+      }
+    >({
+      query: (body) => ({ url: '/departures', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Departure', id: 'LIST' }],
+    }),
+    updateDeparture: builder.mutation<
+      unknown,
+      { id: string; captainUserId?: string; crew?: string; licensedCapacity?: number; notes?: string }
+    >({
+      query: ({ id, ...body }) => ({ url: `/departures/${id}`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Departure', id }, { type: 'Departure', id: 'LIST' }],
+    }),
+    setDepartureStatus: builder.mutation<
+      unknown,
+      { id: string; status: string; reason?: string; overrideSafetyChecklist?: boolean }
+    >({
+      query: ({ id, ...body }) => ({ url: `/departures/${id}/status`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Departure', id }, { type: 'Departure', id: 'LIST' }],
+    }),
+    setSafetyChecklist: builder.mutation<
+      unknown,
+      { id: string; jacketsCounted: boolean; briefingDone: boolean; manifestClosed: boolean; weatherChecked: boolean }
+    >({
+      query: ({ id, ...body }) => ({ url: `/departures/${id}/safety-checklist`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Departure', id }, { type: 'Departure', id: 'LIST' }],
+    }),
+    cancelDepartureForWeather: builder.mutation<
+      {
+        departureId: string; status: string; bookingsCancelled: number;
+        guestsNotified: number; rescheduleOptions: RescheduleOption[];
+      },
+      {
+        id: string; reason?: string;
+        weather?: { windSpeedKnots?: number; waveHeightMetres?: number; visibilityKm?: number; seaStateCode?: number; note?: string };
+      }
+    >({
+      query: ({ id, ...body }) => ({ url: `/departures/${id}/cancel-weather`, method: 'POST', body }),
+      invalidatesTags: [
+        { type: 'Departure', id: 'LIST' }, { type: 'Booking', id: 'LIST' },
+        { type: 'Weather', id: 'LIST' }, { type: 'Notification', id: 'LIST' },
+      ],
+    }),
+    getRescheduleOptions: builder.query<RescheduleOption[], string>({
+      query: (id) => `/departures/${id}/reschedule-options`,
+    }),
+    bulkRescheduleDeparture: builder.mutation<
+      { movedCount: number; skippedCount: number; skipped: { bookingId: string; reason: string }[] },
+      { id: string; targetDepartureId: string; bookingIds: string[] }
+    >({
+      query: ({ id, ...body }) => ({ url: `/departures/${id}/bulk-reschedule`, method: 'POST', body }),
+      invalidatesTags: [{ type: 'Departure', id: 'LIST' }, { type: 'Booking', id: 'LIST' }],
+    }),
+
+    // ── Weather / sea-state console ───────────────────────
+    getWeather: builder.query<
+      { latest?: WeatherObservation | null; items: WeatherObservation[] },
+      { departureId?: string; limit?: number } | void
+    >({
+      query: (params) => ({ url: '/departures/weather', params: params ?? undefined }),
+      providesTags: [{ type: 'Weather', id: 'LIST' }],
+    }),
+    recordWeather: builder.mutation<
+      WeatherObservation,
+      {
+        resourceId?: string; departureId?: string; observedAt?: string;
+        windSpeedKnots?: number; waveHeightMetres?: number; visibilityKm?: number;
+        seaStateCode?: number; note?: string;
+      }
+    >({
+      query: (body) => ({ url: '/departures/weather', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Weather', id: 'LIST' }, { type: 'Departure', id: 'LIST' }],
+    }),
+
+    // ── Safety & compliance ───────────────────────────
+    getSafetyPanel: builder.query<SafetyPanel, { expiringWithinDays?: number } | void>({
+      query: (params) => ({ url: '/departures/safety', params: params ?? undefined }),
+      providesTags: [{ type: 'Safety', id: 'LIST' }],
+    }),
+
+    // ── Sightings ─────────────────────────────────
+    getSightings: builder.query<
+      { items: Sighting[]; total: number },
+      { departureId?: string; resourceId?: string; species?: string; from?: string; to?: string; pageSize?: number }
+    >({
+      query: (params) => ({ url: '/sightings', params }),
+      providesTags: [{ type: 'Sighting', id: 'LIST' }],
+    }),
+    logSighting: builder.mutation<
+      Sighting,
+      {
+        departureId?: string; resourceId?: string; bookingId?: string;
+        departureDateTime?: string; species: string; count?: number;
+        locationLat?: number; locationLng?: number; behaviour?: string;
+        notes?: string; photoUrls?: string;
+      }
+    >({
+      query: (body) => ({ url: '/sightings', method: 'POST', body }),
+      invalidatesTags: [
+        { type: 'Sighting', id: 'LIST' }, { type: 'Sighting', id: 'ANALYTICS' },
+        { type: 'Departure', id: 'LIST' },
+      ],
+    }),
+    deleteSighting: builder.mutation<void, string>({
+      query: (id) => ({ url: `/sightings/${id}`, method: 'DELETE' }),
+      invalidatesTags: [{ type: 'Sighting', id: 'LIST' }, { type: 'Sighting', id: 'ANALYTICS' }],
+    }),
+    getSightingAnalytics: builder.query<
+      SightingAnalytics,
+      { from?: string; to?: string; species?: string } | void
+    >({
+      query: (params) => ({ url: '/sightings/analytics', params: params ?? undefined }),
+      providesTags: [{ type: 'Sighting', id: 'ANALYTICS' }],
+    }),
+    getSightingVocabulary: builder.query<{ species: string[]; behaviours: string[] }, void>({
+      query: () => '/sightings/vocabulary',
+    }),
+
+    // ── Per-ticket-type pricing ─────────────────────────
+    quoteTickets: builder.mutation<
+      {
+        lines: TicketLine[]; totalQuantity: number; total: number; currency: string;
+        seasonLabel?: string | null; isOffPeakRate: boolean;
+        inSeason?: boolean | null; weatherDependent?: boolean | null;
+      },
+      { bookingTypeId: string; startTime: string; ticketBreakdown: TicketLine[] }
+    >({
+      query: (body) => ({ url: '/bookings/quote', method: 'POST', body }),
+    }),
+    setBookingTickets: builder.mutation<
+      { totalCost: number; currency: string; capacityWarning?: string | null },
+      { id: string; ticketBreakdown: TicketLine[] }
+    >({
+      query: ({ id, ticketBreakdown }) => ({ url: `/bookings/${id}/tickets`, method: 'PUT', body: { ticketBreakdown } }),
+      invalidatesTags: (_r, _e, { id }) => [
+        { type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Departure', id: 'LIST' },
+      ],
+    }),
+    setBookingWaiver: builder.mutation<
+      unknown,
+      { id: string; signerName: string; signedAt?: string; minorCount?: number }
+    >({
+      query: ({ id, ...body }) => ({ url: `/bookings/${id}/waiver`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { id }) => [
+        { type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Departure', id: 'LIST' },
+      ],
+    }),
+
+    // ── Excursion reports ─────────────────────────────
+    getExcursionKpis: builder.query<ExcursionKpis, { on?: string; forwardDays?: number } | void>({
+      query: (params) => ({ url: '/reports/excursions/kpis', params: params ?? undefined }),
+      providesTags: [{ type: 'Departure', id: 'KPIS' }],
+    }),
+    getRevenueByTicketType: builder.query<
+      {
+        byTicketType: { ticketType: string; quantity: number; revenue: number }[];
+        unbrokenDownRevenue: number; totalRevenue: number; totalTickets: number;
+      },
+      { from?: string; to?: string }
+    >({
+      query: (params) => ({ url: '/reports/excursions/revenue-by-ticket-type', params }),
+    }),
+    getPerDepartureReport: builder.query<
+      {
+        departures: {
+          departureId: string; vesselName: string; scheduledDeparture: string; status: string;
+          capacity: number; pax: number; occupancyPercent: number; revenue: number;
+          revenuePerSeat: number; bookings: number; sightings: number;
+        }[];
+        totalRevenue: number; averageOccupancyPercent: number;
+      },
+      { from?: string; to?: string }
+    >({
+      query: (params) => ({ url: '/reports/excursions/per-departure', params }),
+    }),
+    getWeatherCancellationReport: builder.query<
+      {
+        totalCancelled: number; totalBookingsAffected: number;
+        totalRefundableAmount: number; totalRebooked: number;
+        byMonth: { month: string; label: string; count: number }[];
+        departures: {
+          departureId: string; vesselName: string; scheduledDeparture: string;
+          cancellationReason?: string | null; bookingsAffected: number;
+          refundableAmount: number; paxAffected: number; rebookedCount: number;
+        }[];
+      },
+      { from?: string; to?: string }
+    >({
+      query: (params) => ({ url: '/reports/excursions/weather-cancellations', params }),
+    }),
+    getChannelSplit: builder.query<
+      {
+        byChannel: { channel: string; bookings: number; pax: number; revenue: number }[];
+        byNationality: { nationality: string; bookings: number }[];
+        nationalityCaptured: boolean;
+      },
+      { from?: string; to?: string }
+    >({
+      query: (params) => ({ url: '/reports/excursions/channel-split', params }),
     }),
 
     // ── Resources ─────────────────────────────────────────
@@ -421,6 +657,31 @@ export const {
   useGetConflictsQuery,
   useBulkScheduleMutation,
   useGetNoShowStatsQuery,
+  useGetDepartureBoardQuery,
+  useGetDepartureManifestQuery,
+  useCreateDepartureMutation,
+  useUpdateDepartureMutation,
+  useSetDepartureStatusMutation,
+  useSetSafetyChecklistMutation,
+  useCancelDepartureForWeatherMutation,
+  useGetRescheduleOptionsQuery,
+  useBulkRescheduleDepartureMutation,
+  useGetWeatherQuery,
+  useRecordWeatherMutation,
+  useGetSafetyPanelQuery,
+  useGetSightingsQuery,
+  useLogSightingMutation,
+  useDeleteSightingMutation,
+  useGetSightingAnalyticsQuery,
+  useGetSightingVocabularyQuery,
+  useQuoteTicketsMutation,
+  useSetBookingTicketsMutation,
+  useSetBookingWaiverMutation,
+  useGetExcursionKpisQuery,
+  useGetRevenueByTicketTypeQuery,
+  useGetPerDepartureReportQuery,
+  useGetWeatherCancellationReportQuery,
+  useGetChannelSplitQuery,
   useGetResourcesQuery,
   useCreateResourceMutation,
   useUpdateResourceMutation,

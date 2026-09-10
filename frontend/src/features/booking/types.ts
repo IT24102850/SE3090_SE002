@@ -6,7 +6,10 @@ export type BookingStatus =
   | 'Completed'
   | 'Cancelled'
   | 'NoShow'
-  | 'Rejected';
+  | 'Rejected'
+  // Set by the weather-cancel flow, never by a guest. Kept apart from
+  // Cancelled so weather losses do not read as churn in the reports.
+  | 'WeatherCancelled';
 
 export type BookingPriority = 'Low' | 'Normal' | 'High' | 'Urgent';
 
@@ -32,6 +35,273 @@ export interface Booking {
   attendeeCount?: number | null;
   totalCost?: number | null;
   createdAt: string;
+  checkInAt?: string | null;
+  // Fixed-departure excursion fields. All optional - a booking that has
+  // none of them renders exactly as it did before they existed.
+  departureId?: string | null;
+  /** Raw jsonb: TicketLine[]. Parse with parseTicketBreakdown below. */
+  ticketBreakdown?: string | null;
+  /** Raw jsonb: { signedAt, signerName, minorCount }. */
+  waiver?: string | null;
+  source?: string | null;
+}
+
+// ── Fixed-departure excursion types (whale watching, safari) ──────────
+
+export interface TicketLine {
+  type: string;
+  qty: number;
+  unitPrice?: number | null;
+  lineTotal?: number | null;
+}
+
+export const TICKET_TYPES = ['Adult', 'Child', 'Infant'] as const;
+
+/** Parses Booking.ticketBreakdown. Returns [] for null/blank/malformed
+ *  jsonb, so a bad row degrades one card rather than the whole board. */
+export function parseTicketBreakdown(json?: string | null): TicketLine[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as TicketLine[]).filter((l) => l && l.qty > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+export interface WaiverState {
+  signedAt?: string | null;
+  signerName?: string | null;
+  minorCount?: number | null;
+}
+
+export function parseWaiver(json?: string | null): WaiverState | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as WaiverState;
+  } catch {
+    return null;
+  }
+}
+
+export type DepartureStatus =
+  | 'Scheduled'
+  | 'Boarding'
+  | 'AtSea'
+  | 'Returned'
+  | 'CancelledWeather'
+  | 'CancelledOther';
+
+export const DEPARTURE_STATUS_COLORS: Record<DepartureStatus, { bg: string; label: string }> = {
+  Scheduled: { bg: '#8B5CF6', label: 'Scheduled' },
+  Boarding: { bg: '#FBBF24', label: 'Boarding' },
+  AtSea: { bg: '#22D3EE', label: 'At sea' },
+  Returned: { bg: '#4ADE80', label: 'Returned' },
+  CancelledWeather: { bg: '#38BDF8', label: 'Weather-cancelled' },
+  CancelledOther: { bg: '#7C7C85', label: 'Cancelled' },
+};
+
+export interface WeatherObservation {
+  id: string;
+  resourceId?: string | null;
+  departureId?: string | null;
+  observedAt: string;
+  windSpeedKnots?: number | null;
+  waveHeightMetres?: number | null;
+  visibilityKm?: number | null;
+  seaStateCode?: number | null;
+  note?: string | null;
+  source: string;
+}
+
+export interface SafetyChecklist {
+  jacketsCounted?: boolean;
+  briefingDone?: boolean;
+  manifestClosed?: boolean;
+  weatherChecked?: boolean;
+  completedAt?: string | null;
+  completedBy?: string | null;
+}
+
+export function parseSafetyChecklist(json?: string | null): SafetyChecklist {
+  if (!json) return {};
+  try {
+    return JSON.parse(json) as SafetyChecklist;
+  } catch {
+    return {};
+  }
+}
+
+export interface CrewMember {
+  userId?: string | null;
+  name: string;
+  role?: string | null;
+}
+
+export function parseCrew(json?: string | null): CrewMember[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as CrewMember[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export interface DepartureSummary {
+  id: string;
+  resourceId: string;
+  vesselName: string;
+  bookingTypeId?: string | null;
+  bookingTypeName?: string | null;
+  scheduledDeparture: string;
+  scheduledReturn: string;
+  durationMinutes: number;
+  status: DepartureStatus;
+  captainUserId?: string | null;
+  crew?: string | null;
+  safetyChecklist?: string | null;
+  safetyChecklistComplete: boolean;
+  capacity: number;
+  paxBooked: number;
+  seatsRemaining: number;
+  occupancyPercent: number;
+  nearCapacity: boolean;
+  ticketMix: Record<string, number>;
+  bookingCount: number;
+  checkedInCount: number;
+  waiverCompletionPercent: number;
+  revenue: number;
+  sightingCount: number;
+  cancellationReason?: string | null;
+  latestWeather?: WeatherObservation | null;
+}
+
+export interface DepartureBoard {
+  from: string;
+  to: string;
+  today: DepartureSummary[];
+  upcoming: DepartureSummary[];
+}
+
+export interface ManifestPassenger {
+  bookingId: string;
+  guestName: string;
+  guestEmail?: string | null;
+  guestPhone?: string | null;
+  seats: number;
+  tickets: TicketLine[];
+  status: BookingStatus;
+  source?: string | null;
+  checkedIn: boolean;
+  checkInAt?: string | null;
+  noShow: boolean;
+  waiverSigned: boolean;
+  waiverSignerName?: string | null;
+  minorCount: number;
+  totalCost?: number | null;
+  notes?: string | null;
+}
+
+export interface DepartureManifest {
+  departure: DepartureSummary;
+  passengers: ManifestPassenger[];
+  waiverCompletionPercent: number;
+  checkedInCount: number;
+  noShowCount: number;
+}
+
+export interface Sighting {
+  id: string;
+  resourceId: string;
+  departureId?: string | null;
+  bookingId?: string | null;
+  departureDateTime: string;
+  species: string;
+  count?: number | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
+  behaviour?: string | null;
+  notes?: string | null;
+  photoUrls?: string | null;
+  loggedByUserId?: string | null;
+  createdAt: string;
+}
+
+export interface SightingAnalytics {
+  from: string;
+  to: string;
+  speciesFilter?: string | null;
+  departuresSailed: number;
+  departuresWithSighting: number;
+  successRate: number;
+  totalSightings: number;
+  totalIndividuals: number;
+  speciesFrequency: { species: string; sightings: number; individuals: number }[];
+  monthly: {
+    month: string;
+    label: string;
+    departures: number;
+    departuresWithSighting: number;
+    successRate: number;
+    totalSightings: number;
+    bySpecies: Record<string, number>;
+  }[];
+}
+
+export interface ExcursionKpis {
+  asOf: string;
+  seasonStart: string;
+  departuresToday: number;
+  departuresTodayByStatus: Record<string, number>;
+  paxBookedToday: number;
+  capacityToday: number;
+  occupancyTodayPercent: number;
+  sightingSuccessRate: number;
+  departuresSailedSeasonToDate: number;
+  departuresWithSightingSeasonToDate: number;
+  revenueToday: number;
+  weatherCancelledThisMonth: number;
+  waiverCompletionPercent: number;
+  checkedInToday: number;
+  forwardDays: number;
+  nextDaysOccupancyPercent: number;
+  nextDaysPax: number;
+  nextDaysCapacity: number;
+}
+
+export interface SafetyPanel {
+  vessels: {
+    resourceId: string;
+    vesselName: string;
+    licensedCapacity: number;
+    lifeJacketCount: number;
+    lifeJacketShortfall: number;
+    jacketsSufficient: boolean;
+    equipment: SafetyGearItem[];
+  }[];
+  sharedEquipment: SafetyGearItem[];
+  expiredCount: number;
+  expiringSoonCount: number;
+}
+
+export interface SafetyGearItem {
+  equipmentItemId: string;
+  name: string;
+  category: string;
+  quantity: number;
+  expiryDate?: string | null;
+  isExpired: boolean;
+  isExpiringSoon: boolean;
+}
+
+export interface RescheduleOption {
+  departureId: string;
+  vesselName: string;
+  scheduledDeparture: string;
+  capacity: number;
+  seatsTaken: number;
+  seatsRemaining: number;
 }
 
 export interface PagedResult<T> {
@@ -270,9 +540,13 @@ export const STATUS_COLORS: Record<BookingStatus, { fg: string; bg: string; tone
   Cancelled: { fg: '#475569', bg: '#7C7C85', tone: 'neutral' },
   NoShow: { fg: '#991b1b', bg: '#F87171', tone: 'critical' },
   Rejected: { fg: '#991b1b', bg: '#EF4444', tone: 'critical' },
+  // Storm blue rather than the red of a rejection: the operator did not
+  // turn this guest away, the sea did.
+  WeatherCancelled: { fg: '#075985', bg: '#38BDF8', tone: 'warning' },
 };
 
 export const RESOURCE_CATEGORIES: ResourceCategory[] = ['Room', 'Equipment', 'Vehicle', 'Staff', 'Desk', 'Other'];
 export const BOOKING_STATUSES: BookingStatus[] = [
   'Pending', 'Confirmed', 'CheckedIn', 'InProgress', 'Completed', 'Cancelled', 'NoShow', 'Rejected',
+  'WeatherCancelled',
 ];

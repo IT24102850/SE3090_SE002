@@ -137,15 +137,53 @@ public class BookingsController : ControllerBase
         if (endTime <= startTime)
             return BadRequest(new { message = "EndTime must be after StartTime." });
 
-        // FR-B3: Conflict detection
-        if (await HasConflictAsync(dto.ResourceId, startTime, endTime))
-            return Conflict(new { message = "This time slot is already booked." });
+        // FR-B3: Conflict detection, or - on a shared vehicle such as a
+        // whale-watching boat - a capacity check instead, since twenty
+        // reservations legitimately share one sailing.
+        var seats = TicketPricing.SeatsUsed(
+            dto.TicketBreakdown == null ? null : TicketPricing.Serialize(dto.TicketBreakdown),
+            dto.AttendeeCount);
+
+        // Attach the booking to the departure it is actually on.
+        //
+        // Departures were added after the booking flow existed, so every
+        // client that predates them - the customer app, the admin booking
+        // form, the bulk and recurring paths - sends no DepartureId, and
+        // those bookings then never appear on the departure board even
+        // though they are real reservations on a real sailing. Resolving it
+        // here fixes every one of those callers at once, and it runs before
+        // the capacity check so the seats count against the right sailing.
+        //
+        // Matched on an exact start time for that vessel: a booking at 09:00
+        // is genuinely not the 06:30 sailing, and quietly folding it into one
+        // would put guests on a manifest they never booked. No departure at
+        // that moment leaves the link null and behaves exactly as before.
+        var departureId = dto.DepartureId ?? await _db.Departures.AsNoTracking()
+            .Where(d => d.ResourceId == dto.ResourceId && d.ScheduledDeparture == startTime)
+            .Select(d => (Guid?)d.Id)
+            .FirstOrDefaultAsync();
+
+        var availability = await CheckAvailabilityAsync(
+            dto.ResourceId, dto.BookingTypeId, departureId, startTime, endTime, seats);
+        if (availability.Error != null)
+            return availability.IsCapacityFailure
+                ? BadRequest(new { message = availability.Error, capacity = availability.Capacity, seatsRemaining = availability.SeatsRemaining })
+                : Conflict(new { message = availability.Error });
 
         var businessRuleError = await ValidateBusinessRulesAsync(dto.ResourceId, startTime, endTime, dto.BookingTypeId);
         if (businessRuleError != null)
             return BadRequest(new { message = businessRuleError });
 
         var bookedBy = callerRole == Roles.Customer ? callerId.Value : dto.BookedBy;
+
+        // Per-ticket-type pricing (2 adults + 1 child in one reservation).
+        // Absent a breakdown this is all null and the booking behaves
+        // exactly as it did before ticket breakdowns existed.
+        var bookingType = await _db.BookingTypes.AsNoTracking()
+            .FirstOrDefaultAsync(bt => bt.Id == dto.BookingTypeId);
+        var priced = dto.TicketBreakdown is { Count: > 0 }
+            ? TicketPricing.Price(dto.TicketBreakdown, bookingType, startTime)
+            : null;
 
         var booking = new Booking
         {
@@ -160,8 +198,13 @@ public class BookingsController : ControllerBase
             EndTime = endTime,
             Status = Models.BookingStatus.Pending,
             Priority = dto.Priority,
-            AttendeeCount = dto.AttendeeCount,
-            FormData = dto.FormData
+            AttendeeCount = dto.AttendeeCount ?? (priced?.TotalQuantity > 0 ? priced.TotalQuantity : null),
+            FormData = dto.FormData,
+            DepartureId = departureId,
+            TicketBreakdown = priced != null ? TicketPricing.Serialize(priced.Lines) : null,
+            Waiver = dto.Waiver,
+            Source = dto.Source,
+            TotalCost = priced?.Total
         };
 
         _db.Bookings.Add(booking);
@@ -180,7 +223,16 @@ public class BookingsController : ControllerBase
             booking.StartTime,
             booking.EndTime,
             booking.Status,
-            ResourceName = resourceName
+            ResourceName = resourceName,
+            booking.DepartureId,
+            booking.TicketBreakdown,
+            booking.TotalCost,
+            Currency = priced?.Currency,
+            SeasonLabel = priced?.SeasonLabel,
+            IsOffPeakRate = priced?.IsOffPeak ?? false,
+            // Non-blocking: the sale went through, the board should show
+            // this sailing as nearly full (the 90% threshold in section 3.1).
+            CapacityWarning = availability.Warning
         });
     }
 
@@ -205,8 +257,13 @@ public class BookingsController : ControllerBase
         if (DateTime.UtcNow > cutoff)
             return BadRequest(new { message = $"Cannot reschedule within {tenant?.RescheduleCutoffHours ?? 2} hour(s) of the appointment." });
 
-        if (await HasConflictAsync(booking.ResourceId, newStart, newEnd, excludeBookingId: id))
-            return Conflict(new { message = "New slot conflicts with existing booking." });
+        var seats = TicketPricing.SeatsUsed(booking.TicketBreakdown, booking.AttendeeCount);
+        var availability = await CheckAvailabilityAsync(
+            booking.ResourceId, booking.BookingTypeId, booking.DepartureId, newStart, newEnd, seats, excludeBookingId: id);
+        if (availability.Error != null)
+            return availability.IsCapacityFailure
+                ? BadRequest(new { message = availability.Error, capacity = availability.Capacity, seatsRemaining = availability.SeatsRemaining })
+                : Conflict(new { message = "New slot conflicts with existing booking." });
 
         var businessRuleError = await ValidateBusinessRulesAsync(booking.ResourceId, newStart, newEnd, booking.BookingTypeId, excludeBookingId: id);
         if (businessRuleError != null)
@@ -291,6 +348,67 @@ public class BookingsController : ControllerBase
             && b.EndTime > start);
     }
 
+    /// The outcome of asking "can this booking go here?".
+    /// Exclusive resources fail with a conflict; shared vehicles fail with a
+    /// capacity error, which the caller renders as a 400 rather than a 409
+    /// because there is nothing conflicting - the boat is simply full.
+    private sealed record AvailabilityOutcome(
+        string? Error, string? Warning, bool IsCapacityFailure, int? Capacity, int? SeatsRemaining);
+
+    // Sits in front of HasConflictAsync rather than replacing it.
+    //
+    // Exclusive occupancy (any overlap is a conflict) stays the rule for
+    // every resource that has no declared passenger capacity above one -
+    // consulting rooms, hire cars, and every resource that existed before
+    // departures did. Only a resource whose operator has actually set a
+    // capacity (CustomAttributes.capacity, Resource.Capacity, or the
+    // booking type's MaxParticipants) switches to summing seats, because
+    // only there does "twenty bookings on one boat" mean twenty guests on
+    // one sailing rather than twenty double-bookings.
+    private async Task<AvailabilityOutcome> CheckAvailabilityAsync(
+        Guid resourceId, Guid bookingTypeId, Guid? departureId,
+        DateTime start, DateTime end, int seats, Guid? excludeBookingId = null)
+    {
+        var resource = await _db.Resources.AsNoTracking().FirstOrDefaultAsync(r => r.Id == resourceId);
+        var bookingType = await _db.BookingTypes.AsNoTracking().FirstOrDefaultAsync(bt => bt.Id == bookingTypeId);
+        var departure = departureId.HasValue
+            ? await _db.Departures.AsNoTracking().FirstOrDefaultAsync(d => d.Id == departureId)
+            : null;
+
+        var capacity = CapacityRules.Resolve(resource, bookingType, departure);
+        if (capacity is not > 1)
+        {
+            return await HasConflictAsync(resourceId, start, end, excludeBookingId)
+                ? new AvailabilityOutcome("This time slot is already booked.", null, false, null, null)
+                : new AvailabilityOutcome(null, null, false, null, null);
+        }
+
+        // Seats already sold on the same sailing. Matched by departure when
+        // there is one, and by overlapping time otherwise, so a shared
+        // resource still enforces capacity for tenants that book it without
+        // creating Departure rows at all.
+        var query = _db.Bookings.AsNoTracking()
+            .Where(b => b.DeletedAt == null
+                && b.Status != Models.BookingStatus.Cancelled
+                && b.Status != Models.BookingStatus.WeatherCancelled
+                && b.Status != Models.BookingStatus.Rejected
+                && (excludeBookingId == null || b.Id != excludeBookingId));
+
+        query = departureId.HasValue
+            ? query.Where(b => b.DepartureId == departureId)
+            : query.Where(b => b.ResourceId == resourceId && b.StartTime < end && b.EndTime > start);
+
+        var existing = await query
+            .Select(b => new { b.TicketBreakdown, b.AttendeeCount })
+            .ToListAsync();
+
+        var seatsTaken = existing.Sum(b => TicketPricing.SeatsUsed(b.TicketBreakdown, b.AttendeeCount));
+        var check = CapacityRules.Check(capacity.Value, seatsTaken, seats);
+
+        return new AvailabilityOutcome(
+            check.Error, check.Warning, check.Error != null, check.Capacity, check.SeatsRemaining);
+    }
+
     // Enforces per-resource lunch-break gaps and a max-hours/day cap, both
     // configured on ResourceSchedule (ResourcesController's schedule
     // editor). Independent of HasConflictAsync above — a booking can pass
@@ -330,14 +448,41 @@ public class BookingsController : ControllerBase
             .Where(b => b.ResourceId == resourceId
                 && b.DeletedAt == null
                 && b.Status != Models.BookingStatus.Cancelled
+                && b.Status != Models.BookingStatus.WeatherCancelled
                 && b.Status != Models.BookingStatus.Rejected
                 && b.StartTime.Date == start.Date
                 && (excludeBookingId == null || b.Id != excludeBookingId))
             .Select(b => new { b.StartTime, b.EndTime })
             .ToListAsync();
 
-        var existingMinutes = existingBookingsToday.Sum(b => (b.EndTime - b.StartTime).TotalMinutes);
-        var totalHours = (decimal)(existingMinutes + (end - start).TotalMinutes) / 60m;
+        // The cap is on how long the *resource* is in use, so overlapping
+        // bookings are merged rather than added up. On an exclusive resource
+        // nothing overlaps (conflict detection saw to that) and this is
+        // arithmetically identical to the sum it replaces; on a shared
+        // vessel it is the difference between "one 4-hour sailing" and
+        // "80 hours", which is what twenty guests on one boat used to
+        // measure as.
+        var windows = existingBookingsToday
+            .Select(b => (b.StartTime, b.EndTime))
+            .Append((start, end))
+            .OrderBy(w => w.Item1)
+            .ToList();
+
+        var bookedMinutes = 0d;
+        var (mergedStart, mergedEnd) = windows[0];
+        foreach (var (windowStart, windowEnd) in windows.Skip(1))
+        {
+            if (windowStart <= mergedEnd)
+            {
+                if (windowEnd > mergedEnd) mergedEnd = windowEnd;
+                continue;
+            }
+            bookedMinutes += (mergedEnd - mergedStart).TotalMinutes;
+            (mergedStart, mergedEnd) = (windowStart, windowEnd);
+        }
+        bookedMinutes += (mergedEnd - mergedStart).TotalMinutes;
+
+        var totalHours = (decimal)bookedMinutes / 60m;
 
         if (totalHours > maxHours)
             return $"This resource is limited to {maxHours} booked hour(s) per day; this booking would bring the total to {totalHours:0.#} hour(s).";
@@ -361,6 +506,102 @@ public class BookingsController : ControllerBase
         return Ok(new { message = "Patient checked in.", booking.Status });
     }
     
+
+    // ── Liability waiver (section 3.6) ───────────────────────
+    // Kept off UpdateBooking on purpose: a waiver is signed by the guest, so
+    // the customer-facing app must be able to record one without also being
+    // handed the Admin/Manager/Staff-only booking editor.
+    /// <summary>Records that a guest signed the liability waiver for a booking.</summary>
+    [HttpPut("{id}/waiver")]
+    public async Task<IActionResult> SetWaiver(Guid id, [FromBody] SetWaiverDto dto)
+    {
+        var booking = await _db.Bookings.FindAsync(id);
+        if (booking == null || booking.DeletedAt != null) return NotFound();
+
+        var ownership = CheckOwnership(booking);
+        if (ownership != null) return ownership;
+
+        if (string.IsNullOrWhiteSpace(dto.SignerName))
+            return BadRequest(new { message = "SignerName is required to record a waiver." });
+
+        booking.Waiver = JsonSerializer.Serialize(new
+        {
+            signedAt = dto.SignedAt.HasValue ? DateTimeUtil.AsUtc(dto.SignedAt.Value) : DateTime.UtcNow,
+            signerName = dto.SignerName,
+            minorCount = dto.MinorCount ?? 0,
+        });
+        booking.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+        return Ok(new { booking.Id, booking.Waiver });
+    }
+
+    /// <summary>Replaces a booking's ticket breakdown and re-prices it (e.g. a child added to an existing reservation).</summary>
+    [HttpPut("{id}/tickets")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    public async Task<IActionResult> SetTickets(Guid id, [FromBody] SetTicketsDto dto)
+    {
+        var booking = await _db.Bookings.FindAsync(id);
+        if (booking == null || booking.DeletedAt != null) return NotFound();
+
+        if (dto.TicketBreakdown.Count == 0)
+            return BadRequest(new { message = "At least one ticket line is required." });
+
+        var seats = dto.TicketBreakdown.Sum(t => t.Qty);
+        var availability = await CheckAvailabilityAsync(
+            booking.ResourceId, booking.BookingTypeId, booking.DepartureId,
+            booking.StartTime, booking.EndTime, seats, excludeBookingId: id);
+        if (availability.Error != null && availability.IsCapacityFailure)
+            return BadRequest(new { message = availability.Error, capacity = availability.Capacity, seatsRemaining = availability.SeatsRemaining });
+
+        var bookingType = await _db.BookingTypes.AsNoTracking()
+            .FirstOrDefaultAsync(bt => bt.Id == booking.BookingTypeId);
+        var priced = TicketPricing.Price(dto.TicketBreakdown, bookingType, booking.StartTime);
+
+        booking.TicketBreakdown = TicketPricing.Serialize(priced.Lines);
+        booking.AttendeeCount = priced.TotalQuantity;
+        booking.TotalCost = priced.Total;
+        booking.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+        return Ok(new
+        {
+            booking.Id,
+            booking.TicketBreakdown,
+            booking.TotalCost,
+            priced.Currency,
+            priced.SeasonLabel,
+            IsOffPeakRate = priced.IsOffPeak,
+            CapacityWarning = availability.Warning,
+        });
+    }
+
+    /// <summary>Prices a ticket breakdown without creating anything, so the booking form can show a live total.</summary>
+    [HttpPost("quote")]
+    public async Task<IActionResult> Quote([FromBody] QuoteDto dto)
+    {
+        var bookingType = await _db.BookingTypes.AsNoTracking()
+            .FirstOrDefaultAsync(bt => bt.Id == dto.BookingTypeId);
+        if (bookingType == null) return NotFound(new { message = "Booking type not found." });
+
+        var on = DateTimeUtil.AsUtc(dto.StartTime == default ? DateTime.UtcNow : dto.StartTime);
+        var priced = TicketPricing.Price(dto.TicketBreakdown ?? new List<TicketLine>(), bookingType, on);
+        var config = JsonAttributes.Root(bookingType.ConfigJson);
+
+        return Ok(new
+        {
+            lines = priced.Lines,
+            totalQuantity = priced.TotalQuantity,
+            total = priced.Total,
+            priced.Currency,
+            priced.SeasonLabel,
+            isOffPeakRate = priced.IsOffPeak,
+            // Seasonality hints (section 3.8) - null when the operator has
+            // not declared a season, which is not the same as out of season.
+            inSeason = TicketPricing.IsInSeason(config, on),
+            weatherDependent = JsonAttributes.Bool(config, "season.weatherDependent"),
+        });
+    }
 
     // ── Equipment reservation (cross-component link to Equipment) ─────
     // See EquipmentController.cs. Distinct from the Inventory module.
@@ -471,6 +712,10 @@ public class BookingsController : ControllerBase
                 b.AttendeeCount,
                 b.TotalCost,
                 b.CheckInAt,
+                b.DepartureId,
+                b.TicketBreakdown,
+                b.Waiver,
+                b.Source,
                 b.CreatedAt
             })
             .ToListAsync();
@@ -603,6 +848,11 @@ public class BookingsController : ControllerBase
                 Priority = b.Priority.ToString(),
                 b.AttendeeCount,
                 b.TotalCost,
+                b.DepartureId,
+                b.TicketBreakdown,
+                b.Waiver,
+                b.Source,
+                b.CheckInAt,
                 b.CreatedAt
             })
             .ToListAsync();
@@ -912,6 +1162,10 @@ public class BookingsController : ControllerBase
                 b.TotalCost,
                 b.CheckInAt,
                 b.FormData,
+                b.DepartureId,
+                b.TicketBreakdown,
+                b.Waiver,
+                b.Source,
                 b.CreatedAt
             })
             .FirstOrDefaultAsync();
@@ -967,7 +1221,18 @@ public record CreateBookingDto(
     // Tourism sub-type-specific fields collected by the booking wizard's
     // extra step (certificationLevel, bedCount, driverIncluded, ...) - see
     // docs/tourism-business-template.md. Raw JSON, not parsed server-side.
-    string? FormData
+    string? FormData,
+    // Fixed-departure excursion fields, all optional and all defaulted:
+    // omit every one of them and the booking is created exactly as it was
+    // before they existed, priced as a single unit.
+    Guid? DepartureId = null,
+    // "2 adults + 1 child" in one reservation. Unit prices are resolved
+    // server-side from BookingType.ConfigJson, so a client cannot set its
+    // own price by sending one.
+    List<TicketLine>? TicketBreakdown = null,
+    string? Waiver = null,
+    // Booking channel: "WalkIn" | "Online" | "OTA" | free text.
+    string? Source = null
 );
 
 public record UpdateBookingDto(
@@ -981,6 +1246,9 @@ public record UpdateBookingDto(
 );
 
 public record RescheduleDto(DateTime NewStartTime, DateTime NewEndTime);
+public record SetWaiverDto(string SignerName, DateTime? SignedAt, int? MinorCount);
+public record SetTicketsDto(List<TicketLine> TicketBreakdown);
+public record QuoteDto(Guid BookingTypeId, DateTime StartTime, List<TicketLine>? TicketBreakdown);
 public record UpdateStatusDto(BookingStatus Status, string? DoctorNotes);
 public record SendReminderDto(string? Channel);
 

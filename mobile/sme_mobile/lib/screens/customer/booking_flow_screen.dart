@@ -404,18 +404,90 @@ class _TypeStep extends ConsumerWidget {
         if (types.isEmpty) {
           return const Center(child: Text('No bookable services available.'));
         }
+        // Add-ons are extras attached to a trip, not trips in their own
+        // right, so they get their own labelled section below the tours
+        // instead of sitting in the same list as "Whale Watching" - which
+        // made a photo package look like something you could book alone.
+        final tours = types.where((t) => !t.isAddon).toList();
+        final addons = types.where((t) => t.isAddon).toList();
+
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
           children: [
             Text('What would you like to book?', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            ...types.map((type) => Padding(
+            // Falls back to every type when nothing is categorised, so a
+            // tenant that never set `category` sees exactly what it saw
+            // before this grouping existed.
+            ...(tours.isEmpty ? types : tours).map((type) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _TypeCard(type: type, accent: accent, onTap: () => onSelected(type)),
                 )),
+            if (tours.isNotEmpty && addons.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('Add-ons & services', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(
+                'Extras you can book alongside a trip.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 12),
+              ...addons.map((type) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _TypeCard(type: type, accent: accent, onTap: () => onSelected(type)),
+                  )),
+            ],
           ],
         );
       },
+    );
+  }
+}
+
+/// "LKR 7,500" - or "Free" for a published zero price, which is a real rate
+/// (the complimentary 3 km transfer) and not missing data.
+String? _money(num? value, String currency) {
+  if (value == null) return null;
+  if (value == 0) return 'Free';
+  final formatted = value.round().toString().replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+$)'),
+        (m) => '${m[1]},',
+      );
+  return '$currency $formatted';
+}
+
+/// One ticket tier, laid out like the operator's own rate card: the tier, the
+/// age band it applies to, and the per-person price.
+class _TicketTier extends StatelessWidget {
+  final String label;
+  final String? band;
+  final String price;
+  final Color color;
+
+  const _TicketTier({required this.label, required this.band, required this.price, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+          const SizedBox(height: 2),
+          Text(price, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+          if (band != null) ...[
+            const SizedBox(height: 1),
+            Text(band!, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -430,6 +502,12 @@ class _TypeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = parseHexColor(type.colorHex) ?? accent;
+    final currency = type.currency;
+    final adult = _money(type.adultPrice, currency);
+    // A null child rate means this product has no child tier at all, which is
+    // not the same as free - the tier is omitted rather than shown at zero.
+    final child = _money(type.childPrice, currency);
+
     return Container(
       decoration: GlassStyle.elevatedCard(),
       child: InkWell(
@@ -437,35 +515,110 @@ class _TypeCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(width: 8, height: 44, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4))),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(type.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 4),
-                    Row(
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 40,
+                    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.schedule, size: 13, color: Colors.grey.shade500),
-                        const SizedBox(width: 4),
-                        Text('${type.defaultDurationMinutes} min', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                        if (type.requiresApproval) ...[
-                          const SizedBox(width: 10),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(color: AppColors.amber.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-                            child: const Text('Needs approval', style: TextStyle(fontSize: 10, color: AppColors.amber, fontWeight: FontWeight.w700)),
+                        Text(
+                          type.icon == null ? type.name : '${type.icon} ${type.name}',
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                        ),
+                        if (type.description != null && type.description!.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            type.description!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.3),
                           ),
                         ],
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            Icon(Icons.schedule, size: 13, color: Colors.grey.shade500),
+                            const SizedBox(width: 4),
+                            Text('${type.defaultDurationMinutes} min',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                            if (type.requiresApproval) ...[
+                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.amber.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text('Needs approval',
+                                    style: TextStyle(fontSize: 10, color: AppColors.amber, fontWeight: FontWeight.w700)),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
                     ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Colors.grey),
+                ],
+              ),
+
+              // The rate card: one tile per ticket tier the operator publishes.
+              if (adult != null || child != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    if (adult != null)
+                      Expanded(
+                        child: _TicketTier(
+                          label: 'ADULT',
+                          band: type.adultFromAge == null ? null : 'Above ${type.adultFromAge} years',
+                          price: adult,
+                          color: color,
+                        ),
+                      ),
+                    if (adult != null && child != null) const SizedBox(width: 8),
+                    if (child != null)
+                      Expanded(
+                        child: _TicketTier(
+                          label: 'CHILD',
+                          band: type.childUnderAge == null ? null : 'Below ${type.childUnderAge} years',
+                          price: child,
+                          color: color,
+                        ),
+                      ),
                   ],
                 ),
-              ),
-              const Icon(Icons.chevron_right, color: Colors.grey),
+              ],
+
+              // What every ticket includes - the same list the operator prints
+              // under each tier on their own booking page.
+              if (type.includes.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                ...type.includes.map((inc) => Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.add, size: 12, color: color),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(inc,
+                                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, height: 1.3)),
+                          ),
+                        ],
+                      ),
+                    )),
+              ],
             ],
           ),
         ),

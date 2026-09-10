@@ -428,6 +428,11 @@ class BookingStatusVisual {
         return const BookingStatusVisual(color: AppColors.danger, icon: Icons.person_off_outlined, label: 'No-show');
       case 'Rejected':
         return const BookingStatusVisual(color: AppColors.danger, icon: Icons.block_rounded, label: 'Rejected');
+      // Set by the operator's weather-cancel flow, never by the guest. Its
+      // own case rather than folding into Cancelled: the guest did not lose
+      // the booking, the sea did, and a rebooking is usually offered.
+      case 'WeatherCancelled':
+        return const BookingStatusVisual(color: AppColors.cyan, icon: Icons.storm_rounded, label: 'Weather-cancelled');
       default:
         return const BookingStatusVisual(color: AppColors.textMuted, icon: Icons.help_outline, label: 'Unknown');
     }
