@@ -4,7 +4,8 @@ import BusinessTypes from './BusinessTypes';
 import HeroScene from './webgl/HeroScene';
 import { useSmoothScroll, scrollToId } from './scroll/useSmoothScroll';
 import { usePageProgress, useCountUp } from './scroll/usePageProgress';
-import { usePinnedProgress, useReveal } from './scroll/useScrollMotion';
+import { usePinnedProgress, useReveal, range } from './scroll/useScrollMotion';
+import { useSceneEnabled } from './scroll/useSceneEnabled';
 import './landing.css';
 
 /* Unify's public landing page.
@@ -110,10 +111,40 @@ function useCurrentStep(count: number) {
 
 export default function LandingPage() {
   useSmoothScroll({ lerp: 0.09 });
+  /* Gates mounting, not visibility. See useSceneEnabled for why the two are
+   * not interchangeable. Both scenes are behind it: the close section's still
+   * is decoration by the same argument. */
+  const sceneEnabled = useSceneEnabled();
   const pageProgress = usePageProgress();
 
   const heroRef = useRef<HTMLElement>(null);
   const heroProgress = usePinnedProgress(heroRef);
+  /* Reserves the right-hand column so the copy keeps its measure, and tells
+   * the scene where to rest. It draws nothing itself - the canvas behind it
+   * is full-bleed. */
+  const heroAnchorRef = useRef<HTMLDivElement>(null);
+
+  /* Act I: the headline and buttons hold for the first quarter of the pin,
+   * then fall back on the z-axis and fade while the camera commits to the
+   * approach. They are gone before the shell crossing, so the moment of
+   * passing through is not competing with body copy sitting on top of it.
+   *
+   * Driven off usePinnedProgress, which is quantised to 1/200ths - the one
+   * sanctioned per-frame state on this page. At 200 steps over 300vh that is
+   * a render every 15 pixels of scroll, and the transform itself is a
+   * compositor property, so nothing lays out. */
+  const copyExit = range(heroProgress, 0.25, 0.62);
+
+  /* Once the copy has faded past reading, take it out of the tab order too. A
+   * button that is invisible but still focusable is how a keyboard user ends
+   * up on a control they cannot see, in a section that scrolls itself to
+   * reach it.
+   *
+   * Spelled as a spread because React 18's types have no `inert`, and its DOM
+   * layer discards `inert={true}` as a non-boolean attribute. The empty
+   * string is the correct serialisation of a boolean HTML attribute; React
+   * passes it through and the browser honours its presence. */
+  const inertWhenGone = (copyExit > 0.9 ? { inert: '' } : {}) as Record<string, string>;
 
   const capabilityRef = useRef<HTMLElement>(null);
   const stackRef = useRef<HTMLElement>(null);
@@ -160,8 +191,21 @@ export default function LandingPage() {
         {/* ── Hero ─────────────────────────────────────────────────── */}
         <section className="lp-hero-pin" ref={heroRef} aria-label="Introduction">
           <div className="lp-hero-sticky">
+            {sceneEnabled && (
+              <div className="lp-hero-stage" aria-hidden="true">
+                <HeroScene progress={heroProgress} act={1} anchorRef={heroAnchorRef} />
+              </div>
+            )}
+
             <div className="lp-shell lp-hero-inner">
-              <div>
+              <div
+                className="lp-hero-copy"
+                style={{
+                  transform: `translate3d(0, ${(copyExit * -30).toFixed(1)}px, ${(copyExit * -460).toFixed(0)}px)`,
+                  opacity: 1 - copyExit,
+                }}
+                {...inertWhenGone}
+              >
                 <span className="lp-pill">
                   <span className="lp-pill-dot" aria-hidden="true" />
                   Multi-tenant SME platform
@@ -182,12 +226,13 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              <div className="lp-hero-canvas">
-                <HeroScene progress={heroProgress} />
-              </div>
+              <div className="lp-hero-canvas" ref={heroAnchorRef} aria-hidden="true" />
             </div>
 
-            <div className="lp-cue" aria-hidden="true">
+            {/* Goes with the copy. Leaving the word "Scroll" sitting over the
+                interior of the shell tells someone who is already three
+                viewports deep to do the thing they are visibly doing. */}
+            <div className="lp-cue" aria-hidden="true" style={{ opacity: 1 - copyExit }}>
               <span>Scroll</span>
               <span className="lp-cue-track">
                 {/* Drains as the hero is scrubbed. */}
@@ -290,9 +335,14 @@ export default function LandingPage() {
 
         {/* ── Close ────────────────────────────────────────────────── */}
         <section className="lp-close">
-          <div className="lp-close-canvas" aria-hidden="true">
-            <HeroScene progress={0.5} />
-          </div>
+          {sceneEnabled && (
+            <div className="lp-close-canvas" aria-hidden="true">
+              {/* Not an act - a still. Held at the midpoint of the approach,
+                  which is the reading of the object the close wants: whole,
+                  lit, and seen from outside. */}
+              <HeroScene progress={0.5} act={1} />
+            </div>
+          )}
           <div className="lp-shell lp-close-inner">
             <h2 className="lp-display" style={{ fontSize: 'clamp(2.2rem, 5.6vw, 4.2rem)' }}>
               <Mask>Start a business</Mask>

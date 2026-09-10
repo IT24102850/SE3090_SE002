@@ -168,8 +168,25 @@
   display: grid; grid-template-columns: 1.24fr 0.76fr;
   gap: clamp(24px, 5vw, 56px); align-items: center; width: 100%;
 }
-/* Spec: roughly 40% of the viewport width. */
-.lp-hero-canvas { position: relative; aspect-ratio: 1; width: min(40vw, 460px); margin-left: auto; }
+/* The Act I copy retreats along z, so the perspective has to live on an
+   ancestor that is not itself being transformed - put it on the moving
+   element and the vanishing point travels with it, which reads as a scale
+   rather than as depth. 1200px is shallow enough to be felt at 460px of
+   travel and deep enough not to distort the type on the way. */
+.lp-hero-inner { perspective: 1200px; }
+.lp-hero-copy { will-change: transform, opacity; }
+
+/* The canvas is a full-bleed layer behind the copy, not a column.
+   Flying into a 460px box on the right reads as watching something through a
+   window; the act needs the object to own the viewport by the time the lens
+   reaches the shell. The sticky stage is positioned, so this anchors to it. */
+.lp-hero-stage { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.lp-hero-inner { position: relative; z-index: 1; }
+
+/* Now purely a spacer: it reserves the right-hand column so the copy keeps
+   its measure, and gives the scene an element to rest the object over.
+   Roughly 40% of the viewport width, per the brief. */
+.lp-hero-canvas { aspect-ratio: 1; width: min(40vw, 460px); margin-left: auto; }
 .lp-canvas { width: 100%; height: 100%; display: block; }
 
 /* The global display size assumes a full-bleed heading. In the hero it sits
@@ -200,7 +217,7 @@
    page stops being worth pinning - so it gets its own, earlier breakpoint. */
 @media (max-width: 1000px) {
   .lp-hero-inner { grid-template-columns: 1fr; }
-  .lp-hero-canvas { display: none; }
+  .lp-hero-canvas, .lp-hero-stage { display: none; }
 }
 
 /* Unpinning is a behaviour call, and 900px was easy to fall under on a
@@ -404,7 +421,11 @@
   .lp-mask > span { transform: none; transition: none; }
   [data-reveal] { opacity: 1; transition: none; }
   .lp-step { opacity: 1; }
-  .lp-hero-canvas, .lp-close-canvas { display: none; }
+  .lp-hero-stage, .lp-hero-canvas, .lp-close-canvas { display: none; }
+  /* The pin collapses here so the progress driving this never leaves zero -
+     but the inline style is authored per frame and would beat any normal
+     rule, so this is stated outright rather than left to depend on that. */
+  .lp-hero-copy { transform: none !important; opacity: 1 !important; }
   /* The cue is absolutely positioned against a sticky stage. With the pin
      collapsed the stage is a normal block and the cue lands in the middle of
      the body copy - and there is nothing to scrub anyway. */

@@ -42,6 +42,20 @@ function subscribe(fn: Subscriber) {
 }
 
 /**
+ * Map a global 0..1 progress onto a sub-range, clamped and eased.
+ *
+ * The whole act system is built on this: each beat owns a slice of its act's
+ * progress and reads it through here, so beats can overlap without any of
+ * them needing to know what the others claimed. Smoothstepped rather than
+ * linear because a value that arrives and departs at constant speed reads as
+ * a slider being dragged rather than as something moving.
+ */
+export function range(p: number, start: number, end: number) {
+  const t = Math.min(Math.max((p - start) / (end - start), 0), 1);
+  return t * t * (3 - 2 * t);
+}
+
+/**
  * How far an element has travelled through the viewport, 0 to 1.
  *
  * 0 when its top edge first reaches the bottom of the viewport, 1 when its
