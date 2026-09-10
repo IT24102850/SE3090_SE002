@@ -114,6 +114,8 @@ builder.Services.AddHttpClient<SmeBackend.Services.IPlannerAgentService, SmeBack
 builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.StubReminderChannelSender>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPushNotificationSender, SmeBackend.Services.FcmPushNotificationSender>();
 builder.Services.AddScoped<SmeBackend.Services.ICloudinaryImageService, SmeBackend.Services.CloudinaryImageService>();
+builder.Services.AddScoped<IBillingService, BillingService>();
+builder.Services.AddScoped<IDynamicFormService, DynamicFormService>();
 
 // CORS
 builder.Services.AddCors(options =>
