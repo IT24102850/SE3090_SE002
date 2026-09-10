@@ -49,10 +49,6 @@ export function useSmoothScroll({ lerp = 0.1, wheelMultiplier = 1 }: Options = {
     // True while the loop is easing toward a target the wheel set. When it is
     // false the page scrolls natively and this hook keeps out of the way.
     let animating = false;
-    // Set immediately before our own scrollTo so the scroll listener can tell
-    // our writes apart from the user's. Without this the listener resyncs to
-    // the position we just wrote and the easing never converges.
-    let selfScroll = false;
 
     const onWheel = (e: WheelEvent) => {
       // Leave zoom gestures and anything with its own scrollport alone.
@@ -72,14 +68,16 @@ export function useSmoothScroll({ lerp = 0.1, wheelMultiplier = 1 }: Options = {
 
     /* Everything that moves the page without going through the wheel -
      * dragging the scrollbar, PageDown, space, Home/End, find-in-page, and
-     * the smooth scrollIntoView the nav buttons use. Previously the rAF loop
-     * kept writing its own stale position on the next frame and yanked the
-     * page straight back, which made all of those feel broken. */
+     * the smooth scrollIntoView the nav buttons use.
+     *
+     * Compared by position rather than by a "this write was mine" flag. A
+     * flag has to be cleared by exactly the event it was set for, and scroll
+     * events coalesce - two writes in one frame emit one event, so the flag
+     * stays set and the next genuine user scroll gets swallowed. Distance
+     * cannot desync: our own writes always land within a pixel of where the
+     * loop thinks it is, and anything further away came from the user. */
     const onScroll = () => {
-      if (selfScroll) {
-        selfScroll = false;
-        return;
-      }
+      if (animating && Math.abs(window.scrollY - current.current) < 2) return;
       animating = false;
       target.current = window.scrollY;
       current.current = window.scrollY;
@@ -90,7 +88,6 @@ export function useSmoothScroll({ lerp = 0.1, wheelMultiplier = 1 }: Options = {
         const delta = target.current - current.current;
         if (Math.abs(delta) > 0.35) {
           current.current += delta * lerp;
-          selfScroll = true;
           window.scrollTo(0, current.current);
         } else {
           // Settle exactly and hand control back to the browser.

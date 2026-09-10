@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { subscribeToScrollLoop } from './useScrollMotion';
 
 /**
  * How far down the whole document the visitor is, 0..100.
@@ -11,7 +12,6 @@ export function usePageProgress() {
   const [percent, setPercent] = useState(0);
 
   useEffect(() => {
-    let raf = 0;
     let last = -1;
 
     const measure = () => {
@@ -21,11 +21,10 @@ export function usePageProgress() {
         last = next;
         setPercent(next);
       }
-      raf = requestAnimationFrame(measure);
     };
 
-    raf = requestAnimationFrame(measure);
-    return () => cancelAnimationFrame(raf);
+    // Shares the loop in useScrollMotion rather than opening a second one.
+    return subscribeToScrollLoop(measure);
   }, []);
 
   return percent;

@@ -79,18 +79,30 @@ function useCurrentStep(count: number) {
   const refs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
-    let raf = 0;
-    const tick = () => {
-      const line = window.innerHeight * 0.6;
-      let next = 0;
-      refs.current.forEach((el, i) => {
-        if (el && el.getBoundingClientRect().top <= line) next = i;
-      });
-      setCurrent((prev) => (prev === next ? prev : next));
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const els = refs.current.filter(Boolean) as HTMLDivElement[];
+    if (els.length === 0) return;
+
+    // An observer fires on crossings only. The rAF this replaces measured
+    // every step every frame for the life of the page, whether or not the
+    // section was even on screen.
+    const passed = new Set<number>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const i = els.indexOf(e.target as HTMLDivElement);
+          // Deliberately boundingClientRect.top, not isIntersecting: a step
+          // that has scrolled off the top has still been passed, and reading
+          // intersection alone would un-highlight it on the way out.
+          if (e.boundingClientRect.top <= window.innerHeight * 0.6) passed.add(i);
+          else passed.delete(i);
+        }
+        setCurrent(passed.size ? Math.max(...passed) : 0);
+      },
+      { rootMargin: '0px 0px -40% 0px' },
+    );
+
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
   }, [count]);
 
   return { current, refs };

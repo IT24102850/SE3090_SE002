@@ -25,6 +25,10 @@ function runLoop() {
   loopId = subscribers.size > 0 ? requestAnimationFrame(runLoop) : null;
 }
 
+/** Exported so other scroll-driven hooks can share this one loop rather than
+ *  opening their own. Every extra rAF is another wake-up per frame. */
+export { subscribe as subscribeToScrollLoop };
+
 function subscribe(fn: Subscriber) {
   subscribers.add(fn);
   if (loopId === null) loopId = requestAnimationFrame(runLoop);

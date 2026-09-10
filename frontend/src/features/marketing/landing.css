@@ -196,9 +196,17 @@
 .lp-cue-track { width: 1px; height: 46px; background: var(--line-strong); position: relative; overflow: clip; }
 .lp-cue-fill { position: absolute; inset: 0; background: var(--paper); transform-origin: top center; }
 
-@media (max-width: 900px) {
+/* Hiding the sphere is a layout call - it stops having room well before the
+   page stops being worth pinning - so it gets its own, earlier breakpoint. */
+@media (max-width: 1000px) {
   .lp-hero-inner { grid-template-columns: 1fr; }
   .lp-hero-canvas { display: none; }
+}
+
+/* Unpinning is a behaviour call, and 900px was easy to fall under on a
+   1366px laptop at 150% zoom - which silently turned the whole scroll
+   experience off for anyone browsing zoomed in. 760px, per the brief. */
+@media (max-width: 760px) {
   .lp-hero-pin { height: auto; }
   .lp-hero-sticky { position: static; height: auto; padding: 96px 0 72px; }
   .lp-cue { display: none; }
@@ -288,9 +296,16 @@
 .lp-mock-row b { color: var(--paper); font-weight: 600; }
 .lp-mock-note { font-size: 0.82rem; color: var(--muted); margin: 14px 0 0; line-height: 1.55; }
 
-@media (max-width: 900px) {
+/* The two-column stage runs out of room before the pin stops being useful,
+   so the stack is a layout call at 1000 and the unpin is a behaviour call at
+   760 - same reasoning as the hero. */
+@media (max-width: 1000px) {
+  .lp-types-sticky { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
   .lp-types { height: auto !important; }
-  .lp-types-sticky { position: static; height: auto; grid-template-columns: 1fr; padding-block: 24px; }
+  .lp-types-sticky { position: static; height: auto; padding-block: 24px; }
   /* Spec: a swipeable strip on small screens, not a pin. */
   .lp-types-list { grid-auto-flow: column; grid-auto-columns: 74%; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; }
   .lp-type-item { scroll-snap-align: start; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
