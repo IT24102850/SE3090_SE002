@@ -162,6 +162,15 @@ class AppColors {
         end: Alignment.bottomRight,
       );
 
+  /// Darkens photo-backed tiles from the top down. Bottom-heavy because the
+  /// label sits at the foot of the card, so it has to clear whatever the
+  /// artwork happens to be doing down there.
+  static const tileScrimGradient = LinearGradient(
+    colors: [Color(0x99050514), Color(0xF2050514)],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+
   /// Glow cast beneath a primary button.
   static const buttonGlow = Color(0x4D00E5FF); // cyan 30%
 

@@ -16,10 +16,12 @@ import '../register_screen.dart';
 /// The app's first screen for a signed-out visitor: sign in to Unify —
 /// Enterprise Management System.
 ///
-/// One scrolling column over a full-bleed backdrop: wordmark, the orbiting
-/// hero sculpture, then a frosted card carrying the form. Everything scrolls
-/// as a unit so the keyboard pushes the whole composition up rather than
-/// clipping the card.
+/// One column over a full-bleed backdrop: wordmark, the orbiting hero
+/// sculpture, then a frosted card carrying the form. It is sized to the
+/// viewport rather than scrolled - the hero takes the leftover space and the
+/// spacing tightens on short screens, so everything fits on one screen. The
+/// only exception is when the keyboard is up, where scrolling is the only way
+/// to keep the password field reachable.
 ///
 /// On success nothing here navigates — main.dart watches [authProvider] and
 /// swaps the app's home for the dashboard (or profile setup) as soon as the
@@ -101,10 +103,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    // The hero is the one element that has to give ground on small phones —
-    // capped at its design size, shrunk proportionally below that.
-    final heroSize = math.min(340.0, media.size.width * 0.82);
+    final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -130,49 +129,102 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
             children: [
               const Positioned.fill(child: AppBackground(showParticles: true)),
               SafeArea(
-                child: SingleChildScrollView(
-                  physics: const ClampingScrollPhysics(),
-                  padding: const EdgeInsets.only(bottom: 24),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 28),
-                      const UnifyWordmark(),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Enterprise Management System',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w300,
-                          letterSpacing: 1.5,
-                          color: Colors.white.withValues(alpha: 0.70),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      OrbitHero(size: heroSize),
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: _buildCard(),
-                      ),
-                      const SizedBox(height: 20),
-                      // Customers could browse the public business list from
-                      // the old landing screen without an account. This screen
-                      // replaced it, so that route keeps an entry point here.
-                      _TextLink(
-                        onTap: _openBrowse,
-                        child: Text(
-                          'Browse businesses without an account',
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Sized to the viewport rather than scrolled. The card
+                    // is the immovable part (~600px of fields, button and
+                    // links), so compression is continuous rather than a
+                    // binary breakpoint: every gap, the card padding and the
+                    // display type scale with how much height there is, and
+                    // the hero soaks up whatever is left.
+                    //
+                    // Measured floor is ~700dp - below that the card alone
+                    // cannot fit, and scrolling beats clipping the form.
+                    final height = constraints.maxHeight;
+                    final tooShort = height < _minFittableHeight;
+                    final t = ((height - 700) / 240).clamp(0.0, 1.0);
+                    final m = _Metrics(
+                      gap: 0.46 + 0.39 * t,
+                      cardPadding: 14 + 18 * t,
+                      wordmark: 32 + 12 * t,
+                      tagline: 11.5 + 2.5 * t,
+                      title: 22 + 6 * t,
+                    );
+
+                    final column = Column(
+                      children: [
+                        SizedBox(height: 24 * m.gap),
+                        UnifyWordmark(fontSize: m.wordmark),
+                        SizedBox(height: 8 * m.gap),
+                        Text(
+                          'Enterprise Management System',
                           style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textMuted,
-                            decoration: TextDecoration.underline,
-                            decorationColor:
-                                Colors.white.withValues(alpha: 0.25),
+                            fontSize: m.tagline,
+                            fontWeight: FontWeight.w300,
+                            letterSpacing: 1.5,
+                            color: Colors.white.withValues(alpha: 0.70),
                           ),
                         ),
+
+                        // The slack. Caps at the 340 design size on a tall
+                        // screen, shrinks on a short one, and drops out
+                        // entirely rather than forcing an overflow.
+                        if (!tooShort)
+                          Expanded(
+                            child: LayoutBuilder(
+                              builder: (context, slack) {
+                                final size = math.min(
+                                  math.min(slack.maxHeight - 8, slack.maxWidth * 0.82),
+                                  340.0,
+                                );
+                                if (size < _minHeroSize) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Center(child: OrbitHero(size: size));
+                              },
+                            ),
+                          )
+                        else
+                          SizedBox(height: 16 * m.gap),
+
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: _buildCard(m),
+                        ),
+                        SizedBox(height: 12 * m.gap),
+                        // Customers could browse the public business list from
+                        // the old landing screen without an account. This screen
+                        // replaced it, so that route keeps an entry point here.
+                        _TextLink(
+                          onTap: _openBrowse,
+                          child: Text(
+                            'Browse businesses without an account',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textMuted,
+                              decoration: TextDecoration.underline,
+                              decorationColor:
+                                  Colors.white.withValues(alpha: 0.25),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 8 * m.gap),
+                      ],
+                    );
+
+                    // The one case that still has to scroll: the keyboard eats
+                    // roughly half the viewport, and no amount of compressing
+                    // keeps the password field reachable under it.
+                    if (!keyboardOpen && !tooShort) return column;
+                    return SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints:
+                            BoxConstraints(minHeight: constraints.maxHeight),
+                        child: IntrinsicHeight(child: column),
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -182,31 +234,35 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
     );
   }
 
-  Widget _buildCard() {
+  /// [m] carries the viewport-derived compression. The controls keep their
+  /// real sizes - only the air between them and the display type give - so a
+  /// short screen loses whitespace, not legibility or tap targets.
+  Widget _buildCard(_Metrics m) {
     final auth = ref.watch(authProvider);
+    final gap = m.gap;
 
     return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: m.cardPadding),
       child: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               'Welcome Back',
               style: TextStyle(
-                fontSize: 28,
+                fontSize: m.title,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
                 height: 1.1,
               ),
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: 6 * gap),
             const Text(
               'Sign in to your workspace',
               style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
             ),
-            const SizedBox(height: 28),
+            SizedBox(height: 24 * gap),
 
             NeonInputField(
               label: 'Email',
@@ -218,7 +274,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
               autofillHints: const [AutofillHints.email],
               validator: _validateEmail,
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 18 * gap),
 
             NeonInputField(
               label: 'Password',
@@ -233,17 +289,17 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
             ),
 
             if (auth.error != null) ...[
-              const SizedBox(height: 16),
+              SizedBox(height: 14 * gap),
               _ErrorBanner(message: auth.error!),
             ],
-            const SizedBox(height: 26),
+            SizedBox(height: 22 * gap),
 
             NeonButton(
               label: 'Sign In',
               isLoading: auth.isLoading,
               onPressed: _handleSignIn,
             ),
-            const SizedBox(height: 18),
+            SizedBox(height: 14 * gap),
 
             Center(
               child: _TextLink(
@@ -258,7 +314,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 18 * gap),
 
             const Center(
               child: Text(
@@ -266,10 +322,10 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                 style: TextStyle(fontSize: 13, color: AppColors.textMuted),
               ),
             ),
-            const SizedBox(height: 18),
+            SizedBox(height: 14 * gap),
 
             SocialSignInRow(onProviderTap: _showComingSoon),
-            const SizedBox(height: 26),
+            SizedBox(height: 20 * gap),
 
             Center(
               child: _TextLink(
@@ -334,6 +390,35 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
+/// How hard the layout is squeezing, derived once per build from the viewport
+/// height and threaded through the column and the card so both compress in
+/// step.
+class _Metrics {
+  const _Metrics({
+    required this.gap,
+    required this.cardPadding,
+    required this.wordmark,
+    required this.tagline,
+    required this.title,
+  });
+
+  /// Multiplier applied to every vertical gap.
+  final double gap;
+  final double cardPadding;
+  final double wordmark;
+  final double tagline;
+  final double title;
+}
+
+/// Below this the card alone is taller than the viewport, so the screen
+/// scrolls instead of clipping the form. Measured, not guessed: at full
+/// compression the card plus branding plus footer needs about this much.
+const double _minFittableHeight = 720;
+
+/// A hero smaller than this reads as a smudge rather than a sculpture, so it
+/// is dropped instead.
+const double _minHeroSize = 52;
+
 /// A tap target around inline text. Padded out to a comfortable hit area —
 /// bare [GestureDetector]s around 14pt text are a hair thin to hit.
 class _TextLink extends StatelessWidget {
@@ -350,7 +435,7 @@ class _TextLink extends StatelessWidget {
       splashColor: AppColors.cyan.withValues(alpha: 0.10),
       highlightColor: AppColors.cyan.withValues(alpha: 0.06),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: child,
       ),
     );

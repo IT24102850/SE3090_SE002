@@ -114,8 +114,12 @@ class _OrbitHeroState extends State<OrbitHero> with SingleTickerProviderStateMix
 
             // The orb at the centre of the sculpture.
             Container(
-              width: 58,
-              height: 58,
+              // Proportional, not fixed: the hero shrinks to fit short
+              // screens, and a hardcoded orb would swamp the rings there
+              // instead of sitting inside them. 0.17 reproduces the original
+              // 58px orb at the 340px design size.
+              width: widget.size * 0.17,
+              height: widget.size * 0.17,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const RadialGradient(
@@ -124,13 +128,13 @@ class _OrbitHeroState extends State<OrbitHero> with SingleTickerProviderStateMix
                 boxShadow: [
                   BoxShadow(
                     color: Colors.white.withValues(alpha: 0.55),
-                    blurRadius: 40,
-                    spreadRadius: 4,
+                    blurRadius: widget.size * 0.118,
+                    spreadRadius: widget.size * 0.012,
                   ),
                   BoxShadow(
                     color: AppColors.cyan.withValues(alpha: 0.45),
-                    blurRadius: 60,
-                    spreadRadius: 12,
+                    blurRadius: widget.size * 0.176,
+                    spreadRadius: widget.size * 0.035,
                   ),
                 ],
               ),

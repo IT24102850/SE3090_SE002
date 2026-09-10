@@ -15,12 +15,15 @@ class BookBusinessListScreen extends ConsumerStatefulWidget {
   const BookBusinessListScreen({super.key});
 
   @override
-  ConsumerState<BookBusinessListScreen> createState() => _BookBusinessListScreenState();
+  ConsumerState<BookBusinessListScreen> createState() =>
+      _BookBusinessListScreenState();
 }
 
-class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen> {
+class _BookBusinessListScreenState
+    extends ConsumerState<BookBusinessListScreen> {
   final _searchController = TextEditingController();
   String _query = '';
+  String _selectedType = 'All';
 
   @override
   void dispose() {
@@ -31,7 +34,8 @@ class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen>
   void _onTenantTap(PublicTenant tenant) {
     final isAuthenticated = ref.read(authProvider).isAuthenticated;
     if (isAuthenticated) {
-      Navigator.of(context).push(slideFadeRoute(BusinessDetailScreen(tenant: tenant)));
+      Navigator.of(context)
+          .push(slideFadeRoute(BusinessDetailScreen(tenant: tenant)));
       return;
     }
     _showSignInPrompt(tenant);
@@ -42,7 +46,8 @@ class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen>
       context: context,
       backgroundColor: AppColors.overlaySurface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.pill)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadii.pill)),
       ),
       builder: (sheetContext) {
         return SafeArea(
@@ -57,9 +62,11 @@ class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen>
                   decoration: BoxDecoration(
                     color: AppColors.magenta.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.magenta.withValues(alpha: 0.4)),
+                    border: Border.all(
+                        color: AppColors.magenta.withValues(alpha: 0.4)),
                   ),
-                  child: const Icon(Icons.lock_outline_rounded, color: AppColors.magenta, size: 28),
+                  child: const Icon(Icons.lock_outline_rounded,
+                      color: AppColors.magenta, size: 28),
                 ),
                 const SizedBox(height: 18),
                 Text(
@@ -79,8 +86,8 @@ class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen>
                   height: 48,
                   onPressed: () {
                     Navigator.pop(sheetContext);
-                    Navigator.of(context)
-                        .push(MaterialPageRoute(builder: (_) => const LoginScreen()));
+                    Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()));
                   },
                 ),
                 const SizedBox(height: 10),
@@ -90,13 +97,15 @@ class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen>
                   onPressed: () async {
                     Navigator.pop(sheetContext);
                     final signedUp = await Navigator.of(context).push<bool>(
-                      MaterialPageRoute(builder: (_) => CustomerRegisterScreen(tenant: tenant)),
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              CustomerRegisterScreen(tenant: tenant)),
                     );
                     // Signed up as this tenant's customer — continue straight
                     // into their business page instead of dropping back to the list.
                     if (signedUp == true && mounted) {
-                      Navigator.of(context)
-                          .push(slideFadeRoute(BusinessDetailScreen(tenant: tenant)));
+                      Navigator.of(context).push(
+                          slideFadeRoute(BusinessDetailScreen(tenant: tenant)));
                     }
                   },
                 ),
@@ -124,30 +133,77 @@ class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen>
                 hintText: 'Search by business or type…',
                 icon: Icons.search,
                 clearable: true,
-                onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+                onChanged: (v) =>
+                    setState(() => _query = v.trim().toLowerCase()),
+              ),
+            ),
+            // Type filter dropdown
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.filter_list, color: AppColors.chevron),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        final tenantsAsync = ref.watch(publicTenantsProvider);
+                        return tenantsAsync.when(
+                          data: (tenants) {
+                            final types = tenants
+                                .map((t) => t.businessType)
+                                .toSet()
+                                .toList();
+                            types.sort();
+                            types.insert(0, 'All');
+                            return DropdownButton<String>(
+                              value: _selectedType,
+                              isExpanded: true,
+                              icon: const Icon(Icons.arrow_drop_down),
+                              items: types
+                                  .map((t) => DropdownMenuItem(
+                                        value: t,
+                                        child: Text(t),
+                                      ))
+                                  .toList(),
+                              onChanged: (v) =>
+                                  setState(() => _selectedType = v ?? 'All'),
+                            );
+                          },
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
             Expanded(
               child: tenantsAsync.when(
                 loading: () => const AppLoader(),
                 error: (err, stack) => ErrorState(
-                  message: 'Could not load businesses. Check your connection and try again.',
+                  message:
+                      'Could not load businesses. Check your connection and try again.',
                   onRetry: () => ref.invalidate(publicTenantsProvider),
                 ),
                 data: (tenants) {
-                  final filtered = _query.isEmpty
-                      ? tenants
-                      : tenants
-                          .where((t) =>
-                              t.businessName.toLowerCase().contains(_query) ||
-                              t.businessType.toLowerCase().contains(_query))
-                          .toList();
+                  final filtered = tenants.where((t) {
+                    final matchesQuery = _query.isEmpty ||
+                        t.businessName.toLowerCase().contains(_query) ||
+                        t.businessType.toLowerCase().contains(_query);
+                    final matchesType = _selectedType == 'All' ||
+                        t.businessType == _selectedType;
+                    return matchesQuery && matchesType;
+                  }).toList();
 
                   if (tenants.isEmpty) {
                     return const EmptyState(
                       icon: Icons.storefront_outlined,
-                      title: 'No businesses are available for booking right now.',
-                      message: 'Check back soon, or ask your business to register on Unify.',
+                      title:
+                          'No businesses are available for booking right now.',
+                      message:
+                          'Check back soon, or ask your business to register on Unify.',
                     );
                   }
                   if (filtered.isEmpty) {
@@ -160,15 +216,28 @@ class _BookBusinessListScreenState extends ConsumerState<BookBusinessListScreen>
                   return RefreshIndicator(
                     color: AppColors.cyan,
                     backgroundColor: AppColors.overlaySurface,
-                    onRefresh: () async => ref.invalidate(publicTenantsProvider),
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) => _TenantCard(
-                        tenant: filtered[index],
-                        onTap: () => _onTenantTap(filtered[index]),
-                      ),
+                    onRefresh: () async =>
+                        ref.invalidate(publicTenantsProvider),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final crossAxisCount =
+                            constraints.maxWidth > 600 ? 3 : 2;
+                        return GridView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                            childAspectRatio: 3,
+                          ),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) => _TenantCard(
+                            tenant: filtered[index],
+                            onTap: () => _onTenantTap(filtered[index]),
+                          ),
+                        );
+                      },
                     ),
                   );
                 },
@@ -222,11 +291,13 @@ class _TenantCard extends StatelessWidget {
                 // The type pill carries the business hue, which is why this
                 // row is built by hand rather than as a GlassListTile.
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: visual.color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: visual.color.withValues(alpha: 0.35)),
+                    border:
+                        Border.all(color: visual.color.withValues(alpha: 0.35)),
                   ),
                   child: Text(
                     tenant.businessType,
@@ -240,7 +311,8 @@ class _TenantCard extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppColors.chevron, size: 22),
+          const Icon(Icons.chevron_right_rounded,
+              color: AppColors.chevron, size: 22),
         ],
       ),
     );

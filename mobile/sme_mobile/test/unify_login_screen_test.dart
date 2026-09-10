@@ -48,12 +48,55 @@ void main() {
     expect(find.text('Browse businesses without an account'), findsOneWidget);
   });
 
-  testWidgets('scrolls rather than overflowing on a short viewport', (tester) async {
-    await pumpLogin(tester, size: const Size(320, 560));
+  // The whole point of the layout: it compresses to fit rather than scrolling.
+  // On every viewport tall enough to hold the card, nothing may overflow and
+  // no scroll view may exist to scroll.
+  for (final size in const [
+    Size(430, 932), // iPhone 15 Pro Max
+    Size(393, 852), // Pixel 8
+    Size(390, 844), // iPhone 13/14
+    Size(360, 740), // common Android
+  ]) {
+    testWidgets('fits ${size.width.toInt()}x${size.height.toInt()} with no overflow and no scrolling', (tester) async {
+      await pumpLogin(tester, size: size);
 
-    expect(tester.takeException(), isNull);
-    await tester.drag(find.text('Welcome Back'), const Offset(0, -300));
+      // A RenderFlex overflow surfaces here rather than as a failed matcher.
+      expect(tester.takeException(), isNull);
+      expect(find.byType(SingleChildScrollView), findsNothing);
+
+      // Both ends of the composition are actually on screen.
+      expect(find.text('Welcome Back'), findsOneWidget);
+      expect(find.text('Sign In'), findsOneWidget);
+      expect(find.text('Browse businesses without an account'), findsOneWidget);
+    });
+  }
+
+  // Below ~720dp the card alone is taller than the viewport. Scrolling is the
+  // honest fallback there - clipping the form would be worse - but it must
+  // still never overflow.
+  for (final size in const [
+    Size(360, 640), // small Android
+    Size(320, 568), // iPhone SE 1st gen
+  ]) {
+    testWidgets('degrades to scrolling, not overflow, at ${size.width.toInt()}x${size.height.toInt()}', (tester) async {
+      await pumpLogin(tester, size: size);
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(find.text('Welcome Back'), findsOneWidget);
+    });
+  }
+
+  testWidgets('scrolls only once the keyboard is up', (tester) async {
+    await pumpLogin(tester, size: const Size(390, 844));
+    expect(find.byType(SingleChildScrollView), findsNothing);
+
+    // Simulate the keyboard claiming the bottom half of the viewport.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 420);
+    addTearDown(tester.view.resetViewInsets);
     await tester.pump();
+
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

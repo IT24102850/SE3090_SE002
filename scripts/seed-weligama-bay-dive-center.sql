@@ -43,18 +43,43 @@
 BEGIN;
 
 -- ── 0) Locate the tenant by its owner's email ───────────────────────────────
+-- Dropped first so the script can be re-run in the same psql/editor session -
+-- temp tables outlive the transaction, and CREATE would otherwise error with
+-- "relation _seed_ctx already exists" on the second run.
+DROP TABLE IF EXISTS _seed_ctx;
+DROP TABLE IF EXISTS _seed_branch;
+
+-- One email can legitimately map to SEVERAL tenants here: "Users" has no
+-- unique index on "Email" (only Id/BranchId/TenantId are indexed), and the
+-- tenant-onboarding path in TenantService.cs creates its admin WITHOUT the
+-- duplicate check that AuthController.Register does. wowwhales@gmail.com is
+-- already duplicated across two tenants for exactly this reason.
+--
+-- So this does NOT silently pick one with LIMIT 1 - seeding an arbitrary
+-- tenant would be worse than failing. If the email is ambiguous the script
+-- aborts and you pin the tenant by hand below.
 CREATE TEMP TABLE _seed_ctx AS
 SELECT u."Id" AS admin_user_id, u."TenantId" AS tenant_id
 FROM "Users" u
-WHERE lower(u."Email") = 'chaminda1990@gmail.com'
-ORDER BY u."Role"          -- Admin (0) wins if the email somehow repeats
-LIMIT 1;
+WHERE lower(u."Email") = 'chaminda1990@gmail.com';
+
+-- ► To pin a specific tenant instead of looking it up, comment out the
+--   CREATE above and use this, with the real UUIDs:
+-- CREATE TEMP TABLE _seed_ctx AS
+-- SELECT '00000000-0000-0000-0000-000000000000'::uuid AS admin_user_id,
+--        '00000000-0000-0000-0000-000000000000'::uuid AS tenant_id;
 
 DO $$
+DECLARE n integer;
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM _seed_ctx) THEN
+  SELECT count(*) INTO n FROM _seed_ctx;
+
+  IF n = 0 THEN
     RAISE EXCEPTION
-      'No user with email chaminda1990@gmail.com. Register that account first (or uncomment step 0b below to create the tenant + admin outright).';
+      'No user with email chaminda1990@gmail.com. Register that account first, or uncomment step 0b to create the tenant + admin outright.';
+  ELSIF n > 1 THEN
+    RAISE EXCEPTION
+      'Email chaminda1990@gmail.com maps to % users across different tenants. Refusing to guess which business to seed - pin the tenant explicitly using the commented CREATE above. To see them: SELECT "Id","FullName","TenantId" FROM "Users" WHERE lower("Email") = ''chaminda1990@gmail.com'';', n;
   END IF;
 END $$;
 
@@ -160,6 +185,15 @@ SELECT b."Id" AS branch_id
 FROM "Branches" b JOIN _seed_ctx ctx ON b."TenantId" = ctx.tenant_id
 WHERE b."Name" = 'Weligama Bay (Kapparatota)'
 LIMIT 1;
+
+-- Every resource INSERT below cross-joins _seed_branch. If it were empty they
+-- would all quietly insert zero rows, so fail loudly instead.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM _seed_branch) THEN
+    RAISE EXCEPTION 'Branch "Weligama Bay (Kapparatota)" was neither found nor created - aborting before the resource inserts silently no-op.';
+  END IF;
+END $$;
 
 -- ── 3) Resources ────────────────────────────────────────────────────────────
 -- Category/Status are the string forms of ResourceCategory/ResourceStatus

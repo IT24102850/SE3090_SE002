@@ -51,66 +51,66 @@ class App extends StatelessWidget {
       scaffoldMessengerKey: appMessengerKey,
       title: 'SME Inventory',
       theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-              seedColor: navy, brightness: Brightness.light),
-          scaffoldBackgroundColor: canvas,
-          dividerColor: const Color(0xFFE5EAF2),
-          appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              surfaceTintColor: Colors.transparent),
-          navigationBarTheme: NavigationBarThemeData(
-              height: 74,
-              backgroundColor: Colors.white,
-              elevation: 1,
-              labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-              indicatorColor: navy.withValues(alpha: .12),
-              indicatorShape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14))),
-          cardTheme: CardThemeData(
-              elevation: 0,
-              color: Colors.white,
-              surfaceTintColor: Colors.white,
-              margin: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: const BorderSide(color: Color(0xFFE4EAF2)))),
-          inputDecorationTheme: InputDecorationTheme(
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
-              border: border(),
-              enabledBorder: border(),
-              focusedBorder: border(navy, 2)),
-          filledButtonTheme: FilledButtonThemeData(
-            style: FilledButton.styleFrom(
-              backgroundColor: navy,
-              foregroundColor: Colors.white,
-              textStyle: const TextStyle(fontWeight: FontWeight.w700),
-              minimumSize: const Size.fromHeight(54),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
-            ),
-          ),
-          outlinedButtonTheme: OutlinedButtonThemeData(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: navy,
-              minimumSize: const Size.fromHeight(48),
-              side: const BorderSide(color: Color(0xFFCBD8E7)),
-              textStyle: const TextStyle(fontWeight: FontWeight.w700),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
-            ),
-          ),
-          iconButtonTheme: IconButtonThemeData(
-            style: IconButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13)),
-            ),
+        useMaterial3: true,
+        colorScheme:
+            ColorScheme.fromSeed(seedColor: navy, brightness: Brightness.light),
+        scaffoldBackgroundColor: canvas,
+        dividerColor: const Color(0xFFE5EAF2),
+        appBarTheme: const AppBarTheme(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            surfaceTintColor: Colors.transparent),
+        navigationBarTheme: NavigationBarThemeData(
+            height: 74,
+            backgroundColor: Colors.white,
+            elevation: 1,
+            labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+            indicatorColor: navy.withValues(alpha: .12),
+            indicatorShape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14))),
+        cardTheme: CardThemeData(
+            elevation: 0,
+            color: Colors.white,
+            surfaceTintColor: Colors.white,
+            margin: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFE4EAF2)))),
+        inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+            border: border(),
+            enabledBorder: border(),
+            focusedBorder: border(navy, 2)),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: navy,
+            foregroundColor: Colors.white,
+            textStyle: const TextStyle(fontWeight: FontWeight.w700),
+            minimumSize: const Size.fromHeight(54),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
         ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: navy,
+            minimumSize: const Size.fromHeight(48),
+            side: const BorderSide(color: Color(0xFFCBD8E7)),
+            textStyle: const TextStyle(fontWeight: FontWeight.w700),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
+        iconButtonTheme: IconButtonThemeData(
+          style: IconButton.styleFrom(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+          ),
+        ),
+      ),
       home: AnimatedBuilder(
           animation: auth,
           builder: (_, __) => auth.isRestoring
@@ -121,7 +121,8 @@ class App extends StatelessWidget {
                       opacity: animation,
                       child: SlideTransition(
                           position: Tween<Offset>(
-                                  begin: const Offset(0, .025), end: Offset.zero)
+                                  begin: const Offset(0, .025),
+                                  end: Offset.zero)
                               .animate(CurvedAnimation(
                                   parent: animation,
                                   curve: Curves.easeOutCubic)),
@@ -181,12 +182,12 @@ class _LoginState extends State<LoginScreen> {
     // Use a typical email-field width instead of the current text length.
     // Otherwise a caret at the end of even one typed character looks right.
     const trackedCharacters = 24;
-    final caret = email.selection.baseOffset
-        .clamp(0, trackedCharacters)
-        .toDouble();
+    final caret =
+        email.selection.baseOffset.clamp(0, trackedCharacters).toDouble();
     final progress = caret / trackedCharacters;
     return Offset(-9 + (progress * 18), 5);
   }
+
   @override
   void dispose() {
     email.dispose();
@@ -204,12 +205,14 @@ class _LoginState extends State<LoginScreen> {
     });
     try {
       await widget.auth.login(email.text.trim(), password.text);
-      showAppNotification('Signed in successfully.', tone: AppNotificationTone.success);
+      showAppNotification('Signed in successfully.',
+          tone: AppNotificationTone.success);
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
       showAppNotification(e.message, tone: AppNotificationTone.error);
     } catch (_) {
-      const message = 'Unable to reach the server. Check the API connection and try again.';
+      const message =
+          'Unable to reach the server. Check the API connection and try again.';
       if (mounted) setState(() => error = message);
       showAppNotification(message, tone: AppNotificationTone.error);
     } finally {
@@ -227,142 +230,151 @@ class _LoginState extends State<LoginScreen> {
                   if (emailFocus.hasFocus || passwordFocus.hasFocus) return;
                   final size = MediaQuery.sizeOf(context);
                   setState(() => pointerGaze = Offset(
-                      ((event.position.dx - (size.width / 2)) / size.width *
-                              18)
+                      ((event.position.dx - (size.width / 2)) / size.width * 18)
                           .clamp(-9, 9)
                           .toDouble(),
                       ((event.position.dy - (size.height * .22)) /
-                                  size.height *
+                              size.height *
                               12)
                           .clamp(-5, 7)
                           .toDouble()));
                 },
                 child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: 1),
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.easeOutCubic,
-                    builder: (_, value, child) => Opacity(
-                        opacity: value,
-                        child: Transform.translate(
-                            offset: Offset(0, 24 * (1 - value)), child: child)),
-                    child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 440),
-                        child: Card(
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(28),
-                                side:
-                                    const BorderSide(color: Color(0xFFE5EAF2))),
-                            child: Padding(
-                                padding: const EdgeInsets.all(32),
-                                child: Form(
-                                    key: form,
-                                    child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
-                                        children: [
-                                          SizedBox(
-                                              height: 155,
-                                              child: FittedBox(
-                                                  fit: BoxFit.contain,
-                                                  child: OwlMascot(
-                                                      coverEyes: hidden &&
-                                                          passwordFocus
+                    padding: const EdgeInsets.all(24),
+                    child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOutCubic,
+                        builder: (_, value, child) => Opacity(
+                            opacity: value,
+                            child: Transform.translate(
+                                offset: Offset(0, 24 * (1 - value)),
+                                child: child)),
+                        child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 440),
+                            child: Card(
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(28),
+                                    side: const BorderSide(
+                                        color: Color(0xFFE5EAF2))),
+                                child: Padding(
+                                    padding: const EdgeInsets.all(32),
+                                    child: Form(
+                                        key: form,
+                                        child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              SizedBox(
+                                                  height: 155,
+                                                  child: FittedBox(
+                                                      fit: BoxFit.contain,
+                                                      child: OwlMascot(
+                                                          coverEyes: hidden &&
+                                                              passwordFocus
+                                                                  .hasFocus,
+                                                          sad: error != null,
+                                                          content:
+                                                              error == null &&
+                                                                  !busy,
+                                                          curious: emailFocus
                                                               .hasFocus,
-                                                      sad: error != null,
-                                                      content: error == null &&
-                                                          !busy,
-                                                      curious: emailFocus
-                                                          .hasFocus,
-                                                      gaze: _owlGaze))),
-                                          const SizedBox(height: 4),
-                                          const Logo(),
-                                          const SizedBox(height: 28),
-                                          Text('Welcome back',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .headlineMedium
-                                                  ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w800)),
-                                          const SizedBox(height: 8),
-                                          const Text(
-                                              'Sign in to manage your inventory with ease.',
-                                              style: TextStyle(
-                                                  color: Color(0xFF667085))),
-                                          const SizedBox(height: 28),
-                                          TextFormField(
-                                              controller: email,
-                                              focusNode: emailFocus,
-                                              keyboardType:
-                                                  TextInputType.emailAddress,
-                                              decoration: const InputDecoration(
-                                                  labelText: 'Email address',
-                                                  prefixIcon: Icon(Icons
-                                                      .mail_outline_rounded)),
-                                              validator: (v) =>
-                                                  v == null || v.trim().isEmpty
+                                                          gaze: _owlGaze))),
+                                              const SizedBox(height: 4),
+                                              const Logo(),
+                                              const SizedBox(height: 28),
+                                              Text('Welcome back',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .headlineMedium
+                                                      ?.copyWith(
+                                                          fontWeight:
+                                                              FontWeight.w800)),
+                                              const SizedBox(height: 8),
+                                              const Text(
+                                                  'Sign in to manage your inventory with ease.',
+                                                  style: TextStyle(
+                                                      color:
+                                                          Color(0xFF667085))),
+                                              const SizedBox(height: 28),
+                                              TextFormField(
+                                                  controller: email,
+                                                  focusNode: emailFocus,
+                                                  keyboardType: TextInputType
+                                                      .emailAddress,
+                                                  decoration: const InputDecoration(
+                                                      labelText:
+                                                          'Email address',
+                                                      prefixIcon: Icon(Icons
+                                                          .mail_outline_rounded)),
+                                                  validator: (v) => v == null ||
+                                                          v.trim().isEmpty
                                                       ? 'Email is required'
                                                       : null),
-                                          const SizedBox(height: 16),
-                                          TextFormField(
-                                              controller: password,
-                                              focusNode: passwordFocus,
-                                              obscureText: hidden,
-                                              onFieldSubmitted: (_) => submit(),
-                                              decoration: InputDecoration(
-                                                  labelText: 'Password',
-                                                  prefixIcon: const Icon(Icons
-                                                      .lock_outline_rounded),
-                                                  suffixIcon: IconButton(
-                                                      onPressed: () => setState(
-                                                          () =>
-                                                              hidden = !hidden),
-                                                      icon: Icon(hidden
-                                                          ? Icons
-                                                              .visibility_outlined
-                                                          : Icons
-                                                              .visibility_off_outlined))),
-                                              validator: (v) =>
-                                                  v == null || v.isEmpty
+                                              const SizedBox(height: 16),
+                                              TextFormField(
+                                                  controller: password,
+                                                  focusNode: passwordFocus,
+                                                  obscureText: hidden,
+                                                  onFieldSubmitted: (_) =>
+                                                      submit(),
+                                                  decoration: InputDecoration(
+                                                      labelText: 'Password',
+                                                      prefixIcon: const Icon(Icons
+                                                          .lock_outline_rounded),
+                                                      suffixIcon: IconButton(
+                                                          onPressed: () =>
+                                                              setState(() =>
+                                                                  hidden =
+                                                                      !hidden),
+                                                          icon: Icon(hidden
+                                                              ? Icons
+                                                                  .visibility_outlined
+                                                              : Icons
+                                                                  .visibility_off_outlined))),
+                                                  validator: (v) => v == null ||
+                                                          v.isEmpty
                                                       ? 'Password is required'
                                                       : null),
-                                          if (error != null)
-                                            Padding(
-                                                padding: const EdgeInsets.only(
-                                                    top: 16),
-                                                child: ErrorBox(error!)),
-                                          const SizedBox(height: 24),
-                                          FilledButton.icon(
-                                              onPressed: busy ? null : submit,
-                                              icon: busy
-                                                  ? const SizedBox(
-                                                      height: 18,
-                                                      width: 18,
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                              strokeWidth: 2,
-                                                              color:
-                                                                  Colors.white))
-                                                  : const Icon(Icons
-                                                      .arrow_forward_rounded),
-                                              label: Text(busy
-                                                  ? 'Signing in...'
-                                                  : 'Sign in')),
-                                          const SizedBox(height: 20),
-                                          const Row(children: [
-                                            Icon(Icons.shield_outlined,
-                                                color: mint, size: 17),
-                                            SizedBox(width: 8),
-                                            Text(
-                                                'Your session is secured and encrypted.',
-                                                style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: Color(0xFF667085)))
-                                          ])
-                                        ])))))))))
+                                              if (error != null)
+                                                Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            top: 16),
+                                                    child: ErrorBox(error!)),
+                                              const SizedBox(height: 24),
+                                              FilledButton.icon(
+                                                  onPressed:
+                                                      busy ? null : submit,
+                                                  icon: busy
+                                                      ? const SizedBox(
+                                                          height: 18,
+                                                          width: 18,
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      2,
+                                                                  color: Colors
+                                                                      .white))
+                                                      : const Icon(Icons
+                                                          .arrow_forward_rounded),
+                                                  label: Text(busy
+                                                      ? 'Signing in...'
+                                                      : 'Sign in')),
+                                              const SizedBox(height: 20),
+                                              const Row(children: [
+                                                Icon(Icons.shield_outlined,
+                                                    color: mint, size: 17),
+                                                SizedBox(width: 8),
+                                                Text(
+                                                    'Your session is secured and encrypted.',
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        color:
+                                                            Color(0xFF667085)))
+                                              ])
+                                            ])))))))))
       ]));
 }
 
@@ -496,19 +508,15 @@ class _OwlMascotState extends State<OwlMascot> with TickerProviderStateMixin {
           final t = _life.value;
           // Quick dip, slow rise — characteristic owl nod
           final nodPhase = math.sin(t * math.pi * 2);
-          final nod = nodPhase > 0
-              ? nodPhase * 0.055
-              : nodPhase * 0.028;
+          final nod = nodPhase > 0 ? nodPhase * 0.055 : nodPhase * 0.028;
           final bobY = math.sin(t * math.pi * 2 + 0.4) * 2.8;
           final sway = math.sin(t * math.pi * 2 * 0.45) * 0.018;
           final breathe = 1 + math.sin(t * math.pi * 2) * 0.012;
 
-          final headTurn = easedGaze.dx / 68 +
-              (widget.curious ? 0.06 : 0) +
-              sway * 0.4;
-          final headTilt = easedGaze.dy / 820 +
-              sway +
-              (widget.curious ? -0.04 : 0);
+          final headTurn =
+              easedGaze.dx / 68 + (widget.curious ? 0.06 : 0) + sway * 0.4;
+          final headTilt =
+              easedGaze.dy / 820 + sway + (widget.curious ? -0.04 : 0);
 
           return Transform.translate(
             offset: Offset(0, bobY),
@@ -644,10 +652,8 @@ class _OwlExpressionPainter extends CustomPainter {
         ..strokeWidth = 3.5
         ..strokeCap = StrokeCap.round;
       final d = -mood;
-      canvas.drawLine(
-          const Offset(8, 7), Offset(30, 12 + d * 4), brow);
-      canvas.drawLine(
-          const Offset(84, 7), Offset(62, 12 + d * 4), brow);
+      canvas.drawLine(const Offset(8, 7), Offset(30, 12 + d * 4), brow);
+      canvas.drawLine(const Offset(84, 7), Offset(62, 12 + d * 4), brow);
     } else {
       final neutral = Path()
         ..moveTo(32, 22)
@@ -657,8 +663,7 @@ class _OwlExpressionPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _OwlExpressionPainter old) =>
-      old.mood != mood;
+  bool shouldRepaint(covariant _OwlExpressionPainter old) => old.mood != mood;
 }
 
 class _RealisticEye extends StatelessWidget {
@@ -1261,20 +1266,34 @@ class _ShellState extends State<Shell> {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF7C3AED)]),
+                gradient: const LinearGradient(
+                    colors: [Color(0xFF2563EB), Color(0xFF7C3AED)]),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Icon(Icons.logout_rounded, color: Colors.white),
             ),
             const SizedBox(height: 16),
-            Text('Ready to sign out?', style: Theme.of(dialogContext).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            Text('Ready to sign out?',
+                style: Theme.of(dialogContext)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
-            const Text('Your work is saved. You can sign back in whenever you are ready.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF667085), height: 1.4)),
+            const Text(
+                'Your work is saved. You can sign back in whenever you are ready.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF667085), height: 1.4)),
             const SizedBox(height: 22),
             Row(children: [
-              Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Stay signed in'))),
+              Expanded(
+                  child: OutlinedButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: const Text('Stay signed in'))),
               const SizedBox(width: 12),
-              Expanded(child: FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Sign out'))),
+              Expanded(
+                  child: FilledButton(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: const Text('Sign out'))),
             ]),
           ]),
         ),
@@ -1282,7 +1301,8 @@ class _ShellState extends State<Shell> {
     );
     if (shouldLogout == true) {
       await widget.auth.logout();
-      showAppNotification('You have been safely signed out. See you next time!', tone: AppNotificationTone.success);
+      showAppNotification('You have been safely signed out. See you next time!',
+          tone: AppNotificationTone.success);
     }
   }
 
@@ -1293,16 +1313,12 @@ class _ShellState extends State<Shell> {
     final pages = [
       InventoryDashboard(
         client: stockClient,
-        onOpenStockOperations: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => StockCheckScreen(client: stockClient),
-          ),
-        ),
       ),
       StockCountScreen(client: stockClient),
       PurchaseOrderApprovalScreen(
           client: stockClient,
-          canApprove: widget.session.hasAnyRole([AppRole.admin, AppRole.manager])),
+          canApprove:
+              widget.session.hasAnyRole([AppRole.admin, AppRole.manager])),
       const EquipmentMaintenanceScreen(),
       if (analytics) const Analytics(),
     ];
@@ -1341,14 +1357,15 @@ class _ShellState extends State<Shell> {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [Color(0xFF173B5C), Color(0xFF0E6972)]))),
-            title: const Logo(), actions: [
-          Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: IconButton.filledTonal(
-                  onPressed: confirmLogout,
-                  tooltip: 'Sign out',
-                  icon: const Icon(Icons.logout_rounded)))
-        ]),
+            title: const Logo(),
+            actions: [
+              Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: IconButton.filledTonal(
+                      onPressed: confirmLogout,
+                      tooltip: 'Sign out',
+                      icon: const Icon(Icons.logout_rounded)))
+            ]),
         body: AnimatedSwitcher(
             duration: const Duration(milliseconds: 240),
             child: KeyedSubtree(key: ValueKey(current), child: pages[current])),

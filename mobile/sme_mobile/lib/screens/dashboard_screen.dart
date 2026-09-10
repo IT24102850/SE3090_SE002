@@ -71,13 +71,18 @@ class DashboardScreen extends ConsumerWidget {
               ],
               const SizedBox(height: 24),
               const SectionHeader('Quick actions'),
-              GridView.count(
-                crossAxisCount: 2,
+              GridView(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-                childAspectRatio: 1.35,
+                // A fixed extent rather than an aspect ratio: the tiles then
+                // stay identical whatever the device width or text scale does
+                // to the two-line labels.
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  mainAxisExtent: 140,
+                ),
                 children: _quickActionsFor(context, user.role, role.color),
               ),
               const SizedBox(height: 24),
@@ -351,6 +356,44 @@ class _DrawerItem extends StatelessWidget {
   }
 }
 
+/// Artwork behind each quick-action tile, keyed by the tile's label.
+///
+/// Remote (Unsplash) rather than bundled: the asset bundle stays small, and a
+/// tile that can't reach the network just falls back to plain glass. Requested
+/// at 400px because these render at roughly 176x140 logical pixels.
+const _quickActionImages = <String, String>{
+  'Book appointments':
+      'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=400&q=60',
+  'View my bills':
+      'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=400&q=60',
+  'Cancel / reschedule':
+      'https://images.unsplash.com/photo-1501139083538-0139583c060f?auto=format&fit=crop&w=400&q=60',
+  'Ask AI to book for you':
+      'https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=400&q=60',
+  'Business Profile':
+      'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=400&q=60',
+  'Manage all branches':
+      'https://images.unsplash.com/photo-1517502884422-41eaead166d4?auto=format&fit=crop&w=400&q=60',
+  'View system analytics':
+      'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=400&q=60',
+  'Assign managers & staff':
+      'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=400&q=60',
+  'Approve high-impact actions':
+      'https://images.unsplash.com/photo-1521791136064-7986c2920216?auto=format&fit=crop&w=400&q=60',
+  'Manage branch bookings':
+      'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=400&q=60',
+  'Approve schedules':
+      'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=400&q=60',
+  'View branch reports':
+      'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?auto=format&fit=crop&w=400&q=60',
+  'Create / view bookings':
+      'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=400&q=60',
+  'Mark attendance':
+      'https://images.unsplash.com/photo-1541746972996-4e0b0f43e02a?auto=format&fit=crop&w=400&q=60',
+  'Process walk-ins':
+      'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=400&q=60',
+};
+
 /// Builds the quick-action tiles for a role. Customer actions are wired to
 /// real screens. Admin/Manager tiles stay as "coming soon" stubs — that
 /// management tooling lives in the web app — except Staff's "Mark
@@ -363,23 +406,27 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color) {
         label: 'Book appointments',
         icon: Icons.calendar_month_outlined,
         color: color,
+        imageUrl: _quickActionImages['Book appointments'],
         onTap: () => Navigator.of(context).push(slideFadeRoute(const BookBusinessListScreen())),
       ),
       _QuickActionCard(
         label: 'View my bills',
         icon: Icons.receipt_long_outlined,
         color: color,
+        imageUrl: _quickActionImages['View my bills'],
       ),
       _QuickActionCard(
         label: 'Cancel / reschedule',
         icon: Icons.event_busy_outlined,
         color: color,
+        imageUrl: _quickActionImages['Cancel / reschedule'],
         onTap: () => Navigator.of(context).push(slideFadeRoute(const MyBookingsScreen())),
       ),
       _QuickActionCard(
         label: 'Ask AI to book for you',
         icon: Icons.auto_awesome,
         color: AppColors.violet,
+        imageUrl: _quickActionImages['Ask AI to book for you'],
         onTap: () => Navigator.of(context).push(slideFadeRoute(const AiPlannerScreen())),
       ),
     ];
@@ -415,25 +462,37 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color) {
             label: action,
             icon: icons[action] ?? Icons.check_circle_outline,
             color: color,
+            imageUrl: _quickActionImages[action],
             onTap: wiredTaps.containsKey(action) ? () => Navigator.of(context).push(slideFadeRoute<void>(wiredTaps[action]!())) : null,
           ))
       .toList();
 }
 
+/// A quick-action tile: photo, scrim, icon well and label, inside a card the
+/// grid gives a fixed size to. Without [imageUrl] — or while one loads, or if
+/// it fails — it degrades to the plain glass card it used to be.
 class _QuickActionCard extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
+  final String? imageUrl;
   final VoidCallback? onTap;
 
-  const _QuickActionCard({required this.label, required this.icon, required this.color, this.onTap});
+  const _QuickActionCard({
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.imageUrl,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
-      borderRadius: AppRadii.row,
+    final radius = BorderRadius.circular(AppRadii.row);
+    final tap = onTap ?? () => AppSnackBar.info(context, '$label — coming soon');
+
+    final content = Padding(
       padding: const EdgeInsets.all(14),
-      onTap: onTap ?? () => AppSnackBar.info(context, '$label — coming soon'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -444,6 +503,68 @@ class _QuickActionCard extends StatelessWidget {
             style: AppTextStyles.subtitle.copyWith(fontSize: 13),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+
+    final url = imageUrl;
+    if (url == null) {
+      return GlassCard(
+        borderRadius: AppRadii.row,
+        padding: EdgeInsets.zero,
+        onTap: tap,
+        child: content,
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: radius,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // The glass fill sits under the photo, so a slow or failed load still
+          // reads as a card rather than a hole in the grid.
+          const ColoredBox(color: AppColors.glassFill),
+          Image.network(
+            url,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.medium,
+            // Fade in rather than pop — the four tiles resolve at slightly
+            // different moments otherwise.
+            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+                wasSynchronouslyLoaded
+                    ? child
+                    : AnimatedOpacity(
+                        opacity: frame == null ? 0 : 1,
+                        duration: const Duration(milliseconds: 350),
+                        curve: Curves.easeOut,
+                        child: child,
+                      ),
+            errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+          ),
+          const DecoratedBox(
+            decoration: BoxDecoration(gradient: AppColors.tileScrimGradient),
+          ),
+          content,
+          // Rim last so the photo can't paint over the hairline.
+          IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                border: Border.all(color: AppColors.glassBorder),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: radius,
+                onTap: tap,
+                child: const SizedBox.expand(),
+              ),
+            ),
           ),
         ],
       ),
