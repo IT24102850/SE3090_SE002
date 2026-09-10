@@ -9,7 +9,9 @@ using SmeBackend.Models;
 namespace SmeBackend.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/inventory/notifications")]
+[Route("api/notifications")]
 [Produces("application/json")]
 public sealed class InventoryNotificationsController(
     AppDbContext db,

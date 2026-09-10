@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+import math
 from typing import Any
 
 # Support running as package or as standalone script: try relative imports then fall back to absolute
@@ -49,7 +50,7 @@ ACTION_REQUIRED_FIELDS = {
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _make_audit(actionType: str, actorRole: str, outcome: str, details: dict[str, Any] | None = None) -> AuditEntry:
@@ -62,6 +63,16 @@ def _make_audit(actionType: str, actorRole: str, outcome: str, details: dict[str
     }
 
 
+def _to_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+        return parsed if math.isfinite(parsed) else None
+    except (TypeError, ValueError):
+        return None
+
+
 def evaluate_validation_safety(payload: ValidationSafetyInput) -> ValidationSafetyOutput:
     """Evaluate ValidationSafetyInput and return ValidationSafetyOutput.
 
@@ -69,6 +80,8 @@ def evaluate_validation_safety(payload: ValidationSafetyInput) -> ValidationSafe
     - role-based permission checks using ACTION_MIN_ROLE and ROLE_LEVELS
     - schema validation (required fields present)
     - business-rule compliance:
+      * low stock below reorder level automatically triggers a PO recommendation
+      * purchase orders exceeding the approved budget require approval
       * apply_discount: discount_percentage <= 20
       * schedule_appointment: duration_minutes <= 120 (2 hours)
     - safe-failure fallback: on unexpected exception return isAllowed=False, requiredApprovals=['Admin'], rejectionReason set, and auditLog contains exception details
@@ -115,13 +128,54 @@ def evaluate_validation_safety(payload: ValidationSafetyInput) -> ValidationSafe
                 }
 
         # Business rules
+        if action in {"create_purchase_order", "generate_purchase_order"}:
+            current_stock = _to_float(payload.payload.get("current_stock", payload.payload.get("currentStock")))
+            reorder_level = _to_float(payload.payload.get("reorder_level", payload.payload.get("reorderLevel")))
+            quantity = _to_float(payload.payload.get("quantity"))
+            unit_cost = _to_float(payload.payload.get("unit_cost", payload.payload.get("unitCost")))
+            total_cost = _to_float(payload.payload.get("totalCost"))
+            budget_limit = _to_float(payload.payload.get("budget_limit", payload.payload.get("budgetLimit", payload.payload.get("budget"))))
+
+            if current_stock is not None and reorder_level is not None and current_stock < reorder_level:
+                audit_log.append(_make_audit("business_check", "System", "ok", {"reason": "stock_below_reorder_level", "current_stock": current_stock, "reorder_level": reorder_level}))
+                # A below-reorder item must trigger a PO, not a rejection.
+                if budget_limit is not None and total_cost is not None and total_cost > budget_limit:
+                    audit_log.append(_make_audit("budget_check", "System", "requires_approval", {"totalCost": total_cost, "budgetLimit": budget_limit}))
+                    return {
+                        "isAllowed": False,
+                        "requiredApprovals": ["Manager", "Procurement"],
+                        "rejectionReason": "po_exceeds_budget_limit",
+                        "auditLog": audit_log,
+                    }
+                if budget_limit is not None and total_cost is None and quantity is not None and unit_cost is not None:
+                    estimated_total = quantity * unit_cost
+                    if estimated_total > budget_limit:
+                        audit_log.append(_make_audit("budget_check", "System", "requires_approval", {"estimatedTotal": estimated_total, "budgetLimit": budget_limit}))
+                        return {
+                            "isAllowed": False,
+                            "requiredApprovals": ["Manager", "Procurement"],
+                            "rejectionReason": "po_exceeds_budget_limit",
+                            "auditLog": audit_log,
+                        }
+                audit_log.append(_make_audit("final_decision", "PolicyEngine", "ok", {"action": action, "trigger": "low_stock"}))
+                return {"isAllowed": True, "requiredApprovals": [], "rejectionReason": None, "auditLog": audit_log}
+
+            if budget_limit is not None and total_cost is not None and total_cost > budget_limit:
+                audit_log.append(_make_audit("budget_check", "System", "requires_approval", {"totalCost": total_cost, "budgetLimit": budget_limit}))
+                return {
+                    "isAllowed": False,
+                    "requiredApprovals": ["Manager", "Procurement"],
+                    "rejectionReason": "po_exceeds_budget_limit",
+                    "auditLog": audit_log,
+                }
+
         if action == "apply_discount":
             try:
                 disc = float(payload.payload.get("discount_percentage"))
             except Exception:
                 audit_log.append(_make_audit("business_check", "System", "rejected", {"reason": "discount not numeric"}))
                 return {"isAllowed": False, "requiredApprovals": [], "rejectionReason": "invalid_schema: discount_percentage must be numeric", "auditLog": audit_log}
-            if disc > 20.0:
+            if disc < 0 or disc > 20.0:
                 audit_log.append(_make_audit("business_check", "System", "rejected", {"discount": disc}))
                 return {"isAllowed": False, "requiredApprovals": [], "rejectionReason": "discount_exceeds_maximum", "auditLog": audit_log}
             audit_log.append(_make_audit("business_check", "System", "ok", {"discount": disc}))
@@ -132,7 +186,7 @@ def evaluate_validation_safety(payload: ValidationSafetyInput) -> ValidationSafe
             except Exception:
                 audit_log.append(_make_audit("business_check", "System", "rejected", {"reason": "duration not numeric"}))
                 return {"isAllowed": False, "requiredApprovals": [], "rejectionReason": "invalid_schema: duration_minutes must be numeric", "auditLog": audit_log}
-            if dur > 120.0:
+            if dur < 0 or dur > 120.0:
                 audit_log.append(_make_audit("business_check", "System", "rejected", {"duration_minutes": dur}))
                 return {"isAllowed": False, "requiredApprovals": [], "rejectionReason": "appointment_too_long", "auditLog": audit_log}
             audit_log.append(_make_audit("business_check", "System", "ok", {"duration_minutes": dur}))

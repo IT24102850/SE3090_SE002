@@ -1313,6 +1313,7 @@ class _ShellState extends State<Shell> {
     final pages = [
       InventoryDashboard(
         client: stockClient,
+        canApprove: widget.session.hasAnyRole([AppRole.admin, AppRole.manager]),
       ),
       StockCountScreen(client: stockClient),
       PurchaseOrderApprovalScreen(

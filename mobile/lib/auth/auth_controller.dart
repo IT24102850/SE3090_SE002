@@ -12,9 +12,17 @@ class AuthController extends ChangeNotifier {
   bool isRestoring = true;
 
   Future<void> restore() async {
-    session = await _repository.restoreSession();
-    isRestoring = false;
-    notifyListeners();
+    try {
+      session = await _repository.restoreSession();
+    } catch (_) {
+      // Browser storage can be unavailable in private browsing or when it is
+      // blocked by a site policy. A stored session is a convenience, not a
+      // prerequisite for opening the app, so fall back to the sign-in screen.
+      session = null;
+    } finally {
+      isRestoring = false;
+      notifyListeners();
+    }
   }
 
   Future<void> login(String email, String password) async {

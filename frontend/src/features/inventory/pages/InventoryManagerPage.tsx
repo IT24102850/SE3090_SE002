@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../../store/store';
 import { Badge, type BadgeTone } from '../ui/Badge';
 import { useToast } from '../ui/ToastContext';
+import { Icon } from '../ui/Icon';
+import { getStoredToken } from '../authToken';
 
 type StockStatus = 'In stock' | 'Low stock' | 'Out of stock';
 
 type StockRow = {
+  id?: string;
+  categoryId?: string;
+  unitId?: string;
+  branchId?: string;
   sku: string;
   item: string;
   category: string;
@@ -18,19 +26,6 @@ type StockRow = {
 type StockForm = Omit<StockRow, 'sku'>;
 
 const PAGE_SIZE = 5;
-
-const initialStock: StockRow[] = [
-  { sku: 'SKU-00128', item: 'Colombia Supremo Beans 1kg', category: 'Coffee & beverages', unit: 'bag', price: 4850, qty: 142, reorder: 40, owner: 'Kavindu' },
-  { sku: 'SKU-00132', item: 'Premium Coffee Beans', category: 'Coffee & beverages', unit: 'kg', price: 6200, qty: 6, reorder: 40, owner: 'Kavindu' },
-  { sku: 'SKU-00324', item: 'Vanilla Syrup 750ml', category: 'Coffee & beverages', unit: 'bottle', price: 1890, qty: 0, reorder: 25, owner: 'Kavindu' },
-  { sku: 'SKU-00451', item: 'Butter Croissants (x12)', category: 'Bakery & desserts', unit: 'pack', price: 2450, qty: 96, reorder: 30, owner: 'Dinesh' },
-  { sku: 'SKU-00598', item: 'Packaging Boxes — Medium', category: 'Packaging & supplies', unit: 'box', price: 580, qty: 11, reorder: 60, owner: 'Nadeesha' },
-  { sku: 'SKU-00612', item: 'Craft Paper Cups 12oz (x50)', category: 'Packaging & supplies', unit: 'pack', price: 1150, qty: 74, reorder: 40, owner: 'Nadeesha' },
-  { sku: 'SKU-00741', item: 'Whole Milk 1L', category: 'Dairy & chilled', unit: 'carton', price: 420, qty: 218, reorder: 80, owner: 'Nadeesha' },
-  { sku: 'SKU-00811', item: 'Whole Milk 1L (Small)', category: 'Dairy & chilled', unit: 'carton', price: 380, qty: 18, reorder: 80, owner: 'Nadeesha' },
-  { sku: 'SKU-00902', item: 'Brown Sugar 500g', category: 'Groceries', unit: 'bag', price: 640, qty: 65, reorder: 30, owner: 'Kavindu' },
-  { sku: 'SKU-01033', item: 'Napkins — Kraft (x200)', category: 'Packaging & supplies', unit: 'pack', price: 950, qty: 43, reorder: 25, owner: 'Nadeesha' },
-];
 
 const suppliers = [
   { name: 'Ceylon Coffee Traders', category: 'Coffee & beverages', outstanding: 'LKR 184,500', rating: 4 },
@@ -103,11 +98,13 @@ function ItemModal({
   initial,
   onClose,
   onSave,
+  saving,
 }: {
   title: string;
   initial: StockForm;
   onClose: () => void;
   onSave: (form: StockForm) => void;
+  saving: boolean;
 }) {
   const [form, setForm] = useState(initial);
   const [error, setError] = useState('');
@@ -180,7 +177,7 @@ function ItemModal({
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Save item</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save item'}</button>
           </div>
         </form>
       </div>
@@ -190,7 +187,12 @@ function ItemModal({
 
 export function InventoryManagerPage() {
   const { notify } = useToast();
-  const [items, setItems] = useState<StockRow[]>(initialStock);
+  const token = getStoredToken();
+  const { user } = useSelector((state: RootState) => state.auth);
+  const [items, setItems] = useState<StockRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(categories[0]);
   const [status, setStatus] = useState<StatusFilter>(statusFilters[0]);
@@ -238,23 +240,104 @@ export function InventoryManagerPage() {
 
   const editingItem = modal?.mode === 'edit' ? items.find((row) => row.sku === modal.sku) : undefined;
 
-  function handleSave(form: StockForm) {
-    if (modal?.mode === 'add') {
-      setItems((prev) => [...prev, { sku: nextSku(prev), ...form }]);
-      notify(`${form.item} was added to inventory.`);
-    } else if (modal?.mode === 'edit') {
-      setItems((prev) => prev.map((row) => (row.sku === modal.sku ? { ...row, ...form } : row)));
-      notify(`${form.item} was updated.`);
+  async function loadInventory() {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const response = await fetch('/api/inventory?page=1&pageSize=100', {
+        headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
+      });
+      if (!response.ok) throw new Error(`Inventory request failed (${response.status})`);
+      const data = await response.json();
+      setItems((data.items ?? []).map((item: any): StockRow => ({
+        id: item.id,
+        sku: item.sku,
+        item: item.name,
+        category: item.category ?? 'Uncategorized',
+        unit: item.unit ?? 'unit',
+        categoryId: item.categoryId ?? undefined,
+        unitId: item.unitId ?? undefined,
+        branchId: item.branchId ?? undefined,
+        price: Number(item.unitCost ?? 0),
+        qty: Number(item.quantity ?? 0),
+        reorder: Number(item.reorderLevel ?? 0),
+        owner: item.branch ?? 'Inventory Admin',
+      })));
+    } catch (error) {
+      console.error(error);
+      setItems([]);
+      setLoadError('Unable to load inventory from the database. Refresh and try again.');
+    } finally {
+      setLoading(false);
     }
-    setModal(null);
   }
 
-  function confirmDelete() {
+  useEffect(() => {
+    void loadInventory();
+  }, [token]);
+
+  async function handleSave(form: StockForm) {
+    setSaving(true);
+    try {
+      const existing = modal?.mode === 'edit' ? items.find((row) => row.sku === modal.sku) : undefined;
+      const path = existing?.id ? `/api/inventory/${existing.id}` : '/api/inventory';
+      const method = existing?.id ? 'PUT' : 'POST';
+      const response = await fetch(path, {
+        method,
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: token ? 'Bearer ' + token : '' },
+        body: JSON.stringify({
+          name: form.item,
+          sku: existing?.sku ?? nextSku(items),
+          description: null,
+          categoryId: existing?.categoryId ?? null,
+          unitId: existing?.unitId ?? null,
+          branchId: existing?.branchId ?? user?.branchId ?? null,
+          ...(existing ? {} : { quantity: form.qty }),
+          reorderLevel: form.reorder,
+          unitCost: form.price,
+        }),
+      });
+      if (!response.ok) throw new Error(`Save failed (${response.status})`);
+      if (existing && form.qty !== existing.qty) {
+        const adjustment = await fetch(`/api/inventory/${existing.id}/adjust`, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: token ? 'Bearer ' + token : '' },
+          body: JSON.stringify({ quantity: form.qty - existing.qty, reference: 'Inventory manager edit' }),
+        });
+        if (!adjustment.ok) throw new Error(`Quantity adjustment failed (${adjustment.status})`);
+      }
+      await loadInventory();
+      setModal(null);
+      notify(`${form.item} was ${existing ? 'updated' : 'added'} in inventory.`);
+    } catch (error) {
+      console.error(error);
+      notify('Inventory could not be saved. Check your connection and permissions.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
     if (!deleteSku) return;
     const item = items.find((row) => row.sku === deleteSku);
-    setItems((prev) => prev.filter((row) => row.sku !== deleteSku));
-    setDeleteSku(null);
-    notify(`${item?.item ?? 'Item'} was deleted.`, 'info');
+    if (!item?.id) {
+      setDeleteSku(null);
+      notify('This fallback row is not connected to the live inventory.', 'warning');
+      return;
+    }
+    try {
+      const response = await fetch(`/api/inventory/${item.id}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
+      });
+      if (!response.ok) throw new Error(`Delete failed (${response.status})`);
+      await loadInventory();
+      setDeleteSku(null);
+      notify(`${item.item} was deleted.`, 'info');
+    } catch (error) {
+      console.error(error);
+      notify('Inventory item could not be deleted.', 'error');
+    }
   }
 
   const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
@@ -269,16 +352,31 @@ export function InventoryManagerPage() {
           <p className="page-sub">Search items, monitor stock levels, and keep suppliers in check.</p>
         </div>
         <div className="page-actions">
+          <button className="btn btn-secondary" type="button" onClick={() => void loadInventory()} disabled={loading}>Refresh</button>
           <button className="btn btn-secondary" type="button" onClick={() => notify('Import is ready for a CSV file. File selection will be available next.', 'warning')}>Import</button>
           <button className="btn btn-primary" type="button" onClick={() => setModal({ mode: 'add' })}>Add item</button>
         </div>
       </header>
+      {loadError && <p className="page-notice">{loadError}</p>}
+      {loading && <div className="panel p-6">Loading live inventory…</div>}
 
       <section className="stat-strip" aria-label="Inventory summary">
-        <div className="stat"><span className="stat-value">{stats.items}</span><span className="stat-label">Items tracked</span></div>
-        <div className="stat"><span className="stat-value">{stats.total.toLocaleString()}</span><span className="stat-label">Units on hand</span></div>
-        <div className="stat"><span className="stat-value">{stats.low}</span><span className="stat-label">Need attention</span></div>
-        <div className="stat"><span className="stat-value">LKR {stats.value.toLocaleString()}</span><span className="stat-label">Stock value</span></div>
+        <div className="stat metric-card">
+          <div className="metric-icon-bubble metric-purple" aria-hidden="true"><Icon name="inventory" size={20} /></div>
+          <div className="metric-info"><span className="stat-value metric-value">{stats.items}</span><span className="stat-label metric-label">Items tracked</span></div>
+        </div>
+        <div className="stat metric-card">
+          <div className="metric-icon-bubble metric-cyan" aria-hidden="true"><Icon name="box" size={20} /></div>
+          <div className="metric-info"><span className="stat-value metric-value">{stats.total.toLocaleString()}</span><span className="stat-label metric-label">Units on hand</span></div>
+        </div>
+        <div className="stat metric-card">
+          <div className="metric-icon-bubble metric-amber" aria-hidden="true"><Icon name="alert" size={20} /></div>
+          <div className="metric-info"><span className="stat-value metric-value">{stats.low}</span><span className="stat-label metric-label">Need attention</span></div>
+        </div>
+        <div className="stat metric-card">
+          <div className="metric-icon-bubble metric-emerald" aria-hidden="true"><Icon name="chart" size={20} /></div>
+          <div className="metric-info"><span className="stat-value metric-value">LKR {stats.value.toLocaleString()}</span><span className="stat-label metric-label">Stock value</span></div>
+        </div>
       </section>
 
       <div className="inventory-layout">
@@ -411,6 +509,7 @@ export function InventoryManagerPage() {
             : emptyForm}
           onClose={() => setModal(null)}
           onSave={handleSave}
+          saving={saving}
         />
       )}
 

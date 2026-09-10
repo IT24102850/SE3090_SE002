@@ -11,7 +11,6 @@ public class User : BaseEntity, ITenantScoped
     public string FullName { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.Customer;
-
     public bool IsActive { get; set; } = true;
 
     // Self-service avatar, set via PUT /api/auth/me after an upload through
@@ -24,4 +23,5 @@ public class User : BaseEntity, ITenantScoped
     public string? InsuranceProvider { get; set; }
     public string? InsuranceNumber { get; set; }
     public string? MedicalNotes { get; set; }
+    public bool IsApproved { get; set; } = true;
 }
