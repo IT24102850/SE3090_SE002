@@ -1,6 +1,6 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { RootState } from '../../store/store';
 import { logout } from '../../store/authSlice';
 import NotificationBell from './NotificationBell';
@@ -93,6 +93,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem('sme-inventory-theme') || 'dark');
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('sme-inventory-theme', theme);
+  }, [theme]);
 
   // Role filtering happens inside each section; a section whose items are all
   // filtered out disappears rather than leaving an empty heading.
@@ -126,13 +133,18 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     .filter((section) => section.items.length > 0);
 
   const activeSectionId = sections.find((s) => s.items.some((i) => i.path === location.pathname))?.id;
+  const pageName = location.pathname === '/inventory-analytics'
+    ? 'ENTERPRISE ANALYTICS'
+    : location.pathname === '/inventory'
+      ? 'STOCK MANAGEMENT'
+      : location.pathname.replace('/', '').replace(/-/g, ' ').toUpperCase() || 'OPERATIONS';
 
   // Collapsed by default except the section you are in, so the list stays
   // short without putting anything more than one click away. Once the user
   // opens a section it stays open while they navigate — `null` means
   // "untouched", so the active section keeps auto-following the route.
   const [openIds, setOpenIds] = useState<Set<string> | null>(null);
-  const isOpen = (id: string) => (openIds ? openIds.has(id) : id === activeSectionId);
+  const isOpen = (id: string) => (openIds ? openIds.has(id) : true);
   const toggleSection = (id: string) => {
     setOpenIds((prev) => {
       const next = new Set(prev ?? (activeSectionId ? [activeSectionId] : []));
@@ -174,8 +186,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       )}
       <aside className={`sidebar${mobileNavOpen ? ' open' : ''}`}>
         <div className="sidebar-brand">
-          <img className="sidebar-brand-mark" src="/unify-logo.svg" alt="" width={32} height={32} />
-          Unify
+          <span className="sidebar-brand-mark" aria-hidden="true">SME</span>
+          <span>
+            <strong>SME Inventory</strong>
+            <small>Stock · Procurement · Analytics</small>
+          </span>
         </div>
         <nav className="sidebar-nav">
           {sections.map((section) => {
@@ -203,7 +218,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                         className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
                         onClick={() => setMobileNavOpen(false)}
                       >
-                        <span>{item.icon}</span>
+                        <span className="sidebar-link-icon" aria-hidden="true">{item.icon}</span>
                         <span>{item.label}</span>
                       </NavLink>
                     ))}
@@ -256,11 +271,43 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         )}
       </aside>
       <div className="app-main">
-        {user && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 24px 0' }}>
+        {user && <header className="app-topbar">
+          <div className="app-breadcrumb">
+            <span className="app-breadcrumb-dot" />
+            <strong>SME INVENTORY</strong>
+            <span>//</span>
+            <span>{pageName}</span>
+          </div>
+          <div className="app-topbar-actions">
+            <label className="theme-select" title="Choose theme">
+              <span className="theme-select-icon" aria-hidden="true">◐</span>
+              <span className="theme-select-label">Theme</span>
+              <button type="button" className="theme-select-trigger" aria-haspopup="listbox" aria-expanded={themeMenuOpen} onClick={() => setThemeMenuOpen((open) => !open)}>
+                {theme === 'dark' ? 'Dark theme' : theme === 'light' ? 'Light theme' : 'System theme'}
+                <span className="theme-select-chevron" aria-hidden="true" />
+              </button>
+              {themeMenuOpen && <div className="theme-menu" role="listbox" aria-label="Choose theme">
+                {[
+                  ['dark', 'Dark theme'],
+                  ['light', 'Light theme'],
+                  ['system', 'System theme'],
+                ].map(([value, label]) => (
+                  <button type="button" role="option" aria-selected={theme === value} className={`theme-menu-option${theme === value ? ' selected' : ''}`} key={value} onClick={() => { setTheme(value); setThemeMenuOpen(false); }}>
+                    <span>{theme === value ? '✓' : ''}</span>{label}
+                  </button>
+                ))}
+              </div>}
+            </label>
+            <span className="app-clock" aria-label="Current time">◷ {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <NavLink to="/profile" className="app-user-chip">
+              <span className="app-user-avatar">{(user.fullName || user.email || 'A').trim().charAt(0).toUpperCase()}</span>
+              <strong>{user.fullName || user.email}</strong>
+              <span className="app-role-chip">{user.role}</span>
+            </NavLink>
+            <button className="app-signout" onClick={handleLogout}>Sign out</button>
             <NotificationBell />
           </div>
-        )}
+        </header>}
         <div className="app-content">{children}</div>
       </div>
     </div>
