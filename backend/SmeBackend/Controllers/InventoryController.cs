@@ -509,6 +509,24 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
+        if (request.Quantity < 0)
+        {
+            ModelState.AddModelError("quantity", "Quantity cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.ReorderLevel < 0)
+        {
+            ModelState.AddModelError("reorderLevel", "Reorder level cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.UnitCost < 0)
+        {
+            ModelState.AddModelError("unitCost", "Unit cost cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
                 InventoryAuthorizationPolicies.InventoryWrite,

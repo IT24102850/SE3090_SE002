@@ -35,8 +35,20 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
   }
 
   Future<void> _loadPresets() async {
-    final items = await MockInventoryData.getItems();
-    if (mounted) setState(() => _availableItems = items);
+    try {
+      final response = await widget.client.get('/api/inventory?pageSize=100');
+      if (response.statusCode != 200) return;
+      final payload = jsonDecode(response.body) as Map<String, dynamic>;
+      final items = ((payload['items'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MockInventoryItem.fromJson)
+          .toList();
+      if (mounted) setState(() => _availableItems = items);
+    } catch (_) {
+      // Only use the local catalog when the API cannot be reached.
+      final items = await MockInventoryData.getItems();
+      if (mounted) setState(() => _availableItems = items);
+    }
   }
 
   @override
@@ -102,18 +114,13 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
             },
           );
           if (response.statusCode >= 200 && response.statusCode < 300) {
-            await MockInventoryData.updateQuantity(
-              code,
-              _operation == StockOperation.checkIn
-                  ? quantity.toDouble()
-                  : -quantity.toDouble(),
-            );
             if (!mounted) return;
             showAppNotification(
               '${_operation == StockOperation.checkIn ? 'Check-in' : 'Check-out'} recorded for ${item['name']}.',
               tone: AppNotificationTone.success,
             );
             setState(() {
+              _saving = false;
               _scannedCode = null;
               _barcode.clear();
               _quantity.text = '1';
@@ -121,8 +128,30 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
             _loadPresets();
             return;
           }
+          if (mounted) {
+            setState(() => _saving = false);
+            showAppNotification(
+              'The inventory API rejected this stock movement.',
+              tone: AppNotificationTone.error,
+            );
+          }
+          return;
         }
+        if (mounted) {
+          setState(() => _saving = false);
+          showAppNotification('No inventory item matches "$code".',
+              tone: AppNotificationTone.error);
+        }
+        return;
       }
+      if (mounted) {
+        setState(() => _saving = false);
+        showAppNotification(
+          'The inventory API is unavailable (${inventoryResponse.statusCode}).',
+          tone: AppNotificationTone.error,
+        );
+      }
+      return;
     } catch (_) {
       // Live API unreachable, fall back to offline demo store
     }

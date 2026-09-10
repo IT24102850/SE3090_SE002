@@ -32,6 +32,7 @@ class _PurchaseOrderApprovalScreenState
   void initState() {
     super.initState();
     _load();
+    NotificationService().connect();
     // subscribe to notification websocket events
     try {
       _notifSub = NotificationService().stream.listen((event) {
@@ -73,7 +74,9 @@ class _PurchaseOrderApprovalScreenState
     try {
       final response = await widget.client
           .get('/api/purchase-orders?status=InReview&pageSize=100');
-      if (response.statusCode != 200) throw Exception();
+      if (response.statusCode != 200) {
+        throw StateError('Purchase orders API returned ${response.statusCode}.');
+      }
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
@@ -83,6 +86,13 @@ class _PurchaseOrderApprovalScreenState
             .toList();
         _isDemoData = false;
       });
+    } on StateError catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _isDemoData = false;
+        });
+      }
     } catch (_) {
       // Fallback to MockInventoryData orders
       final mockOrders = await MockInventoryData.getOrders();
@@ -124,7 +134,18 @@ class _PurchaseOrderApprovalScreenState
       showAppNotification('${order.number} approved and marked as placed.',
           tone: AppNotificationTone.success);
     } catch (_) {
-      // Offline / Demo fallback
+      // Never replace a live queue with local demo data after a live API
+      // failure. Local approvals are only allowed for an already demo-backed
+      // queue.
+      if (!_isDemoData) {
+        if (mounted) {
+          setState(() => order.approving = false);
+          showAppNotification(
+              'Approval could not be completed while the API is unavailable.',
+              tone: AppNotificationTone.error);
+        }
+        return;
+      }
       final approved = await MockInventoryData.approveOrder(order.id);
       if (approved && mounted) {
         setState(() => _orders.removeWhere((item) => item.id == order.id));

@@ -8,6 +8,9 @@ type StockStatus = 'In stock' | 'Low stock' | 'Out of stock';
 
 type StockRow = {
   id?: string;
+  categoryId?: string;
+  unitId?: string;
+  branchId?: string;
   sku: string;
   item: string;
   category: string;
@@ -21,19 +24,6 @@ type StockRow = {
 type StockForm = Omit<StockRow, 'sku'>;
 
 const PAGE_SIZE = 5;
-
-const initialStock: StockRow[] = [
-  { sku: 'SKU-00128', item: 'Colombia Supremo Beans 1kg', category: 'Coffee & beverages', unit: 'bag', price: 4850, qty: 142, reorder: 40, owner: 'Kavindu' },
-  { sku: 'SKU-00132', item: 'Premium Coffee Beans', category: 'Coffee & beverages', unit: 'kg', price: 6200, qty: 6, reorder: 40, owner: 'Kavindu' },
-  { sku: 'SKU-00324', item: 'Vanilla Syrup 750ml', category: 'Coffee & beverages', unit: 'bottle', price: 1890, qty: 0, reorder: 25, owner: 'Kavindu' },
-  { sku: 'SKU-00451', item: 'Butter Croissants (x12)', category: 'Bakery & desserts', unit: 'pack', price: 2450, qty: 96, reorder: 30, owner: 'Dinesh' },
-  { sku: 'SKU-00598', item: 'Packaging Boxes — Medium', category: 'Packaging & supplies', unit: 'box', price: 580, qty: 11, reorder: 60, owner: 'Nadeesha' },
-  { sku: 'SKU-00612', item: 'Craft Paper Cups 12oz (x50)', category: 'Packaging & supplies', unit: 'pack', price: 1150, qty: 74, reorder: 40, owner: 'Nadeesha' },
-  { sku: 'SKU-00741', item: 'Whole Milk 1L', category: 'Dairy & chilled', unit: 'carton', price: 420, qty: 218, reorder: 80, owner: 'Nadeesha' },
-  { sku: 'SKU-00811', item: 'Whole Milk 1L (Small)', category: 'Dairy & chilled', unit: 'carton', price: 380, qty: 18, reorder: 80, owner: 'Nadeesha' },
-  { sku: 'SKU-00902', item: 'Brown Sugar 500g', category: 'Groceries', unit: 'bag', price: 640, qty: 65, reorder: 30, owner: 'Kavindu' },
-  { sku: 'SKU-01033', item: 'Napkins — Kraft (x200)', category: 'Packaging & supplies', unit: 'pack', price: 950, qty: 43, reorder: 25, owner: 'Nadeesha' },
-];
 
 const suppliers = [
   { name: 'Ceylon Coffee Traders', category: 'Coffee & beverages', outstanding: 'LKR 184,500', rating: 4 },
@@ -195,7 +185,7 @@ function ItemModal({
 
 export function InventoryManagerPage() {
   const { notify } = useToast();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [items, setItems] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -262,6 +252,9 @@ export function InventoryManagerPage() {
         item: item.name,
         category: item.category ?? 'Uncategorized',
         unit: item.unit ?? 'unit',
+        categoryId: item.categoryId ?? undefined,
+        unitId: item.unitId ?? undefined,
+        branchId: item.branchId ?? undefined,
         price: Number(item.unitCost ?? 0),
         qty: Number(item.quantity ?? 0),
         reorder: Number(item.reorderLevel ?? 0),
@@ -293,15 +286,23 @@ export function InventoryManagerPage() {
           name: form.item,
           sku: existing?.sku ?? nextSku(items),
           description: null,
-          categoryId: null,
-          unitId: null,
-          branchId: null,
-          quantity: form.qty,
+          categoryId: existing?.categoryId ?? null,
+          unitId: existing?.unitId ?? null,
+          branchId: existing?.branchId ?? user?.branchId ?? null,
+          ...(existing ? {} : { quantity: form.qty }),
           reorderLevel: form.reorder,
           unitCost: form.price,
         }),
       });
       if (!response.ok) throw new Error(`Save failed (${response.status})`);
+      if (existing && form.qty !== existing.qty) {
+        const adjustment = await fetch(`/api/inventory/${existing.id}/adjust`, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: token ? 'Bearer ' + token : '' },
+          body: JSON.stringify({ quantity: form.qty - existing.qty, reference: 'Inventory manager edit' }),
+        });
+        if (!adjustment.ok) throw new Error(`Quantity adjustment failed (${adjustment.status})`);
+      }
       await loadInventory();
       setModal(null);
       notify(`${form.item} was ${existing ? 'updated' : 'added'} in inventory.`);

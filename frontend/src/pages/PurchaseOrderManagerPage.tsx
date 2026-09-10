@@ -79,90 +79,6 @@ const suppliers = [
 const statusFilters = ['All statuses', ...lifecycleSteps.map((step) => statusLabels[step]), 'Cancelled'] as const;
 type StatusFilter = (typeof statusFilters)[number];
 
-const fallbackOrders: PurchaseOrder[] = [
-  {
-    id: 'po-2147',
-    number: 'PO-2147',
-    supplier: 'Ceylon Coffee Traders',
-    branch: 'Main branch',
-    status: 'InTransit',
-    amount: 184500,
-    lineItems: 3,
-    createdAt: '2026-08-08T10:00:00Z',
-    updatedAt: '2026-08-12T14:30:00Z',
-    timeline: [
-      { status: 'Draft', at: '2026-08-08T10:00:00Z', by: 'Kavindu' },
-      { status: 'InReview', at: '2026-08-08T11:20:00Z', by: 'Inventory Admin', note: 'Approved supplier quote' },
-      { status: 'Placed', at: '2026-08-09T09:15:00Z', by: 'Kavindu' },
-      { status: 'InTransit', at: '2026-08-12T14:30:00Z', by: 'Nadeesha', note: 'Courier dispatched — ETA Aug 16' },
-    ],
-  },
-  {
-    id: 'po-2146',
-    number: 'PO-2146',
-    supplier: 'MetroPack Ltd',
-    branch: 'Main branch',
-    status: 'Received',
-    amount: 96200,
-    lineItems: 2,
-    createdAt: '2026-08-06T08:30:00Z',
-    updatedAt: '2026-08-10T16:00:00Z',
-    timeline: [
-      { status: 'Draft', at: '2026-08-06T08:30:00Z', by: 'Nadeesha' },
-      { status: 'InReview', at: '2026-08-06T10:00:00Z', by: 'Inventory Admin' },
-      { status: 'Placed', at: '2026-08-07T09:00:00Z', by: 'Nadeesha' },
-      { status: 'InTransit', at: '2026-08-09T11:45:00Z', by: 'MetroPack Ltd' },
-      { status: 'Received', at: '2026-08-10T16:00:00Z', by: 'Nadeesha', note: 'GRN-4395 posted' },
-    ],
-  },
-  {
-    id: 'po-2144',
-    number: 'PO-2144',
-    supplier: 'Fresh Farms Dairy',
-    branch: 'Main branch',
-    status: 'Placed',
-    amount: 72850,
-    lineItems: 1,
-    createdAt: '2026-08-05T07:45:00Z',
-    updatedAt: '2026-08-08T08:20:00Z',
-    timeline: [
-      { status: 'Draft', at: '2026-08-05T07:45:00Z', by: 'Nadeesha' },
-      { status: 'InReview', at: '2026-08-05T12:00:00Z', by: 'Inventory Admin' },
-      { status: 'Placed', at: '2026-08-08T08:20:00Z', by: 'Nadeesha' },
-    ],
-  },
-  {
-    id: 'po-2141',
-    number: 'PO-2141',
-    supplier: 'Flour & Co Bakery Supply',
-    branch: 'Main branch',
-    status: 'InReview',
-    amount: 61400,
-    lineItems: 4,
-    createdAt: '2026-08-04T13:10:00Z',
-    updatedAt: '2026-08-04T15:00:00Z',
-    timeline: [
-      { status: 'Draft', at: '2026-08-04T13:10:00Z', by: 'Dinesh' },
-      { status: 'InReview', at: '2026-08-04T15:00:00Z', by: 'Inventory Admin', note: 'Awaiting manager sign-off' },
-    ],
-  },
-  {
-    id: 'po-2138',
-    number: 'PO-2138',
-    supplier: 'Ceylon Coffee Traders',
-    branch: 'Colombo outlet',
-    status: 'Cancelled',
-    amount: 42000,
-    lineItems: 1,
-    createdAt: '2026-08-01T09:00:00Z',
-    updatedAt: '2026-08-02T11:30:00Z',
-    timeline: [
-      { status: 'Draft', at: '2026-08-01T09:00:00Z', by: 'Kavindu' },
-      { status: 'Cancelled', at: '2026-08-02T11:30:00Z', by: 'Inventory Admin', note: 'Duplicate order — merged into PO-2147' },
-    ],
-  },
-];
-
 const amountByNumber: Record<string, number> = {
   'PO-2147': 184500,
   'PO-2146': 96200,
@@ -454,7 +370,7 @@ export function PurchaseOrderManagerPage() {
     notify(`${order.number} moved to ${statusLabels[next]}.`);
   }
 
-  function cancelOrder(order: PurchaseOrder) {
+  async function cancelOrder(order: PurchaseOrder) {
     if (order.status === 'Received' || order.status === 'Cancelled') return;
     const now = new Date().toISOString();
     const timelineEvent: TimelineEvent = { status: 'Cancelled', at: now, by: performer, note: 'Cancelled by user' };
@@ -463,6 +379,17 @@ export function PurchaseOrderManagerPage() {
         ? { ...candidate, status: 'Cancelled', updatedAt: now, timeline: [...candidate.timeline, timelineEvent] }
         : candidate
     )));
+    if (!usedFallback) {
+      try {
+        await apiPut<PurchaseOrderResponse>(`/api/purchase-orders/${order.id}/status`, token, { status: 'Cancelled' });
+      } catch {
+        setOrders((prev) => prev.map((candidate) => (
+          candidate.id === order.id ? order : candidate
+        )));
+        notify(`Could not cancel ${order.number}; the status was not saved.`, 'error');
+        return;
+      }
+    }
     notify(`${order.number} was cancelled.`, 'info');
   }
 

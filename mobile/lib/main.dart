@@ -586,6 +586,7 @@ class _ShellState extends State<Shell> {
     final pages = [
       InventoryDashboard(
           client: client,
+          canApprove: canApprove,
           onOpenStockOperations: () => Navigator.push(
               context,
               MaterialPageRoute(

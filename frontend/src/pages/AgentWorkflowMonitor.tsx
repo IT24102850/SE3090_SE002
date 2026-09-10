@@ -23,6 +23,7 @@ type WorkflowItem = {
 export function AgentWorkflowMonitorPage() {
   const [items, setItems] = useState<WorkflowItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [selected, setSelected] = useState<WorkflowItem | null>(null);
   const { token } = useAuth();
 
@@ -82,6 +83,7 @@ export function AgentWorkflowMonitorPage() {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('fetch failed');
       const data = await resp.json();
+      setLoadError('');
       setItems(data.items || []);
       setTotal(data.total ?? null);
 
@@ -93,6 +95,7 @@ export function AgentWorkflowMonitorPage() {
       prevIdsRef.current = nowIds;
     } catch (err) {
       console.error(err);
+      setLoadError('Live workflow data could not be loaded. Check the agent service connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -169,6 +172,7 @@ export function AgentWorkflowMonitorPage() {
           <button className="btn btn-secondary" onClick={() => fetchItems()}>Refresh</button>
         </div>
       </header>
+      {loadError && <p className="page-notice" role="alert">{loadError}</p>}
 
       <div className="workflow-kpi-grid">
         <div className="kpi-card">

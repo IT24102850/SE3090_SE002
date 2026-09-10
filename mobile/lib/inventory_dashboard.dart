@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import 'auth/authenticated_api_client.dart';
 import 'data/mock_inventory_data.dart';
@@ -12,10 +14,12 @@ class InventoryDashboard extends StatefulWidget {
   const InventoryDashboard({
     super.key,
     required this.client,
+    required this.canApprove,
     this.onOpenStockOperations,
   });
 
   final AuthenticatedApiClient client;
+  final bool canApprove;
   final VoidCallback? onOpenStockOperations;
 
   @override
@@ -43,15 +47,15 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
     });
     try {
       final summary = await _repository.loadSummary();
-      final mockItems = await MockInventoryData.getItems();
+      final liveItems = await _repository.loadPreviewItems();
       if (mounted) {
         setState(() {
           _summary = summary;
-          _previewItems = mockItems;
+          _previewItems = liveItems;
           _isDemoData = false;
         });
       }
-    } catch (_) {
+    } on http.ClientException catch (_) {
       // Keep the dashboard honest when the shared API is unavailable.
       final mockItems = await MockInventoryData.getItems();
       final mockOrders = await MockInventoryData.getOrders();
@@ -74,6 +78,26 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
           _error = null;
         });
       }
+    } on TimeoutException catch (_) {
+      final mockItems = await MockInventoryData.getItems();
+      final mockOrders = await MockInventoryData.getOrders();
+      if (mounted) {
+        setState(() {
+          _summary = DashboardSummary(
+            totalItems: mockItems.length,
+            totalValue: mockItems.fold<double>(
+                0, (sum, item) => sum + item.totalValue),
+            lowStock: mockItems.where((item) => item.isLowStock).length,
+            pendingOrders:
+                mockOrders.where((order) => order.status == 'InReview').length,
+          );
+          _previewItems = mockItems;
+          _isDemoData = true;
+          _error = null;
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Unable to load live inventory: $error');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -213,7 +237,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                                   MaterialPageRoute(
                                     builder: (_) => PurchaseOrderApprovalScreen(
                                       client: widget.client,
-                                      canApprove: true,
+                                      canApprove: widget.canApprove,
                                     ),
                                   ),
                                 ),
@@ -386,6 +410,19 @@ class InventoryDashboardRepository {
     }
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return (data['totalCount'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<List<MockInventoryItem>> loadPreviewItems() async {
+    final response =
+        await _client.get('/api/inventory?page=1&pageSize=100');
+    if (response.statusCode != 200) {
+      throw Exception('Inventory preview request failed');
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return ((data['items'] as List?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(MockInventoryItem.fromJson)
+        .toList();
   }
 }
 

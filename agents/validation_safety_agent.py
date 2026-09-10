@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+import math
 from typing import Any
 
 # Support running as package or as standalone script: try relative imports then fall back to absolute
@@ -49,7 +50,7 @@ ACTION_REQUIRED_FIELDS = {
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _make_audit(actionType: str, actorRole: str, outcome: str, details: dict[str, Any] | None = None) -> AuditEntry:
@@ -66,7 +67,8 @@ def _to_float(value: Any) -> float | None:
     if value is None:
         return None
     try:
-        return float(value)
+        parsed = float(value)
+        return parsed if math.isfinite(parsed) else None
     except (TypeError, ValueError):
         return None
 
@@ -173,7 +175,7 @@ def evaluate_validation_safety(payload: ValidationSafetyInput) -> ValidationSafe
             except Exception:
                 audit_log.append(_make_audit("business_check", "System", "rejected", {"reason": "discount not numeric"}))
                 return {"isAllowed": False, "requiredApprovals": [], "rejectionReason": "invalid_schema: discount_percentage must be numeric", "auditLog": audit_log}
-            if disc > 20.0:
+            if disc < 0 or disc > 20.0:
                 audit_log.append(_make_audit("business_check", "System", "rejected", {"discount": disc}))
                 return {"isAllowed": False, "requiredApprovals": [], "rejectionReason": "discount_exceeds_maximum", "auditLog": audit_log}
             audit_log.append(_make_audit("business_check", "System", "ok", {"discount": disc}))
@@ -184,7 +186,7 @@ def evaluate_validation_safety(payload: ValidationSafetyInput) -> ValidationSafe
             except Exception:
                 audit_log.append(_make_audit("business_check", "System", "rejected", {"reason": "duration not numeric"}))
                 return {"isAllowed": False, "requiredApprovals": [], "rejectionReason": "invalid_schema: duration_minutes must be numeric", "auditLog": audit_log}
-            if dur > 120.0:
+            if dur < 0 or dur > 120.0:
                 audit_log.append(_make_audit("business_check", "System", "rejected", {"duration_minutes": dur}))
                 return {"isAllowed": False, "requiredApprovals": [], "rejectionReason": "appointment_too_long", "auditLog": audit_log}
             audit_log.append(_make_audit("business_check", "System", "ok", {"duration_minutes": dur}))

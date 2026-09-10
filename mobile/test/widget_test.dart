@@ -11,6 +11,7 @@ import 'package:sme_inventory_app/auth/auth_repository.dart';
 import 'package:sme_inventory_app/auth/authenticated_api_client.dart';
 import 'package:sme_inventory_app/main.dart';
 import 'package:sme_inventory_app/stock_count_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeInventoryClient implements http.Client {
   @override
@@ -93,6 +94,7 @@ late http.Client mockInventoryClient;
 
 void main() {
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('dev.steenbakker.mobile_scanner'),
@@ -125,7 +127,7 @@ void main() {
       (call) async {
         switch (call.method) {
           case 'checkConnectivity':
-            return 'wifi';
+            return ['wifi'];
           default:
             return null;
         }
@@ -177,7 +179,8 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('Stock count'), findsOneWidget);
     expect(find.byType(MobileScanner), findsOneWidget);
@@ -199,10 +202,12 @@ void main() {
         home: StockCountScreen(client: client),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
     await tester.enterText(find.byType(TextField).at(0), 'SKU-100');
     await tester.enterText(find.byType(TextField).at(1), '3');
+    await tester.ensureVisible(find.text('Save count'));
     await tester.tap(find.text('Save count'));
     await tester.pump();
 

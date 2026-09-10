@@ -56,42 +56,6 @@ type AnalyticsData = {
   usedFallback: boolean;
 };
 
-const fallbackRevenue: RevenueReport = {
-  totalRevenue: 892000,
-  buckets: [
-    { date: '2026-08-09', label: 'Aug 09', revenue: 98000 },
-    { date: '2026-08-10', label: 'Aug 10', revenue: 116000 },
-    { date: '2026-08-11', label: 'Aug 11', revenue: 127500 },
-    { date: '2026-08-12', label: 'Aug 12', revenue: 143000 },
-    { date: '2026-08-13', label: 'Aug 13', revenue: 131000 },
-    { date: '2026-08-14', label: 'Aug 14', revenue: 156500 },
-    { date: '2026-08-15', label: 'Aug 15', revenue: 120000 },
-  ],
-};
-
-const fallbackUsage: InventoryUsageReport = {
-  totalReceivedQuantity: 592,
-  totalIssuedQuantity: 427,
-  netQuantity: 165,
-  items: [
-    { inventoryItemId: 'coffee', itemName: 'Premium Coffee Beans', sku: 'SKU-00132', receivedQuantity: 120, issuedQuantity: 92, netQuantity: 28, movementCount: 16 },
-    { inventoryItemId: 'cups', itemName: 'Craft Paper Cups 12oz', sku: 'SKU-00612', receivedQuantity: 180, issuedQuantity: 126, netQuantity: 54, movementCount: 12 },
-    { inventoryItemId: 'milk', itemName: 'Whole Milk 1L', sku: 'SKU-00741', receivedQuantity: 160, issuedQuantity: 143, netQuantity: 17, movementCount: 18 },
-    { inventoryItemId: 'boxes', itemName: 'Packaging Boxes Medium', sku: 'SKU-00598', receivedQuantity: 82, issuedQuantity: 44, netQuantity: 38, movementCount: 8 },
-    { inventoryItemId: 'syrup', itemName: 'Vanilla Syrup 750ml', sku: 'SKU-00324', receivedQuantity: 50, issuedQuantity: 22, netQuantity: 28, movementCount: 7 },
-  ],
-};
-
-const fallbackLowStock: InventoryListResponse = {
-  totalCount: 4,
-  items: [
-    { id: 'coffee', name: 'Premium Coffee Beans', sku: 'SKU-00132', quantity: 6, reorderLevel: 40, status: 'LowStock' },
-    { id: 'syrup', name: 'Vanilla Syrup 750ml', sku: 'SKU-00324', quantity: 0, reorderLevel: 25, status: 'OutOfStock' },
-    { id: 'boxes', name: 'Packaging Boxes Medium', sku: 'SKU-00598', quantity: 11, reorderLevel: 60, status: 'LowStock' },
-    { id: 'milk', name: 'Whole Milk 1L Small', sku: 'SKU-00811', quantity: 18, reorderLevel: 80, status: 'LowStock' },
-  ],
-};
-
 const chartColors = {
   blue: '#2563eb',
   green: '#059669',
@@ -156,6 +120,7 @@ export function AnalyticsDashboardPage() {
     usedFallback: false,
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -170,6 +135,18 @@ export function AnalyticsDashboardPage() {
       ]);
 
       if (cancelled) return;
+      const sources: Array<[string, PromiseSettledResult<unknown>]> = [
+        ['revenue', revenue],
+        ['inventory movement', usage],
+        ['low-stock inventory', lowStock],
+        ['inventory', inventory],
+      ];
+      const failedSources = sources
+        .filter(([, result]) => result.status === 'rejected')
+        .map(([name]) => name);
+      setLoadError(failedSources.length > 0
+        ? `Live ${failedSources.join(', ')} data could not be loaded. Showing only data returned by the database.`
+        : '');
 
       const inventoryData = inventory.status === 'fulfilled' ? inventory.value : { totalCount: 0, items: [] };
       const liveUsage = usage.status === 'fulfilled' ? usage.value : { totalReceivedQuantity: 0, totalIssuedQuantity: 0, netQuantity: 0, items: [] };
@@ -240,9 +217,10 @@ export function AnalyticsDashboardPage() {
         </div>
         <div className="page-actions">
           {loading && <Badge tone="blue">Loading live data</Badge>}
-          {!loading && data.usedFallback && <Badge tone="amber">Live analytics unavailable</Badge>}
+          {!loading && data.usedFallback && <Badge tone="amber">Partial live data</Badge>}
         </div>
       </header>
+      {loadError && <p className="page-notice" role="alert">{loadError}</p>}
 
       <section className="kpi-grid" aria-label="Key metrics">
         <KpiCard label="Revenue" value={currency(data.revenue.totalRevenue)} detail="30 days" tone="green" />

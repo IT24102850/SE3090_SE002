@@ -136,8 +136,9 @@ class _StockCountScreenState extends State<StockCountScreen> {
             await MockInventoryData.setCount(count.sku, count.quantity);
           }
         } catch (_) {
-          // If offline/demo mode, sync to local mock store
-          await MockInventoryData.setCount(count.sku, count.quantity);
+          // A failed request is not a successful sync. Keep the entry queued
+          // so it can be retried when connectivity returns.
+          remaining.add(count.withError('Unable to reach the inventory API.'));
         }
       }
       await _store.save(_catalog, remaining);

@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'auth/authenticated_api_client.dart';
-import 'data/mock_inventory_data.dart';
 
 class RevenuePoint {
   const RevenuePoint(this.label, this.date, this.revenue);
@@ -93,23 +92,28 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
   Future<void> _fetchAnalytics() async {
     if (widget.client == null) return;
+    // Once an authenticated API client is present, never keep showing the
+    // seeded demo series as if it were live data.
+    setState(() {
+      _revenue = [];
+      _usage = [];
+      _lowStock = [];
+      _usedFallback = false;
+    });
     setState(() => _loading = true);
     try {
       final revRes = await widget.client!.get('/api/reports/revenue');
       if (revRes.statusCode == 200) {
         final data = jsonDecode(revRes.body) as Map<String, dynamic>;
         final buckets = (data['buckets'] as List?) ?? [];
-        if (buckets.isNotEmpty) {
-          _revenue = buckets
-              .whereType<Map<String, dynamic>>()
-              .map((b) => RevenuePoint(
-                    b['label'] as String? ?? '',
-                    b['date'] as String? ?? '',
-                    (b['revenue'] as num?)?.toDouble() ?? 0,
-                  ))
-              .toList();
-          _usedFallback = false;
-        }
+        _revenue = buckets
+            .whereType<Map<String, dynamic>>()
+            .map((b) => RevenuePoint(
+                  b['label'] as String? ?? '',
+                  b['date'] as String? ?? '',
+                  (b['revenue'] as num?)?.toDouble() ?? 0,
+                ))
+            .toList();
       }
     } catch (_) {
       // Gracefully maintain fallback
@@ -120,19 +124,17 @@ class _InsightsScreenState extends State<InsightsScreen> {
       if (usageRes.statusCode == 200) {
         final data = jsonDecode(usageRes.body) as Map<String, dynamic>;
         final items = (data['items'] as List?) ?? [];
-        if (items.isNotEmpty) {
-          _usage = items
-              .whereType<Map<String, dynamic>>()
-              .take(5)
-              .map((u) => UsagePoint(
-                    u['itemName'] as String? ?? 'Item',
-                    u['sku'] as String? ?? '',
-                    (u['receivedQuantity'] as num?)?.toInt() ?? 0,
-                    (u['issuedQuantity'] as num?)?.toInt() ?? 0,
-                    (u['netQuantity'] as num?)?.toInt() ?? 0,
-                  ))
-              .toList();
-        }
+        _usage = items
+            .whereType<Map<String, dynamic>>()
+            .take(5)
+            .map((u) => UsagePoint(
+                  u['itemName'] as String? ?? 'Item',
+                  u['sku'] as String? ?? '',
+                  (u['receivedQuantity'] as num?)?.toInt() ?? 0,
+                  (u['issuedQuantity'] as num?)?.toInt() ?? 0,
+                  (u['netQuantity'] as num?)?.toInt() ?? 0,
+                ))
+            .toList();
       }
     } catch (_) {}
 
@@ -142,35 +144,18 @@ class _InsightsScreenState extends State<InsightsScreen> {
       if (lowStockRes.statusCode == 200) {
         final data = jsonDecode(lowStockRes.body) as Map<String, dynamic>;
         final items = (data['items'] as List?) ?? [];
-        if (items.isNotEmpty) {
-          _lowStock = items
-              .whereType<Map<String, dynamic>>()
-              .map((i) => LowStockPoint(
-                    i['name'] as String? ?? 'Item',
-                    i['sku'] as String? ?? '',
-                    (i['quantity'] as num?)?.toDouble() ?? 0,
-                    (i['reorderLevel'] as num?)?.toDouble() ?? 10,
-                    i['status'] as String? ?? 'LowStock',
-                  ))
-              .toList();
-        }
-      }
-    } catch (_) {
-      // Sync with MockInventoryData
-      final mockItems = await MockInventoryData.getItems();
-      final low = mockItems.where((i) => i.isLowStock).toList();
-      if (low.isNotEmpty) {
-        _lowStock = low
+        _lowStock = items
+            .whereType<Map<String, dynamic>>()
             .map((i) => LowStockPoint(
-                  i.name,
-                  i.sku,
-                  i.quantity,
-                  i.reorderLevel,
-                  i.quantity <= 0 ? 'OutOfStock' : 'LowStock',
+                  i['name'] as String? ?? 'Item',
+                  i['sku'] as String? ?? '',
+                  (i['quantity'] as num?)?.toDouble() ?? 0,
+                  (i['reorderLevel'] as num?)?.toDouble() ?? 10,
+                  i['status'] as String? ?? 'LowStock',
                 ))
             .toList();
       }
-    }
+    } catch (_) {}
 
     if (mounted) {
       setState(() => _loading = false);
