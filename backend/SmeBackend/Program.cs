@@ -176,12 +176,12 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
-    await db.Users.IgnoreQueryFilters()
-        .Where(user => user.Email == "admin@sme-demo.local")
-        .ExecuteDeleteAsync();
 
     if (app.Environment.IsDevelopment())
     {
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+        await DevelopmentUserSeeder.SeedAsync(db, tenantContext);
+
         var seedTenant = await db.Tenants
             .IgnoreQueryFilters()
             .Where(tenant => tenant.Name == "SME Demo Store")

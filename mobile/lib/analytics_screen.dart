@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'auth/authenticated_api_client.dart';
+import 'auth/app_notifications.dart';
 
 class RevenuePoint {
   const RevenuePoint(this.label, this.date, this.revenue);
@@ -101,6 +102,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
       _usedFallback = false;
     });
     setState(() => _loading = true);
+    var failedReports = 0;
     try {
       final revRes = await widget.client!.get('/api/reports/revenue');
       if (revRes.statusCode == 200) {
@@ -116,7 +118,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
             .toList();
       }
     } catch (_) {
-      // Gracefully maintain fallback
+      failedReports++;
     }
 
     try {
@@ -136,7 +138,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 ))
             .toList();
       }
-    } catch (_) {}
+    } catch (_) {
+      failedReports++;
+    }
 
     try {
       final lowStockRes =
@@ -155,10 +159,17 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 ))
             .toList();
       }
-    } catch (_) {}
+    } catch (_) {
+      failedReports++;
+    }
 
     if (mounted) {
       setState(() => _loading = false);
+      if (failedReports > 0) {
+        showAppNotification(
+            '$failedReports analytics report${failedReports == 1 ? '' : 's'} could not be loaded.',
+            tone: AppNotificationTone.warning);
+      }
     }
   }
 

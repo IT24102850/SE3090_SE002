@@ -75,7 +75,8 @@ class _PurchaseOrderApprovalScreenState
       final response = await widget.client
           .get('/api/purchase-orders?status=InReview&pageSize=100');
       if (response.statusCode != 200) {
-        throw StateError('Purchase orders API returned ${response.statusCode}.');
+        throw StateError(
+            'Purchase orders API returned ${response.statusCode}.');
       }
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       if (!mounted) return;
@@ -92,6 +93,8 @@ class _PurchaseOrderApprovalScreenState
           _error = error.message;
           _isDemoData = false;
         });
+        showAppNotification('Purchase orders could not be loaded.',
+            tone: AppNotificationTone.error);
       }
     } catch (_) {
       // Fallback to MockInventoryData orders
@@ -113,6 +116,9 @@ class _PurchaseOrderApprovalScreenState
           _isDemoData = true;
           _error = null;
         });
+        showAppNotification(
+            'Live purchase orders are unavailable. Showing saved demo orders.',
+            tone: AppNotificationTone.warning);
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -355,9 +361,10 @@ class _PurchaseOrderApprovalScreenState
                                 ),
                                 const SizedBox(height: 16),
                                 FilledButton.icon(
-                                  onPressed: widget.canApprove && !order.approving
-                                      ? () => _approve(order)
-                                      : null,
+                                  onPressed:
+                                      widget.canApprove && !order.approving
+                                          ? () => _approve(order)
+                                          : null,
                                   icon: order.approving
                                       ? const SizedBox(
                                           width: 18,
@@ -367,8 +374,8 @@ class _PurchaseOrderApprovalScreenState
                                             color: Colors.white,
                                           ),
                                         )
-                                      : const Icon(Icons
-                                          .check_circle_outline_rounded),
+                                      : const Icon(
+                                          Icons.check_circle_outline_rounded),
                                   label: Text(
                                     order.approving
                                         ? 'Approving...'

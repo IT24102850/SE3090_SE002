@@ -69,7 +69,10 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
     {
+        // Login happens before a tenant is known, so tenant query filters
+        // cannot be applied until the user's tenant has been resolved.
         var user = await _context.Users
+            .IgnoreQueryFilters()
             .Include(u => u.Tenant)
             .FirstOrDefaultAsync(u => u.Email == dto.Email && u.IsActive);
         

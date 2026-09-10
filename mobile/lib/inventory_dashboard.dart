@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'auth/authenticated_api_client.dart';
+import 'auth/app_notifications.dart';
 import 'data/mock_inventory_data.dart';
 import 'purchase_order_approval_screen.dart';
 import 'stock_check_screen.dart';
@@ -56,6 +57,9 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
         });
       }
     } on http.ClientException catch (_) {
+      showAppNotification(
+          'Live inventory is unavailable. Showing saved demo data.',
+          tone: AppNotificationTone.warning);
       // Keep the dashboard honest when the shared API is unavailable.
       final mockItems = await MockInventoryData.getItems();
       final mockOrders = await MockInventoryData.getOrders();
@@ -79,14 +83,17 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
         });
       }
     } on TimeoutException catch (_) {
+      showAppNotification(
+          'The inventory request timed out. Showing saved demo data.',
+          tone: AppNotificationTone.warning);
       final mockItems = await MockInventoryData.getItems();
       final mockOrders = await MockInventoryData.getOrders();
       if (mounted) {
         setState(() {
           _summary = DashboardSummary(
             totalItems: mockItems.length,
-            totalValue: mockItems.fold<double>(
-                0, (sum, item) => sum + item.totalValue),
+            totalValue:
+                mockItems.fold<double>(0, (sum, item) => sum + item.totalValue),
             lowStock: mockItems.where((item) => item.isLowStock).length,
             pendingOrders:
                 mockOrders.where((order) => order.status == 'InReview').length,
@@ -97,7 +104,11 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _error = 'Unable to load live inventory: $error');
+      if (mounted) {
+        setState(() => _error = 'Unable to load live inventory: $error');
+        showAppNotification('Unable to load live inventory.',
+            tone: AppNotificationTone.error);
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -413,8 +424,7 @@ class InventoryDashboardRepository {
   }
 
   Future<List<MockInventoryItem>> loadPreviewItems() async {
-    final response =
-        await _client.get('/api/inventory?page=1&pageSize=100');
+    final response = await _client.get('/api/inventory?page=1&pageSize=100');
     if (response.statusCode != 200) {
       throw Exception('Inventory preview request failed');
     }
