@@ -1,0 +1,397 @@
+/* Unify public surface: landing page and auth screens.
+ *
+ * Scoped under .lp so it cannot reach the signed-in admin console, which
+ * stays on the warm light tokens in shared/style/tokens.css.
+ *
+ * ── The gradient rule ────────────────────────────────────────────────
+ * cyan -> violet -> magenta at 110deg is the brand signature and appears in
+ * exactly three places: the primary button fill, the second line of the hero
+ * headline, and the scroll progress rail. Everything else here is monochrome
+ * on the void. If you are about to add a fourth, don't - the signature only
+ * reads as one because it is rationed.
+ */
+
+.lp {
+  --void: #05070D;
+  --surface: #0C1220;
+  --line: rgba(120, 150, 220, 0.14);
+  --line-strong: rgba(120, 150, 220, 0.26);
+  --paper: #EEF2F8;
+  /* Raised from the spec's #7E8CA3, which measures about 4.3:1 on the void
+     and fails AA for the 0.78rem labels this page uses it on. #92A0B6 is
+     ~5.4:1 and still reads as clearly secondary. The dimmer original is kept
+     for larger, non-critical text where it does pass. */
+  --muted: #92A0B6;
+  --muted-dim: #7E8CA3;
+
+  --cyan: #35C6F4;
+  --violet: #7C5CF0;
+  --magenta: #D946A6;
+  --brand: linear-gradient(110deg, var(--cyan) 0%, var(--violet) 52%, var(--magenta) 100%);
+
+  --max: 1180px;
+  --gutter: clamp(20px, 5vw, 56px);
+
+  color: var(--paper);
+  background: var(--void);
+  font-family: Outfit, Poppins, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  position: relative;
+  /* clip, NOT hidden. Overflow is a grouping property: setting one axis to
+     anything but visible computes the OTHER to auto, which turned .lp into
+     its own scroll container - the page scrolled inside this div,
+     window.scrollY never moved, and every scroll-driven hook read zero. */
+  overflow-x: clip;
+}
+
+.lp-shell { max-width: var(--max); margin: 0 auto; padding: 0 var(--gutter); }
+
+/* Grid items default to min-width:auto, so a long word or a wide child stops
+   the track shrinking and the whole page overflows. Every grid on this page
+   wants to shrink instead. */
+.lp-hero-inner > *,
+.lp-types-sticky > *,
+.lp-method > *,
+.lp-branch-row > * { min-width: 0; }
+
+/* ── Type ───────────────────────────────────────────────────── */
+.lp-display {
+  font-size: clamp(2.6rem, 7vw, 5.5rem);
+  font-weight: 800; letter-spacing: -0.03em; line-height: 0.95; margin: 0;
+}
+.lp-h2 {
+  font-size: clamp(1.9rem, 4.4vw, 3.2rem);
+  font-weight: 700; letter-spacing: -0.03em; line-height: 1.02; margin: 0 0 18px;
+}
+.lp-body { font-size: 1rem; line-height: 1.6; color: var(--muted); max-width: 62ch; margin: 0; }
+
+/* Used sparingly - only where the word is a real category, never as an
+   eyebrow above every heading. */
+.lp-label {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted-dim); margin: 0 0 14px;
+}
+.lp-label-n { color: var(--paper); font-variant-numeric: tabular-nums; }
+.lp-label-rule { width: 40px; height: 1px; background: var(--line-strong); flex-shrink: 0; }
+
+/* Allowed gradient #2: the second line of the hero headline. */
+/* Left inline on purpose. As an inline-block this phrase becomes one
+   unbreakable box; the hero grid column then sizes to it, the shell grows
+   past the viewport, and every other line inside lays out at that wider
+   width and gets clipped. On a phone that clipped the whole page. */
+.lp-brandtext {
+  background: var(--brand);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+.lp :focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; border-radius: 4px; }
+
+/* ── Progress rail ──────────────────────────────────────────── */
+.lp-rail {
+  position: fixed; inset: 0 0 auto 0; z-index: 60;
+  display: flex; align-items: center; gap: 14px;
+  padding: 9px var(--gutter);
+  background: rgba(5, 7, 13, 0.92); border-bottom: 1px solid var(--line);
+  font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-dim);
+}
+.lp-rail-pct { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--paper); }
+.lp-rail-track { width: clamp(64px, 15vw, 190px); height: 2px; background: var(--line); flex-shrink: 0; overflow: clip; }
+.lp-rail-fill {
+  display: block; width: 100%; height: 100%;
+  background: var(--brand);            /* allowed gradient #3 */
+  transform-origin: left center; will-change: transform;
+}
+@media (max-width: 620px) { .lp-rail-tag { display: none; } }
+
+/* ── Nav ────────────────────────────────────────────────────── */
+.lp-nav {
+  position: sticky; top: 33px; z-index: 50;
+  background: rgba(5, 7, 13, 0.72);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--line);
+}
+.lp-nav-inner {
+  max-width: var(--max); margin: 0 auto; padding: 13px var(--gutter);
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.lp-brand { display: flex; align-items: center; gap: 11px; color: var(--paper); text-decoration: none; }
+.lp-brand-mark {
+  width: 32px; height: 32px; border-radius: 9px;
+  border: 1px solid var(--line-strong); background: var(--surface);
+  display: grid; place-items: center; font-weight: 800; font-size: 0.95rem;
+}
+.lp-brand-name { font-weight: 700; font-size: 1.08rem; letter-spacing: -0.01em; line-height: 1.1; }
+.lp-brand-tag {
+  display: block; font-size: 0.6rem; font-weight: 500; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--muted-dim); margin-top: 2px;
+}
+.lp-nav-links { display: flex; align-items: center; gap: 26px; }
+.lp-nav-links a, .lp-nav-links button {
+  background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit;
+  font-size: 0.9rem; font-weight: 500; color: var(--muted); text-decoration: none;
+  transition: color 0.18s ease;
+}
+.lp-nav-links a:hover, .lp-nav-links button:hover { color: var(--paper); }
+.lp-nav-cta { display: flex; align-items: center; gap: 10px; }
+@media (max-width: 860px) { .lp-nav-links { display: none; } }
+@media (max-width: 560px) {
+  .lp-brand-tag { display: none; }
+  /* Brand + two pill buttons will not fit a 390px bar. Sign in drops out of
+     the nav rather than being squeezed - it is still in the footer and on the
+     register page, and the primary action is the one that has to survive. */
+  .lp-nav-cta .lp-btn-outline { display: none; }
+  .lp-btn { padding: 10px 18px; font-size: 0.86rem; }
+  .lp-nav-inner { padding-inline: 16px; }
+}
+
+/* ── Buttons ────────────────────────────────────────────────── */
+.lp-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 12px 24px; border-radius: 999px;
+  font-family: inherit; font-size: 0.92rem; font-weight: 600;
+  text-decoration: none; cursor: pointer; white-space: nowrap;
+  border: 1px solid transparent;
+  transition: opacity 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+.lp-btn-primary { background: var(--brand); color: #05070D; font-weight: 700; }  /* allowed gradient #1 */
+.lp-btn-primary:hover { opacity: 0.9; }
+.lp-btn-outline { background: transparent; color: var(--paper); border-color: var(--line-strong); }
+.lp-btn-outline:hover { background: var(--surface); border-color: var(--muted-dim); }
+.lp-btn-lg { padding: 15px 30px; font-size: 0.98rem; }
+
+/* ── Hero ───────────────────────────────────────────────────── */
+.lp-hero-pin { height: 300vh; position: relative; }
+.lp-hero-sticky { position: sticky; top: 0; height: 100vh; display: grid; align-items: center; }
+.lp-hero-inner {
+  display: grid; grid-template-columns: 1.24fr 0.76fr;
+  gap: clamp(24px, 5vw, 56px); align-items: center; width: 100%;
+}
+/* Spec: roughly 40% of the viewport width. */
+.lp-hero-canvas { position: relative; aspect-ratio: 1; width: min(40vw, 460px); margin-left: auto; }
+.lp-canvas { width: 100%; height: 100%; display: block; }
+
+/* The global display size assumes a full-bleed heading. In the hero it sits
+   beside the sphere in ~55% of the shell, so it gets a lower ceiling - at the
+   full 5.5rem "becomes your business" breaks across two lines of its own and
+   the authored line break stops meaning anything. */
+.lp-hero-inner .lp-display { font-size: clamp(2.3rem, 4.4vw, 3.9rem); }
+
+.lp-pill {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 7px 15px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: 0.75rem; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 26px;
+}
+.lp-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 9px var(--cyan); }
+.lp-hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 32px; }
+
+.lp-cue {
+  position: absolute; bottom: 5vh; left: 50%; transform: translateX(-50%);
+  display: grid; justify-items: center; gap: 10px;
+  font-size: 0.66rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--muted-dim); pointer-events: none;
+}
+.lp-cue-track { width: 1px; height: 46px; background: var(--line-strong); position: relative; overflow: clip; }
+.lp-cue-fill { position: absolute; inset: 0; background: var(--paper); transform-origin: top center; }
+
+@media (max-width: 900px) {
+  .lp-hero-inner { grid-template-columns: 1fr; }
+  .lp-hero-canvas { display: none; }
+  .lp-hero-pin { height: auto; }
+  .lp-hero-sticky { position: static; height: auto; padding: 96px 0 72px; }
+  .lp-cue { display: none; }
+}
+
+/* ── Sections ───────────────────────────────────────────────── */
+.lp-section { padding: clamp(72px, 10vw, 132px) 0; position: relative; }
+.lp-section-head { max-width: 62ch; margin-bottom: clamp(36px, 5vw, 64px); }
+
+/* ── Text reveal ────────────────────────────────────────────── */
+/* A line masked by its parent and translated up from below, rather than an
+   opacity fade. Applied to the few headings that earn it, not everything. */
+.lp-mask { overflow: hidden; display: block; }
+.lp-mask > span { display: block; transform: translateY(110%); transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
+.lp-mask.is-revealed > span { transform: none; }
+
+/* Panels fade instead, where a mask would fight the layout. */
+[data-reveal] { opacity: 0; transition: opacity 0.7s ease; }
+[data-reveal].is-revealed { opacity: 1; }
+
+/* ── Capability: a spine with branches ──────────────────────── */
+/* Deliberately not six identical cards. The rail on the left is the shared
+   core and every row hangs off it, so the structure carries the argument -
+   one platform, several surfaces - instead of six unrelated tiles. */
+.lp-spine { position: relative; padding-left: clamp(26px, 5vw, 60px); }
+.lp-spine::before {
+  content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 1px;
+  background: linear-gradient(180deg, transparent, var(--line-strong) 12%, var(--line-strong) 88%, transparent);
+}
+.lp-branch { position: relative; padding: 22px 0; border-bottom: 1px solid var(--line); }
+.lp-branch:last-child { border-bottom: 0; }
+.lp-branch::before {
+  content: ''; position: absolute;
+  left: calc(clamp(26px, 5vw, 60px) * -1); top: 34px;
+  width: clamp(18px, 3.5vw, 42px); height: 1px; background: var(--line-strong);
+}
+.lp-branch::after {
+  content: ''; position: absolute;
+  left: calc(clamp(26px, 5vw, 60px) * -1 - 3px); top: 31px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--void); border: 1px solid var(--muted-dim);
+}
+.lp-branch-row { display: grid; grid-template-columns: 0.42fr 1fr; gap: clamp(14px, 3vw, 40px); align-items: baseline; }
+.lp-branch h3 { font-size: 1.12rem; font-weight: 600; letter-spacing: -0.015em; margin: 0; }
+.lp-branch p { font-size: 0.93rem; line-height: 1.6; color: var(--muted); margin: 0; max-width: 54ch; }
+@media (max-width: 720px) { .lp-branch-row { grid-template-columns: 1fr; gap: 6px; } }
+
+/* ── Business types: the pinned swap ────────────────────────── */
+.lp-types { position: relative; }
+.lp-types-sticky {
+  position: sticky; top: 0; height: 100vh;
+  display: grid; grid-template-columns: 0.82fr 1fr;
+  gap: clamp(24px, 5vw, 64px); align-items: center;
+  max-width: var(--max); margin: 0 auto; padding: 0 var(--gutter);
+}
+.lp-types-list { display: grid; gap: 2px; }
+.lp-type-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px 0; border-bottom: 1px solid var(--line);
+  color: var(--muted-dim); transition: color 0.35s ease;
+}
+.lp-type-item.is-active { color: var(--paper); }
+.lp-type-index { font-size: 0.72rem; font-variant-numeric: tabular-nums; width: 22px; flex-shrink: 0; }
+.lp-type-name { font-size: clamp(1rem, 2.2vw, 1.35rem); font-weight: 600; letter-spacing: -0.02em; }
+.lp-type-bar { margin-left: auto; width: 44px; height: 1px; background: var(--line-strong); position: relative; overflow: clip; }
+.lp-type-bar span { position: absolute; inset: 0; background: var(--paper); transform-origin: left center; }
+
+/* One chrome, different modules - that is the whole pitch, so the frame must
+   stay identical between types and only the contents move. */
+.lp-mock {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 16px; padding: 16px; min-height: 340px;
+  display: grid; grid-template-rows: auto auto 1fr; gap: 12px;
+}
+.lp-mock-chrome { display: flex; align-items: center; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.lp-mock-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); }
+.lp-mock-title { margin-left: 6px; font-size: 0.76rem; color: var(--muted-dim); letter-spacing: 0.06em; text-transform: uppercase; }
+.lp-mock-modules { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
+@media (max-width: 420px) { .lp-mock-modules { grid-template-columns: 1fr 1fr; } }
+.lp-mock-module { border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; font-size: 0.78rem; font-weight: 500; }
+.lp-mock-rows { display: grid; gap: 7px; align-content: start; }
+.lp-mock-row {
+  display: flex; justify-content: space-between; gap: 12px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px;
+  font-size: 0.76rem; color: var(--muted);
+}
+.lp-mock-row b { color: var(--paper); font-weight: 600; }
+.lp-mock-note { font-size: 0.82rem; color: var(--muted); margin: 14px 0 0; line-height: 1.55; }
+
+@media (max-width: 900px) {
+  .lp-types { height: auto !important; }
+  .lp-types-sticky { position: static; height: auto; grid-template-columns: 1fr; padding-block: 24px; }
+  /* Spec: a swipeable strip on small screens, not a pin. */
+  .lp-types-list { grid-auto-flow: column; grid-auto-columns: 74%; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; }
+  .lp-type-item { scroll-snap-align: start; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .lp-type-bar { display: none; }
+}
+
+/* ── Method: sticky left, scrolling steps ───────────────────── */
+.lp-method { display: grid; grid-template-columns: 0.72fr 1fr; gap: clamp(28px, 6vw, 80px); align-items: start; }
+.lp-method-aside { position: sticky; top: 22vh; }
+.lp-method-steps { display: grid; gap: clamp(48px, 9vw, 112px); }
+.lp-step { border-top: 1px solid var(--line); padding-top: 22px; opacity: 0.35; transition: opacity 0.5s ease; }
+.lp-step.is-current { opacity: 1; }
+.lp-step-n { font-size: 0.78rem; letter-spacing: 0.08em; color: var(--muted-dim); font-variant-numeric: tabular-nums; }
+.lp-step h3 { font-size: clamp(1.3rem, 2.6vw, 1.9rem); font-weight: 700; letter-spacing: -0.025em; margin: 10px 0; }
+.lp-step p { font-size: 0.95rem; line-height: 1.6; color: var(--muted); margin: 0; max-width: 52ch; }
+@media (max-width: 860px) {
+  .lp-method { grid-template-columns: 1fr; }
+  .lp-method-aside { position: static; }
+  .lp-method-steps { gap: 40px; }
+  .lp-step { opacity: 1; }
+}
+
+/* ── Stack ──────────────────────────────────────────────────── */
+.lp-stack { display: flex; flex-wrap: wrap; gap: 9px 10px; }
+.lp-stack-item {
+  padding: 9px 15px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: 0.84rem; color: var(--muted); transition: color 0.2s ease, border-color 0.2s ease;
+}
+.lp-stack-item:hover { color: var(--paper); border-color: var(--line-strong); }
+
+/* ── Numbers ────────────────────────────────────────────────── */
+.lp-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 24px; }
+.lp-figure-value {
+  font-size: clamp(2.2rem, 5.4vw, 3.6rem); font-weight: 800;
+  letter-spacing: -0.035em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--paper);
+}
+.lp-figure-label { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-dim); margin-top: 10px; }
+
+/* ── Close ──────────────────────────────────────────────────── */
+.lp-close { position: relative; text-align: center; padding: clamp(80px, 13vw, 170px) 0; }
+.lp-close-canvas {
+  position: absolute; top: 50%; left: 50%;
+  width: min(560px, 84vw); aspect-ratio: 1;
+  transform: translate(-50%, -50%); opacity: 0.4; pointer-events: none;
+}
+.lp-close-inner { position: relative; z-index: 1; }
+
+/* ── Footer ─────────────────────────────────────────────────── */
+.lp-footer { border-top: 1px solid var(--line); padding: 44px 0 36px; }
+.lp-footer-inner { display: flex; justify-content: space-between; align-items: flex-start; gap: 26px; flex-wrap: wrap; }
+.lp-footer-links { display: flex; gap: 22px; flex-wrap: wrap; }
+.lp-footer-links a, .lp-footer-links button {
+  background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit;
+  font-size: 0.84rem; color: var(--muted); text-decoration: none;
+}
+.lp-footer-links a:hover, .lp-footer-links button:hover { color: var(--paper); }
+.lp-footer p { font-size: 0.8rem; color: var(--muted-dim); margin: 0; }
+
+/* ── Auth ───────────────────────────────────────────────────── */
+.lp-auth { min-height: 100vh; display: grid; place-items: center; padding: 40px var(--gutter); }
+.lp-auth-inner { width: 100%; max-width: 920px; display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 5vw, 64px); align-items: center; }
+.lp-auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: clamp(26px, 4vw, 38px); }
+.lp-auth-card h1 { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 6px; }
+.lp-auth-card > p { font-size: 0.92rem; color: var(--muted); margin: 0 0 26px; }
+.lp-field { display: grid; gap: 7px; margin-bottom: 15px; }
+.lp-field label { font-size: 0.74rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-dim); }
+.lp-input {
+  width: 100%; padding: 12px 14px; border-radius: 10px;
+  background: var(--void); border: 1px solid var(--line);
+  color: var(--paper); font-size: 0.95rem; font-family: inherit; transition: border-color 0.18s ease;
+}
+.lp-input::placeholder { color: var(--muted-dim); }
+.lp-input:focus { outline: none; border-color: var(--cyan); }
+.lp-auth-submit { width: 100%; margin-top: 10px; }
+.lp-auth-alt { text-align: center; margin: 20px 0 0; font-size: 0.88rem; color: var(--muted); }
+.lp-auth-alt a { color: var(--cyan); text-decoration: none; font-weight: 600; }
+.lp-alert {
+  padding: 11px 14px; border-radius: 10px; font-size: 0.86rem; margin-bottom: 16px;
+  background: rgba(217, 70, 166, 0.10); border: 1px solid rgba(217, 70, 166, 0.32); color: #F2A8D6;
+}
+.lp-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.lp-form-grid .lp-field-full { grid-column: 1 / -1; }
+.lp-section-label { grid-column: 1 / -1; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted-dim); margin: 16px 0 12px; }
+.lp-section-label:first-child { margin-top: 0; }
+.lp-spinner { width: 15px; height: 15px; border-radius: 50%; border: 2px solid rgba(5,7,13,0.3); border-top-color: #05070D; animation: lp-rotate 0.7s linear infinite; margin-right: 8px; }
+@keyframes lp-rotate { to { transform: rotate(360deg); } }
+@media (max-width: 900px) { .lp-auth-inner { grid-template-columns: 1fr; max-width: 440px; } .lp-auth-aside { display: none; } }
+@media (max-width: 560px) { .lp-form-grid { grid-template-columns: 1fr; } }
+
+/* ── Reduced motion ─────────────────────────────────────────── */
+/* Spec: no sphere, no pins, sections stack at full opacity. */
+@media (prefers-reduced-motion: reduce) {
+  .lp-hero-pin, .lp-types { height: auto !important; }
+  .lp-hero-sticky, .lp-types-sticky { position: static; height: auto; padding-block: 72px; }
+  .lp-method-aside { position: static; }
+  .lp-mask > span { transform: none; transition: none; }
+  [data-reveal] { opacity: 1; transition: none; }
+  .lp-step { opacity: 1; }
+  .lp-hero-canvas, .lp-close-canvas { display: none; }
+  /* The cue is absolutely positioned against a sticky stage. With the pin
+     collapsed the stage is a normal block and the cue lands in the middle of
+     the body copy - and there is nothing to scrub anyway. */
+  .lp-cue { display: none; }
+}

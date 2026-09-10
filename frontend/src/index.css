@@ -3,9 +3,15 @@ html, body, #root {
   min-height: 100%;
 }
 
-/* Colour and font come from shared/style/tokens.css; this only guarantees a
-   dark ground before that stylesheet resolves, so there is no white flash. */
+/* Colour and font come from shared/style/tokens.css. This only paints a
+   ground before that stylesheet resolves, so it has to agree with it: the
+   admin app is the warm light theme, and the value here was a leftover from
+   the earlier violet theme, which flashed dark on every load.
+
+   The public surface (landing, login, register) is deliberately dark and
+   paints its own ground from .lp in features/marketing/landing.css, which
+   covers the viewport - so it is unaffected by this. */
 body {
-  background: #0A0A0B;
-  color: #FFFFFF;
+  background: #F1EFEC;
+  color: #131A24;
 }

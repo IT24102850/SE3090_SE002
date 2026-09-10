@@ -3,9 +3,11 @@ import { Provider } from 'react-redux';
 import { useEffect } from 'react';
 import { store } from './store/store';
 import { initializeAuth } from './store/authSlice';
+import LandingPage from './features/marketing/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
+import AdminPage from './pages/AdminPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './shared/components/AppLayout';
 import { ToastProvider } from './shared/components/Toast';
@@ -197,7 +199,7 @@ function App() {
                 path="/admin"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <Shell><div><h1 className="page-title">Admin Panel</h1></div></Shell>
+                    <Shell><AdminPage /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -268,7 +270,7 @@ function App() {
                 }
               />
 
-              <Route path="/" element={<LoginPage />} />
+              <Route path="/" element={<LandingPage />} />
               <Route path="*" element={<div style={{ padding: '2rem' }}><h1>404 - Page Not Found</h1></div>} />
             </Routes>
           </BrowserRouter>
