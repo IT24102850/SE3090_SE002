@@ -36,12 +36,19 @@ interface RingSpec {
   width: number;
 }
 
-// The same four rings as the Flutter OrbitHero, in the same order.
+/* The same four rings as the Flutter OrbitHero, in the same order - but in
+ * ink rather than neon.
+ *
+ * This canvas draws with plain source-over and no additive pass, so the
+ * colours port to a light ground directly; only the palette had to change.
+ * Alphas come down, because on paper an alpha is ink coverage rather than
+ * emitted light, and the values that read as a faint glow on black read as
+ * a hard line on white. */
 const RINGS: RingSpec[] = [
-  { scale: 1.0, tiltX: 1.15, tiltY: 0.1, turns: 1.0, phase: 0.0, color: '#E8ECF8', alpha: 0.5, width: 1.6 },
-  { scale: 0.84, tiltX: 0.55, tiltY: 0.85, turns: -1.6, phase: 0.8, color: '#00E5FF', alpha: 0.62, width: 1.8 },
-  { scale: 0.68, tiltX: 1.35, tiltY: -0.6, turns: 2.1, phase: 1.9, color: '#FF2D95', alpha: 0.5, width: 1.8 },
-  { scale: 0.52, tiltX: 0.25, tiltY: 0.35, turns: -2.8, phase: 3.1, color: '#CBD5F5', alpha: 0.34, width: 1.4 },
+  { scale: 1.0, tiltX: 1.15, tiltY: 0.1, turns: 1.0, phase: 0.0, color: '#9C93B8', alpha: 0.42, width: 1.4 },
+  { scale: 0.84, tiltX: 0.55, tiltY: 0.85, turns: -1.6, phase: 0.8, color: '#6D28D9', alpha: 0.5, width: 1.6 },
+  { scale: 0.68, tiltX: 1.35, tiltY: -0.6, turns: 2.1, phase: 1.9, color: '#C026D3', alpha: 0.4, width: 1.6 },
+  { scale: 0.52, tiltX: 0.25, tiltY: 0.35, turns: -2.8, phase: 3.1, color: '#5B4A8F', alpha: 0.3, width: 1.3 },
 ];
 
 /** Points per ring. 96 is past the point where more is visible at any size we
@@ -91,10 +98,12 @@ export default function OrbitCanvas({ progress }: { progress: number }) {
       // Core glow first, so the rings composite over it.
       const coreR = half * 0.2;
       const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 3.4);
-      glow.addColorStop(0, 'rgba(255,255,255,0.95)');
-      glow.addColorStop(0.14, 'rgba(0,229,255,0.75)');
-      glow.addColorStop(0.42, 'rgba(76,111,255,0.32)');
-      glow.addColorStop(1, 'rgba(76,111,255,0)');
+      // A soft violet bloom rather than a white-hot one: on paper a bright
+      // centre is invisible, so the halo has to darken the ground instead.
+      glow.addColorStop(0, 'rgba(109,40,217,0.26)');
+      glow.addColorStop(0.14, 'rgba(109,40,217,0.18)');
+      glow.addColorStop(0.42, 'rgba(109,40,217,0.07)');
+      glow.addColorStop(1, 'rgba(109,40,217,0)');
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(cx, cy, coreR * 3.4, 0, Math.PI * 2);
@@ -155,9 +164,9 @@ export default function OrbitCanvas({ progress }: { progress: number }) {
       const core = ctx.createRadialGradient(
         cx - coreR * 0.3, cy - coreR * 0.35, 0, cx, cy, coreR,
       );
-      core.addColorStop(0, '#FFFFFF');
-      core.addColorStop(0.45, '#00E5FF');
-      core.addColorStop(1, '#4C6FFF');
+      core.addColorStop(0, '#9333EA');
+      core.addColorStop(0.45, '#6D28D9');
+      core.addColorStop(1, '#4C1D95');
       ctx.fillStyle = core;
       ctx.beginPath();
       ctx.arc(cx, cy, coreR, 0, Math.PI * 2);

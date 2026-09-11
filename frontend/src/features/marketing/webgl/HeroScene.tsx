@@ -82,8 +82,14 @@ void main() {
   // Depth fade is what makes a wireframe read as a solid volume rather than a
   // flat tangle: the far side of the sphere recedes instead of competing.
   float fog = clamp((vDepth - 2.0) / 4.5, 0.0, 1.0);
-  vec3 color = mix(uNear, uFar, fog * 0.85 + vElevation * 0.15);
-  gl_FragColor = vec4(color, uAlpha * (1.0 - fog * 0.72));
+  // The colour lightens with depth as well as fading, but only gently. At the
+  // dark build's 0.85 a line at mid-distance was already most of the way to
+  // the far tint, which on paper means most of the way to invisible.
+  vec3 color = mix(uNear, uFar, fog * 0.5 + vElevation * 0.12);
+  // Falls off less steeply than the dark build's 0.72. There, depth fade and
+  // additive glow pulled against each other and the far side stayed readable;
+  // under source-over both subtract, and 0.72 erased it.
+  gl_FragColor = vec4(color, uAlpha * (1.0 - fog * 0.5));
 }
 `;
 
@@ -131,7 +137,9 @@ void main() {
 
   float fog = clamp((vDepth - 2.0) / 7.0, 0.0, 1.0);
   vec3 color = mix(uNear, uFar, vSeed);
-  gl_FragColor = vec4(color, alpha * (1.0 - fog) * 0.72);
+  // Faint on paper: this field is atmosphere, and specks of solid violet on
+  // white read as dust on the screen rather than as depth.
+  gl_FragColor = vec4(color, alpha * (1.0 - fog) * 0.3);
 }
 `;
 
@@ -205,26 +213,36 @@ void main() {
   // discard - so only reject outside the disc when this is actually a point.
   if (offset.x != -0.5 && length(offset) > 0.5) discard;
 
-  // A brief bloom as the cluster seats itself, peaking just before it stops.
+  // A brief bloom as the plate seats itself, peaking just before it stops.
   float flash = exp(-pow((vArrive - 0.9) / 0.07, 2.0));
 
   float fog = clamp((vDepth - 0.6) / 5.0, 0.0, 1.0);
-  vec3 color = mix(uWarm, uCool, fog);
+  /* uCool is the resting violet, uWarm the orchid it flares to. On the dark
+     build the flash was added to the colour, which brightened it toward
+     white; here that would fade the plate into the paper at the exact moment
+     it is meant to announce itself, so the flare is a hue shift and an
+     opacity gain instead. */
+  vec3 color = mix(uCool, uWarm, flash * 0.85);
   // Unlit modules stay present as dim geometry. Absent would say the trade
   // cannot have them; dim says it is not using them.
-  float body = mix(0.10, 1.0, vLit);
+  float body = mix(0.24, 1.0, vLit);
   // The tether is the connection, not the subject: it fades out along its
   // run so the eye follows it inward rather than reading it as structure.
   float tether = 1.0 - vCore * 0.78;
 
-  float alpha = vArrive * (body + flash * 1.6) * (1.0 - fog * 0.55) * tether;
-  gl_FragColor = vec4(color + flash * 0.5, alpha);
+  float alpha = clamp(vArrive * (body + flash * 0.5) * (1.0 - fog * 0.55) * tether, 0.0, 1.0);
+  gl_FragColor = vec4(color, alpha);
 }
 `;
 
-const CYAN: [number, number, number] = [0.0, 0.898, 1.0];      // #00E5FF
-const MAGENTA: [number, number, number] = [1.0, 0.176, 0.584]; // #FF2D95
-const ELECTRIC: [number, number, number] = [0.298, 0.435, 1.0]; // #4C6FFF
+/* Ink on paper. Matches the tokens in landing.css - the shell is drawn in a
+ * muted violet-grey so it reads as a construction line, the nodes and plates
+ * in the brand violet so they read as the subject, and orchid is kept for the
+ * moment a plate seats. */
+const LINE_NEAR: [number, number, number] = [0.278, 0.216, 0.459]; // #47376A
+const LINE_FAR: [number, number, number] = [0.549, 0.514, 0.671];  // #8C83AB
+const VIOLET: [number, number, number] = [0.427, 0.157, 0.851];    // #6D28D9
+const ORCHID: [number, number, number] = [0.753, 0.149, 0.827];    // #C026D3
 
 /** Which of the three acts the camera is playing. The scene holds no global
  *  scroll state of its own: the act says which path, the progress says where
@@ -448,10 +466,19 @@ export default function HeroScene({ progress, act = 1, anchorRef, litModules, ca
     };
 
     gl.enable(gl.BLEND);
-    // Additive blending: overlapping glowing lines should brighten, which is
-    // what makes the dense far side of the sphere read as luminous.
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-    gl.disable(gl.DEPTH_TEST); // additive glow does not want depth rejection
+    /* Source-over, not additive.
+     *
+     * Additive blending is what made this read as neon on a black ground:
+     * overlapping lines summed toward white and the dense far side glowed.
+     * On paper that same sum runs to white immediately - the object bleaches
+     * out and dense areas become the brightest, which is exactly backwards.
+     *
+     * Source-over inverts the logic correctly: each line lays a little ink
+     * down, overlaps accumulate toward darker, and depth fades to the paper
+     * by falling to zero alpha. The result reads like a drawing rather than a
+     * light source, which is the right register for a light theme anyway. */
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable(gl.DEPTH_TEST); // a wireframe this open does not want depth rejection
 
     let raf = 0;
     const start = performance.now();
@@ -659,8 +686,8 @@ export default function HeroScene({ progress, act = 1, anchorRef, litModules, ca
       gl.uniformMatrix4fv(loc.particleProj, false, projection);
       gl.uniformMatrix4fv(loc.particleView, false, view);
       gl.uniform1f(loc.particleTime, time);
-      gl.uniform3fv(loc.particleNear, CYAN);
-      gl.uniform3fv(loc.particleFar, MAGENTA);
+      gl.uniform3fv(loc.particleNear, LINE_FAR);
+      gl.uniform3fv(loc.particleFar, VIOLET);
       gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer);
       gl.enableVertexAttribArray(loc.particleAttr);
       gl.vertexAttribPointer(loc.particleAttr, 4, gl.FLOAT, false, 0, 0);
@@ -673,8 +700,8 @@ export default function HeroScene({ progress, act = 1, anchorRef, litModules, ca
       // The surface unsettles most as you pass through it, and calms once
       // you are inside.
       gl.uniform1f(loc.sphereDisplace, 0.05 + Math.sin(p * Math.PI) * 0.14 + crossing * 0.22);
-      gl.uniform3fv(loc.sphereNear, CYAN);
-      gl.uniform3fv(loc.sphereFar, ELECTRIC);
+      gl.uniform3fv(loc.sphereNear, LINE_NEAR);
+      gl.uniform3fv(loc.sphereFar, LINE_FAR);
       gl.bindBuffer(gl.ARRAY_BUFFER, spherePositions);
       gl.enableVertexAttribArray(loc.spherePos);
       gl.vertexAttribPointer(loc.spherePos, 3, gl.FLOAT, false, 0, 0);
@@ -683,21 +710,29 @@ export default function HeroScene({ progress, act = 1, anchorRef, litModules, ca
       // Right at the crossing the near wall is inches from the lens and would
       // otherwise smear across the whole frame; fading it there turns the
       // moment into a passage instead of a collision.
-      /* Act II dims the shell hard. It is the same geometry either way, but
-       * once the plates arrive the shell is the room rather than the subject,
-       * and at full strength its edges are brighter and far more numerous
-       * than the thing the act is actually about. */
+      /* Act II still steps the shell back - once the plates arrive the shell
+       * is the room rather than the subject, and its edges are far more
+       * numerous than the thing the act is about.
+       *
+       * The base weight was first set to 0.3 on the reasoning that source-
+       * over lays down real ink where additive added light, so the dark
+       * build's 0.55 would read as a solid mesh. That was arithmetic, not
+       * looking: depth fade and blending now subtract together rather than
+       * pulling against each other, and the object came out so faint it was
+       * effectively absent from every act. */
       const shellAlpha =
-        0.55 * (1 - crossing * 0.72) *
-        (currentAct === 2 ? 0.42 : currentAct === 3 ? 0.8 : 1);
+        0.85 * (1 - crossing * 0.6) *
+        (currentAct === 2 ? 0.6 : 1);
 
       gl.uniform1f(loc.sphereAlpha, shellAlpha);
       gl.drawElements(gl.LINES, edges.length, gl.UNSIGNED_SHORT, 0);
 
       // Vertices again as points, brighter, so the nodes read as lit. Inside
       // the shell they are all around the camera, so they are dimmed too.
-      gl.uniform1f(loc.sphereAlpha, inside ? 0.5 : 0.95 * (1 - crossing * 0.5));
-      gl.uniform3fv(loc.sphereFar, MAGENTA);
+      // The nodes stay the darkest marks on the shell - they are what makes
+      // a wireframe read as a structure rather than as a hatch pattern.
+      gl.uniform1f(loc.sphereAlpha, inside ? 0.42 : 0.8 * (1 - crossing * 0.5));
+      gl.uniform3fv(loc.sphereFar, VIOLET);
       gl.drawArrays(gl.POINTS, 0, positions.length / 3);
 
       // ── Module clusters and their links to the core ─────────────────
@@ -708,8 +743,8 @@ export default function HeroScene({ progress, act = 1, anchorRef, litModules, ca
         gl.uniform3fv(loc.modPos, modulePos);
         gl.uniform1fv(loc.modT, moduleT);
         gl.uniform1fv(loc.modLit, moduleLit);
-        gl.uniform3fv(loc.modWarm, MAGENTA);
-        gl.uniform3fv(loc.modCool, ELECTRIC);
+        gl.uniform3fv(loc.modWarm, ORCHID);
+        gl.uniform3fv(loc.modCool, VIOLET);
 
         const stride = MODULE_STRIDE * 4;
         const bindModuleAttribs = () => {
