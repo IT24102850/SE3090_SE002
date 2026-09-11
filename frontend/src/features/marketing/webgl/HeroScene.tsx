@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import OrbitCanvas from '../OrbitCanvas';
 import {
+  MODULE_STRIDE,
   buffer,
   createProgram,
   icosphere,
+  moduleClusters,
   multiply,
   particleShell,
   perspective,
@@ -133,6 +135,93 @@ void main() {
 }
 `;
 
+/* The six module clusters and their links to the core.
+ *
+ * One program, one attribute layout, two buffers - the clusters drawn as
+ * points and the links as lines. Cluster positions arrive as six vec3
+ * uniforms rather than as vertex data, so animating the whole assembly costs
+ * eighteen floats a frame instead of rewriting the buffer.
+ */
+const VERT_MODULES = `
+precision mediump float;
+attribute vec3 aLocal;
+attribute float aModule;
+attribute float aCore;   // 1 for the end of a tether that sits at the core
+
+uniform mat4 uProjection;
+uniform mat4 uView;
+uniform vec3 uModulePos[6];
+uniform float uModuleT[6];    // 0 off-camera, 1 locked on
+uniform float uModuleLit[6];  // Act III: which modules this trade uses
+
+varying float vDepth;
+varying float vArrive;
+varying float vLit;
+varying float vCore;
+
+void main() {
+  /* Selected by a constant-bounds loop rather than uModulePos[int(aModule)].
+     GLSL ES 1.0 only guarantees uniform arrays can be indexed by a constant
+     expression, and the drivers that enforce it fail at link time on exactly
+     the low-end hardware this scene is meant to survive on. */
+  vec3 centre = vec3(0.0);
+  float arrive = 0.0;
+  float lit = 1.0;
+  for (int i = 0; i < 6; i++) {
+    if (abs(aModule - float(i)) < 0.5) {
+      centre = uModulePos[i];
+      arrive = uModuleT[i];
+      lit = uModuleLit[i];
+    }
+  }
+
+  vArrive = arrive;
+  vLit = lit;
+  // Interpolates 0..1 along a tether and stays 0 across a plate's own edges,
+  // so one varying both fades the tether toward the core and leaves the
+  // plate at full strength - no second draw call to tell them apart.
+  vCore = aCore;
+
+  vec3 world = mix(centre + aLocal, vec3(0.0), aCore);
+  vec4 viewPos = uView * vec4(world, 1.0);
+  vDepth = -viewPos.z;
+  gl_Position = uProjection * viewPos;
+  gl_PointSize = clamp(13.0 / max(vDepth, 0.35), 1.5, 6.0);
+}
+`;
+
+const FRAG_MODULES = `
+precision mediump float;
+varying float vDepth;
+varying float vArrive;
+varying float vLit;
+varying float vCore;
+uniform vec3 uWarm;
+uniform vec3 uCool;
+
+void main() {
+  vec2 offset = gl_PointCoord - vec2(0.5);
+  // Lines rasterise with gl_PointCoord at (0,0), which the circle test would
+  // discard - so only reject outside the disc when this is actually a point.
+  if (offset.x != -0.5 && length(offset) > 0.5) discard;
+
+  // A brief bloom as the cluster seats itself, peaking just before it stops.
+  float flash = exp(-pow((vArrive - 0.9) / 0.07, 2.0));
+
+  float fog = clamp((vDepth - 0.6) / 5.0, 0.0, 1.0);
+  vec3 color = mix(uWarm, uCool, fog);
+  // Unlit modules stay present as dim geometry. Absent would say the trade
+  // cannot have them; dim says it is not using them.
+  float body = mix(0.10, 1.0, vLit);
+  // The tether is the connection, not the subject: it fades out along its
+  // run so the eye follows it inward rather than reading it as structure.
+  float tether = 1.0 - vCore * 0.78;
+
+  float alpha = vArrive * (body + flash * 1.6) * (1.0 - fog * 0.55) * tether;
+  gl_FragColor = vec4(color + flash * 0.5, alpha);
+}
+`;
+
 const CYAN: [number, number, number] = [0.0, 0.898, 1.0];      // #00E5FF
 const MAGENTA: [number, number, number] = [1.0, 0.176, 0.584]; // #FF2D95
 const ELECTRIC: [number, number, number] = [0.298, 0.435, 1.0]; // #4C6FFF
@@ -157,9 +246,26 @@ interface Props {
    * element, and the offset resolves to centre as the approach begins.
    */
   anchorRef?: RefObject<HTMLElement>;
+  /**
+   * Act III: which of the six modules this business type uses.
+   *
+   * Unlit modules are dimmed rather than removed - the claim is that every
+   * trade gets the same core and lights a different part of it, which only
+   * reads if the unused part is visibly still there.
+   */
+  litModules?: boolean[];
+  /**
+   * Act II: elements to park at each cluster's landing site.
+   *
+   * The scene positions these itself, in its own render loop, because they
+   * follow a projected 3D point - routing that through React would mean a
+   * state update per frame per caption. Handing the scene six DOM nodes to
+   * write transforms to is the smaller evil.
+   */
+  captionRefs?: RefObject<(HTMLElement | null)[]>;
 }
 
-export default function HeroScene({ progress, act = 1, anchorRef }: Props) {
+export default function HeroScene({ progress, act = 1, anchorRef, litModules, captionRefs }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [failed, setFailed] = useState(false);
 
@@ -170,6 +276,8 @@ export default function HeroScene({ progress, act = 1, anchorRef }: Props) {
   progressRef.current = progress;
   const actRef = useRef<Act>(act);
   actRef.current = act;
+  const litRef = useRef<boolean[] | undefined>(litModules);
+  litRef.current = litModules;
   const pointer = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
 
   useEffect(() => {
@@ -183,7 +291,8 @@ export default function HeroScene({ progress, act = 1, anchorRef }: Props) {
 
     const sphereProgram = createProgram(gl, VERT_SPHERE, FRAG_SPHERE);
     const particleProgram = createProgram(gl, VERT_PARTICLES, FRAG_PARTICLES);
-    if (!sphereProgram || !particleProgram) { setFailed(true); return; }
+    const moduleProgram = createProgram(gl, VERT_MODULES, FRAG_MODULES);
+    if (!sphereProgram || !particleProgram || !moduleProgram) { setFailed(true); return; }
 
     const { positions, edges } = icosphere(2);
     const spherePositions = buffer(gl, positions);
@@ -198,6 +307,69 @@ export default function HeroScene({ progress, act = 1, anchorRef }: Props) {
     // re-uploading a smaller buffer to draw fewer points would be work done
     // precisely on the machine that already cannot keep up.
     let particleCount = particles.length / 4;
+
+    const modules = moduleClusters(6);
+    const modulePointBuffer = buffer(gl, modules.points);
+    const moduleLineBuffer = buffer(gl, modules.lines);
+
+    // Reused every frame so the render loop allocates nothing.
+    const modulePos = new Float32Array(6 * 3);
+    const moduleT = new Float32Array(6);
+    const moduleLit = new Float32Array(6).fill(1);
+
+    /* Where the camera must be pointed to put each landing site dead centre.
+     *
+     * The view is translate(0,0,-d) * rotateX(pitch) * rotateY(yaw), so the
+     * world turns rather than the camera. Solving for the yaw that swings an
+     * anchor into the xz plane and the pitch that lifts it onto the view axis
+     * is exact, which matters: six sites spread by the Fibonacci lattice are
+     * deliberately nowhere near each other, and a hand-tuned sweep would miss
+     * most of them from inside the shell where only a sixth of it is in shot.
+     */
+    const aimYaw = new Float32Array(6);
+    const aimPitch = new Float32Array(6);
+    for (let i = 0; i < 6; i++) {
+      const ax = modules.anchors[i * 3];
+      const ay = modules.anchors[i * 3 + 1];
+      const az = modules.anchors[i * 3 + 2];
+      const flat = Math.hypot(ax, az);
+      /* Solved for the anchor landing on the NEGATIVE z axis in view space.
+       *
+       * There are two yaws that swing a point into the xz plane, half a turn
+       * apart, and only one of them puts it in front of the lens: the view is
+       * translate(0,0,-d) * R, so the camera looks along -z and a point is
+       * visible when its view-space z is negative. Taking the +z solution -
+       * the one that falls out of the algebra first - aims the camera exactly
+       * 180 degrees from every landing site, which looks like the clusters
+       * were never drawn at all. */
+      aimYaw[i] = Math.atan2(ax, -az);
+      aimPitch[i] = Math.atan2(-ay, flat);
+    }
+
+    /** Shortest way round: without this the camera unwinds the long way
+     *  whenever consecutive sites straddle the +/-PI seam. */
+    const lerpAngle = (a: number, b: number, t: number) => {
+      let d = (b - a) % (Math.PI * 2);
+      if (d > Math.PI) d -= Math.PI * 2;
+      if (d < -Math.PI) d += Math.PI * 2;
+      return a + d * t;
+    };
+    const smooth = (t: number) => t * t * (3 - 2 * t);
+    const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
+    /* Act II's schedule, in one place because two things read it and they
+     * must agree: module i flies in over [0.02 + 0.14i, 0.14 + 0.14i], so it
+     * seats at BEAT * (i + 1). The last one lands at 0.84, leaving the tail
+     * of the act for the pull-back that shows all six together. */
+    const BEAT = 0.14;
+    const arrival = (i: number, pr: number) =>
+      smooth(clamp01((pr - (0.02 + i * BEAT)) / (BEAT - 0.02)));
+    /** Fractional module index the camera should be facing at progress pr.
+     *  Reaches exactly i at the moment module i seats - the earlier form was
+     *  offset by most of a beat, so every cluster landed off-camera and every
+     *  caption was clamped against the edge of the frame. */
+    const facing = (pr: number) => Math.min(Math.max((pr - BEAT) / BEAT, 0), 5);
+    /** The closing reveal: back out through the wall to take the whole thing in. */
+    const finale = (pr: number) => smooth(clamp01((pr - 0.84) / 0.16));
 
     const loc = {
       spherePos: gl.getAttribLocation(sphereProgram, 'aPosition'),
@@ -214,6 +386,16 @@ export default function HeroScene({ progress, act = 1, anchorRef }: Props) {
       particleTime: gl.getUniformLocation(particleProgram, 'uTime'),
       particleNear: gl.getUniformLocation(particleProgram, 'uNear'),
       particleFar: gl.getUniformLocation(particleProgram, 'uFar'),
+      modLocal: gl.getAttribLocation(moduleProgram, 'aLocal'),
+      modIndex: gl.getAttribLocation(moduleProgram, 'aModule'),
+      modCore: gl.getAttribLocation(moduleProgram, 'aCore'),
+      modProj: gl.getUniformLocation(moduleProgram, 'uProjection'),
+      modView: gl.getUniformLocation(moduleProgram, 'uView'),
+      modPos: gl.getUniformLocation(moduleProgram, 'uModulePos'),
+      modT: gl.getUniformLocation(moduleProgram, 'uModuleT'),
+      modLit: gl.getUniformLocation(moduleProgram, 'uModuleLit'),
+      modWarm: gl.getUniformLocation(moduleProgram, 'uWarm'),
+      modCool: gl.getUniformLocation(moduleProgram, 'uCool'),
     };
 
     let projection: Mat4 = perspective(Math.PI / 4, 1, 0.1, 100);
@@ -352,8 +534,30 @@ export default function HeroScene({ progress, act = 1, anchorRef }: Props) {
       // is what makes three pinned sections read as one continuous move.
       const distance =
         currentAct === 1 ? 4.4 - approach * 4.1
-        : currentAct === 2 ? 0.30
-        : 0.30 + approach * 2.9;
+        // Act II drifts back a little inside the shell - far enough that an
+        // arriving cluster has somewhere to arrive into, still comfortably
+        // within radius 1 so the visitor stays inside the object.
+        /* The closing reveal has to clear the shell properly. Stopping just
+         * outside it - the first thing that sounded like "out" - still framed
+         * two plates and the inside of the far wall, which is the one shot
+         * the act cannot end on: the whole point is that all six are on one
+         * skeleton, and that is only a claim you can check from far enough
+         * back to count them. */
+        : currentAct === 2 ? 0.30 + smooth(p) * 0.42 + finale(p) * 1.58
+        // Act III leaves through the wall early and then holds, so the six
+        // trades swap against a settled view rather than a moving one.
+        // Picks up exactly where Act II left the lens, so the boundary
+        // between two pinned sections is invisible in the object itself.
+        /* Further out than Act II ends, and further than looks right in
+         * isolation. This act has a column of type down one side and a mock
+         * panel down the other; the object is the backdrop to an argument
+         * being made in words, and at a framing that flatters the object the
+         * lattice runs straight through the copy. */
+        /* Far enough back that the whole object reads, close enough that it
+         * still has presence behind the copy. The scrim in landing.css is
+         * what keeps the type legible, so this is free to be framed for the
+         * object rather than pulled back until it stops being a problem. */
+        : 2.30 + smooth(clamp01(p / 0.28)) * 1.30;
       const inside = distance < 1;
 
       // Re-rasterise at the lower cap on the way in and the higher one on the
@@ -366,10 +570,45 @@ export default function HeroScene({ progress, act = 1, anchorRef }: Props) {
       // moment of crossing. Drives the fades and the surface agitation.
       const crossing = 1 - Math.min(Math.abs(distance - 1) / 0.55, 1);
 
-      // Rotation accelerates as the shell gets close, which is what sells
-      // the sense of passing through something rather than into a backdrop.
-      const yaw = p * Math.PI * 2.1 + approach * 1.1 + pointer.current.x * 0.6;
-      const pitch = -0.32 + p * 0.62 + pointer.current.y * 0.4;
+      /* Orientation.
+       *
+       * Act I: rotation accelerates as the shell gets close, which is what
+       * sells passing through something rather than into a backdrop.
+       * Act II: the camera turns to face each cluster as it lands, holding on
+       * it while the caption reads, then swinging to the next.
+       * Act III: a slow orbit of the finished object.
+       */
+      let yaw: number;
+      let pitch: number;
+      if (currentAct === 1) {
+        yaw = p * Math.PI * 2.1 + approach * 1.1;
+        pitch = -0.32 + p * 0.62;
+      } else if (currentAct === 2) {
+        // Trails the arrivals slightly: the camera is already turning as a
+        // cluster comes in, so it is met rather than waited for.
+        const stage = facing(p);
+        const from = Math.floor(stage);
+        const to = Math.min(from + 1, 5);
+        /* Hold, then swing - rather than drifting evenly from one site to the
+         * next. Interpolating linearly across the beat means half the act is
+         * spent pointed at empty interior between two plates, with nothing
+         * on screen but shell. Dwelling for the first third and crossing in
+         * the middle puts the camera on a plate whenever there is one worth
+         * looking at, and moving only when there is not. */
+        const t = smooth(clamp01((stage - from - 0.32) / 0.46));
+        yaw = lerpAngle(aimYaw[from], aimYaw[to], t);
+        pitch = aimPitch[from] + (aimPitch[to] - aimPitch[from]) * t;
+        // Level off for the closing reveal: staring up or down at the last
+        // landing site is the wrong angle from which to read six of them.
+        const out = finale(p);
+        pitch += (-0.22 - pitch) * out;
+        yaw += out * 0.8;
+      } else {
+        yaw = aimYaw[5] + 0.8 + smooth(p) * 2.4;
+        pitch = -0.26 + Math.sin(p * Math.PI) * 0.2;
+      }
+      yaw += pointer.current.x * 0.6;
+      pitch += pointer.current.y * 0.4;
 
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -393,6 +632,26 @@ export default function HeroScene({ progress, act = 1, anchorRef }: Props) {
         translate(offsetX, 0, -distance),
         multiply(rotateX(pitch), rotateY(yaw)),
       );
+
+      /* Where each cluster is this frame, and how lit.
+       *
+       * Act I has none of them - the core is still just a core. Act II flies
+       * them in one at a time. Act III holds them all on the skeleton and
+       * lights the subset the current trade uses.
+       */
+      const lit = litRef.current;
+      let anyModule = false;
+      for (let i = 0; i < 6; i++) {
+        const t = currentAct === 1 ? 0 : currentAct === 2 ? arrival(i, p) : 1;
+        moduleT[i] = t;
+        if (t > 0) anyModule = true;
+        moduleLit[i] = currentAct === 3 && lit ? (lit[i] ? 1 : 0) : 1;
+        for (let k = 0; k < 3; k++) {
+          const from = modules.origins[i * 3 + k];
+          const to = modules.anchors[i * 3 + k];
+          modulePos[i * 3 + k] = from + (to - from) * t;
+        }
+      }
 
       // Particles first: they belong behind the sphere, and with depth
       // testing off, draw order is what decides that.
@@ -424,7 +683,13 @@ export default function HeroScene({ progress, act = 1, anchorRef }: Props) {
       // Right at the crossing the near wall is inches from the lens and would
       // otherwise smear across the whole frame; fading it there turns the
       // moment into a passage instead of a collision.
-      const shellAlpha = 0.55 * (1 - crossing * 0.72);
+      /* Act II dims the shell hard. It is the same geometry either way, but
+       * once the plates arrive the shell is the room rather than the subject,
+       * and at full strength its edges are brighter and far more numerous
+       * than the thing the act is actually about. */
+      const shellAlpha =
+        0.55 * (1 - crossing * 0.72) *
+        (currentAct === 2 ? 0.42 : currentAct === 3 ? 0.8 : 1);
 
       gl.uniform1f(loc.sphereAlpha, shellAlpha);
       gl.drawElements(gl.LINES, edges.length, gl.UNSIGNED_SHORT, 0);
@@ -434,6 +699,109 @@ export default function HeroScene({ progress, act = 1, anchorRef }: Props) {
       gl.uniform1f(loc.sphereAlpha, inside ? 0.5 : 0.95 * (1 - crossing * 0.5));
       gl.uniform3fv(loc.sphereFar, MAGENTA);
       gl.drawArrays(gl.POINTS, 0, positions.length / 3);
+
+      // ── Module clusters and their links to the core ─────────────────
+      if (anyModule) {
+        gl.useProgram(moduleProgram);
+        gl.uniformMatrix4fv(loc.modProj, false, projection);
+        gl.uniformMatrix4fv(loc.modView, false, view);
+        gl.uniform3fv(loc.modPos, modulePos);
+        gl.uniform1fv(loc.modT, moduleT);
+        gl.uniform1fv(loc.modLit, moduleLit);
+        gl.uniform3fv(loc.modWarm, MAGENTA);
+        gl.uniform3fv(loc.modCool, ELECTRIC);
+
+        const stride = MODULE_STRIDE * 4;
+        const bindModuleAttribs = () => {
+          gl.enableVertexAttribArray(loc.modLocal);
+          gl.vertexAttribPointer(loc.modLocal, 3, gl.FLOAT, false, stride, 0);
+          gl.enableVertexAttribArray(loc.modIndex);
+          gl.vertexAttribPointer(loc.modIndex, 1, gl.FLOAT, false, stride, 12);
+          gl.enableVertexAttribArray(loc.modCore);
+          gl.vertexAttribPointer(loc.modCore, 1, gl.FLOAT, false, stride, 16);
+        };
+
+        // Wireframe first so the lit vertices sit on top of their own edges.
+        gl.bindBuffer(gl.ARRAY_BUFFER, moduleLineBuffer);
+        bindModuleAttribs();
+        gl.drawArrays(gl.LINES, 0, modules.lineCount);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, modulePointBuffer);
+        bindModuleAttribs();
+        gl.drawArrays(gl.POINTS, 0, modules.pointCount);
+
+        // The sphere program owns attribute 0 on the next frame; leaving the
+        // module attributes enabled would have it read from the wrong buffer.
+        gl.disableVertexAttribArray(loc.modIndex);
+        gl.disableVertexAttribArray(loc.modCore);
+      }
+
+      /* Captions ride their landing sites.
+       *
+       * Projected here rather than in React: this is a 3D point being turned
+       * into a 2D one every frame, and the only honest place for that is
+       * beside the matrices that define it. Written as transform and opacity,
+       * which the compositor can take without a layout.
+       */
+      const captions = captionRefs?.current;
+      if (captions && currentAct === 2) {
+        for (let i = 0; i < 6; i++) {
+          const el = captions[i];
+          if (!el) continue;
+
+          // The cluster's position this frame, not its landing site: the
+          // caption starts fading in before the cluster has finished its
+          // approach, and pinning it to the destination would leave it
+          // hanging in empty space until the thing it labels caught up.
+          const ax = modulePos[i * 3];
+          const ay = modulePos[i * 3 + 1];
+          const az = modulePos[i * 3 + 2];
+
+          // view then projection, by hand - column-major, so a row of the
+          // matrix is every fourth element starting at the row index.
+          const vx = view[0] * ax + view[4] * ay + view[8] * az + view[12];
+          const vy = view[1] * ax + view[5] * ay + view[9] * az + view[13];
+          const vz = view[2] * ax + view[6] * ay + view[10] * az + view[14];
+          const cw = -vz; // the projection's w is -z for this matrix form
+          const cx = projection[0] * vx;
+          const cy = projection[5] * vy;
+
+          // Fade in as it seats, out as the next one starts its approach.
+          /* Fades in as the plate seats and holds until the next one is well
+           * into its approach. Keyed off the next arrival rather than a timer
+           * so it cannot desync from the thing it is labelling - but starting
+           * that fade at the first frame of the next approach left every
+           * caption legible for only a moment. */
+          const next = i < 5 ? moduleT[i + 1] : 0;
+          /* Also cleared by the closing pull-back. The sixth caption has no
+           * successor to fade it, so it stayed lit through the reveal and
+           * then rode the section off the top of the viewport - which is the
+           * one shot the act should end on with nothing but the object. */
+          const show =
+            clamp01((moduleT[i] - 0.5) / 0.28) *
+            (1 - clamp01((next - 0.34) / 0.42)) *
+            (1 - finale(p));
+
+          if (cw <= 0.05 || show <= 0.01) {
+            el.style.opacity = '0';
+            continue;
+          }
+          /* Kept inside the frame. The camera aims at each cluster as it
+           * lands, so this almost never binds - but "almost never" over six
+           * arrivals and every viewport size is not the same as never, and a
+           * caption half off the right edge is worse than one nudged in. */
+          // Room for the offset as well as the card, or clamping to the edge
+          // just moves the overflow rather than preventing it.
+          const card = Math.min(box.width * 0.42, 380) + 130;
+          const sx = Math.min(Math.max((cx / cw * 0.5 + 0.5) * box.width, 24), box.width - card);
+          // The card hangs from -44px to about +100px around the anchor, so
+          // the bottom bound has to leave room for the copy, not just the
+          // point it is pinned to.
+          const sy = Math.min(Math.max((0.5 - cy / cw * 0.5) * box.height, 120), box.height - 140);
+          el.style.opacity = show.toFixed(3);
+          el.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0)`;
+        }
+      }
 
       if (running) raf = requestAnimationFrame(render);
     };
@@ -483,8 +851,11 @@ export default function HeroScene({ progress, act = 1, anchorRef }: Props) {
       gl.deleteBuffer(spherePositions);
       gl.deleteBuffer(edgeBuffer);
       gl.deleteBuffer(particleBuffer);
+      gl.deleteBuffer(modulePointBuffer);
+      gl.deleteBuffer(moduleLineBuffer);
       gl.deleteProgram(sphereProgram);
       gl.deleteProgram(particleProgram);
+      gl.deleteProgram(moduleProgram);
       /* Contexts are a scarce per-tab resource - browsers keep about 16 and
        * silently kill the oldest - so ours is released explicitly rather than
        * left for the collector.

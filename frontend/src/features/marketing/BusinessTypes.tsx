@@ -1,5 +1,6 @@
 import { useRef } from 'react';
-import { usePinnedProgress } from './scroll/useScrollMotion';
+import HeroScene from './webgl/HeroScene';
+import { usePinnedProgress, range } from './scroll/useScrollMotion';
 
 /* The section the page exists for.
  *
@@ -18,6 +19,16 @@ interface BizType {
   modules: string[];
   rows: [string, string][];
   note: string;
+  /**
+   * Which of the six core modules this trade actually leans on, as indexes
+   * into the capability list: Bookings, Resources, Inventory, Staff,
+   * Payments, Reporting.
+   *
+   * The unlisted ones are dimmed in the 3D object rather than removed. Every
+   * tenant gets the whole core; what differs is how much of it is lit, and
+   * deleting the rest would say something untrue about the product.
+   */
+  lit: number[];
 }
 
 const TYPES: BizType[] = [
@@ -31,6 +42,7 @@ const TYPES: BizType[] = [
       ['Nitrox cert · expires', '14 days'],
     ],
     note: 'Boats, tank stock and instructor rosters. Certification levels sit on the booking, so an unqualified diver cannot be put on a deep dive.',
+    lit: [0, 1, 2, 3],
   },
   {
     name: 'Homestay',
@@ -42,6 +54,7 @@ const TYPES: BizType[] = [
       ['Room 3 · turnaround', 'due 11:00'],
     ],
     note: 'Rooms priced per night with a cleaning gap between stays. Check-in and check-out are the day, so they are the first thing on the screen.',
+    lit: [0, 1, 4],
   },
   {
     name: 'Salon',
@@ -53,6 +66,7 @@ const TYPES: BizType[] = [
       ['Retail stock low', '3 lines'],
     ],
     note: 'A calendar per chair rather than per room. Services carry their own duration, so a colour books the chair for three hours and a trim for twenty minutes.',
+    lit: [0, 1, 3],
   },
   {
     name: 'Restaurant',
@@ -64,6 +78,7 @@ const TYPES: BizType[] = [
       ['Delivery due', 'tomorrow 07:00'],
     ],
     note: 'Tables with sittings rather than all-day slots, and a supplier ledger behind the stock, because the order goes in before service not after it.',
+    lit: [0, 1, 2, 3],
   },
   {
     name: 'Gym',
@@ -75,6 +90,7 @@ const TYPES: BizType[] = [
       ['Rower 2 · service', 'overdue'],
     ],
     note: 'Recurring classes with a capacity, plus memberships that lapse. Equipment maintenance is tracked because a broken rower is a refund conversation.',
+    lit: [0, 3, 4, 5],
   },
   {
     name: 'Tuition class',
@@ -86,10 +102,11 @@ const TYPES: BizType[] = [
       ['Fees outstanding', '4 students'],
     ],
     note: 'Batches that repeat weekly for a term, attendance per session, and fees that are owed by month rather than paid at the door.',
+    lit: [0, 3, 4],
   },
 ];
 
-export default function BusinessTypes() {
+export default function BusinessTypes({ live }: { live: boolean }) {
   const ref = useRef<HTMLElement>(null);
   const progress = usePinnedProgress(ref);
 
@@ -100,6 +117,10 @@ export default function BusinessTypes() {
   const active = TYPES[index];
   const within = progress * TYPES.length - index;
 
+  // Six booleans rather than the index list, because that is what the shader
+  // wants and building it here keeps the conversion in one place.
+  const litModules = Array.from({ length: 6 }, (_, i) => active.lit.includes(i));
+
   return (
     <section
       className="lp-types"
@@ -109,6 +130,21 @@ export default function BusinessTypes() {
       aria-label="Business types"
     >
       <div className="lp-types-sticky">
+        {/* Inside the sticky child, not beside it: two sticky siblings would
+            each claim their own 100vh of flow and push the content a viewport
+            down the page. The sticky element is a positioning context, so an
+            absolute child rides along with it for free. */}
+        {live && (
+          <div
+            className="lp-types-stage"
+            aria-hidden="true"
+            style={{ opacity: range(progress, 0, 0.05) }}
+          >
+            <HeroScene progress={progress} act={3} litModules={litModules} />
+          </div>
+        )}
+
+        <div className="lp-types-grid">
         <div>
           <p className="lp-label">
             <span className="lp-label-n">03</span>
@@ -159,6 +195,7 @@ export default function BusinessTypes() {
             </div>
           </div>
           <p className="lp-mock-note">{active.note}</p>
+        </div>
         </div>
       </div>
     </section>

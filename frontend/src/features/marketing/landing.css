@@ -51,7 +51,7 @@
    the track shrinking and the whole page overflows. Every grid on this page
    wants to shrink instead. */
 .lp-hero-inner > *,
-.lp-types-sticky > *,
+.lp-types-grid > *,
 .lp-method > *,
 .lp-branch-row > * { min-width: 0; }
 
@@ -229,6 +229,44 @@
   .lp-cue { display: none; }
 }
 
+/* ── Act II: assembly ───────────────────────────────────────── */
+/* 400vh of pin, one cluster arriving per slice. The stage is full-bleed and
+   the copy floats over it - unlike the hero there is no column to respect,
+   because by this act the object is the whole subject. */
+.lp-assembly { height: 400vh; position: relative; }
+.lp-assembly-sticky { position: sticky; top: 0; height: 100vh; overflow: clip; }
+.lp-assembly-stage { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+
+.lp-assembly-head {
+  position: absolute; top: clamp(84px, 13vh, 140px); left: 0; right: 0; z-index: 2;
+  transition: opacity 0.5s ease;
+}
+.lp-assembly-head .lp-section-head { margin-bottom: 0; max-width: 46ch; }
+
+/* Each caption is a zero-sized point that the scene parks on its cluster's
+   projected position; the card hangs off it. Splitting the two means the
+   scene can own transform completely without also owning the offset that
+   keeps the text clear of the node it belongs to. */
+.lp-captions { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.lp-caption {
+  position: absolute; top: 0; left: 0; width: 0; height: 0;
+  opacity: 0; will-change: transform, opacity;
+}
+/* Clear of the plate it labels. The plate is ~0.115 units across and lands
+   about 1.4 units from the lens, which is roughly 90px on screen at this
+   field of view - so a 26px offset put the text straight through it. */
+.lp-caption-inner {
+  position: absolute; left: 118px; top: -44px; width: min(30ch, 40vw);
+  border-left: 1px solid var(--cyan);
+  padding: 2px 0 2px 16px;
+}
+.lp-caption-n {
+  display: block; font-size: 0.66rem; letter-spacing: 0.2em;
+  color: var(--cyan); margin-bottom: 7px;
+}
+.lp-caption-inner h3 { font-size: 1.32rem; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.01em; }
+.lp-caption-inner p { font-size: 0.86rem; line-height: 1.55; color: var(--muted); margin: 0; }
+
 /* ── Sections ───────────────────────────────────────────────── */
 .lp-section { padding: clamp(72px, 10vw, 132px) 0; position: relative; }
 .lp-section-head { max-width: 62ch; margin-bottom: clamp(36px, 5vw, 64px); }
@@ -273,11 +311,35 @@
 
 /* ── Business types: the pinned swap ────────────────────────── */
 .lp-types { position: relative; }
-.lp-types-sticky {
-  position: sticky; top: 0; height: 100vh;
+
+/* Full width, so the Act III stage behind it can be too. The measure and the
+   gutters moved down to .lp-types-grid - an absolutely positioned child of a
+   max-width element can only ever be as wide as that element, and the object
+   needs the whole viewport once the camera is back outside it. */
+.lp-types-sticky { position: sticky; top: 0; height: 100vh; display: grid; align-items: center; }
+.lp-types-grid {
+  position: relative; z-index: 1;
   display: grid; grid-template-columns: 0.82fr 1fr;
   gap: clamp(24px, 5vw, 64px); align-items: center;
-  max-width: var(--max); margin: 0 auto; padding: 0 var(--gutter);
+  max-width: var(--max); margin: 0 auto; padding: 0 var(--gutter); width: 100%;
+}
+.lp-types-stage { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+
+/* A scrim so the object can be a backdrop rather than a competitor.
+   Act III is the one act carrying its argument in words as well as geometry:
+   a list down the left, a mock panel down the right. Unchecked, the lattice
+   runs straight through both. This holds the left column solid, fades out
+   across the middle where the object should be seen, and lets the panel's
+   own surface do the work on the right. */
+.lp-types-stage::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    var(--void) 0%,
+    rgba(5, 7, 13, 0.9) 17%,
+    rgba(5, 7, 13, 0.5) 32%,
+    rgba(5, 7, 13, 0) 44%
+  );
 }
 .lp-types-list { display: grid; gap: 2px; }
 .lp-type-item {
@@ -317,12 +379,22 @@
    so the stack is a layout call at 1000 and the unpin is a behaviour call at
    760 - same reasoning as the hero. */
 @media (max-width: 1000px) {
-  .lp-types-sticky { grid-template-columns: 1fr; }
+  .lp-types-grid { grid-template-columns: 1fr; }
+  .lp-types-stage { display: none; }
+}
+
+/* Sits under the mock panel, outside its surface, so it was the one piece of
+   Act III copy with nothing behind it. */
+.lp-mock-note {
+  background: rgba(5, 7, 13, 0.74);
+  padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--line);
 }
 
 @media (max-width: 760px) {
   .lp-types { height: auto !important; }
-  .lp-types-sticky { position: static; height: auto; padding-block: 24px; }
+  .lp-types-sticky { position: static; height: auto; }
+  .lp-types-grid { padding-block: 24px; }
   /* Spec: a swipeable strip on small screens, not a pin. */
   .lp-types-list { grid-auto-flow: column; grid-auto-columns: 74%; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; }
   .lp-type-item { scroll-snap-align: start; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
@@ -415,13 +487,14 @@
 /* ── Reduced motion ─────────────────────────────────────────── */
 /* Spec: no sphere, no pins, sections stack at full opacity. */
 @media (prefers-reduced-motion: reduce) {
-  .lp-hero-pin, .lp-types { height: auto !important; }
-  .lp-hero-sticky, .lp-types-sticky { position: static; height: auto; padding-block: 72px; }
+  .lp-hero-pin, .lp-types, .lp-assembly { height: auto !important; }
+  .lp-hero-sticky, .lp-types-sticky, .lp-assembly-sticky { position: static; height: auto; padding-block: 72px; }
   .lp-method-aside { position: static; }
   .lp-mask > span { transform: none; transition: none; }
   [data-reveal] { opacity: 1; transition: none; }
   .lp-step { opacity: 1; }
-  .lp-hero-stage, .lp-hero-canvas, .lp-close-canvas { display: none; }
+  .lp-hero-stage, .lp-hero-canvas, .lp-close-canvas,
+  .lp-assembly-stage, .lp-types-stage { display: none; }
   /* The pin collapses here so the progress driving this never leaves zero -
      but the inline style is authored per frame and would beat any normal
      rule, so this is stated outright rather than left to depend on that. */

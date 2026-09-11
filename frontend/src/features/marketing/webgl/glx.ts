@@ -232,3 +232,138 @@ export function particleShell(count: number, innerRadius: number, outerRadius: n
   }
   return data;
 }
+
+/* ── Module clusters ──────────────────────────────────────────────── */
+
+export interface ModuleGeometry {
+  /** Interleaved: local xyz, module index, core-end flag. 5 floats/vertex. */
+  points: Float32Array;
+  /** Same layout. Cluster edges plus one tether per cluster back to the core. */
+  lines: Float32Array;
+  /** Unit directions the clusters lock onto, 3 floats each. */
+  anchors: Float32Array;
+  /** Where each cluster starts, off-camera. 3 floats each. */
+  origins: Float32Array;
+  pointCount: number;
+  lineCount: number;
+}
+
+/** Floats per vertex in both buffers above. */
+export const MODULE_STRIDE = 5;
+
+/**
+ * Six module plates, each with a landing site on the unit sphere and a start
+ * position off-camera.
+ *
+ * Each plate is two concentric rings around a hub, wired up - not a cloud of
+ * random points. A scatter reads as dust at the distances this is seen from;
+ * a ring with spokes reads as a made thing arriving, which is the whole claim
+ * of the act. The plate is built in the tangent plane at its landing site, so
+ * it lies flat on the shell instead of hanging at whatever angle the local
+ * axes happened to give it.
+ *
+ * Positions animate by uniform, not by re-upload: the vertex shader adds its
+ * cluster's current centre to a fixed local offset, so moving six plates
+ * costs eighteen floats a frame rather than rewriting the buffer.
+ */
+export function moduleClusters(count = 6): ModuleGeometry {
+  const OUTER = 9;
+  const INNER = 5;
+  // Sized against where they are seen from: a plate seats about 1.4 units
+  // from the lens, so this is roughly 120px across on a 900px-tall viewport.
+  const R_OUTER = 0.155;
+  const R_INNER = 0.072;
+  const perCluster = OUTER + INNER + 1; // + the hub
+
+  const edgesPer = OUTER + INNER + INNER + INNER; // rims, spokes out, spokes in
+  const points = new Float32Array(count * perCluster * MODULE_STRIDE);
+  const lines = new Float32Array(count * (edgesPer + 1) * 2 * MODULE_STRIDE);
+  const anchors = new Float32Array(count * 3);
+  const origins = new Float32Array(count * 3);
+
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  let p = 0;
+  let l = 0;
+
+  for (let i = 0; i < count; i++) {
+    // Fibonacci lattice: y walks evenly down the axis while longitude turns
+    // by the golden angle, which is what stops successive sites lining up.
+    const y = 1 - (i / (count - 1)) * 2;
+    const ring = Math.sqrt(Math.max(0, 1 - y * y));
+    const theta = golden * i;
+    const ax = Math.cos(theta) * ring;
+    const az = Math.sin(theta) * ring;
+
+    anchors[i * 3] = ax;
+    anchors[i * 3 + 1] = y;
+    anchors[i * 3 + 2] = az;
+
+    // Start well outside the shell, thrown off the landing axis so the six
+    // approaches are visibly different rather than six radial zooms.
+    const swing = ((i % 3) - 1) * 2.4;
+    origins[i * 3] = ax * 5.4 + swing;
+    origins[i * 3 + 1] = y * 5.4 - swing * 0.5;
+    origins[i * 3 + 2] = az * 5.4 - swing;
+
+    /* Tangent basis at the landing site. The helper axis is swapped near the
+     * poles because the cross product collapses when it is parallel to the
+     * normal, which would flatten the plate to a line at exactly the two
+     * sites the Fibonacci lattice always puts there. */
+    const hx = Math.abs(y) < 0.9 ? 0 : 1;
+    const hy = Math.abs(y) < 0.9 ? 1 : 0;
+    let ux = hy * az - 0 * y;
+    let uy = 0 * ax - hx * az;
+    let uz = hx * y - hy * ax;
+    const ul = Math.hypot(ux, uy, uz) || 1;
+    ux /= ul; uy /= ul; uz /= ul;
+    const vx = y * uz - az * uy;
+    const vy = az * ux - ax * uz;
+    const vz = ax * uy - y * ux;
+
+    /** A point in the plate's own plane, as a local offset in world axes. */
+    const plate = (radius: number, angle: number, lift: number) => {
+      const a = Math.cos(angle) * radius;
+      const b = Math.sin(angle) * radius;
+      return [
+        ux * a + vx * b + ax * lift,
+        uy * a + vy * b + y * lift,
+        uz * a + vz * b + az * lift,
+      ];
+    };
+
+    // Hub first, then the inner ring, then the outer: index 0 is the hub.
+    const local: number[][] = [plate(0, 0, 0.02)];
+    for (let n = 0; n < INNER; n++) local.push(plate(R_INNER, (n / INNER) * Math.PI * 2, 0.012));
+    for (let n = 0; n < OUTER; n++) local.push(plate(R_OUTER, (n / OUTER) * Math.PI * 2, 0));
+
+    for (const [lx, ly, lz] of local) {
+      points[p++] = lx; points[p++] = ly; points[p++] = lz;
+      points[p++] = i; points[p++] = 0;
+    }
+
+    const edge = (a: number[], b: number[]) => {
+      lines[l++] = a[0]; lines[l++] = a[1]; lines[l++] = a[2]; lines[l++] = i; lines[l++] = 0;
+      lines[l++] = b[0]; lines[l++] = b[1]; lines[l++] = b[2]; lines[l++] = i; lines[l++] = 0;
+    };
+
+    const innerAt = (n: number) => local[1 + (n % INNER)];
+    const outerAt = (n: number) => local[1 + INNER + (n % OUTER)];
+
+    for (let n = 0; n < OUTER; n++) edge(outerAt(n), outerAt(n + 1));
+    for (let n = 0; n < INNER; n++) edge(innerAt(n), innerAt(n + 1));
+    for (let n = 0; n < INNER; n++) edge(local[0], innerAt(n));
+    // Spokes out to the rim, spaced so they do not all land on one side.
+    for (let n = 0; n < INNER; n++) edge(innerAt(n), outerAt(Math.round((n * OUTER) / INNER)));
+
+    // The tether: plate hub, then the core at the origin. The second vertex
+    // carries the core flag, which the shader reads as "ignore the centre".
+    lines[l++] = 0; lines[l++] = 0; lines[l++] = 0; lines[l++] = i; lines[l++] = 0;
+    lines[l++] = 0; lines[l++] = 0; lines[l++] = 0; lines[l++] = i; lines[l++] = 1;
+  }
+
+  return {
+    points, lines, anchors, origins,
+    pointCount: count * perCluster,
+    lineCount: count * (edgesPer + 1) * 2,
+  };
+}

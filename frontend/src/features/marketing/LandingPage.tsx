@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import Assembly from './Assembly';
 import BusinessTypes from './BusinessTypes';
 import HeroScene from './webgl/HeroScene';
 import { useSmoothScroll, scrollToId } from './scroll/useSmoothScroll';
@@ -146,10 +147,8 @@ export default function LandingPage() {
    * passes it through and the browser honours its presence. */
   const inertWhenGone = (copyExit > 0.9 ? { inert: '' } : {}) as Record<string, string>;
 
-  const capabilityRef = useRef<HTMLElement>(null);
   const stackRef = useRef<HTMLElement>(null);
   const figuresRef = useRef<HTMLElement>(null);
-  useReveal(capabilityRef);
   useReveal(stackRef);
   useReveal(figuresRef);
 
@@ -192,7 +191,17 @@ export default function LandingPage() {
         <section className="lp-hero-pin" ref={heroRef} aria-label="Introduction">
           <div className="lp-hero-sticky">
             {sceneEnabled && (
-              <div className="lp-hero-stage" aria-hidden="true">
+              /* Dissolves into the next act's stage. Each act owns its own
+                 canvas, so at a section boundary both are briefly on screen -
+                 two spheres at once, which is precisely the thing the whole
+                 three-act structure is pretending is one object. The camera
+                 distances already match across the seam, so an 8% crossfade
+                 reads as nothing at all. */
+              <div
+                className="lp-hero-stage"
+                aria-hidden="true"
+                style={{ opacity: 1 - range(heroProgress, 0.92, 1) }}
+              >
                 <HeroScene progress={heroProgress} act={1} anchorRef={heroAnchorRef} />
               </div>
             )}
@@ -242,35 +251,11 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ── Capability: one core, several surfaces ───────────────── */}
-        <section className="lp-section" id="capability" ref={capabilityRef}>
-          <div className="lp-shell">
-            <div className="lp-section-head">
-              <p className="lp-label">
-                <span className="lp-label-n">02</span><span className="lp-label-rule" />Capability
-              </p>
-              <h2 className="lp-h2"><Mask>What it actually does</Mask></h2>
-              <p className="lp-body">
-                Six things, one core. They share a customer, a calendar and a set of
-                permissions, which is why turning one on does not mean reconciling it
-                with the others later.
-              </p>
-            </div>
+        {/* ── Act II: the core becomes a platform ──────────────────── */}
+        <Assembly items={CAPABILITY} live={sceneEnabled} />
 
-            <div className="lp-spine">
-              {CAPABILITY.map((c, i) => (
-                <div className="lp-branch" key={c.name} data-reveal data-reveal-delay={`${i * 60}`}>
-                  <div className="lp-branch-row">
-                    <h3>{c.name}</h3>
-                    <p>{c.body}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <BusinessTypes />
+        {/* ── Act III: the platform becomes a specific business ─────── */}
+        <BusinessTypes live={sceneEnabled} />
 
         {/* ── Method ───────────────────────────────────────────────── */}
         <section className="lp-section" id="method">
