@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Assembly from './Assembly';
 import BusinessTypes from './BusinessTypes';
-import HeroScene from './webgl/HeroScene';
+import HeroScene from './webgl/LazyScene';
 import { useSmoothScroll, scrollToId } from './scroll/useSmoothScroll';
 import { usePageProgress, useCountUp } from './scroll/usePageProgress';
 import { usePinnedProgress, useReveal, range } from './scroll/useScrollMotion';

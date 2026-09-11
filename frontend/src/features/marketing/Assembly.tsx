@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import HeroScene from './webgl/HeroScene';
+import HeroScene from './webgl/LazyScene';
 import { usePinnedProgress, useReveal, range } from './scroll/useScrollMotion';
 
 /* Act II: the core becomes a platform.

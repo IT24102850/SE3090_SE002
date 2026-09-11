@@ -267,6 +267,12 @@
 .lp-caption-inner h3 { font-size: 1.32rem; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.01em; }
 .lp-caption-inner p { font-size: 0.86rem; line-height: 1.55; color: var(--muted); margin: 0; }
 
+/* The nav is sticky, so an in-page jump that lands a section flush with the
+   top of the viewport puts its heading underneath the nav - which is every
+   link in the nav, and every link in the footer. Most visible where the pins
+   are released and the sections are plain blocks. */
+#capability, #business-types, #method, #stack { scroll-margin-top: 96px; }
+
 /* ── Sections ───────────────────────────────────────────────── */
 .lp-section { padding: clamp(72px, 10vw, 132px) 0; position: relative; }
 .lp-section-head { max-width: 62ch; margin-bottom: clamp(36px, 5vw, 64px); }

@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import HeroScene from './webgl/HeroScene';
+import HeroScene from './webgl/LazyScene';
 import { usePinnedProgress, range } from './scroll/useScrollMotion';
 
 /* The section the page exists for.
