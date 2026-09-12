@@ -24,11 +24,15 @@ interface Ring {
   opacity: number;
 }
 
+/* Ink on paper, matching landing.css. The silver/cyan/magenta ordering came
+ * from the dark build; on a light ground those first two are all but
+ * invisible and the magenta is the only thing that lands, which reverses the
+ * intended hierarchy. Same four rings, same rhythms, violet palette. */
 const RINGS: Ring[] = [
-  { scale: 1.0, rx: 1.15, ry: 0.1, duration: 28, delay: 0, color: '#E8ECF8', opacity: 0.45 },
-  { scale: 0.84, rx: 0.55, ry: 0.85, duration: -17, delay: -6, color: '#00E5FF', opacity: 0.5 },
-  { scale: 0.68, rx: 1.35, ry: -0.6, duration: 13, delay: -3, color: '#FF2D95', opacity: 0.4 },
-  { scale: 0.52, rx: 0.25, ry: 0.35, duration: -10, delay: -8, color: '#CBD5F5', opacity: 0.28 },
+  { scale: 1.0, rx: 1.15, ry: 0.1, duration: 28, delay: 0, color: '#B9AFD4', opacity: 0.9 },
+  { scale: 0.84, rx: 0.55, ry: 0.85, duration: -17, delay: -6, color: '#6D28D9', opacity: 0.65 },
+  { scale: 0.68, rx: 1.35, ry: -0.6, duration: 13, delay: -3, color: '#C026D3', opacity: 0.5 },
+  { scale: 0.52, rx: 0.25, ry: 0.35, duration: -10, delay: -8, color: '#8C83AB', opacity: 0.55 },
 ];
 
 export default function OrbitHero() {
@@ -43,7 +47,9 @@ export default function OrbitHero() {
             height: `${ring.scale * 100}%`,
             borderColor: ring.color,
             opacity: ring.opacity,
-            boxShadow: `0 0 24px ${ring.color}40`,
+            // Lighter than the dark build's 40: on paper a coloured halo at
+            // 25% alpha reads as a printing fault rather than as a glow.
+            boxShadow: `0 0 18px ${ring.color}24`,
             animationDuration: `${Math.abs(ring.duration)}s`,
             animationDirection: ring.duration < 0 ? 'reverse' : 'normal',
             animationDelay: `${ring.delay}s`,

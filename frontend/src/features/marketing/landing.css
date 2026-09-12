@@ -606,6 +606,61 @@
 }
 @media (max-width: 560px) { .lp-form-grid { grid-template-columns: 1fr; } }
 
+/* ── Account-type toggle ────────────────────────────────────── */
+/* A segmented control on the sign-in card. The thumb is one absolutely
+   positioned element that slides, rather than a background on whichever
+   option is active - sliding is what tells you the two are alternatives of
+   the same thing instead of two separate buttons. */
+.lp-toggle {
+  position: relative;
+  display: grid; grid-template-columns: 1fr 1fr;
+  padding: 4px; margin-bottom: 24px;
+  background: var(--paper);
+  border: 1px solid var(--line); border-radius: 12px;
+}
+.lp-toggle-thumb {
+  position: absolute; top: 4px; bottom: 4px; left: 4px;
+  width: calc(50% - 4px); border-radius: 9px;
+  background: var(--card); border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.lp-toggle-thumb[data-mode='customer'] { transform: translateX(100%); }
+.lp-toggle-opt {
+  position: relative; z-index: 1;
+  background: none; border: 0; cursor: pointer;
+  padding: 10px 12px; border-radius: 9px;
+  font: inherit; font-size: 0.88rem; font-weight: 600;
+  color: var(--muted);
+  transition: color 0.2s ease;
+}
+.lp-toggle-opt.is-on { color: var(--violet-deep); }
+.lp-toggle-opt:hover { color: var(--ink); }
+
+/* ── Orbit sculpture (auth aside) ───────────────────────────── */
+/* These four classes are rendered by OrbitHero and were defined in no
+   stylesheet at all, so the sculpture had been shipping as four unstyled
+   divs. Perspective lives on the container: rotate3d without it reads as a
+   flat squash rather than a ring turning edge-on. */
+.lp-orbit {
+  position: relative; width: min(230px, 62%); aspect-ratio: 1;
+  display: grid; place-items: center;
+  perspective: 620px; margin-bottom: 4px;
+}
+.lp-orbit-ring {
+  position: absolute; border: 1px solid; border-radius: 50%;
+  animation-name: lp-spin; animation-timing-function: linear; animation-iteration-count: infinite;
+}
+.lp-orbit-core {
+  width: 15%; aspect-ratio: 1; border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 26px rgba(109, 40, 217, 0.36);
+}
+@keyframes lp-spin {
+  from { transform: rotate3d(var(--rx), var(--ry), 0, 0deg); }
+  to { transform: rotate3d(var(--rx), var(--ry), 0, 360deg); }
+}
+
 /* ── Reduced motion ─────────────────────────────────────────── */
 /* No object, no pins, sections stack at full opacity. */
 @media (prefers-reduced-motion: reduce) {
@@ -624,4 +679,15 @@
      but the inline style is authored per frame and would beat any normal
      rule, so this is stated outright rather than left to depend on that. */
   .lp-hero-copy { transform: none !important; opacity: 1 !important; }
+  /* The toggle still moves - it has to, it is the only thing saying which of
+     the two is selected - but it arrives rather than travels. */
+  .lp-toggle-thumb { transition: none; }
+  /* Stopped, but still tilted. Freezing the rings at 0deg leaves four
+     concentric circles, which reads as a bullseye rather than as rings seen
+     in perspective - the motion is what someone asked to remove, not the
+     shape. Each ring keeps its own axis, so they still interlock. */
+  .lp-orbit-ring {
+    animation: none;
+    transform: rotate3d(var(--rx), var(--ry), 0, 64deg);
+  }
 }
