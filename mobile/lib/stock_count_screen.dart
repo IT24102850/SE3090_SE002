@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth/app_notifications.dart';
 import 'auth/authenticated_api_client.dart';
-import 'data/mock_inventory_data.dart';
 
 /// An offline-first physical stock-count workflow. Counts persist on-device
 /// immediately, and become server adjustments as soon as a request succeeds.
@@ -86,21 +85,15 @@ class _StockCountScreenState extends State<StockCountScreen> {
       }
     } catch (_) {}
 
-    // Fallback if catalog is still empty: seed from MockInventoryData so offline counting works immediately
-    if (_catalog.isEmpty) {
-      final mockItems = await MockInventoryData.getItems();
-      final seeded = mockItems
-          .map((m) => _CatalogItem(
-                id: m.id,
-                name: m.name,
-                sku: m.sku,
-                quantity: m.quantity,
-              ))
-          .toList();
-      await _store.save(seeded, _pending);
-      if (mounted) setState(() => _catalog = seeded);
-      return true;
-    }
+    /* No seeding when the catalogue is empty.
+     *
+     * This used to fill an empty catalogue from a demo store "so offline
+     * counting works immediately". It did - against six coffee-shop SKUs
+     * that were never in the database, and the counts taken against them
+     * were then queued for sync and rejected one by one as "no longer in
+     * the catalog". The offline queue below is real and stays; it just
+     * needs one successful connection first, which the save-count message
+     * already says. */
     return false;
   }
 
@@ -131,9 +124,6 @@ class _StockCountScreenState extends State<StockCountScreen> {
           if (response.statusCode < 200 || response.statusCode >= 300) {
             remaining.add(count.withError(_error(response.body) ??
                 'The server did not accept this count.'));
-          } else {
-            // Keep mock inventory in sync
-            await MockInventoryData.setCount(count.sku, count.quantity);
           }
         } catch (_) {
           // A failed request is not a successful sync. Keep the entry queued
@@ -201,9 +191,6 @@ class _StockCountScreenState extends State<StockCountScreen> {
       return;
     }
     final item = matches.first;
-
-    // Keep MockInventoryData in sync so inventory dashboard reflects change
-    await MockInventoryData.setCount(item.sku, quantity);
 
     final entry = _PendingCount(
         id: DateTime.now().microsecondsSinceEpoch.toString(),

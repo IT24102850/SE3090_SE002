@@ -5,7 +5,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'auth/authenticated_api_client.dart';
 import 'auth/app_notifications.dart';
-import 'data/mock_inventory_data.dart';
+import 'data/inventory_models.dart';
 
 enum StockOperation { checkIn, checkOut }
 
@@ -26,7 +26,7 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
   String? _scannedCode;
   bool _torchOn = false;
   bool _saving = false;
-  List<MockInventoryItem> _availableItems = const [];
+  List<InventoryItem> _availableItems = const [];
 
   @override
   void initState() {
@@ -41,13 +41,15 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
       final payload = jsonDecode(response.body) as Map<String, dynamic>;
       final items = ((payload['items'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
-          .map(MockInventoryItem.fromJson)
+          .map(InventoryItem.fromJson)
           .toList();
       if (mounted) setState(() => _availableItems = items);
     } catch (_) {
-      // Only use the local catalog when the API cannot be reached.
-      final items = await MockInventoryData.getItems();
-      if (mounted) setState(() => _availableItems = items);
+      // The quick-pick list stays empty rather than filling with a demo
+      // catalogue. Tapping a demo item here fed a demo SKU into a real
+      // submit, which then failed against the live API with "no item
+      // matches" - a confusing error that started with invented data.
+      if (mounted) setState(() => _availableItems = const []);
     }
   }
 
@@ -153,33 +155,18 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
       }
       return;
     } catch (_) {
-      // Live API unreachable, fall back to offline demo store
+      // A movement the server never saw was previously "recorded" into a
+      // local demo store and confirmed with a success toast, so a scan made
+      // offline looked identical to one that reached the ledger. Now it
+      // fails visibly, and the scanned code is kept so it can be retried.
+      if (mounted) {
+        setState(() => _saving = false);
+        showAppNotification(
+          'The inventory API cannot be reached. This movement was not recorded - try again when connected.',
+          tone: AppNotificationTone.error,
+        );
+      }
     }
-
-    // Offline / Demo store fallback
-    final delta = _operation == StockOperation.checkIn
-        ? quantity.toDouble()
-        : -quantity.toDouble();
-    final updated = await MockInventoryData.updateQuantity(code, delta);
-    if (!mounted) return;
-    if (updated != null) {
-      showAppNotification(
-        '${_operation == StockOperation.checkIn ? 'Check-in' : 'Check-out'} recorded for ${updated.name} (Now: ${updated.quantity.toInt()} ${updated.unit}).',
-        tone: AppNotificationTone.success,
-      );
-      setState(() {
-        _scannedCode = null;
-        _barcode.clear();
-        _quantity.text = '1';
-      });
-      _loadPresets();
-    } else {
-      showAppNotification(
-        'No inventory item matches "$code". Tap an item from the list below.',
-        tone: AppNotificationTone.error,
-      );
-    }
-    if (mounted) setState(() => _saving = false);
   }
 
   @override

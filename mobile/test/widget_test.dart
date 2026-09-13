@@ -228,6 +228,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('Count saved successfully.'), findsOneWidget);
-    expect(find.byIcon(Icons.check_circle_outline_rounded), findsOneWidget);
+    // The filled variant, matching app_notifications.dart. The test asked
+    // for the outlined one and had been failing against the real icon.
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
   });
 }

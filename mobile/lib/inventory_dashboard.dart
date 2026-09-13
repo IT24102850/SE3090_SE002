@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'auth/authenticated_api_client.dart';
 import 'auth/app_notifications.dart';
-import 'data/mock_inventory_data.dart';
+import 'data/inventory_models.dart';
 import 'purchase_order_approval_screen.dart';
 import 'stock_check_screen.dart';
 import 'stock_count_screen.dart';
@@ -30,10 +30,9 @@ class InventoryDashboard extends StatefulWidget {
 class _InventoryDashboardState extends State<InventoryDashboard> {
   late final _repository = InventoryDashboardRepository(widget.client);
   DashboardSummary? _summary;
-  List<MockInventoryItem> _previewItems = [];
+  List<InventoryItem> _previewItems = const [];
   String? _error;
   bool _loading = true;
-  bool _isDemoData = false;
 
   @override
   void initState() {
@@ -53,65 +52,32 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
         setState(() {
           _summary = summary;
           _previewItems = liveItems;
-          _isDemoData = false;
         });
       }
     } on http.ClientException catch (_) {
-      showAppNotification(
-          'Live inventory is unavailable. Showing saved demo data.',
-          tone: AppNotificationTone.warning);
-      // Keep the dashboard honest when the shared API is unavailable.
-      final mockItems = await MockInventoryData.getItems();
-      final mockOrders = await MockInventoryData.getOrders();
-      final lowStock = mockItems.where((item) => item.isLowStock).length;
-      final totalValue =
-          mockItems.fold<double>(0, (sum, item) => sum + item.totalValue);
-      final pendingCount =
-          mockOrders.where((order) => order.status == 'InReview').length;
-
-      if (mounted) {
-        setState(() {
-          _summary = DashboardSummary(
-            totalItems: mockItems.length,
-            totalValue: totalValue,
-            lowStock: lowStock,
-            pendingOrders: pendingCount,
-          );
-          _previewItems = mockItems;
-          _isDemoData = true;
-          _error = null;
-        });
-      }
+      // An unreachable API is shown as exactly that. This used to swap in a
+      // saved demo catalogue, which meant the totals on screen could be for
+      // a business that does not exist while looking identical to live ones.
+      _fail('The inventory API cannot be reached. Check the connection and pull to retry.');
     } on TimeoutException catch (_) {
-      showAppNotification(
-          'The inventory request timed out. Showing saved demo data.',
-          tone: AppNotificationTone.warning);
-      final mockItems = await MockInventoryData.getItems();
-      final mockOrders = await MockInventoryData.getOrders();
-      if (mounted) {
-        setState(() {
-          _summary = DashboardSummary(
-            totalItems: mockItems.length,
-            totalValue:
-                mockItems.fold<double>(0, (sum, item) => sum + item.totalValue),
-            lowStock: mockItems.where((item) => item.isLowStock).length,
-            pendingOrders:
-                mockOrders.where((order) => order.status == 'InReview').length,
-          );
-          _previewItems = mockItems;
-          _isDemoData = true;
-          _error = null;
-        });
-      }
+      _fail('The inventory request timed out. Pull to retry.');
     } catch (error) {
-      if (mounted) {
-        setState(() => _error = 'Unable to load live inventory: $error');
-        showAppNotification('Unable to load live inventory.',
-            tone: AppNotificationTone.error);
-      }
+      _fail('Unable to load inventory: $error');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _fail(String message) {
+    if (!mounted) return;
+    // Whatever was on screen from the last successful load is cleared too:
+    // stale totals under an error banner still read as current totals.
+    setState(() {
+      _error = message;
+      _summary = null;
+      _previewItems = const [];
+    });
+    showAppNotification(message, tone: AppNotificationTone.error);
   }
 
   @override
@@ -165,38 +131,6 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                           style: TextStyle(
                               color: theme.colorScheme.onSurfaceVariant),
                         ),
-                        if (_isDemoData) ...[
-                          const SizedBox(height: 14),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF59E0B)
-                                  .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color: const Color(0xFFF59E0B)
-                                      .withValues(alpha: 0.3)),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.info_outline_rounded,
-                                    size: 16, color: Color(0xFFF59E0B)),
-                                SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Live inventory is unavailable. Pull to retry when the API is connected.',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFFF59E0B),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
                         const SizedBox(height: 20),
                         if (_error != null)
                           _DashboardError(message: _error!, onRetry: _load),
@@ -265,7 +199,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                                 style: theme.textTheme.titleMedium
                                     ?.copyWith(fontWeight: FontWeight.w800)),
                             Text(
-                              '${(_previewItems as List<MockInventoryItem>?)?.length ?? 0} items',
+                              '${_previewItems.length} items',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
@@ -275,9 +209,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        ...((_previewItems as List<MockInventoryItem>?) ??
-                                const [])
-                            .map((item) => Card(
+                        ..._previewItems.map((item) => Card(
                                   margin: const EdgeInsets.only(bottom: 10),
                                   child: Padding(
                                     padding: const EdgeInsets.all(16),
@@ -423,7 +355,7 @@ class InventoryDashboardRepository {
     return (data['totalCount'] as num?)?.toInt() ?? 0;
   }
 
-  Future<List<MockInventoryItem>> loadPreviewItems() async {
+  Future<List<InventoryItem>> loadPreviewItems() async {
     final response = await _client.get('/api/inventory?page=1&pageSize=100');
     if (response.statusCode != 200) {
       throw Exception('Inventory preview request failed');
@@ -431,7 +363,7 @@ class InventoryDashboardRepository {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return ((data['items'] as List?) ?? const [])
         .whereType<Map<String, dynamic>>()
-        .map(MockInventoryItem.fromJson)
+        .map(InventoryItem.fromJson)
         .toList();
   }
 }

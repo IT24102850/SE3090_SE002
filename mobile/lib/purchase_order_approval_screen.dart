@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'auth/app_notifications.dart';
 import 'auth/authenticated_api_client.dart';
 import 'auth/notification_ws.dart';
-import 'data/mock_inventory_data.dart';
 
 class PurchaseOrderApprovalScreen extends StatefulWidget {
   const PurchaseOrderApprovalScreen(
@@ -23,7 +22,6 @@ class _PurchaseOrderApprovalScreenState
     extends State<PurchaseOrderApprovalScreen> {
   List<_PurchaseOrder> _orders = [];
   bool _loading = true;
-  bool _isDemoData = false;
   String? _error;
 
   StreamSubscription? _notifSub;
@@ -85,44 +83,29 @@ class _PurchaseOrderApprovalScreenState
             .whereType<Map<String, dynamic>>()
             .map(_PurchaseOrder.fromJson)
             .toList();
-        _isDemoData = false;
       });
     } on StateError catch (error) {
-      if (mounted) {
-        setState(() {
-          _error = error.message;
-          _isDemoData = false;
-        });
-        showAppNotification('Purchase orders could not be loaded.',
-            tone: AppNotificationTone.error);
-      }
+      _fail(error.message);
     } catch (_) {
-      // Fallback to MockInventoryData orders
-      final mockOrders = await MockInventoryData.getOrders();
-      final pending = mockOrders
-          .where((po) => po.status == 'InReview')
-          .map((po) => _PurchaseOrder(
-                id: po.id,
-                number: po.number,
-                supplier: po.supplier,
-                branch: po.branch,
-                amount: po.amount,
-                lineItems: po.lineItems,
-              ))
-          .toList();
-      if (mounted) {
-        setState(() {
-          _orders = pending;
-          _isDemoData = true;
-          _error = null;
-        });
-        showAppNotification(
-            'Live purchase orders are unavailable. Showing saved demo orders.',
-            tone: AppNotificationTone.warning);
-      }
+      // An approval queue is a list of decisions someone is about to make.
+      // This used to substitute a saved demo queue when the API was
+      // unreachable - four orders from a supplier that does not exist,
+      // approvable with one tap. Unreachable is now shown as unreachable.
+      _fail('The purchase orders API cannot be reached. Pull to retry.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _fail(String message) {
+    if (!mounted) return;
+    // The stale queue goes too. A list of orders under an error card still
+    // has approve buttons on it.
+    setState(() {
+      _error = message;
+      _orders = const [];
+    });
+    showAppNotification(message, tone: AppNotificationTone.error);
   }
 
   Future<void> _approve(_PurchaseOrder order) async {
@@ -134,34 +117,17 @@ class _PurchaseOrderApprovalScreenState
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception();
       }
-      await MockInventoryData.approveOrder(order.id);
       if (!mounted) return;
       setState(() => _orders.removeWhere((item) => item.id == order.id));
       showAppNotification('${order.number} approved and marked as placed.',
           tone: AppNotificationTone.success);
     } catch (_) {
-      // Never replace a live queue with local demo data after a live API
-      // failure. Local approvals are only allowed for an already demo-backed
-      // queue.
-      if (!_isDemoData) {
-        if (mounted) {
-          setState(() => order.approving = false);
-          showAppNotification(
-              'Approval could not be completed while the API is unavailable.',
-              tone: AppNotificationTone.error);
-        }
-        return;
-      }
-      final approved = await MockInventoryData.approveOrder(order.id);
-      if (approved && mounted) {
-        setState(() => _orders.removeWhere((item) => item.id == order.id));
-        showAppNotification(
-            '${order.number} approved and marked as placed (Demo sync).',
-            tone: AppNotificationTone.success);
-      } else if (mounted) {
+      // An approval the server did not record is not an approval. The order
+      // stays in the queue with its button re-enabled.
+      if (mounted) {
         setState(() => order.approving = false);
         showAppNotification(
-            'Approval could not be completed. Please try again.',
+            'Approval could not be completed while the API is unavailable.',
             tone: AppNotificationTone.error);
       }
     }
@@ -221,34 +187,6 @@ class _PurchaseOrderApprovalScreenState
                       ),
                     ),
                     const SizedBox(height: 18),
-                    if (_isDemoData)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0x1FF59E0B),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0x40F59E0B)),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.info_outline_rounded,
-                                size: 18, color: Color(0xFFF59E0B)),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Showing demo approval queue. Approvals sync with inventory operations.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFFFBBF24),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     if (_error != null)
                       _MessageCard(
                           message: _error!, icon: Icons.cloud_off_outlined),

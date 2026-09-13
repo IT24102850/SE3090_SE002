@@ -353,3 +353,17 @@
     transition-duration: .01ms !important;
   }
 }
+
+/* Per-panel error and empty states on the analytics dashboard. Sized to the
+   same box the chart would fill, so a failed panel does not collapse and
+   shove the grid around while its neighbours are still loading. */
+.inventory-scope .analytics-panel-error,
+.inventory-scope .analytics-panel-empty {
+  min-height: 220px; display: grid; place-content: center; text-align: center; gap: 6px;
+  padding: 24px; border-radius: 12px; border: 1px dashed rgba(255,255,255,.14);
+}
+.inventory-scope .analytics-panel-error { border-color: rgba(248,113,113,.35); }
+.inventory-scope .analytics-panel-error p,
+.inventory-scope .analytics-panel-empty p { margin: 0; font-weight: 600; color: var(--color-text); }
+.inventory-scope .analytics-panel-error span { font-size: .82rem; color: var(--color-text-secondary); }
+.inventory-scope .analytics-panel-error .btn { margin-top: 8px; justify-self: center; }
