@@ -8,6 +8,7 @@ using SmeBackend.Models;
 namespace SmeBackend.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/suppliers")]
 public sealed class SuppliersController(
     AppDbContext db,

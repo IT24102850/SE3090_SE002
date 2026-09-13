@@ -9,6 +9,7 @@ using SmeBackend.Models;
 namespace SmeBackend.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/inventory")]
 [Produces("application/json")]
 public sealed class InventoryController(
@@ -33,6 +34,7 @@ public sealed class InventoryController(
         {
             return Unauthorized();
         }
+        branchId = ResolveBranchScope(branchId);
 
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
@@ -102,6 +104,60 @@ public sealed class InventoryController(
             page: page,
             pageSize: pageSize,
             cancellationToken: cancellationToken);
+
+    [HttpGet("movements")]
+    public async Task<ActionResult<IReadOnlyList<InventoryMovementResponse>>> GetMovements(
+        [FromQuery] Guid? branchId = null,
+        [FromQuery] int pageSize = 100,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+        branchId = ResolveBranchScope(branchId);
+
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService,
+                InventoryAuthorizationPolicies.InventoryRead,
+                tenantId,
+                branchId))
+        {
+            return Forbid();
+        }
+
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var query = db.StockMovements
+            .AsNoTracking()
+            .OrderByDescending(movement => movement.OccurredAt)
+            .AsQueryable();
+
+        if (branchId.HasValue)
+        {
+            query = query.Where(movement => movement.BranchId == branchId.Value);
+        }
+
+        var movements = await query.Take(pageSize).ToListAsync(cancellationToken);
+        var itemIds = movements.Select(movement => movement.InventoryItemId).Distinct().ToList();
+        var items = await db.InventoryItems
+            .AsNoTracking()
+            .Where(item => itemIds.Contains(item.Id))
+            .ToDictionaryAsync(item => item.Id, cancellationToken);
+
+        return Ok(movements.Select(movement =>
+        {
+            items.TryGetValue(movement.InventoryItemId, out var item);
+            return new InventoryMovementResponse(
+                movement.Id,
+                movement.OccurredAt,
+                item?.Name ?? "Unknown item",
+                item?.Sku ?? "Unknown SKU",
+                movement.MovementType,
+                movement.Quantity,
+                movement.Reference,
+                movement.Notes);
+        }).ToList());
+    }
 
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
@@ -453,6 +509,24 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
+        if (request.Quantity < 0)
+        {
+            ModelState.AddModelError("quantity", "Quantity cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.ReorderLevel < 0)
+        {
+            ModelState.AddModelError("reorderLevel", "Reorder level cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.UnitCost < 0)
+        {
+            ModelState.AddModelError("unitCost", "Unit cost cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
                 InventoryAuthorizationPolicies.InventoryWrite,
@@ -520,6 +594,18 @@ public sealed class InventoryController(
 
     private bool TryGetTenantId(out Guid tenantId) =>
         Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out tenantId);
+
+    private Guid? ResolveBranchScope(Guid? requestedBranchId)
+    {
+        if (User.IsInRole(UserRole.Admin.ToString()) || requestedBranchId.HasValue)
+        {
+            return requestedBranchId;
+        }
+
+        return Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var branchId)
+            ? branchId
+            : null;
+    }
 
     private async Task<InventoryItem?> LoadItemAsync(Guid id, CancellationToken cancellationToken) =>
         await db.InventoryItems
@@ -595,6 +681,16 @@ public sealed record InventoryItemResponse(
     decimal? UnitCost,
     string Status,
     DateTime CreatedAt);
+
+public sealed record InventoryMovementResponse(
+    Guid Id,
+    DateTime OccurredAt,
+    string Item,
+    string Sku,
+    string MovementType,
+    decimal Quantity,
+    string? Reference,
+    string? Notes);
 
 public sealed record CreateInventoryRequest(
     string Name,
