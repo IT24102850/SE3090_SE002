@@ -20,6 +20,7 @@ import {
   YAxis,
 } from 'recharts';
 import { getStoredToken } from '../authToken';
+import { useChartTheme } from '../../../shared/useChartTheme';
 import { Badge, type BadgeTone } from '../ui/Badge';
 
 type RevenueBucket = { date: string; label: string; revenue: number };
@@ -76,27 +77,6 @@ function settle<T>(result: PromiseSettledResult<T>): Slot<T> {
     ? { status: 'ready', value: result.value }
     : { status: 'failed', error: result.reason instanceof Error ? result.reason.message : 'Request failed' };
 }
-
-const chartColors = {
-  blue: '#8B5CF6',
-  green: '#4ADE80',
-  amber: '#FBBF24',
-  red: '#F87171',
-  slate: '#9A9A9F',
-  sky: '#22D3EE',
-};
-
-// Recharts paints its own chrome; without these it renders a white tooltip
-// and near-black axis text on the dark canvas.
-const axisTick = { fill: '#9A9A9F', fontSize: 12 };
-const gridStroke = 'rgba(255,255,255,0.07)';
-const tooltipStyle = {
-  background: '#231E33',
-  border: '1px solid rgba(255,255,255,0.16)',
-  borderRadius: 10,
-  color: '#FFFFFF',
-};
-const tooltipItem = { color: '#C4C4C8' };
 
 async function apiGet<T>(path: string, token: string | null): Promise<T> {
   const response = await fetch(path, {
@@ -155,6 +135,22 @@ function PanelEmpty({ children }: { children: React.ReactNode }) {
 export function AnalyticsDashboardPage() {
   const token = getStoredToken();
   const { user } = useSelector((state: RootState) => state.auth);
+
+  // Chart chrome follows the theme tokens - see useChartTheme for why these
+  // cannot simply be var() references.
+  const chart = useChartTheme();
+  const axisTick = { fill: chart.tick, fontSize: 12 };
+  const gridStroke = chart.grid;
+  const tooltipStyle = chart.tooltip;
+  const tooltipItem = chart.tooltipItem;
+  const chartColors = {
+    blue: chart.series.violet,
+    green: chart.series.green,
+    amber: chart.series.amber,
+    red: chart.series.red,
+    slate: chart.series.slate,
+    sky: chart.series.cyan,
+  };
 
   const [revenue, setRevenue] = useState<Slot<RevenueReport>>(loading);
   const [patients, setPatients] = useState<Slot<PatientCountReport>>(loading);
@@ -338,7 +334,7 @@ export function AnalyticsDashboardPage() {
                 <ComposedChart data={stockLevels} layout="vertical" margin={{ top: 8, right: 20, left: 12, bottom: 8 }}>
                   <CartesianGrid stroke={gridStroke} horizontal={false} />
                   <XAxis type="number" tickLine={false} axisLine={false} tick={axisTick} />
-                  <YAxis type="category" dataKey="name" width={112} tickLine={false} axisLine={false} tick={{ fill: '#C4C4C8', fontSize: 12 }} />
+                  <YAxis type="category" dataKey="name" width={112} tickLine={false} axisLine={false} tick={axisTick} />
                   <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItem} labelStyle={tooltipItem} />
                   <Legend />
                   <Bar dataKey="quantity" name="On hand" radius={[0, 6, 6, 0]} fill={chartColors.amber} />

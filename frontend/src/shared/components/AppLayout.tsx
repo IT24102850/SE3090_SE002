@@ -93,12 +93,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem('sme-inventory-theme') || 'dark');
+  const [theme, setTheme] = useState(() => localStorage.getItem('unify-theme') || 'light');
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem('sme-inventory-theme', theme);
+    localStorage.setItem('unify-theme', theme);
   }, [theme]);
 
   // Role filtering happens inside each section; a section whose items are all
@@ -186,10 +186,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       )}
       <aside className={`sidebar${mobileNavOpen ? ' open' : ''}`}>
         <div className="sidebar-brand">
-          <span className="sidebar-brand-mark" aria-hidden="true">SME</span>
+          <img className="sidebar-brand-mark" src="/unify-logo.svg" alt="" width={46} height={46} />
           <span>
-            <strong>SME Inventory</strong>
-            <small>Stock · Procurement · Analytics</small>
+            <strong>Unify</strong>
+            <small>Innovate · Adapt · Operate</small>
           </span>
         </div>
         <nav className="sidebar-nav">
@@ -274,7 +274,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         {user && <header className="app-topbar">
           <div className="app-breadcrumb">
             <span className="app-breadcrumb-dot" />
-            <strong>SME INVENTORY</strong>
+            <strong>UNIFY</strong>
             <span>//</span>
             <span>{pageName}</span>
           </div>
@@ -288,8 +288,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </button>
               {themeMenuOpen && <div className="theme-menu" role="listbox" aria-label="Choose theme">
                 {[
-                  ['dark', 'Dark theme'],
                   ['light', 'Light theme'],
+                  ['dark', 'Dark theme'],
                   ['system', 'System theme'],
                 ].map(([value, label]) => (
                   <button type="button" role="option" aria-selected={theme === value} className={`theme-menu-option${theme === value ? ' selected' : ''}`} key={value} onClick={() => { setTheme(value); setThemeMenuOpen(false); }}>
