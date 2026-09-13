@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/ui/ui.dart';
 import '../../widgets/unify_auth/orbit_hero.dart';
+import '../../widgets/unify_auth/unify_logo_mark.dart';
 import '../../widgets/unify_auth/social_sign_in_row.dart';
 import '../../widgets/unify_auth/unify_wordmark.dart';
 import '../customer/book_business_list_screen.dart';
@@ -154,7 +155,20 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                     final column = Column(
                       children: [
                         SizedBox(height: 24 * m.gap),
-                        UnifyWordmark(fontSize: m.wordmark),
+                        // Brand lockup: the official mark beside the
+                        // wordmark, not above it - a horizontal lockup adds
+                        // no height, and height is the one thing this layout
+                        // has none to spare. The tile matches the wordmark's
+                        // cap height so the two read as one unit.
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            UnifyLogoMark(size: m.wordmark * 0.98),
+                            SizedBox(width: m.wordmark * 0.3),
+                            UnifyWordmark(fontSize: m.wordmark),
+                          ],
+                        ),
                         SizedBox(height: 8 * m.gap),
                         Text(
                           'Enterprise Management System',

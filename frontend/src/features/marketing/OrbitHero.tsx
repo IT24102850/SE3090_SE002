@@ -27,12 +27,12 @@ interface Ring {
 /* Ink on paper, matching landing.css. The silver/cyan/magenta ordering came
  * from the dark build; on a light ground those first two are all but
  * invisible and the magenta is the only thing that lands, which reverses the
- * intended hierarchy. Same four rings, same rhythms, violet palette. */
+ * intended hierarchy. Same four rings, same rhythms, the logo's blue palette. */
 const RINGS: Ring[] = [
-  { scale: 1.0, rx: 1.15, ry: 0.1, duration: 28, delay: 0, color: '#B9AFD4', opacity: 0.9 },
-  { scale: 0.84, rx: 0.55, ry: 0.85, duration: -17, delay: -6, color: '#6D28D9', opacity: 0.65 },
-  { scale: 0.68, rx: 1.35, ry: -0.6, duration: 13, delay: -3, color: '#C026D3', opacity: 0.5 },
-  { scale: 0.52, rx: 0.25, ry: 0.35, duration: -10, delay: -8, color: '#8C83AB', opacity: 0.55 },
+  { scale: 1.0, rx: 1.15, ry: 0.1, duration: 28, delay: 0, color: '#B8C7DC', opacity: 0.9 },
+  { scale: 0.84, rx: 0.55, ry: 0.85, duration: -17, delay: -6, color: '#2563EB', opacity: 0.65 },
+  { scale: 0.68, rx: 1.35, ry: -0.6, duration: 13, delay: -3, color: '#06B6D4', opacity: 0.5 },
+  { scale: 0.52, rx: 0.25, ry: 0.35, duration: -10, delay: -8, color: '#8A9BB8', opacity: 0.55 },
 ];
 
 export default function OrbitHero() {

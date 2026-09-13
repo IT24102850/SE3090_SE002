@@ -137,7 +137,7 @@ void main() {
 
   float fog = clamp((vDepth - 2.0) / 7.0, 0.0, 1.0);
   vec3 color = mix(uNear, uFar, vSeed);
-  // Faint on paper: this field is atmosphere, and specks of solid violet on
+  // Faint on paper: this field is atmosphere, and specks of solid blue on
   // white read as dust on the screen rather than as depth.
   gl_FragColor = vec4(color, alpha * (1.0 - fog) * 0.3);
 }
@@ -217,7 +217,7 @@ void main() {
   float flash = exp(-pow((vArrive - 0.9) / 0.07, 2.0));
 
   float fog = clamp((vDepth - 0.6) / 5.0, 0.0, 1.0);
-  /* uCool is the resting violet, uWarm the orchid it flares to. On the dark
+  /* uCool is the resting blue, uWarm the cyan it flares to. On the dark
      build the flash was added to the colour, which brightened it toward
      white; here that would fade the plate into the paper at the exact moment
      it is meant to announce itself, so the flare is a hue shift and an
@@ -235,14 +235,16 @@ void main() {
 }
 `;
 
-/* Ink on paper. Matches the tokens in landing.css - the shell is drawn in a
- * muted violet-grey so it reads as a construction line, the nodes and plates
- * in the brand violet so they read as the subject, and orchid is kept for the
- * moment a plate seats. */
-const LINE_NEAR: [number, number, number] = [0.278, 0.216, 0.459]; // #47376A
-const LINE_FAR: [number, number, number] = [0.549, 0.514, 0.671];  // #8C83AB
-const VIOLET: [number, number, number] = [0.427, 0.157, 0.851];    // #6D28D9
-const ORCHID: [number, number, number] = [0.753, 0.149, 0.827];    // #C026D3
+/* Ink on paper. Matches the tokens in landing.css, which are drawn from the
+ * logo - the shell is drawn in a muted slate-blue so it reads as a
+ * construction line, the nodes and plates in the brand blue so they read as
+ * the subject, and the logo's cyan is kept for the moment a plate seats.
+ * That flare is the one place the raw cyan is used: it is light on the
+ * object, not text on paper, so its 2.3:1 contrast is not a concern here. */
+const LINE_NEAR: [number, number, number] = [0.204, 0.251, 0.353]; // #34405A
+const LINE_FAR: [number, number, number] = [0.541, 0.608, 0.722];  // #8A9BB8
+const BLUE: [number, number, number] = [0.145, 0.388, 0.922];      // #2563EB
+const CYAN: [number, number, number] = [0.024, 0.714, 0.831];      // #06B6D4
 
 /** Which of the three acts the camera is playing. The scene holds no global
  *  scroll state of its own: the act says which path, the progress says where
@@ -687,7 +689,7 @@ export default function HeroScene({ progress, act = 1, anchorRef, litModules, ca
       gl.uniformMatrix4fv(loc.particleView, false, view);
       gl.uniform1f(loc.particleTime, time);
       gl.uniform3fv(loc.particleNear, LINE_FAR);
-      gl.uniform3fv(loc.particleFar, VIOLET);
+      gl.uniform3fv(loc.particleFar, BLUE);
       gl.bindBuffer(gl.ARRAY_BUFFER, particleBuffer);
       gl.enableVertexAttribArray(loc.particleAttr);
       gl.vertexAttribPointer(loc.particleAttr, 4, gl.FLOAT, false, 0, 0);
@@ -732,7 +734,7 @@ export default function HeroScene({ progress, act = 1, anchorRef, litModules, ca
       // The nodes stay the darkest marks on the shell - they are what makes
       // a wireframe read as a structure rather than as a hatch pattern.
       gl.uniform1f(loc.sphereAlpha, inside ? 0.42 : 0.8 * (1 - crossing * 0.5));
-      gl.uniform3fv(loc.sphereFar, VIOLET);
+      gl.uniform3fv(loc.sphereFar, BLUE);
       gl.drawArrays(gl.POINTS, 0, positions.length / 3);
 
       // ── Module clusters and their links to the core ─────────────────
@@ -743,8 +745,8 @@ export default function HeroScene({ progress, act = 1, anchorRef, litModules, ca
         gl.uniform3fv(loc.modPos, modulePos);
         gl.uniform1fv(loc.modT, moduleT);
         gl.uniform1fv(loc.modLit, moduleLit);
-        gl.uniform3fv(loc.modWarm, ORCHID);
-        gl.uniform3fv(loc.modCool, VIOLET);
+        gl.uniform3fv(loc.modWarm, CYAN);
+        gl.uniform3fv(loc.modCool, BLUE);
 
         const stride = MODULE_STRIDE * 4;
         const bindModuleAttribs = () => {

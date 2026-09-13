@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Assembly from './Assembly';
 import BusinessTypes from './BusinessTypes';
 import HeroScene from './webgl/LazyScene';
+import HeroStills from './HeroStills';
 import { useSmoothScroll, scrollToId } from './scroll/useSmoothScroll';
 import { usePageProgress, useCountUp } from './scroll/usePageProgress';
 import { usePinnedProgress, useReveal, range } from './scroll/useScrollMotion';
@@ -167,7 +168,7 @@ export default function LandingPage() {
       <header className="lp-nav">
         <nav className="lp-nav-inner" aria-label="Primary">
           <Link className="lp-brand" to="/">
-            <span className="lp-brand-mark" aria-hidden="true">U</span>
+            <img className="lp-brand-mark" src="/unify-logo.svg" alt="" width={34} height={34} />
             <span className="lp-brand-name">
               Unify
               <span className="lp-brand-tag">Innovate. Adapt. Operate.</span>
@@ -190,6 +191,14 @@ export default function LandingPage() {
         {/* ── Hero ─────────────────────────────────────────────────── */}
         <section className="lp-hero-pin" ref={heroRef} aria-label="Introduction">
           <div className="lp-hero-sticky">
+            {!sceneEnabled && (
+              /* Warmth for the no-scene hero: the homestay photo, blurred
+                 and faded to paper on the copy side, so the left half stays
+                 crisp for reading and the right half stops being blank. */
+              <div className="lp-hero-wash" aria-hidden="true">
+                <img src="/landing/homestay.jpg" alt="" width={1000} height={667} decoding="async" />
+              </div>
+            )}
             {sceneEnabled && (
               /* Dissolves into the next act's stage. Each act owns its own
                  canvas, so at a section boundary both are briefly on screen -
@@ -235,7 +244,9 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              <div className="lp-hero-canvas" ref={heroAnchorRef} aria-hidden="true" />
+              <div className="lp-hero-canvas" ref={heroAnchorRef} aria-hidden={sceneEnabled}>
+                {!sceneEnabled && <HeroStills />}
+              </div>
             </div>
 
             {/* Goes with the copy. Leaving the word "Scroll" sitting over the
@@ -343,7 +354,7 @@ export default function LandingPage() {
       <footer className="lp-footer">
         <div className="lp-shell lp-footer-inner">
           <Link className="lp-brand" to="/">
-            <span className="lp-brand-mark" aria-hidden="true">U</span>
+            <img className="lp-brand-mark" src="/unify-logo.svg" alt="" width={34} height={34} />
             <span className="lp-brand-name">Unify</span>
           </Link>
           <div className="lp-footer-links">
