@@ -1140,6 +1140,45 @@ namespace SmeBackend.Migrations
                     b.ToTable("resource_schedule_exceptions", (string)null);
                 });
 
+            modelBuilder.Entity("SmeBackend.Models.Sale", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("TenantId", "BranchId", "OccurredAt");
+
+                    b.ToTable("Sales");
+                });
+
             modelBuilder.Entity("SmeBackend.Models.SightingsLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1455,6 +1494,9 @@ namespace SmeBackend.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsApproved")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("MedicalNotes")
                         .HasColumnType("text");
 
@@ -1745,6 +1787,15 @@ namespace SmeBackend.Migrations
                         .IsRequired();
 
                     b.Navigation("Resource");
+                });
+
+            modelBuilder.Entity("SmeBackend.Models.Sale", b =>
+                {
+                    b.HasOne("SmeBackend.Models.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SmeBackend.Models.SightingsLog", b =>

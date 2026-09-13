@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, type BadgeTone } from '../ui/Badge';
+import { Icon } from '../ui/Icon';
 import { useToast } from '../ui/ToastContext';
 
 type AlertLevel = 'Critical' | 'At risk' | 'Watch';
@@ -77,10 +78,34 @@ export function LowStockAlertsPage() {
       </header>
 
       <section className="stat-strip" aria-label="Low stock alert summary">
-        <div className="stat"><span className="stat-value stat-value-out">{critical}</span><span className="stat-label">Critical alerts</span></div>
-        <div className="stat"><span className="stat-value">{dueToday}</span><span className="stat-label">Run out today / tomorrow</span></div>
-        <div className="stat"><span className="stat-value">{alerts.length}</span><span className="stat-label">Items being watched</span></div>
-        <div className="stat"><span className="stat-value">30s</span><span className="stat-label">Refresh interval</span></div>
+        <div className="stat">
+          <div className="metric-icon-bubble metric-amber"><Icon name="alert" /></div>
+          <div>
+            <span className="stat-value stat-value-out">{critical}</span>
+            <span className="stat-label">Critical alerts</span>
+          </div>
+        </div>
+        <div className="stat">
+          <div className="metric-icon-bubble metric-purple"><Icon name="clock" /></div>
+          <div>
+            <span className="stat-value">{dueToday}</span>
+            <span className="stat-label">Run out today / tomorrow</span>
+          </div>
+        </div>
+        <div className="stat">
+          <div className="metric-icon-bubble metric-cyan"><Icon name="inventory" /></div>
+          <div>
+            <span className="stat-value">{alerts.length}</span>
+            <span className="stat-label">Items being watched</span>
+          </div>
+        </div>
+        <div className="stat">
+          <div className="metric-icon-bubble metric-emerald"><Icon name="workflow" /></div>
+          <div>
+            <span className="stat-value">30s</span>
+            <span className="stat-label">Refresh interval</span>
+          </div>
+        </div>
       </section>
 
       <section className="panel">

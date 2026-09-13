@@ -29,18 +29,62 @@ class AuthSession {
 
       const roleClaim =
           'http://schemas.microsoft.com/ws/2008/06/identity/claims/role';
-      final rawRoles = payload['role'] ?? payload[roleClaim];
-      final roleValues = rawRoles is List
-          ? rawRoles.whereType<String>()
-          : rawRoles is String
-              ? [rawRoles]
-              : <String>[];
-      final roles =
-          roleValues.map(AppRoleLabel.fromClaim).whereType<AppRole>().toList();
+      const legacyRoleClaim =
+          'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role';
+      final rawRolesCandidates = [
+        payload['role'],
+        payload['Role'],
+        payload['roles'],
+        payload['Roles'],
+        payload[roleClaim],
+        payload[legacyRoleClaim],
+      ];
+
+      final roleValues = <String>[];
+      for (final rawRoles in rawRolesCandidates) {
+        if (rawRoles == null) continue;
+
+        if (rawRoles is List) {
+          for (final value in rawRoles) {
+            if (value is String) {
+              roleValues.add(value);
+            } else if (value is Map && value['value'] is String) {
+              roleValues.add(value['value'] as String);
+            }
+          }
+        } else if (rawRoles is String) {
+          roleValues.add(rawRoles);
+        } else if (rawRoles is Map) {
+          for (final value in rawRoles.values) {
+            if (value is String) {
+              roleValues.add(value);
+            } else if (value is List) {
+              for (final item in value) {
+                if (item is String) roleValues.add(item);
+              }
+            }
+          }
+        }
+      }
+
+      final resolvedRoles = <AppRole>[];
+      for (final value in roleValues) {
+        for (final part in value
+           .split(RegExp(r'[|,]'))
+           .map((role) => role.trim())
+           .where((role) => role.isNotEmpty)) {
+          final parsedRole = AppRoleLabel.fromClaim(part);
+          if (parsedRole != null && !resolvedRoles.contains(parsedRole)) {
+           resolvedRoles.add(parsedRole);
+          }
+        }
+      }
+
       return AuthSession(
-          token: token,
-          roles: roles,
-          tenantId: payload['tenant_id'] as String?);
+        token: token,
+        roles: resolvedRoles,
+        tenantId: payload['tenant_id'] as String?,
+      );
     } on FormatException {
       return null;
     } on TypeError {

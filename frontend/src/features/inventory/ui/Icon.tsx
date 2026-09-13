@@ -1,5 +1,5 @@
-export function Icon({ name, className }: { name: string; className?: string }) {
-  const size = 18;
+export function Icon({ name, className, size: requestedSize = 18 }: { name: string; className?: string; size?: number }) {
+  const size = requestedSize;
   const stroke = 'currentColor';
   const strokeWidth = 1.6;
   switch (name) {

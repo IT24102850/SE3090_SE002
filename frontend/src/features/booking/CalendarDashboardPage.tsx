@@ -140,12 +140,15 @@ export default function CalendarDashboardPage() {
             </div>
             <div className="hero-tile">
               <div className="hero-tile-label">Pending</div>
-              <div className="hero-tile-value" style={{ color: STATUS_COLORS.Pending.bg }}>{pendingCount}</div>
+              {/* White, like the other two. Colouring these by status put
+                  the cancelled figure in violet on the violet hero, where it
+                  vanished; the label already says which is which. */}
+              <div className="hero-tile-value">{pendingCount}</div>
               <div className="hero-tile-sub">awaiting confirmation</div>
             </div>
             <div className="hero-tile">
               <div className="hero-tile-label">Cancelled</div>
-              <div className="hero-tile-value" style={{ color: STATUS_COLORS.Cancelled.bg }}>{cancelledCount}</div>
+              <div className="hero-tile-value">{cancelledCount}</div>
               <div className="hero-tile-sub">in this view</div>
             </div>
           </div>

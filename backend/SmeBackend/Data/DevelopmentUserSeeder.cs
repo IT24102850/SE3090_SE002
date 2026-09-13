@@ -7,6 +7,13 @@ namespace SmeBackend.Data;
 public static class DevelopmentUserSeeder
 {
     public const string Email = "admin@sme-demo.local";
+    private static readonly (string Email, string FullName, string Password, string Phone, UserRole Role)[] DemoUsers =
+    {
+        (Email, "Demo Administrator", "Demo@12345", "+94 77 000 0000", UserRole.Admin),
+        ("manager@sme-demo.local", "Demo Manager", "Manager@12345", "+94 77 000 0001", UserRole.Manager),
+        ("staff@sme-demo.local", "Demo Staff", "Staff@12345", "+94 77 000 0002", UserRole.Staff),
+        ("customer@sme-demo.local", "Demo Customer", "Customer@12345", "+94 77 000 0003", UserRole.Customer),
+    };
 
     public static async Task SeedAsync(AppDbContext db, ITenantContext tenantContext)
     {
@@ -29,7 +36,9 @@ public static class DevelopmentUserSeeder
                 Address = "Colombo",
                 Phone = "+94 11 000 0000",
             };
-            var user = new User
+            db.Tenants.Add(tenant);
+            db.Branches.Add(branch);
+            db.Users.Add(new User
             {
                 Tenant = tenant,
                 Branch = branch,
@@ -38,9 +47,8 @@ public static class DevelopmentUserSeeder
                 Phone = "+94 77 000 0000",
                 Role = UserRole.Admin,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("Demo@12345"),
-            };
-
-            db.Users.Add(user);
+                IsApproved = true,
+            });
             await db.SaveChangesAsync();
         }
         else
@@ -49,7 +57,44 @@ public static class DevelopmentUserSeeder
             tenantContext.SetTenantId(existingAdmin.TenantId);
         }
 
+        await SeedDemoUsersAsync(db);
         await SeedDemoInventoryIfEmptyAsync(db);
+    }
+
+    private static async Task SeedDemoUsersAsync(AppDbContext db)
+    {
+        var admin = await db.Users.IgnoreQueryFilters()
+            .SingleAsync(user => user.Email == Email);
+        var branchId = admin.BranchId;
+
+        foreach (var demoUser in DemoUsers)
+        {
+            var existingUser = await db.Users.IgnoreQueryFilters()
+                .SingleOrDefaultAsync(user => user.Email == demoUser.Email);
+            if (existingUser is not null)
+            {
+                // Keep documented development credentials usable after a database
+                // is reused from an earlier local run.
+                existingUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword(demoUser.Password);
+                existingUser.Role = demoUser.Role;
+                existingUser.IsApproved = true;
+                continue;
+            }
+
+            db.Users.Add(new User
+            {
+                TenantId = admin.TenantId,
+                BranchId = branchId,
+                Email = demoUser.Email,
+                FullName = demoUser.FullName,
+                Phone = demoUser.Phone,
+                Role = demoUser.Role,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(demoUser.Password),
+                IsApproved = true,
+            });
+        }
+
+        await db.SaveChangesAsync();
     }
 
     private static async Task SeedDemoInventoryIfEmptyAsync(AppDbContext db)

@@ -3,6 +3,8 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 import { Badge } from '../ui/Badge';
 import { Icon } from '../ui/Icon';
 
+const workflowApiBaseUrl = import.meta.env.VITE_WORKFLOW_API_URL || 'http://localhost:8000';
+
 type WorkflowItem = {
   id: number;
   created_at: string;
@@ -20,6 +22,7 @@ type WorkflowItem = {
 export function AgentWorkflowMonitorPage() {
   const [items, setItems] = useState<WorkflowItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [selected, setSelected] = useState<WorkflowItem | null>(null);
 
   function formatConfidence(c: any) {
@@ -74,10 +77,11 @@ export function AgentWorkflowMonitorPage() {
       if (actionFilter) params.set('actionType', actionFilter);
       if (tenantFilter) params.set('tenantId', tenantFilter);
       if (search) params.set('search', search);
-      const url = `http://localhost:8000/workflows?${params.toString()}`;
+      const url = `${workflowApiBaseUrl}/workflows?${params.toString()}`;
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('fetch failed');
       const data = await resp.json();
+      setLoadError('');
       setItems(data.items || []);
       setTotal(data.total ?? null);
 
@@ -89,6 +93,7 @@ export function AgentWorkflowMonitorPage() {
       prevIdsRef.current = nowIds;
     } catch (err) {
       console.error(err);
+      setLoadError('Live workflow data could not be loaded. Check the agent service connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -103,7 +108,7 @@ export function AgentWorkflowMonitorPage() {
 
   async function approve(id: number) {
     try {
-      const resp = await fetch(`http://localhost:8000/workflows/${id}/approve`, {
+      const resp = await fetch(`${workflowApiBaseUrl}/workflows/${id}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approverRole: 'Manager' }),
@@ -119,7 +124,7 @@ export function AgentWorkflowMonitorPage() {
   async function reject(id: number) {
     const reason = prompt('Rejection reason (optional)') || 'rejected';
     try {
-      const resp = await fetch(`http://localhost:8000/workflows/${id}/reject`, {
+      const resp = await fetch(`${workflowApiBaseUrl}/workflows/${id}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approverRole: 'Manager', reason }),
@@ -138,13 +143,14 @@ export function AgentWorkflowMonitorPage() {
   const avgConfidence = items.reduce((acc, i) => acc + (Number(i.validation_result?.confidence ?? i.tool_result?.confidence ?? 0) || 0), 0) / Math.max(1, items.length);
 
   return (
-    <div className="p-4 page page-head">
-      <div className="page-head">
+    <div className="page">
+      <header className="page-head">
         <div>
-          <h2 className="text-2xl font-semibold mb-1">Agent Workflow Monitor</h2>
+          <p className="eyebrow">AUTOMATION / WORKFLOWS</p>
+          <h1>Agent Workflow Monitor</h1>
           <p className="page-sub">View AI-generated purchase orders, approve/reject auto-reorders, and inspect prediction evidence.</p>
         </div>
-        <div className="page-actions">
+        <div className="page-actions workflow-filters">
           <input className="filter-select" placeholder="Search..." value={search} onChange={(e)=>{ setSearch(e.target.value); setPage(1); }} />
           <select className="filter-select" value={statusFilter ?? ''} onChange={(e)=>{ setStatusFilter(e.target.value || null); setPage(1); }}>
             <option value="">All status</option>
@@ -163,9 +169,10 @@ export function AgentWorkflowMonitorPage() {
           <input className="filter-select" placeholder="Tenant ID" value={tenantFilter ?? ''} onChange={(e)=>{ setTenantFilter(e.target.value || null); setPage(1); }} />
           <button className="btn btn-secondary" onClick={() => fetchItems()}>Refresh</button>
         </div>
-      </div>
+      </header>
+      {loadError && <p className="page-notice" role="alert">{loadError}</p>}
 
-      <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginTop:12, marginBottom:12}}>
+      <div className="workflow-kpi-grid">
         <div className="kpi-card">
           <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="workflow" /><div className="kpi-label">Total Workflows</div></div><div className="kpi-value">{totalCount}</div></div>
         </div>
@@ -182,7 +189,7 @@ export function AgentWorkflowMonitorPage() {
 
       {loading && <div className="panel p-6">Loading workflows…</div>}
 
-      <div className="panel">
+      <div className="panel workflow-panel">
         <div className="panel-head">
           <h2>Recent AI Workflows</h2>
           <p className="hint">Automatically generated suggestions from the demand prediction agent.</p>
@@ -194,17 +201,6 @@ export function AgentWorkflowMonitorPage() {
               <div style={{maxWidth:420, margin: '0 auto'}}>
                 <h3>No AI workflows yet</h3>
                 <p className="hint">Generate a workflow by posting to <code>/workflows/execute</code> or wait for the agent to produce suggestions.</p>
-                <div style={{marginTop:12}}>
-                  <button className="btn btn-primary" onClick={() => {
-                    // create a lightweight demo workflow
-                    const demo = {
-                      actionType: 'generate_purchase_order',
-                      payload: { current_stock: 3, reorder_level: 20, historicUsageDays: [2,3,4,2,1,5,3], estimatedUnitCost: 9.5, branchId: '11111111-1111-1111-1111-111111111111', supplierId: '22222222-2222-2222-2222-222222222222', budget_limit: 1000 },
-                      userRole: 'Manager', tenantId: 'tenant-demo'
-                    };
-                    fetch('http://localhost:8000/workflows/execute', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(demo) }).then(()=>fetchItems());
-                  }}>Create demo workflow</button>
-                </div>
               </div>
             </div>
           ) : (
@@ -274,7 +270,7 @@ export function AgentWorkflowMonitorPage() {
               </div>
             </div>
             <div className="modal-body">
-              <div style={{display:'grid', gridTemplateColumns:'1fr 360px', gap:16}}>
+              <div className="workflow-modal-grid">
                 <div>
                   <h4 className="font-medium">Tool result</h4>
                   {selected.tool_result?.items && Array.isArray(selected.tool_result.items) ? (
@@ -291,14 +287,14 @@ export function AgentWorkflowMonitorPage() {
                       </table>
                     </div>
                   ) : (
-                    <pre className="text-xs p-2 bg-slate-50 rounded max-h-60 overflow-auto">{JSON.stringify(selected.tool_result, null, 2)}</pre>
+                    <pre className="workflow-json">{JSON.stringify(selected.tool_result, null, 2)}</pre>
                   )}
 
                   <h4 className="mt-3 font-medium">Validation</h4>
-                  <pre className="text-xs p-2 bg-slate-50 rounded max-h-40 overflow-auto">{JSON.stringify(selected.validation_result, null, 2)}</pre>
+                  <pre className="workflow-json workflow-json-short">{JSON.stringify(selected.validation_result, null, 2)}</pre>
 
                   <h4 className="mt-3 font-medium">LLM reasoning</h4>
-                  <pre className="text-xs p-2 bg-slate-50 rounded max-h-40 overflow-auto">{selected.llm_response}</pre>
+                  <pre className="workflow-json workflow-json-short">{selected.llm_response}</pre>
                 </div>
                 <div>
                   <h4 className="font-medium">Prediction evidence</h4>
@@ -322,7 +318,7 @@ export function AgentWorkflowMonitorPage() {
                   {selected.tool_result?.backend_response && (
                     <div className="mt-3">
                       <h5 className="font-medium">Backend PO</h5>
-                      <pre className="text-xs p-2 bg-slate-50 rounded max-h-36 overflow-auto">{JSON.stringify(selected.tool_result.backend_response, null, 2)}</pre>
+                      <pre className="workflow-json workflow-json-tall">{JSON.stringify(selected.tool_result.backend_response, null, 2)}</pre>
                     </div>
                   )}
 

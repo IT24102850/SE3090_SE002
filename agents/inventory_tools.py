@@ -237,9 +237,39 @@ def _coerce_float(value: Any, field_name: str) -> float:
         numeric = float(value)
     except (TypeError, ValueError) as exc:
         raise ValidationError(f"{field_name} must be numeric.") from exc
+    if not math.isfinite(numeric):
+        raise ValidationError(f"{field_name} must be finite.")
     if numeric < 0:
         raise ValidationError(f"{field_name} must be non-negative.")
     return numeric
+
+
+def _coerce_bool(value: Any, field_name: str, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+    raise ValidationError(f"{field_name} must be a boolean.")
+
+
+def _coerce_int(value: Any, field_name: str, default: int) -> int:
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        raise ValidationError(f"{field_name} must be an integer.")
+    try:
+        converted = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(f"{field_name} must be an integer.") from exc
+    if isinstance(value, float) and value != converted:
+        raise ValidationError(f"{field_name} must be an integer.")
+    return converted
 
 
 def _usage_for_point(point: dict[str, Any]) -> float:
@@ -275,7 +305,10 @@ def query_stock_levels(payload: dict[str, Any]) -> dict[str, Any]:
         tenant_id=_pick_value(payload, "tenant_id", "tenantId"),
         inventory_item_id=_pick_value(payload, "inventory_item_id", "inventoryItemId"),
         branch_id=_pick_value(payload, "branch_id", "branchId"),
-        include_inactive=bool(_pick_value(payload, "include_inactive", "includeInactive", "includeInactiveItems", "includeInactive")),
+        include_inactive=_coerce_bool(
+            _pick_value(payload, "include_inactive", "includeInactive", "includeInactiveItems"),
+            "include_inactive",
+        ),
     )
     request.validate()
 
@@ -317,7 +350,7 @@ def query_historical_usage(payload: dict[str, Any]) -> dict[str, Any]:
         start_date=_pick_value(payload, "start_date", "startDate"),
         end_date=_pick_value(payload, "end_date", "endDate"),
         granularity=str(_pick_value(payload, "granularity", "granularity")) if _pick_value(payload, "granularity", "granularity") is not None else "day",
-        limit=int(_pick_value(payload, "limit", "limit") or 30),
+        limit=_coerce_int(_pick_value(payload, "limit"), "limit", 30),
     )
     request.validate()
 
@@ -368,9 +401,9 @@ def predict_demand(payload: dict[str, Any]) -> dict[str, Any]:
         tenant_id=_pick_value(payload, "tenant_id", "tenantId"),
         inventory_item_id=_pick_value(payload, "inventory_item_id", "inventoryItemId"),
         historical_usage=usage_points,
-        forecast_days=int(_pick_value(payload, "forecast_days", "forecastDays") or 7),
-        lead_time_days=int(_pick_value(payload, "lead_time_days", "leadTimeDays") or 7),
-        safety_stock_days=int(_pick_value(payload, "safety_stock_days", "safetyStockDays", "safetyStock") or 7),
+        forecast_days=_coerce_int(_pick_value(payload, "forecast_days", "forecastDays"), "forecast_days", 7),
+        lead_time_days=_coerce_int(_pick_value(payload, "lead_time_days", "leadTimeDays"), "lead_time_days", 7),
+        safety_stock_days=_coerce_int(_pick_value(payload, "safety_stock_days", "safetyStockDays", "safetyStock"), "safety_stock_days", 7),
     )
     request.validate()
 
@@ -408,9 +441,9 @@ def generate_purchase_order(payload: dict[str, Any]) -> dict[str, Any]:
         current_stock=_coerce_float(_pick_value(payload, "current_stock", "currentStock", "quantity_on_hand", "quantityOnHand", "on_hand", "onHand"), "current_stock"),
         reorder_level=_coerce_float(_pick_value(payload, "reorder_level", "reorderLevel"), "reorder_level"),
         predicted_demand=_coerce_float(_pick_value(payload, "predicted_demand", "predictedDemand"), "predicted_demand"),
-        lead_time_days=int(_pick_value(payload, "lead_time_days", "leadTimeDays") or 7),
+        lead_time_days=_coerce_int(_pick_value(payload, "lead_time_days", "leadTimeDays"), "lead_time_days", 7),
         unit_cost=_coerce_float(_pick_value(payload, "unit_cost", "unitCost", "estimated_unit_cost", "estimatedUnitCost"), "unit_cost"),
-        safety_stock_days=int(_pick_value(payload, "safety_stock_days", "safetyStockDays", "safetyStock") or 7),
+        safety_stock_days=_coerce_int(_pick_value(payload, "safety_stock_days", "safetyStockDays", "safetyStock"), "safety_stock_days", 7),
         budget_limit=_pick_value(payload, "budget_limit", "budgetLimit", "budget"),
         order_multiple=_pick_value(payload, "order_multiple", "orderMultiple", "pack_size", "orderPackSize"),
         supplier_active=_pick_value(payload, "supplier_active", "supplierActive", "active"),
