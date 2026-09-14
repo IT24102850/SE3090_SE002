@@ -1,34 +1,90 @@
+/* Unify admin console theme.
+ *
+ * Light is the default and the designed theme: warm paper ground, aubergine
+ * ink, one violet accent - the same palette as the public site, so signing
+ * in is not a change of product. Dark is the toggle's other option and is
+ * kept honest, but the light values are the ones that were tuned by eye.
+ *
+ * Every colour a component uses is a token. Components never carry literal
+ * dark or light values, because that is exactly how the previous theme
+ * ended up half-converted: a light canvas with a dark rail, dark chart
+ * panels and invisible panel titles.
+ */
+
 :root {
-  --color-bg: #f4f6fb;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f8fafc;
-  --color-border: #e2e8f0;
-  --color-border-strong: #cbd5e1;
+  color-scheme: light;
 
-  --color-text: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-muted: #94a3b8;
+  /* Ground and surfaces */
+  --color-bg: #F7F5FB;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #F5F2F9;
+  --color-surface-raised: #FFFFFF;
+  --color-border: #E7E2EE;
+  --color-border-strong: #D5CDE2;
 
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-soft: #eff6ff;
+  /* Ink */
+  --color-text: #16121F;
+  --color-text-secondary: #5F586F;
+  --color-text-muted: #8E88A0;
 
-  --color-good: #059669;
-  --color-good-soft: #ecfdf5;
-  --color-warning: #d97706;
-  --color-warning-soft: #fffbeb;
-  --color-critical: #dc2626;
-  --color-critical-soft: #fef2f2;
-  --color-neutral: #64748b;
-  --color-neutral-soft: #f1f5f9;
+  /* The one accent */
+  --color-primary: #6D28D9;
+  --color-primary-hover: #5B21B6;
+  --color-primary-soft: rgba(109, 40, 217, 0.10);
+  --color-primary-contrast: #FFFFFF;
+  --color-accent-high: #C026D3;
+  --color-accent-soft: rgba(192, 38, 211, 0.10);
+  --color-accent-cyan: #0891B2;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  --gradient-brand: linear-gradient(135deg, #6D28D9 0%, #C026D3 100%);
+  --gradient-hero: linear-gradient(100deg, #5B21B6 0%, #6D28D9 48%, #9333EA 100%);
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
+  /* Status - saturated enough to read on white without a filled chip */
+  --color-good: #15803D;
+  --color-good-soft: rgba(21, 128, 61, 0.10);
+  --color-warning: #B45309;
+  --color-warning-soft: rgba(180, 83, 9, 0.10);
+  --color-critical: #B91C1C;
+  --color-critical-soft: rgba(185, 28, 28, 0.08);
+  --color-neutral: #6B6580;
+  --color-neutral-soft: rgba(107, 101, 128, 0.10);
+
+  /* The rail. Light like the canvas, separated by a hairline and a shade of
+     tint rather than by being a different world. */
+  --sidebar-bg: #FFFFFF;
+  --sidebar-line: #ECE7F2;
+  --sidebar-text: #4E4760;
+  --sidebar-text-strong: #16121F;
+  --sidebar-muted: #9A94AB;
+  --sidebar-hover: rgba(109, 40, 217, 0.06);
+
+  /* Tints that were literal near-black alphas before */
+  --hover-tint: rgba(22, 18, 31, 0.035);
+  --chip-bg: rgba(255, 255, 255, 0.85);
+  --overlay: rgba(22, 18, 31, 0.42);
+  --scrollbar: rgba(22, 18, 31, 0.18);
+
+  /* Two faint glows behind the page - the only decoration on the ground */
+  --bg-glow-1: rgba(109, 40, 217, 0.08);
+  --bg-glow-2: rgba(192, 38, 211, 0.05);
+
+  /* Recharts paints its own chrome and needs real values, read by hook */
+  --chart-tick: #8E88A0;
+  --chart-grid: rgba(22, 18, 31, 0.07);
+  --chart-tooltip-bg: #FFFFFF;
+  --chart-tooltip-fg: #16121F;
+  --chart-tooltip-border: #E7E2EE;
+
+  /* Generous radii are most of what makes the surface read as soft. */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+
+  /* Lift from blur and a violet tint, never from darkness - on paper a
+     heavy shadow reads as dirt. */
+  --shadow-sm: 0 2px 8px rgba(64, 40, 110, 0.06), 0 1px 2px rgba(64, 40, 110, 0.04);
+  --shadow-md: 0 10px 30px rgba(64, 40, 110, 0.10), 0 2px 6px rgba(64, 40, 110, 0.04);
+  --shadow-lg: 0 24px 60px rgba(64, 40, 110, 0.16), 0 4px 12px rgba(64, 40, 110, 0.06);
 
   --space-1: 4px;
   --space-2: 8px;
@@ -37,7 +93,121 @@
   --space-5: 24px;
   --space-6: 32px;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Dark: the same tokens, re-pointed. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #0B0A12;
+  --color-surface: #14121D;
+  --color-surface-muted: #1B1826;
+  --color-surface-raised: #1B1826;
+  --color-border: rgba(180, 160, 220, 0.12);
+  --color-border-strong: rgba(180, 160, 220, 0.24);
+
+  --color-text: #F1EDF7;
+  --color-text-secondary: #A69FB8;
+  --color-text-muted: #776F8A;
+
+  --color-primary: #A78BFA;
+  --color-primary-hover: #C4B5FD;
+  --color-primary-soft: rgba(167, 139, 250, 0.16);
+  --color-primary-contrast: #16121F;
+  --color-accent-high: #E879F9;
+  --color-accent-soft: rgba(232, 121, 249, 0.14);
+  --color-accent-cyan: #22D3EE;
+
+  --gradient-hero: linear-gradient(100deg, #4C1D95 0%, #6D28D9 48%, #7E22CE 100%);
+
+  --color-good: #4ADE80;
+  --color-good-soft: rgba(74, 222, 128, 0.12);
+  --color-warning: #FBBF24;
+  --color-warning-soft: rgba(251, 191, 36, 0.12);
+  --color-critical: #F87171;
+  --color-critical-soft: rgba(248, 113, 113, 0.10);
+  --color-neutral: #A69FB8;
+  --color-neutral-soft: rgba(166, 159, 184, 0.12);
+
+  --sidebar-bg: #0F0D17;
+  --sidebar-line: rgba(180, 160, 220, 0.10);
+  --sidebar-text: #A69FB8;
+  --sidebar-text-strong: #F1EDF7;
+  --sidebar-muted: #6F6883;
+  --sidebar-hover: rgba(167, 139, 250, 0.10);
+
+  --hover-tint: rgba(255, 255, 255, 0.04);
+  --chip-bg: rgba(20, 18, 29, 0.8);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --scrollbar: rgba(255, 255, 255, 0.16);
+
+  --bg-glow-1: rgba(109, 40, 217, 0.22);
+  --bg-glow-2: rgba(34, 211, 238, 0.05);
+
+  --chart-tick: #776F8A;
+  --chart-grid: rgba(255, 255, 255, 0.07);
+  --chart-tooltip-bg: #1B1826;
+  --chart-tooltip-fg: #F1EDF7;
+  --chart-tooltip-border: rgba(180, 160, 220, 0.24);
+
+  --shadow-sm: 0 8px 20px rgba(0, 0, 0, 0.22);
+  --shadow-md: 0 14px 32px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+/* "System" follows the OS. Light is already the default, so only the dark
+   half needs stating - as a copy of the block above, because a media query
+   cannot extend a selector. Keep the two in step. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    color-scheme: dark;
+    --color-bg: #0B0A12;
+    --color-surface: #14121D;
+    --color-surface-muted: #1B1826;
+    --color-surface-raised: #1B1826;
+    --color-border: rgba(180, 160, 220, 0.12);
+    --color-border-strong: rgba(180, 160, 220, 0.24);
+    --color-text: #F1EDF7;
+    --color-text-secondary: #A69FB8;
+    --color-text-muted: #776F8A;
+    --color-primary: #A78BFA;
+    --color-primary-hover: #C4B5FD;
+    --color-primary-soft: rgba(167, 139, 250, 0.16);
+    --color-primary-contrast: #16121F;
+    --color-accent-high: #E879F9;
+    --color-accent-soft: rgba(232, 121, 249, 0.14);
+    --color-accent-cyan: #22D3EE;
+    --gradient-hero: linear-gradient(100deg, #4C1D95 0%, #6D28D9 48%, #7E22CE 100%);
+    --color-good: #4ADE80;
+    --color-good-soft: rgba(74, 222, 128, 0.12);
+    --color-warning: #FBBF24;
+    --color-warning-soft: rgba(251, 191, 36, 0.12);
+    --color-critical: #F87171;
+    --color-critical-soft: rgba(248, 113, 113, 0.10);
+    --color-neutral: #A69FB8;
+    --color-neutral-soft: rgba(166, 159, 184, 0.12);
+    --sidebar-bg: #0F0D17;
+    --sidebar-line: rgba(180, 160, 220, 0.10);
+    --sidebar-text: #A69FB8;
+    --sidebar-text-strong: #F1EDF7;
+    --sidebar-muted: #6F6883;
+    --sidebar-hover: rgba(167, 139, 250, 0.10);
+    --hover-tint: rgba(255, 255, 255, 0.04);
+    --chip-bg: rgba(20, 18, 29, 0.8);
+    --overlay: rgba(0, 0, 0, 0.6);
+    --scrollbar: rgba(255, 255, 255, 0.16);
+    --bg-glow-1: rgba(109, 40, 217, 0.22);
+    --bg-glow-2: rgba(34, 211, 238, 0.05);
+    --chart-tick: #776F8A;
+    --chart-grid: rgba(255, 255, 255, 0.07);
+    --chart-tooltip-bg: #1B1826;
+    --chart-tooltip-fg: #F1EDF7;
+    --chart-tooltip-border: rgba(180, 160, 220, 0.24);
+    --shadow-sm: 0 8px 20px rgba(0, 0, 0, 0.22);
+    --shadow-md: 0 14px 32px rgba(0, 0, 0, 0.30);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.45);
+  }
 }
 
 * { box-sizing: border-box; }
@@ -49,7 +219,10 @@ html, body, #root {
 
 body {
   font-family: var(--font-sans);
-  background: var(--color-bg);
+  background:
+    radial-gradient(circle at 82% -15%, var(--bg-glow-1), transparent 34rem),
+    radial-gradient(circle at 5% 115%, var(--bg-glow-2), transparent 28rem),
+    var(--color-bg);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
 }
@@ -57,6 +230,13 @@ body {
 a { color: inherit; }
 
 button, input, select, textarea { font-family: inherit; }
+
+/* Light scrollbars, tinted to the canvas rather than pure grey. */
+* { scrollbar-color: var(--scrollbar) transparent; scrollbar-width: thin; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); background-clip: content-box; }
 
 /* ── Layout shell ─────────────────────────────────────────── */
 .app-shell {
@@ -71,8 +251,67 @@ button, input, select, textarea { font-family: inherit; }
   flex-direction: column;
 }
 
+.app-topbar {
+  position: relative;
+  z-index: 20;
+  overflow: visible;
+  min-height: 72px;
+  padding: 18px 24px 8px 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.app-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.app-breadcrumb strong,
+.app-breadcrumb span:last-child { color: var(--color-primary); }
+.app-breadcrumb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary-soft); }
+.app-topbar-actions { position: relative; z-index: 21; display: flex; align-items: center; gap: 10px; }
+.app-clock, .app-user-chip, .app-signout {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--chip-bg);
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+.app-user-chip { color: var(--color-text); }
+.app-user-avatar { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--gradient-brand); font-weight: 800; }
+.app-role-chip { padding: 3px 8px; color: var(--color-primary); background: var(--color-primary-soft); border-radius: 999px; font-size: 0.68rem; }
+.app-signout { color: var(--color-text); cursor: pointer; font-weight: 700; }
+.app-signout:hover, .app-user-chip:hover, .app-clock:hover { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.theme-select { position: relative; z-index: 22; min-height: 40px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--color-border-strong); border-radius: 12px; background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-sm); transition: border-color .18s ease, box-shadow .18s ease; }
+.theme-select:hover, .theme-select:focus-within { z-index: 30; }
+.theme-select:hover { border-color: var(--color-primary); box-shadow: var(--shadow-md); }
+.theme-select:focus-within { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-soft), var(--shadow-md); }
+.theme-select-icon { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 8px; color: #fff; background: var(--gradient-brand); font-size: .8rem; box-shadow: none; }
+.theme-select-label { color: var(--color-text-muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.theme-select-trigger { min-width: 88px; display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; outline: 0; color: var(--color-text); background: transparent; font-size: .78rem; font-weight: 700; text-align: left; cursor: pointer; }
+.theme-select-chevron { flex: 0 0 7px; width: 7px; height: 7px; margin: -3px 2px 0 0; border-right: 2px solid var(--color-text-muted); border-bottom: 2px solid var(--color-text-muted); transform: rotate(45deg); transition: transform .18s ease, border-color .18s ease; }
+.theme-select-trigger[aria-expanded="true"] .theme-select-chevron { margin-top: 4px; transform: rotate(225deg); border-color: var(--color-text); }
+.theme-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 100; min-width: 154px; padding: 6px; border: 1px solid var(--color-border-strong); border-radius: 12px; background: var(--color-surface-raised); box-shadow: var(--shadow-lg); animation: theme-menu-in .16s ease-out both; }
+.theme-menu-option { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 0; border-radius: 8px; color: var(--color-text-secondary); background: transparent; font-size: .78rem; text-align: left; cursor: pointer; }
+.theme-menu-option > span { width: 13px; color: var(--color-primary); font-weight: 800; }
+.theme-menu-option:hover, .theme-menu-option.selected { color: var(--color-text); background: var(--color-primary-soft); }
+@keyframes theme-menu-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
 .app-content {
-  padding: var(--space-5);
+  padding: 16px 36px 36px;
   flex: 1;
   min-width: 0;
 }
@@ -90,7 +329,7 @@ button, input, select, textarea { font-family: inherit; }
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0 0 4px 0;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
 }
 
 .page-subtitle {
@@ -100,38 +339,56 @@ button, input, select, textarea { font-family: inherit; }
 }
 
 /* ── Sidebar ──────────────────────────────────────────────── */
+/* The rail is the same world as the canvas - white on paper, a hairline
+   apart - and reads its colours from the --sidebar-* tokens so the dark
+   theme can re-point it without touching a rule here. */
 .sidebar {
-  width: 240px;
+  width: 276px;
   flex-shrink: 0;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
   min-height: 100vh;
   padding: var(--space-4) var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  border-right: 1px solid var(--sidebar-line);
+  border-radius: 0;
 }
 
 .sidebar-brand {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-5);
   font-weight: 700;
   font-size: 1.05rem;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  color: var(--sidebar-text-strong);
+  border-bottom: 1px solid var(--sidebar-line);
 }
 
+/* The Unify mark is an SVG that carries its own rounded-square background,
+   so no fill is applied here. */
 .sidebar-brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: block;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: var(--gradient-brand);
+  color: #FFFFFF;
+  font-size: 0.78rem;
+  font-weight: 800;
+  box-shadow: 0 8px 22px rgba(109, 40, 217, 0.25);
 }
+
+.sidebar-brand strong,
+.sidebar-brand small { display: block; }
+.sidebar-brand strong { font-size: 1rem; letter-spacing: -0.02em; }
+.sidebar-brand small { margin-top: 3px; color: var(--sidebar-muted); font-size: 0.64rem; font-weight: 500; letter-spacing: 0.01em; }
 
 .sidebar-nav { display: flex; flex-direction: column; gap: 2px; }
 
@@ -139,39 +396,41 @@ button, input, select, textarea { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-radius: var(--radius-sm);
-  color: #cbd5e1;
+  color: var(--sidebar-text);
   text-decoration: none;
   font-size: 0.9rem;
   transition: background 0.12s ease, color 0.12s ease;
 }
 
-.sidebar-link:hover { background: rgba(255,255,255,0.06); color: #fff; }
-.sidebar-link.active { background: rgba(59,130,246,0.18); color: #93c5fd; font-weight: 600; }
+.sidebar-link:hover { background: var(--sidebar-hover); color: var(--sidebar-text-strong); }
+/* Reference pattern: the active item is a soft filled pill, not a tinted
+   label — legible on a dark rail without needing a bright accent colour. */
+.sidebar-link.active { background: var(--color-primary-soft); color: var(--color-primary); font-weight: 700; box-shadow: inset 3px 0 var(--color-primary); }
 
 .sidebar-footer {
   margin-top: auto;
   padding: var(--space-2);
-  border-top: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid var(--sidebar-line);
   padding-top: var(--space-3);
 }
 
-.sidebar-user { font-size: 0.85rem; color: #e2e8f0; font-weight: 600; }
-.sidebar-role { font-size: 0.75rem; color: #94a3b8; margin-top: 2px; }
+.sidebar-user { font-size: 0.85rem; color: var(--sidebar-text-strong); font-weight: 600; }
+.sidebar-role { font-size: 0.75rem; color: var(--sidebar-muted); margin-top: 2px; }
 
 .sidebar-logout {
   margin-top: var(--space-3);
   width: 100%;
-  background: rgba(220,38,38,0.15);
-  color: #fca5a5;
-  border: 1px solid rgba(220,38,38,0.3);
+  background: var(--color-critical-soft);
+  color: var(--color-critical);
+  border: 1px solid transparent;
   padding: 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 0.8rem;
 }
-.sidebar-logout:hover { background: rgba(220,38,38,0.25); }
+.sidebar-logout:hover { border-color: var(--color-critical); }
 
 /* ── Mobile nav toggle / overlay ──────────────────────────── */
 .mobile-menu-toggle {
@@ -220,7 +479,9 @@ button, input, select, textarea { font-family: inherit; }
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  /* Lift comes from a wide, faint shadow rather than a dark edge — that is
+     what keeps white cards reading as "floating" on the warm ground. */
+  box-shadow: var(--shadow-md);
 }
 
 .card-pad { padding: var(--space-5); }
@@ -235,8 +496,9 @@ button, input, select, textarea { font-family: inherit; }
 .stat-tile {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  box-shadow: var(--shadow-sm);
 }
 
 .stat-tile-label {
@@ -244,14 +506,14 @@ button, input, select, textarea { font-family: inherit; }
   color: var(--color-text-secondary);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
 .stat-tile-value {
   font-size: 1.7rem;
   font-weight: 700;
   margin-top: 4px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
 }
 
 .stat-tile-sub { font-size: 0.78rem; color: var(--color-text-muted); margin-top: 2px; }
@@ -262,8 +524,10 @@ button, input, select, textarea { font-family: inherit; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 9px 16px;
-  border-radius: var(--radius-sm);
+  padding: 9px 18px;
+  /* Fully rounded: the reference's CTAs are pills, and this single value
+     does more to match its feel than any colour change. */
+  border-radius: 999px;
   border: 1px solid transparent;
   font-size: 0.87rem;
   font-weight: 600;
@@ -273,17 +537,17 @@ button, input, select, textarea { font-family: inherit; }
 }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-.btn-primary { background: var(--color-primary); color: #fff; }
+.btn-primary { background: var(--color-primary); color: var(--color-primary-contrast); font-weight: 700; }
 .btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
 
 .btn-secondary { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border-strong); }
 .btn-secondary:hover:not(:disabled) { background: var(--color-surface-muted); }
 
-.btn-danger { background: var(--color-critical-soft); color: var(--color-critical); border-color: #fecaca; }
-.btn-danger:hover:not(:disabled) { background: #fee2e2; }
+.btn-danger { background: var(--color-critical-soft); color: var(--color-critical); border-color: transparent; }
+.btn-danger:hover:not(:disabled) { border-color: var(--color-critical); }
 
 .btn-ghost { background: transparent; color: var(--color-text-secondary); }
-.btn-ghost:hover:not(:disabled) { background: var(--color-surface-muted); color: var(--color-text); }
+.btn-ghost:hover:not(:disabled) { background: var(--hover-tint); color: var(--color-text); }
 
 .btn-sm { padding: 6px 10px; font-size: 0.78rem; }
 .btn-icon { padding: 8px; }
@@ -297,15 +561,18 @@ button, input, select, textarea { font-family: inherit; }
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   font-size: 0.88rem;
-  background: var(--color-surface);
+  background: var(--color-surface-muted);
   color: var(--color-text);
   width: 100%;
 }
+.input::placeholder, textarea.input::placeholder { color: var(--color-text-muted); }
 .input:focus, select.input:focus, textarea.input:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-soft);
 }
+/* Native select popups render light unless the option list is told otherwise. */
+select.input option { background: var(--color-surface-muted); color: var(--color-text); }
 
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 var(--space-3); }
 .form-grid .field-full { grid-column: 1 / -1; }
@@ -331,14 +598,15 @@ button, input, select, textarea { font-family: inherit; }
   text-transform: uppercase;
   letter-spacing: 0.03em;
   white-space: nowrap;
+  border: 1px solid transparent;
 }
 .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
-.badge-good { background: var(--color-good-soft); color: var(--color-good); }
-.badge-warning { background: var(--color-warning-soft); color: var(--color-warning); }
-.badge-critical { background: var(--color-critical-soft); color: var(--color-critical); }
-.badge-neutral { background: var(--color-neutral-soft); color: var(--color-neutral); }
-.badge-primary { background: var(--color-primary-soft); color: var(--color-primary); }
+.badge-good { background: var(--color-good-soft); color: var(--color-good); border-color: rgba(22, 163, 74, 0.24); }
+.badge-warning { background: var(--color-warning-soft); color: var(--color-warning); border-color: rgba(217, 119, 6, 0.24); }
+.badge-critical { background: var(--color-critical-soft); color: var(--color-critical); border-color: rgba(220, 38, 38, 0.22); }
+.badge-neutral { background: var(--color-neutral-soft); color: var(--color-neutral); border-color: var(--color-border); }
+.badge-primary { background: var(--color-primary-soft); color: var(--color-primary); border-color: transparent; }
 
 /* ── Tables ───────────────────────────────────────────────── */
 .table-wrap { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--color-border); }
@@ -347,11 +615,11 @@ table.data-table th {
   text-align: left;
   padding: 11px 14px;
   background: var(--color-surface-muted);
-  color: var(--color-text-secondary);
-  font-weight: 600;
-  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.07em;
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
@@ -361,7 +629,7 @@ table.data-table td {
   vertical-align: middle;
 }
 table.data-table tr:last-child td { border-bottom: none; }
-table.data-table tbody tr:hover { background: var(--color-surface-muted); }
+table.data-table tbody tr:hover { background: var(--hover-tint); }
 
 .empty-state {
   text-align: center;
@@ -374,13 +642,14 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
 /* ── Modal ────────────────────────────────────────────────── */
 .modal-backdrop {
   position: fixed; inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--overlay);
   display: flex; align-items: center; justify-content: center;
   z-index: 50;
   padding: var(--space-4);
 }
 .modal {
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   width: 100%;
@@ -410,9 +679,11 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   font-size: 0.86rem;
   margin-bottom: var(--space-4);
 }
-.banner-critical { background: var(--color-critical-soft); color: #991b1b; border: 1px solid #fecaca; }
-.banner-warning { background: var(--color-warning-soft); color: #92400e; border: 1px solid #fde68a; }
-.banner-good { background: var(--color-good-soft); color: #065f46; border: 1px solid #a7f3d0; }
+/* Text moves to the saturated hue itself — on a light tinted field the pale
+   dark-theme text colours had almost no contrast. */
+.banner-critical { background: var(--color-critical-soft); color: #B91C1C; border: 1px solid rgba(220, 38, 38, 0.22); }
+.banner-warning { background: var(--color-warning-soft); color: #B45309; border: 1px solid rgba(217, 119, 6, 0.24); }
+.banner-good { background: var(--color-good-soft); color: #15803D; border: 1px solid rgba(22, 163, 74, 0.24); }
 
 .toast-stack {
   position: fixed;
@@ -430,12 +701,12 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   font-size: 0.85rem;
-  color: #fff;
+  border: 1px solid var(--color-border);
   animation: toast-in 0.18s ease;
 }
-.toast-success { background: #059669; }
-.toast-error { background: #dc2626; }
-.toast-info { background: #334155; }
+.toast-success { background: #ECFDF3; color: #15803D; border-color: rgba(22, 163, 74, 0.28); }
+.toast-error { background: #FEF2F2; color: #B91C1C; border-color: rgba(220, 38, 38, 0.26); }
+.toast-info { background: var(--color-surface-raised); color: var(--color-text); }
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -453,7 +724,7 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
   background: var(--color-surface-muted);
   border-right: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
@@ -469,8 +740,8 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   gap: 4px;
   transition: background 0.12s ease;
 }
-.calendar-cell.is-outside { background: var(--color-surface-muted); }
-.calendar-cell.is-today .calendar-date { background: var(--color-primary); color: #fff; }
+.calendar-cell.is-outside { background: var(--hover-tint); }
+.calendar-cell.is-today .calendar-date { background: var(--color-primary); color: var(--color-primary-contrast); }
 .calendar-cell.is-drop-target { background: var(--color-primary-soft); }
 .calendar-date {
   font-size: 0.75rem;
@@ -489,7 +760,7 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1px solid rgba(0,0,0,0.06);
+  border: 1px solid rgba(0, 0, 0, 0.35);
 }
 .calendar-event:active { cursor: grabbing; }
 .calendar-event-more { font-size: 0.68rem; color: var(--color-text-muted); padding: 0 4px; }
@@ -513,8 +784,9 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
   top: 8px;
   height: 30px;
   border-radius: 6px;
-  color: #fff;
+  color: #FFFFFF;
   font-size: 0.68rem;
+  font-weight: 600;
   display: flex;
   align-items: center;
   padding: 0 8px;
@@ -555,8 +827,8 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
 
 .spinner {
   width: 18px; height: 18px;
-  border: 2px solid rgba(255,255,255,0.4);
-  border-top-color: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.25);
+  border-top-color: var(--color-primary-contrast);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   display: inline-block;
@@ -573,7 +845,7 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
     z-index: 50;
     transform: translateX(-100%);
     transition: transform 0.2s ease;
-    box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,0.25));
+    box-shadow: var(--shadow-lg);
   }
   .sidebar.open { transform: translateX(0); }
 
@@ -581,11 +853,184 @@ table.data-table tbody tr:hover { background: var(--color-surface-muted); }
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(15,23,42,0.5);
+    background: var(--overlay);
     z-index: 45;
   }
 
   .app-content { padding-top: calc(var(--space-5) + 44px); }
 
   .form-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Dashboard hero ───────────────────────────────────────────
+   The one saturated surface in the theme: the brand violet, carrying the
+   headline figure. Everything inside it is white by design rather than by
+   token - the gradient is the same in both themes, so the ink on it is
+   too. The tenant photograph sits far under the gradient as texture. */
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: none;
+  background: var(--gradient-hero);
+  box-shadow: var(--shadow-md);
+  color: #FFFFFF;
+  margin-bottom: var(--space-5);
+  isolation: isolate;
+}
+
+.hero-media {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  /* Much lower than the dark theme's 0.5: on a light gradient the photo
+     fights the numbers instead of sitting behind them. */
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  z-index: -2;
+}
+
+/* Deepest on the left where the copy sits, so the headline figure always
+   has a solid field behind it. */
+.hero-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    var(--gradient-hero),
+    radial-gradient(55% 120% at 88% 20%, rgba(232, 121, 249, 0.35), transparent 70%);
+}
+
+.hero-body { position: relative; padding: var(--space-5) var(--space-5) var(--space-5); }
+
+.hero-eyebrow {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+  margin: 0 0 6px;
+}
+
+.hero-title {
+  margin: 0;
+  font-size: 2.1rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.hero-figure {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  margin-top: var(--space-3);
+}
+
+.hero-sub { margin: 6px 0 0; color: rgba(255, 255, 255, 0.86); font-size: 0.86rem; }
+
+/* Segmented activity bar — the reference's multi-hue progress strip. */
+.hero-activity { display: flex; gap: 3px; margin-top: var(--space-4); height: 6px; }
+.hero-activity span { border-radius: 999px; }
+
+.hero-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-3); }
+.hero-legend-row { display: flex; align-items: center; gap: 7px; font-size: 0.8rem; }
+.hero-legend-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.hero-legend-name { color: rgba(255, 255, 255, 0.78); }
+.hero-legend-value { color: #FFFFFF; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Glass tiles that float over the hero photograph. */
+.hero-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); margin-top: var(--space-5); }
+/* Frosted white tiles over the violet. */
+.hero-tile {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.hero-tile-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(255, 255, 255, 0.8); }
+.hero-tile-value { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.04em; margin-top: 5px; line-height: 1; color: #FFFFFF; }
+.hero-tile-sub { font-size: 0.72rem; color: rgba(255, 255, 255, 0.75); margin-top: 5px; }
+
+@media (max-width: 720px) {
+  .hero-title { font-size: 1.6rem; }
+  .hero-figure { font-size: 2.2rem; }
+}
+
+/* ── Sidebar sections ─────────────────────────────────────────
+   19 flat links overflowed the viewport; grouping them keeps the list short
+   without moving anything further than one click away. */
+.sidebar-section { display: flex; flex-direction: column; }
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 9px 12px;
+  margin-top: 2px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--sidebar-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: left;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.sidebar-section-header:hover { background: var(--sidebar-hover); color: var(--sidebar-text); }
+/* The section you are in stays legible even while collapsed. */
+.sidebar-section-header.has-active { color: var(--color-primary); }
+
+.sidebar-section-label { flex-grow: 1; min-width: 0; }
+
+.sidebar-section-count {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--sidebar-muted);
+  background: var(--sidebar-hover);
+  border-radius: 999px;
+  padding: 1px 7px;
+  flex-shrink: 0;
+}
+
+.sidebar-link-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: var(--sidebar-hover);
+  font-size: 0.9rem;
+}
+.sidebar-link.active .sidebar-link-icon {
+  color: #fff;
+  background: var(--gradient-brand);
+  box-shadow: 0 6px 14px rgba(109, 40, 217, 0.25);
+}
+
+.sidebar-section-chevron {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.sidebar-section-chevron.open { transform: rotate(90deg); }
+
+.sidebar-section-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: var(--space-2);
+  margin-left: 6px;
+  border-left: 1px solid var(--color-border);
 }

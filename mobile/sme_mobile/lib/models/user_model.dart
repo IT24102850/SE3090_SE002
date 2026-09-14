@@ -10,6 +10,7 @@ class User {
   final String? insuranceProvider;
   final String? insuranceNumber;
   final String? medicalNotes;
+  final String? profilePictureUrl;
 
   const User({
     required this.id,
@@ -23,6 +24,7 @@ class User {
     this.insuranceProvider,
     this.insuranceNumber,
     this.medicalNotes,
+    this.profilePictureUrl,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -38,7 +40,15 @@ class User {
       insuranceProvider: json['insuranceProvider']?.toString(),
       insuranceNumber: json['insuranceNumber']?.toString(),
       medicalNotes: json['medicalNotes']?.toString(),
+      profilePictureUrl: _nullIfBlank(json['profilePictureUrl']),
     );
+  }
+
+  /// A cleared photo comes back as an empty string from some paths; treat
+  /// that as "no photo" so callers never build a NetworkImage('').
+  static String? _nullIfBlank(Object? value) {
+    final text = value?.toString().trim();
+    return (text == null || text.isEmpty) ? null : text;
   }
 
   Map<String, dynamic> toJson() {
@@ -54,6 +64,7 @@ class User {
       'insuranceProvider': insuranceProvider,
       'insuranceNumber': insuranceNumber,
       'medicalNotes': medicalNotes,
+      'profilePictureUrl': profilePictureUrl,
     };
   }
 
@@ -69,6 +80,10 @@ class User {
     String? insuranceProvider,
     String? insuranceNumber,
     String? medicalNotes,
+    String? profilePictureUrl,
+    /// A plain null is indistinguishable from "leave unchanged", so removing
+    /// the photo needs its own flag.
+    bool clearProfilePicture = false,
   }) {
     return User(
       id: id ?? this.id,
@@ -82,6 +97,7 @@ class User {
       insuranceProvider: insuranceProvider ?? this.insuranceProvider,
       insuranceNumber: insuranceNumber ?? this.insuranceNumber,
       medicalNotes: medicalNotes ?? this.medicalNotes,
+      profilePictureUrl: clearProfilePicture ? null : (profilePictureUrl ?? this.profilePictureUrl),
     );
   }
 }

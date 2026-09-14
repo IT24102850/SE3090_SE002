@@ -287,7 +287,7 @@ function BookingTypeFormModal({ tenantId, bookingType, onClose }: { tenantId: st
             <textarea className="input" rows={2} value={description ?? ''} onChange={(e) => setDescription(e.target.value)} />
           </div>
 
-          <div className="field field-full" style={{ borderTop: '1px solid var(--border, #e5e7eb)', paddingTop: 12, marginTop: 4 }}>
+          <div className="field field-full" style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12, marginTop: 4 }}>
             <label style={{ fontWeight: 600 }}>
               {bookingUnit === 'Slot' ? 'Slot details' : bookingUnit === 'Night' ? 'Accommodation details' : bookingUnit === 'DateRange' ? 'Rental details' : 'Package details'}
             </label>

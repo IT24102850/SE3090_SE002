@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/subtype_dashboard_config.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
+import 'ui/ui.dart';
 
 /// Renders ONE input for a [BookingFormField], dispatching on
 /// [BookingFieldType]. Shared by every tourism sub-type's extra-fields step
@@ -21,25 +24,41 @@ class BookingFieldInput extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (field.type) {
       case BookingFieldType.dropdown:
-        return DropdownButtonFormField<String>(
-          value: value as String?,
-          decoration: InputDecoration(labelText: field.label, border: const OutlineInputBorder()),
-          items: (field.options ?? const []).map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
-          onChanged: onChanged,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(field.label),
+            DropdownButtonFormField<String>(
+              value: value as String?,
+              // The menu is a popup, not part of the field, so it needs its
+              // own dark fill — otherwise it opens as a white Material sheet.
+              dropdownColor: AppColors.overlaySurface,
+              borderRadius: BorderRadius.circular(AppRadii.control),
+              style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+              icon: const Icon(Icons.expand_more_rounded, color: AppColors.iconSecondary),
+              items: (field.options ?? const [])
+                  .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                  .toList(),
+              onChanged: onChanged,
+            ),
+          ],
         );
 
       case BookingFieldType.numberStepper:
         final count = (value as int?) ?? 1;
         return Row(
           children: [
-            Expanded(child: Text(field.label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
+            Expanded(child: Text(field.label, style: AppTextStyles.subtitle.copyWith(fontSize: 14))),
             IconButton(
               icon: const Icon(Icons.remove_circle_outline),
+              color: AppColors.cyan,
+              disabledColor: AppColors.iconDisabled,
               onPressed: count > 1 ? () => onChanged(count - 1) : null,
             ),
-            Text('$count', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('$count', style: AppTextStyles.title),
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
+              color: AppColors.cyan,
               onPressed: () => onChanged(count + 1),
             ),
           ],
@@ -50,7 +69,9 @@ class BookingFieldInput extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           value: (value as bool?) ?? false,
           onChanged: (v) => onChanged(v ?? false),
-          title: Text(field.label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          activeColor: AppColors.cyan,
+          checkColor: AppColors.onPrimary,
+          title: Text(field.label, style: AppTextStyles.subtitle.copyWith(fontSize: 14)),
         );
 
       case BookingFieldType.fileUpload:
@@ -62,15 +83,20 @@ class BookingFieldInput extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           value: (value as bool?) ?? false,
           onChanged: (v) => onChanged(v ?? false),
-          title: Text(field.label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-          subtitle: const Text('You\'ll be asked to show this on arrival', style: TextStyle(fontSize: 11.5)),
+          activeColor: AppColors.cyan,
+          checkColor: AppColors.onPrimary,
+          title: Text(field.label, style: AppTextStyles.subtitle.copyWith(fontSize: 14)),
+          subtitle: Text(
+            'You\'ll be asked to show this on arrival',
+            style: AppTextStyles.caption.copyWith(fontSize: 11.5),
+          ),
         );
 
       case BookingFieldType.textArea:
-        return TextFormField(
+        return NeonInputField(
+          label: field.label,
           initialValue: value as String?,
           maxLines: 3,
-          decoration: InputDecoration(labelText: field.label, border: const OutlineInputBorder()),
           onChanged: onChanged,
         );
     }

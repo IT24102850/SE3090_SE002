@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_colors.dart';
 
 /// FR-B7: encodes the raw booking ID — the staff check-in scanner
 /// (screens/staff/check_in_scanner_screen.dart) reads this value verbatim
@@ -16,9 +16,15 @@ class BookingQrCode extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
+        // Stays white against the dark theme on purpose: scanners need the
+        // quiet zone and the light/dark contrast the spec assumes. Inverting
+        // it to match the palette would cost reliable scanning.
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(AppRadii.row),
+        border: Border.all(color: AppColors.glassBorder),
+        boxShadow: const [
+          BoxShadow(color: AppColors.buttonGlow, blurRadius: 24, spreadRadius: -6),
+        ],
       ),
       child: QrImageView(
         data: bookingId,

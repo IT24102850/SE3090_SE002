@@ -10,7 +10,7 @@ const RoleBasedNav = () => {
 
   return (
     <nav style={{ padding: '1rem', background: '#1a1a2e', color: 'white' }}>
-      <h3>SME Platform</h3>
+      <h3>Unify</h3>
       <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', alignItems: 'center' }}>
         <a href="/dashboard" style={{ color: 'white', textDecoration: 'none' }}>Dashboard</a>
         

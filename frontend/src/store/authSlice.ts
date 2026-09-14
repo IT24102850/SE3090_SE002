@@ -55,10 +55,19 @@ export const loginUser = createAsyncThunk<
     localStorage.setItem('user', JSON.stringify(user));
 
     return { accessToken, user };
-  } catch (error: any) {
-    return rejectWithValue(
-      error.response?.data?.message || 'Invalid email or password'
-    );
+  } catch (error: unknown) {
+    // No response at all means the request never reached the server - the
+    // backend is down, or the URL is wrong. Reporting that as a bad password
+    // sends the visitor off to reset credentials that were never checked.
+    if (axios.isAxiosError(error) && !error.response) {
+      return rejectWithValue(
+        'Cannot reach the server. Check that the backend is running.'
+      );
+    }
+    const message = axios.isAxiosError(error)
+      ? error.response?.data?.message
+      : undefined;
+    return rejectWithValue(message || 'Invalid email or password');
   }
 });
 

@@ -6,7 +6,9 @@ import '../../providers/booking_providers.dart';
 import '../../shared/color_utils.dart';
 import '../../shared/date_format.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_text_styles.dart';
 import '../../widgets/status_badge.dart';
+import '../../widgets/ui/ui.dart';
 
 /// FR-B8: a doctor's own daily/weekly schedule, with the ability to mark an
 /// appointment's outcome. Backed by GET /bookings/my-schedule, which is
@@ -20,17 +22,20 @@ class MyScheduleScreen extends ConsumerWidget {
 
     return DefaultTabController(
       length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('My Schedule'),
-          bottom: const TabBar(
-            indicatorColor: Colors.white,
+      child: AppBackgroundScaffold(
+        appBar: const GlassAppBar(
+          title: 'My Schedule',
+          bottom: TabBar(
             tabs: [Tab(text: 'Today'), Tab(text: 'Upcoming')],
           ),
         ),
-        body: scheduleAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, stack) => _ErrorState(onRetry: () => ref.invalidate(myScheduleProvider)),
+        child: SafeArea(
+          child: scheduleAsync.when(
+          loading: () => const AppLoader(),
+          error: (err, stack) => ErrorState(
+            message: 'Could not load your schedule.',
+            onRetry: () => ref.invalidate(myScheduleProvider),
+          ),
           data: (bookings) {
             final now = DateTime.now();
             final today = bookings.where((b) => _isSameDay(b.startLocal, now)).toList()
@@ -45,6 +50,7 @@ class MyScheduleScreen extends ConsumerWidget {
               ],
             );
           },
+        ),
         ),
       ),
     );
@@ -62,25 +68,15 @@ class _ScheduleList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (bookings.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.event_available_outlined, size: 48, color: Colors.grey.shade400),
-              const SizedBox(height: 12),
-              Text(emptyMessage, style: TextStyle(color: Colors.grey.shade600)),
-            ],
-          ),
-        ),
-      );
+      return EmptyState(icon: Icons.event_available_outlined, message: emptyMessage);
     }
 
     return RefreshIndicator(
+      color: AppColors.cyan,
+      backgroundColor: AppColors.overlaySurface,
       onRefresh: () async => ref.invalidate(myScheduleProvider),
       child: ListView.separated(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         itemCount: bookings.length,
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, i) => _ScheduleCard(booking: bookings[i]),
@@ -98,11 +94,11 @@ class _ScheduleCard extends ConsumerWidget {
       await updateBookingStatus(ref.read(apiServiceProvider), booking.id, status);
       ref.invalidate(myScheduleProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Marked as $status.')));
+        AppSnackBar.success(context, 'Marked as $status.');
       }
     } on BookingRequestException catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        AppSnackBar.error(context, e.message);
       }
     }
   }
@@ -112,16 +108,21 @@ class _ScheduleCard extends ConsumerWidget {
     final newNotes = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Appointment notes'),
-        content: TextField(
+        title: Text('Appointment notes', style: AppTextStyles.title),
+        content: NeonInputField(
           controller: controller,
           maxLines: 4,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Add notes for this appointment...'),
+          hintText: 'Add notes for this appointment...',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(controller.text), child: const Text('Save')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text('Cancel', style: AppTextStyles.body.copyWith(color: AppColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: Text('Save', style: AppTextStyles.subtitle.copyWith(color: AppColors.cyan)),
+          ),
         ],
       ),
     );
@@ -131,21 +132,22 @@ class _ScheduleCard extends ConsumerWidget {
       await updateBookingNotes(ref.read(apiServiceProvider), booking.id, newNotes);
       ref.invalidate(myScheduleProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notes saved.')));
+        AppSnackBar.success(context, 'Notes saved.');
       }
     } on BookingRequestException catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        AppSnackBar.error(context, e.message);
       }
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final color = parseHexColor(booking.colorHex) ?? AppColors.primary;
+    final color = parseHexColor(booking.colorHex) ?? AppColors.cyan;
 
-    return Container(
-      decoration: GlassStyle.elevatedCard(radius: 16),
+    return GlassCard(
+      borderRadius: AppRadii.row,
+      padding: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -159,14 +161,14 @@ class _ScheduleCard extends ConsumerWidget {
                 children: [
                   Text(
                     booking.title?.isNotEmpty == true ? booking.title! : '${booking.resourceName} · ${booking.bookingTypeName}',
-                    style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+                    style: AppTextStyles.subtitle.copyWith(fontSize: 14.5),
                   ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Icon(Icons.access_time_rounded, size: 13, color: Colors.grey.shade500),
+                      const Icon(Icons.access_time_rounded, size: 13, color: AppColors.iconDisabled),
                       const SizedBox(width: 4),
-                      Text('${formatTimeOfDay(booking.startLocal)} – ${formatTimeOfDay(booking.endLocal)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                      Text('${formatTimeOfDay(booking.startLocal)} – ${formatTimeOfDay(booking.endLocal)}', style: AppTextStyles.caption),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -177,7 +179,7 @@ class _ScheduleCard extends ConsumerWidget {
                       booking.notes!,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                      style: AppTextStyles.caption.copyWith(fontStyle: FontStyle.italic),
                     ),
                   ],
                 ],
@@ -194,30 +196,6 @@ class _ScheduleCard extends ConsumerWidget {
                 const PopupMenuItem(value: 'notes', child: Text('Add/edit notes')),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final VoidCallback onRetry;
-  const _ErrorState({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.wifi_off_rounded, size: 48, color: AppColors.danger.withValues(alpha: 0.7)),
-            const SizedBox(height: 16),
-            const Text('Could not load your schedule.', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry')),
           ],
         ),
       ),

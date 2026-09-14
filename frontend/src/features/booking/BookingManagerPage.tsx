@@ -18,8 +18,10 @@ import {
   isSameDay, startOfDay, toISODate,
 } from '../../shared/dateUtils';
 import { BOOKING_STATUSES, STATUS_COLORS, type Booking } from './types';
+import { useSubtypeConfig } from '../dashboard/useSubtypeConfig';
 
 export default function BookingManagerPage() {
+  const subtype = useSubtypeConfig();
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const { show } = useToast();
@@ -145,7 +147,7 @@ export default function BookingManagerPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Booking Manager</h1>
+          <h1 className="page-title">{subtype.bookingTermPlural}</h1>
           <p className="page-subtitle">Drag a booking card onto another day to reschedule it.</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

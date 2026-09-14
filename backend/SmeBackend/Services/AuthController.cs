@@ -69,7 +69,10 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
     {
+        // Login happens before a tenant is known, so tenant query filters
+        // cannot be applied until the user's tenant has been resolved.
         var user = await _context.Users
+            .IgnoreQueryFilters()
             .Include(u => u.Tenant)
             .FirstOrDefaultAsync(u => u.Email == dto.Email && u.IsActive);
         
@@ -122,7 +125,10 @@ public class AuthController : ControllerBase
         if (dto.InsuranceProvider != null) user.InsuranceProvider = dto.InsuranceProvider;
         if (dto.InsuranceNumber != null) user.InsuranceNumber = dto.InsuranceNumber;
         if (dto.MedicalNotes != null) user.MedicalNotes = dto.MedicalNotes;
-        if (dto.ProfilePictureUrl != null) user.ProfilePictureUrl = dto.ProfilePictureUrl;
+        // An empty string is the clients' "remove my photo" signal (a plain
+        // null means "leave it alone", like every other field here).
+        if (dto.ProfilePictureUrl != null)
+            user.ProfilePictureUrl = string.IsNullOrWhiteSpace(dto.ProfilePictureUrl) ? null : dto.ProfilePictureUrl;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();

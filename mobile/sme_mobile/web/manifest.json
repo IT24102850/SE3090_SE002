@@ -1,11 +1,11 @@
 {
-    "name": "sme_mobile",
-    "short_name": "sme_mobile",
+    "name": "Unify",
+    "short_name": "Unify",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Unify - multi-tenant booking, resources and inventory for any business.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

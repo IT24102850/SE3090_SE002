@@ -586,7 +586,7 @@ function PreviewPanel({
       <div
         style={{
           height: 120,
-          background: coverImageUrl ? `url(${coverImageUrl}) center/cover` : 'linear-gradient(135deg, #2563eb, #7209B7)',
+          background: coverImageUrl ? `url(${coverImageUrl}) center/cover` : 'linear-gradient(135deg, #8B5CF6, #E040FB)',
           position: 'relative',
         }}
       >
@@ -598,7 +598,7 @@ function PreviewPanel({
             width: 56,
             height: 56,
             borderRadius: '50%',
-            border: '3px solid #fff',
+            border: '3px solid var(--color-surface)',
             background: logoUrl ? `url(${logoUrl}) center/cover` : 'var(--color-surface-muted)',
             boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
           }}

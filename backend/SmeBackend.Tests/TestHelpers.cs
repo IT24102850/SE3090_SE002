@@ -3,19 +3,24 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
+using SmeBackend.Services;
 
 namespace SmeBackend.Tests;
 
 public static class TestHelpers
 {
     /// A fresh, isolated in-memory AppDbContext per call - fast, no real
-    /// Postgres needed, matches the "unit/service test" scope.
-    public static AppDbContext NewInMemoryDb()
+    /// Postgres needed, matches the "unit/service test" scope. Pass
+    /// [tenantId] when the entities under test carry a tenant query filter
+    /// (the Inventory ones do); leaving it null mirrors an unresolved tenant.
+    public static AppDbContext NewInMemoryDb(Guid? tenantId = null)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new AppDbContext(options);
+        var tenantContext = new TenantContext();
+        if (tenantId.HasValue) tenantContext.SetTenantId(tenantId.Value);
+        return new AppDbContext(options, tenantContext);
     }
 
     /// Sets a fake authenticated ClaimsPrincipal on the controller, matching

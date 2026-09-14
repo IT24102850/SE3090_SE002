@@ -3,8 +3,13 @@ html, body, #root {
   min-height: 100%;
 }
 
+/* Colour and font come from shared/style/tokens.css. This only paints a
+   ground before that stylesheet resolves, so it has to agree with it - a
+   value that disagrees flashes the wrong theme on every load. Both the
+   admin console and the public site are paper-and-violet now; the public
+   pages paint their own ground from .lp in features/marketing/landing.css,
+   which covers the viewport, so they are unaffected either way. */
 body {
-  font-family: Arial, Helvetica, sans-serif;
-  background: #f7f7f7;
-  color: #111;
+  background: #F7F5FB;
+  color: #16121F;
 }

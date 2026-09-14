@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../shared/date_format.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_text_styles.dart';
 import '../../widgets/booking_qr_code.dart';
+import '../../widgets/ui/ui.dart';
 import '../../widgets/route_transitions.dart';
 import 'my_bookings_screen.dart';
 
@@ -53,8 +55,9 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> with Single
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
+    return AppBackgroundScaffold(
+      showParticles: true,
+      child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -68,6 +71,10 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> with Single
                   decoration: BoxDecoration(
                     color: AppColors.success.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.success.withValues(alpha: 0.5), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(color: AppColors.success.withValues(alpha: 0.25), blurRadius: 28, spreadRadius: -4),
+                    ],
                   ),
                   child: const Icon(Icons.check_rounded, color: AppColors.success, size: 52),
                 ),
@@ -75,7 +82,7 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> with Single
               const SizedBox(height: 24),
               Text(
                 widget.requiresApproval ? 'Booking requested!' : 'Booking confirmed!',
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                style: AppTextStyles.headlineSmall.copyWith(fontSize: 22),
               ),
               const SizedBox(height: 8),
               Text(
@@ -83,17 +90,14 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> with Single
                     ? '${widget.tenantName} will confirm your booking shortly.'
                     : 'You\'re all set with ${widget.tenantName}.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13.5),
+                style: AppTextStyles.bodyMuted.copyWith(fontSize: 13.5),
               ),
               const SizedBox(height: 28),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: GlassStyle.elevatedCard(radius: 18),
+              GlassCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('${widget.resourceName} · ${widget.bookingTypeName}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                    Text('${widget.resourceName} · ${widget.bookingTypeName}', style: AppTextStyles.subtitle),
                     const SizedBox(height: 10),
                     if (widget.bookingUnit == 'Slot') ...[
                       _Row(icon: Icons.calendar_today_outlined, label: formatFullDate(widget.startLocal), accent: widget.accentColor),
@@ -119,29 +123,20 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> with Single
               const SizedBox(height: 8),
               Text(
                 'Show this at reception to check in',
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 11.5),
+                style: AppTextStyles.caption.copyWith(fontSize: 11.5),
               ),
               const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pushAndRemoveUntil(
-                    slideFadeRoute(const MyBookingsScreen()),
-                    (route) => route.isFirst,
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.accentColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: const Text('View My Bookings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              NeonButton(
+                label: 'View My Bookings',
+                onPressed: () => Navigator.of(context).pushAndRemoveUntil(
+                  slideFadeRoute(const MyBookingsScreen()),
+                  (route) => route.isFirst,
                 ),
               ),
               const SizedBox(height: 12),
               TextButton(
                 onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
-                child: const Text('Done'),
+                child: Text('Done', style: AppTextStyles.body.copyWith(color: AppColors.cyan)),
               ),
             ],
           ),
@@ -163,7 +158,7 @@ class _Row extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: accent),
         const SizedBox(width: 8),
-        Expanded(child: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+        Expanded(child: Text(label, style: AppTextStyles.body.copyWith(fontSize: 13, fontWeight: FontWeight.w600))),
       ],
     );
   }

@@ -267,6 +267,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? insuranceProvider,
     String? insuranceNumber,
     String? medicalNotes,
+    String? profilePictureUrl,
+    /// Send an explicit empty string to clear the photo; null just leaves
+    /// it untouched, matching how the other optional fields behave.
+    bool removeProfilePicture = false,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
@@ -278,6 +282,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         if (insuranceProvider != null) 'insuranceProvider': insuranceProvider,
         if (insuranceNumber != null) 'insuranceNumber': insuranceNumber,
         if (medicalNotes != null) 'medicalNotes': medicalNotes,
+        if (removeProfilePicture) 'profilePictureUrl': ''
+        else if (profilePictureUrl != null) 'profilePictureUrl': profilePictureUrl,
       });
 
       final user = User.fromJson(response.data as Map<String, dynamic>);
@@ -296,6 +302,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Clear secure storage + reset state
   Future<void> logout() async {
     await SecureStorageService.clearAll();
+    state = const AuthState(isInitialized: true);
+  }
+
+  /// Drops the session locally after the backend has already rejected it.
+  ///
+  /// Distinct from logout(): the token is gone by the time this runs (the
+  /// Dio interceptor cleared it), and there is no server call to make - this
+  /// only flips the in-memory state so main.dart routes back to the login
+  /// screen instead of leaving the user on a screen that can no longer load
+  /// anything. Ignores repeat calls once already logged out.
+  void onSessionExpired() {
+    if (!state.isAuthenticated) return;
     state = const AuthState(isInitialized: true);
   }
 
@@ -326,5 +344,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
 // Provider
 // ─────────────────────────────────────────────────────────
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier();
+  final notifier = AuthNotifier();
+  // A 401 from any request now ends the session everywhere, rather than
+  // leaving each screen to fail on its own.
+  ApiService.onUnauthorized = notifier.onSessionExpired;
+  return notifier;
 });

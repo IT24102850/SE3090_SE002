@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/booking_model.dart';
+import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/booking_providers.dart';
 import '../providers/notification_providers.dart';
 import '../shared/color_utils.dart';
 import '../shared/date_format.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_text_styles.dart';
 import '../widgets/route_transitions.dart';
 import '../widgets/status_badge.dart';
+import '../widgets/ui/ui.dart';
 import 'business_profile_editor_screen.dart';
 import 'customer/ai_planner_screen.dart';
 import 'customer/book_business_list_screen.dart';
@@ -28,14 +31,17 @@ class DashboardScreen extends ConsumerWidget {
 
     if (!auth.isAuthenticated || user == null) {
       // Should not happen – MyApp routes away – but guard anyway.
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const AppBackgroundScaffold(child: AppLoader());
     }
 
     final role = RoleTheme.of(user.role);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('SME Platform'),
+    return AppBackgroundScaffold(
+      // Particles only on the dashboard header area, per the design: they add
+      // life behind the hero without cluttering the content below.
+      showParticles: true,
+      appBar: GlassAppBar(
+        title: 'Unify',
         actions: [
           const _NotificationBellAction(),
           IconButton(
@@ -49,199 +55,344 @@ class DashboardScreen extends ConsumerWidget {
           const SizedBox(width: 4),
         ],
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(color: AppColors.ink),
-              accountName: Text(user.fullName),
-              accountEmail: Text(user.email),
-              currentAccountPicture: CircleAvatar(
-                backgroundColor: role.color,
-                child: Text(
-                  user.fullName.isNotEmpty ? user.fullName[0].toUpperCase() : '?',
-                  style: const TextStyle(fontSize: 24, color: Colors.white),
+      drawer: _DashboardDrawer(user: user, role: role),
+      child: SafeArea(
+        child: RefreshIndicator(
+          color: AppColors.cyan,
+          backgroundColor: AppColors.overlaySurface,
+          onRefresh: () async {},
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            children: [
+              _WelcomeHero(user: user, role: role),
+              if (user.role == 'Customer') ...[
+                const SizedBox(height: 16),
+                const _UpcomingBookingSection(),
+              ],
+              const SizedBox(height: 24),
+              const SectionHeader('Quick actions'),
+              GridView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                // A fixed extent rather than an aspect ratio: the tiles then
+                // stay identical whatever the device width or text scale does
+                // to the two-line labels.
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  mainAxisExtent: 140,
                 ),
+                children: _quickActionsFor(context, user.role, role.color),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.dashboard_outlined),
-              title: const Text('Dashboard'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: const Text('My Profile'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(slideFadeRoute(const ProfileScreen()));
-              },
-            ),
-            if (user.role == 'Admin' || user.role == 'Manager')
-              ListTile(
-                leading: const Icon(Icons.calendar_today_outlined),
-                title: const Text('Bookings'),
-                onTap: () => Navigator.pop(context),
-              ),
-            if (user.role == 'Admin' || user.role == 'Manager' || user.role == 'Staff')
-              ListTile(
-                leading: const Icon(Icons.schedule_outlined),
-                title: const Text('Schedule'),
-                onTap: () => Navigator.pop(context),
-              ),
-            if (user.role == 'Admin')
-              ListTile(
-                leading: Icon(Icons.admin_panel_settings, color: role.color),
-                title: const Text('Admin Panel'),
-                onTap: () => Navigator.pop(context),
-              ),
-            if (user.role == 'Customer') ...[
-              ListTile(
-                leading: const Icon(Icons.search),
-                title: const Text('Find a Business'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(slideFadeRoute(const BookBusinessListScreen()));
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.book_online_outlined),
-                title: const Text('My Bookings'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(slideFadeRoute(const MyBookingsScreen()));
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.auto_awesome, color: AppColors.purple),
-                title: const Text('Ask AI to book for you'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(slideFadeRoute(const AiPlannerScreen()));
-                },
-              ),
-            ],
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout, color: AppColors.danger),
-              title: const Text('Logout'),
-              onTap: () async {
-                Navigator.pop(context);
-                await ref.read(authProvider.notifier).logout();
-              },
-            ),
-          ],
-        ),
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {},
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                gradient: LinearGradient(
-                  colors: [AppColors.ink, role.color.withValues(alpha: 0.85)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 26,
-                    backgroundColor: Colors.white.withValues(alpha: 0.15),
-                    child: Text(
-                      user.fullName.isNotEmpty ? user.fullName[0].toUpperCase() : '?',
-                      style: const TextStyle(fontSize: 22, color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Welcome back,',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13),
-                        ),
-                        Text(
-                          user.fullName,
-                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(role.icon, size: 13, color: Colors.white),
-                              const SizedBox(width: 5),
-                              Text(role.title, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (user.role == 'Customer') ...[
-              const SizedBox(height: 20),
-              const _UpcomingBookingSection(),
-            ],
-
-            const SizedBox(height: 24),
-
-            Text('Quick actions', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.5,
-              children: _quickActionsFor(context, user.role, role.color),
-            ),
-
-            const SizedBox(height: 24),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
+              const SizedBox(height: 24),
+              const SectionHeader('Account'),
+              GlassCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info_outline, size: 18, color: Colors.grey.shade600),
-                        const SizedBox(width: 8),
-                        Text('Account', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
                     _InfoRow(label: 'Email', value: user.email),
                     _InfoRow(label: 'Role', value: role.title),
                     _InfoRow(label: 'Tenant ID', value: user.tenantId),
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
+
+/// The greeting panel. Carries the role hue as a gradient ramped into the
+/// canvas, so each role still reads distinctly without breaking the palette.
+class _WelcomeHero extends StatelessWidget {
+  const _WelcomeHero({required this.user, required this.role});
+
+  final User user;
+  final RoleTheme role;
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = user.profilePictureUrl;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadii.card),
+        gradient: AppColors.heroGradientFor(role.color),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 26,
+            backgroundColor: AppColors.iconWell,
+            backgroundImage: photo != null ? NetworkImage(photo) : null,
+            child: photo != null
+                ? null
+                : Text(
+                    user.fullName.isNotEmpty
+                        ? user.fullName[0].toUpperCase()
+                        : '?',
+                    style: AppTextStyles.title.copyWith(fontSize: 22),
+                  ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Welcome back,', style: AppTextStyles.caption),
+                Text(
+                  user.fullName,
+                  style: AppTextStyles.headlineSmall.copyWith(fontSize: 20),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.glassFill,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.glassBorder),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(role.icon, size: 13, color: role.color),
+                      const SizedBox(width: 5),
+                      Text(
+                        role.title,
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Navigation drawer. Painted over the app background rather than a solid
+/// panel, so opening it reads as sliding glass across the same canvas.
+class _DashboardDrawer extends ConsumerWidget {
+  const _DashboardDrawer({required this.user, required this.role});
+
+  final User user;
+  final RoleTheme role;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final photo = user.profilePictureUrl;
+    final isCustomer = user.role == 'Customer';
+
+    return Drawer(
+      backgroundColor: Colors.transparent,
+      child: Stack(
+        children: [
+          const Positioned.fill(child: AppBackground()),
+          SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 20, 8, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        radius: 32,
+                        backgroundColor: role.color.withValues(alpha: 0.25),
+                        backgroundImage: photo != null ? NetworkImage(photo) : null,
+                        child: photo != null
+                            ? null
+                            : Text(
+                                user.fullName.isNotEmpty
+                                    ? user.fullName[0].toUpperCase()
+                                    : '?',
+                                style: AppTextStyles.headlineSmall,
+                              ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(user.fullName, style: AppTextStyles.title),
+                      const SizedBox(height: 2),
+                      Text(user.email, style: AppTextStyles.caption),
+                    ],
+                  ),
+                ),
+                _DrawerItem(
+                  icon: Icons.dashboard_outlined,
+                  label: 'Dashboard',
+                  onTap: () => Navigator.pop(context),
+                ),
+                _DrawerItem(
+                  icon: Icons.person_outline,
+                  label: 'My Profile',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(slideFadeRoute(const ProfileScreen()));
+                  },
+                ),
+                if (user.role == 'Admin' || user.role == 'Manager')
+                  _DrawerItem(
+                    icon: Icons.calendar_today_outlined,
+                    label: 'Bookings',
+                    onTap: () => Navigator.pop(context),
+                  ),
+                if (user.role == 'Admin' || user.role == 'Manager' || user.role == 'Staff')
+                  _DrawerItem(
+                    icon: Icons.schedule_outlined,
+                    label: 'Schedule',
+                    onTap: () => Navigator.pop(context),
+                  ),
+                if (user.role == 'Admin')
+                  _DrawerItem(
+                    icon: Icons.admin_panel_settings,
+                    label: 'Admin Panel',
+                    iconColor: role.color,
+                    onTap: () => Navigator.pop(context),
+                  ),
+                if (isCustomer) ...[
+                  _DrawerItem(
+                    icon: Icons.search,
+                    label: 'Find a Business',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute(const BookBusinessListScreen()));
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.book_online_outlined,
+                    label: 'My Bookings',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute(const MyBookingsScreen()));
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.auto_awesome,
+                    label: 'Ask AI to book for you',
+                    iconColor: AppColors.violet,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute(const AiPlannerScreen()));
+                    },
+                  ),
+                ],
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                  child: Divider(color: AppColors.hairline, height: 1),
+                ),
+                _DrawerItem(
+                  icon: Icons.logout,
+                  label: 'Logout',
+                  iconColor: AppColors.danger,
+                  labelColor: AppColors.danger,
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await ref.read(authProvider.notifier).logout();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DrawerItem extends StatelessWidget {
+  const _DrawerItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.iconColor,
+    this.labelColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? iconColor;
+  final Color? labelColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadii.row),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, size: 22, color: iconColor ?? AppColors.iconSecondary),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppTextStyles.body.copyWith(
+                    color: labelColor ?? AppColors.textPrimary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Artwork behind each quick-action tile, keyed by the tile's label.
+///
+/// Remote (Unsplash) rather than bundled: the asset bundle stays small, and a
+/// tile that can't reach the network just falls back to plain glass. Requested
+/// at 400px because these render at roughly 176x140 logical pixels.
+const _quickActionImages = <String, String>{
+  'Book appointments':
+      'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=400&q=60',
+  'View my bills':
+      'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=400&q=60',
+  'Cancel / reschedule':
+      'https://images.unsplash.com/photo-1501139083538-0139583c060f?auto=format&fit=crop&w=400&q=60',
+  'Ask AI to book for you':
+      'https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=400&q=60',
+  'Business Profile':
+      'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=400&q=60',
+  'Manage all branches':
+      'https://images.unsplash.com/photo-1517502884422-41eaead166d4?auto=format&fit=crop&w=400&q=60',
+  'View system analytics':
+      'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=400&q=60',
+  'Assign managers & staff':
+      'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=400&q=60',
+  'Approve high-impact actions':
+      'https://images.unsplash.com/photo-1521791136064-7986c2920216?auto=format&fit=crop&w=400&q=60',
+  'Manage branch bookings':
+      'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=400&q=60',
+  'Approve schedules':
+      'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=400&q=60',
+  'View branch reports':
+      'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?auto=format&fit=crop&w=400&q=60',
+  'Create / view bookings':
+      'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=400&q=60',
+  'Mark attendance':
+      'https://images.unsplash.com/photo-1541746972996-4e0b0f43e02a?auto=format&fit=crop&w=400&q=60',
+  'Process walk-ins':
+      'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=400&q=60',
+};
 
 /// Builds the quick-action tiles for a role. Customer actions are wired to
 /// real screens. Admin/Manager tiles stay as "coming soon" stubs — that
@@ -255,23 +406,27 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color) {
         label: 'Book appointments',
         icon: Icons.calendar_month_outlined,
         color: color,
+        imageUrl: _quickActionImages['Book appointments'],
         onTap: () => Navigator.of(context).push(slideFadeRoute(const BookBusinessListScreen())),
       ),
       _QuickActionCard(
         label: 'View my bills',
         icon: Icons.receipt_long_outlined,
         color: color,
+        imageUrl: _quickActionImages['View my bills'],
       ),
       _QuickActionCard(
         label: 'Cancel / reschedule',
         icon: Icons.event_busy_outlined,
         color: color,
+        imageUrl: _quickActionImages['Cancel / reschedule'],
         onTap: () => Navigator.of(context).push(slideFadeRoute(const MyBookingsScreen())),
       ),
       _QuickActionCard(
         label: 'Ask AI to book for you',
         icon: Icons.auto_awesome,
-        color: AppColors.purple,
+        color: AppColors.violet,
+        imageUrl: _quickActionImages['Ask AI to book for you'],
         onTap: () => Navigator.of(context).push(slideFadeRoute(const AiPlannerScreen())),
       ),
     ];
@@ -307,46 +462,111 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color) {
             label: action,
             icon: icons[action] ?? Icons.check_circle_outline,
             color: color,
+            imageUrl: _quickActionImages[action],
             onTap: wiredTaps.containsKey(action) ? () => Navigator.of(context).push(slideFadeRoute<void>(wiredTaps[action]!())) : null,
           ))
       .toList();
 }
 
+/// A quick-action tile: photo, scrim, icon well and label, inside a card the
+/// grid gives a fixed size to. Without [imageUrl] — or while one loads, or if
+/// it fails — it degrades to the plain glass card it used to be.
 class _QuickActionCard extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
+  final String? imageUrl;
   final VoidCallback? onTap;
 
-  const _QuickActionCard({required this.label, required this.icon, required this.color, this.onTap});
+  const _QuickActionCard({
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.imageUrl,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap ??
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('$label — coming soon')),
-              );
-            },
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Icon(icon, color: color, size: 22),
-              Text(
-                label,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+    final radius = BorderRadius.circular(AppRadii.row);
+    final tap = onTap ?? () => AppSnackBar.info(context, '$label — coming soon');
+
+    final content = Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconWell(icon: icon, color: color, size: 36),
+          Text(
+            label,
+            style: AppTextStyles.subtitle.copyWith(fontSize: 13),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
+        ],
+      ),
+    );
+
+    final url = imageUrl;
+    if (url == null) {
+      return GlassCard(
+        borderRadius: AppRadii.row,
+        padding: EdgeInsets.zero,
+        onTap: tap,
+        child: content,
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: radius,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // The glass fill sits under the photo, so a slow or failed load still
+          // reads as a card rather than a hole in the grid.
+          const ColoredBox(color: AppColors.glassFill),
+          Image.network(
+            url,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.medium,
+            // Fade in rather than pop — the four tiles resolve at slightly
+            // different moments otherwise.
+            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+                wasSynchronouslyLoaded
+                    ? child
+                    : AnimatedOpacity(
+                        opacity: frame == null ? 0 : 1,
+                        duration: const Duration(milliseconds: 350),
+                        curve: Curves.easeOut,
+                        child: child,
+                      ),
+            errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+          ),
+          const DecoratedBox(
+            decoration: BoxDecoration(gradient: AppColors.tileScrimGradient),
+          ),
+          content,
+          // Rim last so the photo can't paint over the hairline.
+          IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                border: Border.all(color: AppColors.glassBorder),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: radius,
+                onTap: tap,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -379,45 +599,39 @@ class _UpcomingBookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = parseHexColor(booking.colorHex) ?? AppColors.purple;
+    final color = parseHexColor(booking.colorHex) ?? AppColors.violet;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      borderColor: color.withValues(alpha: 0.35),
       onTap: () => Navigator.of(context).push(slideFadeRoute(const MyBookingsScreen())),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
-              child: Icon(Icons.event_available_rounded, color: color, size: 22),
+      child: Row(
+        children: [
+          IconWell(icon: Icons.event_available_rounded, color: color, size: 44),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your next booking',
+                  style: AppTextStyles.label.copyWith(color: color, fontSize: 11, letterSpacing: 1.5),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${booking.resourceName} · ${booking.bookingTypeName}',
+                  style: AppTextStyles.subtitle.copyWith(fontSize: 14),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${formatDayMonth(booking.startLocal)} · ${formatTimeOfDay(booking.startLocal)}',
+                  style: AppTextStyles.caption.copyWith(fontSize: 12.5),
+                ),
+              ],
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Your next booking', style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text('${booking.resourceName} · ${booking.bookingTypeName}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${formatDayMonth(booking.startLocal)} · ${formatTimeOfDay(booking.startLocal)}',
-                    style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-                  ),
-                ],
-              ),
-            ),
-            StatusBadge(status: booking.status),
-          ],
-        ),
+          ),
+          StatusBadge(status: booking.status),
+        ],
       ),
     );
   }
@@ -432,16 +646,19 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
             width: 90,
-            child: Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+            child: Text(label, style: AppTextStyles.caption.copyWith(fontSize: 13)),
           ),
           Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            child: Text(
+              value,
+              style: AppTextStyles.body.copyWith(fontSize: 13, color: AppColors.textPrimary),
+            ),
           ),
         ],
       ),
@@ -478,11 +695,19 @@ class _NotificationBellAction extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
               constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-              decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+              decoration: const BoxDecoration(
+                color: AppColors.magenta,
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: AppColors.dangerGlow, blurRadius: 8)],
+              ),
               alignment: Alignment.center,
               child: Text(
                 unread > 9 ? '9+' : '$unread',
-                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textPrimary,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),

@@ -1,0 +1,764 @@
+/* Unify public surface: landing page and auth screens.
+ *
+ * Scoped under .lp so it cannot reach the signed-in admin console, which has
+ * its own tokens in shared/style/tokens.css.
+ *
+ * ── The light system ─────────────────────────────────────────────────
+ * Paper and blue ink, drawn from the logo (public/unify-logo.svg): its navy
+ * tile is the ink, its cyan -> blue gradient is the signature, its sky node
+ * is the accent. The ground is a faint blue-tinted off-white rather than pure
+ * white, and every surface above it is actual white - which is what gives a
+ * light theme depth without resorting to heavy borders. Elevation is carried
+ * by shadows tinted toward the brand, never by grey boxes.
+ *
+ * Dark themes hide weak hierarchy; light ones do not. So the type scale does
+ * the work here: size and weight separate levels, and colour is used only to
+ * mark state.
+ *
+ * ── The gradient rule ────────────────────────────────────────────────
+ * The cyan -> blue gradient is the brand signature and appears in exactly
+ * three places: the primary button fill, the second line of the hero
+ * headline, and the scroll progress rail. Everything else is ink on paper.
+ * If you are about to add a fourth, don't - the signature only reads as one
+ * because it is rationed.
+ */
+
+.lp {
+  --paper: #F7FAFD;
+  --paper-sunk: #EDF3F9;
+  --card: #FFFFFF;
+
+  /* The logo tile's navy, verbatim. 18.2:1 on paper. */
+  --ink: #0A0F1D;
+  /* 6.8:1 on paper - the 0.78rem labels this page sets in it need well over
+     AA's 4.5, and this matches the rigour the previous palette held itself
+     to. #63728C is 4.6:1, so even the faintest text clears AA. */
+  --muted: #4A5872;
+  --faint: #63728C;
+
+  --line: #DCE5EF;
+  --line-strong: #C5D3E3;
+
+  /* The logo gradient's two ends and its node. Only --blue may carry text or
+     sit under white text: it is 4.9:1 on paper and 5.2:1 under white. The
+     raw cyan (#06B6D4) is 2.3:1 and the sky (#38BDF8) 2.1:1 - both fail even
+     the 3:1 large-text bar - so they are accents only: the pill's node, the
+     flare on the object, glows. Never a label, never a button. */
+  --blue: #2563EB;
+  --blue-deep: #1D4ED8;
+  --cyan: #06B6D4;
+  --sky: #38BDF8;
+  /* The gradient's cyan end, deepened to cyan-700 so it can hold white
+     button text (5.4:1) and read as headline gradient text (5.1:1). The
+     logo's own cyan is what it is *reaching for*; this is what survives on
+     white. */
+  --teal: #0E7490;
+  --wash: #E8F3FB;
+  --brand: linear-gradient(110deg, var(--teal) 0%, var(--blue) 100%);
+
+  /* Tinted toward the brand rather than neutral grey. A pure-black shadow on
+     a blue-tinted ground reads as dirt; this reads as depth. */
+  --shadow-sm: 0 1px 2px rgba(10, 15, 29, 0.05);
+  --shadow-md: 0 2px 4px rgba(10, 15, 29, 0.04), 0 12px 28px -14px rgba(37, 99, 235, 0.22);
+  --shadow-lg: 0 4px 10px rgba(10, 15, 29, 0.04), 0 30px 64px -26px rgba(37, 99, 235, 0.30);
+
+  --max: 1180px;
+  --gutter: clamp(20px, 5vw, 56px);
+
+  color: var(--ink);
+  background: var(--paper);
+  font-family: Outfit, Poppins, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  position: relative;
+  /* clip, NOT hidden. Overflow is a grouping property: setting one axis to
+     anything but visible computes the OTHER to auto, which turned .lp into
+     its own scroll container - the page scrolled inside this div,
+     window.scrollY never moved, and every scroll-driven hook read zero. */
+  overflow-x: clip;
+}
+
+.lp *,
+.lp *::before,
+.lp *::after { box-sizing: border-box; }
+
+.lp-shell { max-width: var(--max); margin: 0 auto; padding: 0 var(--gutter); }
+
+/* Grid items default to min-width:auto, so a long word or a wide child stops
+   the track shrinking and the whole page overflows. Every grid on this page
+   wants to shrink instead. */
+.lp-hero-inner > *,
+.lp-types-grid > *,
+.lp-method > *,
+.lp-branch-row > * { min-width: 0; }
+
+/* Visible against paper, and inset so it never sits under a sticky edge. */
+.lp :focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ── Type ───────────────────────────────────────────────────── */
+.lp-display {
+  font-size: clamp(2.6rem, 7vw, 5.2rem);
+  line-height: 0.98;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  margin: 0;
+}
+.lp-h2 {
+  font-size: clamp(1.9rem, 3.6vw, 3rem);
+  line-height: 1.08;
+  font-weight: 700;
+  letter-spacing: -0.032em;
+  margin: 0 0 18px;
+}
+.lp-h { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 8px; }
+.lp-body {
+  font-size: clamp(0.98rem, 1.25vw, 1.09rem);
+  line-height: 1.66;
+  color: var(--muted);
+  max-width: 62ch;
+  margin: 0;
+}
+.lp-brandtext {
+  background: var(--brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* A numbered eyebrow with a hairline running off it. Replaces the old
+   all-caps label: the rule gives every section a shared left edge, which is
+   what makes a long page read as one document rather than a stack. */
+.lp-label {
+  display: flex; align-items: center; gap: 14px;
+  font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 20px;
+}
+.lp-label-n { color: var(--blue); font-variant-numeric: tabular-nums; }
+.lp-label-rule { width: clamp(28px, 5vw, 62px); height: 1px; background: var(--line-strong); }
+
+/* ── Buttons ────────────────────────────────────────────────── */
+.lp-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  padding: 12px 22px; border-radius: 10px;
+  font-size: 0.92rem; font-weight: 600; font-family: inherit;
+  border: 1px solid transparent; cursor: pointer;
+  text-decoration: none; white-space: nowrap;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+.lp-btn-primary {
+  background: var(--brand); color: #fff;
+  box-shadow: var(--shadow-md);
+}
+.lp-btn-primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+.lp-btn-outline {
+  background: var(--card); color: var(--ink); border-color: var(--line-strong);
+  box-shadow: var(--shadow-sm);
+}
+.lp-btn-outline:hover { border-color: var(--blue); color: var(--blue-deep); }
+.lp-btn-lg { padding: 15px 30px; font-size: 0.98rem; border-radius: 12px; }
+.lp-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+/* ── Top rail ───────────────────────────────────────────────── */
+.lp-rail {
+  position: sticky; top: 0; z-index: 60;
+  display: flex; align-items: center; gap: 16px;
+  padding: 9px var(--gutter);
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted);
+}
+.lp-rail-tag { flex: 1; }
+.lp-rail-pct { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+.lp-rail-track { width: clamp(80px, 16vw, 200px); height: 3px; border-radius: 2px; background: var(--line); overflow: clip; }
+.lp-rail-fill { display: block; width: 100%; height: 100%; background: var(--brand); transform-origin: left center; }
+
+/* ── Nav ────────────────────────────────────────────────────── */
+.lp-nav {
+  position: sticky; top: 35px; z-index: 50;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+.lp-nav-inner {
+  max-width: var(--max); margin: 0 auto; padding: 13px var(--gutter);
+  display: flex; align-items: center; gap: 26px;
+}
+.lp-brand { display: flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; margin-right: auto; }
+.lp-brand-mark {
+  /* The real mark (public/unify-logo.svg - the same file the app sidebar and
+     the favicon use), not a styled letter. The SVG carries its own navy tile
+     and 14/64 corner radius, so only size, shadow and a clip are set here. */
+  width: 34px; height: 34px; border-radius: 9px;
+  display: block; flex: none;
+  box-shadow: var(--shadow-sm);
+}
+.lp-brand-name { display: grid; line-height: 1.12; font-weight: 700; letter-spacing: -0.02em; }
+.lp-brand-tag {
+  font-size: 0.58rem; font-weight: 500; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--faint);
+}
+.lp-nav-links { display: flex; align-items: center; gap: 26px; }
+.lp-nav-links a, .lp-nav-links button {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; font-size: 0.91rem; font-weight: 500;
+  color: var(--muted); text-decoration: none;
+  transition: color 0.16s ease;
+}
+.lp-nav-links a:hover, .lp-nav-links button:hover { color: var(--blue-deep); }
+.lp-nav-cta { display: flex; align-items: center; gap: 10px; }
+@media (max-width: 860px) { .lp-nav-links { display: none; } }
+@media (max-width: 560px) {
+  .lp-brand-tag { display: none; }
+  /* Brand + two pill buttons will not fit a 390px bar. Sign in drops out of
+     the nav rather than being squeezed - it is still in the footer and on the
+     register page, and the primary action is the one that has to survive. */
+  .lp-nav-cta .lp-btn-outline { display: none; }
+  .lp-btn { padding: 10px 18px; font-size: 0.86rem; }
+  .lp-nav-inner { padding-inline: 16px; }
+}
+
+/* ── Hero ───────────────────────────────────────────────────── */
+.lp-hero-pin { height: 300vh; position: relative; }
+.lp-hero-sticky { position: sticky; top: 0; height: 100vh; display: grid; align-items: center; }
+.lp-hero-inner {
+  display: grid; grid-template-columns: 1.24fr 0.76fr;
+  gap: clamp(24px, 5vw, 56px); align-items: center; width: 100%;
+  /* The Act I copy retreats along z, so the perspective has to live on an
+     ancestor that is not itself being transformed - put it on the moving
+     element and the vanishing point travels with it, which reads as a scale
+     rather than as depth. */
+  perspective: 1200px;
+  position: relative; z-index: 1;
+}
+.lp-hero-copy { will-change: transform, opacity; }
+
+/* The canvas is a full-bleed layer behind the copy, not a column. Flying into
+   a 460px box on the right reads as watching something through a window; the
+   act needs the object to own the viewport by the time the lens reaches the
+   shell. The sticky stage is positioned, so this anchors to it. */
+.lp-hero-stage { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+
+/* Reserves the right-hand column so the copy keeps its measure and gives
+   the scene an element to rest the object over. When the scene is off it
+   holds the two stills instead, so it is never an empty square. */
+.lp-hero-canvas { aspect-ratio: 1; width: min(40vw, 460px); margin-left: auto; position: relative; }
+
+/* ── No-scene hero: the stills and the wash ───────────────────
+   Two prints staggered on a desk. The back one is the homestay, wider and
+   tilted left; the dive shot overlaps it from the front, tilted right. Each
+   carries a violet tint at its foot so the photography reads as part of
+   the paper-and-ink page rather than dropped on top of it. */
+.lp-hero-stills { position: absolute; inset: 0; }
+.lp-still {
+  position: absolute; margin: 0; overflow: hidden;
+  border-radius: 22px; border: 1px solid var(--line);
+  background: var(--card); box-shadow: var(--shadow-lg);
+}
+.lp-still img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lp-still::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 58%, rgba(37, 99, 235, 0.22) 100%);
+}
+.lp-still-a { inset: 3% 12% 24% 0; transform: rotate(-4deg); }
+.lp-still-b { inset: 36% 0 0 30%; transform: rotate(5deg); }
+.lp-still-tag {
+  position: absolute; left: 14px; bottom: 14px; z-index: 1;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; color: var(--muted);
+}
+
+/* The same homestay photo, blurred hard and faded to paper across the copy
+   side. It sits under .lp-hero-inner (z-index 1), so the heading stays on
+   plain paper and only the right half picks up the warmth. */
+.lp-hero-wash { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.lp-hero-wash img {
+  position: absolute; right: -12%; top: -14%;
+  width: 72%; height: 128%; object-fit: cover;
+  filter: blur(54px) saturate(1.15); opacity: 0.2;
+}
+.lp-hero-wash::after {
+  content: ''; position: absolute; inset: 0;
+  background:
+    linear-gradient(90deg, var(--paper) 0%, var(--paper) 40%, rgba(247, 250, 253, 0.6) 66%, rgba(247, 250, 253, 0.3) 100%),
+    linear-gradient(180deg, rgba(247, 250, 253, 0.35) 0%, transparent 30%, transparent 70%, var(--paper) 100%);
+}
+.lp-canvas { width: 100%; height: 100%; display: block; }
+
+/* The global display size assumes a full-bleed heading. In the hero it sits
+   beside the object in ~55% of the shell, so it gets a lower ceiling. */
+.lp-hero-inner .lp-display { font-size: clamp(2.3rem, 4.4vw, 3.8rem); }
+
+.lp-pill {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 7px 15px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--card);
+  box-shadow: var(--shadow-sm);
+  font-size: 0.75rem; font-weight: 500; letter-spacing: 0.02em;
+  color: var(--muted); margin-bottom: 26px;
+}
+.lp-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); }
+.lp-hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 34px; }
+
+.lp-cue {
+  position: absolute; bottom: 5vh; left: 50%; transform: translateX(-50%);
+  display: grid; justify-items: center; gap: 10px;
+  font-size: 0.64rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--faint); pointer-events: none;
+}
+.lp-cue-track { width: 1px; height: 46px; background: var(--line-strong); position: relative; overflow: clip; }
+.lp-cue-fill { position: absolute; inset: 0; background: var(--blue); transform-origin: top center; }
+
+/* Hiding the object is a layout call - it stops having room well before the
+   page stops being worth pinning - so it gets its own, earlier breakpoint. */
+@media (max-width: 1000px) {
+  .lp-hero-inner { grid-template-columns: 1fr; }
+  .lp-hero-canvas, .lp-hero-stage, .lp-hero-wash { display: none; }
+}
+
+/* Unpinning is a behaviour call, and 900px was easy to fall under on a
+   1366px laptop at 150% zoom - which silently turned the whole scroll
+   experience off for anyone browsing zoomed in. */
+@media (max-width: 760px) {
+  .lp-hero-pin { height: auto; }
+  .lp-hero-sticky { position: static; height: auto; padding: 88px 0 72px; }
+  .lp-cue { display: none; }
+}
+
+/* ── Act II: assembly ───────────────────────────────────────── */
+.lp-assembly { height: 400vh; position: relative; }
+.lp-assembly-sticky { position: sticky; top: 0; height: 100vh; overflow: clip; }
+.lp-assembly-stage { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+
+.lp-assembly-head {
+  position: absolute; top: clamp(96px, 14vh, 150px); left: 0; right: 0; z-index: 2;
+  transition: opacity 0.5s ease;
+}
+.lp-assembly-head .lp-section-head { margin-bottom: 0; max-width: 46ch; }
+
+/* Each caption is a zero-sized point the scene parks on its plate's projected
+   position; the card hangs off it. Splitting the two lets the scene own
+   transform completely without also owning the offset that keeps the text
+   clear of the thing it belongs to. */
+.lp-captions { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.lp-caption {
+  position: absolute; top: 0; left: 0; width: 0; height: 0;
+  opacity: 0; will-change: transform, opacity;
+}
+/* On paper the caption has to be an opaque card, not text laid over the
+   drawing - a wireframe running behind 0.86rem copy is unreadable in a way
+   it never was on a dark ground. */
+.lp-caption-inner {
+  position: absolute; left: 118px; top: -52px; width: min(31ch, 40vw);
+  background: var(--card); border: 1px solid var(--line);
+  border-left: 2px solid var(--blue);
+  border-radius: 12px; padding: 16px 18px;
+  box-shadow: var(--shadow-lg);
+}
+.lp-caption-n {
+  display: block; font-size: 0.64rem; font-weight: 600; letter-spacing: 0.2em;
+  color: var(--blue); margin-bottom: 7px; font-variant-numeric: tabular-nums;
+}
+.lp-caption-inner h3 { font-size: 1.22rem; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.02em; }
+.lp-caption-inner p { font-size: 0.86rem; line-height: 1.55; color: var(--muted); margin: 0; }
+
+/* The nav is sticky, so an in-page jump that lands a section flush with the
+   top of the viewport puts its heading underneath the nav - which is every
+   link in the nav, and every link in the footer. */
+#capability, #business-types, #method, #stack { scroll-margin-top: 116px; }
+
+/* ── Sections ───────────────────────────────────────────────── */
+.lp-section { padding: clamp(76px, 10vw, 136px) 0; position: relative; }
+.lp-section-head { max-width: 62ch; margin-bottom: clamp(36px, 5vw, 64px); }
+
+/* ── Text reveal ────────────────────────────────────────────── */
+.lp-mask { overflow: hidden; display: block; }
+.lp-mask > span { display: block; transform: translateY(110%); transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
+.lp-mask.is-revealed > span { transform: none; }
+
+[data-reveal] { opacity: 0; transform: translateY(14px); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+[data-reveal].is-revealed { opacity: 1; transform: none; }
+
+/* ── Capability: the flat fallback for Act II ───────────────── */
+/* Cards on paper rather than the old dark spine. A hairline rail with text
+   hanging off it needs a dark ground to read as structure; on paper it just
+   looks like an unstyled list, so the structure moves into the cards. */
+.lp-spine { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+.lp-branch {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 24px 24px 26px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.lp-branch:hover { box-shadow: var(--shadow-md); border-color: var(--line-strong); transform: translateY(-2px); }
+.lp-branch-row h3 {
+  font-size: 1.12rem; font-weight: 700; letter-spacing: -0.02em;
+  margin: 0 0 9px; padding-bottom: 11px;
+  border-bottom: 1px solid var(--line);
+}
+.lp-branch-row p { font-size: 0.9rem; line-height: 1.6; color: var(--muted); margin: 0; }
+
+/* ── Act III: business types ────────────────────────────────── */
+.lp-types { position: relative; }
+
+/* Full width, so the Act III stage behind it can be too. The measure and the
+   gutters live on .lp-types-grid - an absolutely positioned child of a
+   max-width element can only ever be as wide as that element, and the object
+   needs the whole viewport once the camera is back outside it. */
+.lp-types-sticky { position: sticky; top: 0; height: 100vh; display: grid; align-items: center; }
+.lp-types-grid {
+  position: relative; z-index: 1;
+  display: grid; grid-template-columns: 0.82fr 1fr;
+  gap: clamp(24px, 5vw, 64px); align-items: center;
+  max-width: var(--max); margin: 0 auto; padding: 0 var(--gutter); width: 100%;
+}
+.lp-types-stage { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+
+/* A scrim so the object can be a backdrop rather than a competitor. Act III
+   is the one act carrying its argument in words as well as geometry: a list
+   down the left, a mock panel down the right. Unchecked, the wireframe runs
+   straight through both. */
+.lp-types-stage::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    var(--paper) 0%,
+    rgba(247, 250, 253, 0.9) 14%,
+    rgba(247, 250, 253, 0.5) 30%,
+    /* Clears at 44%, not 36%. The intro paragraph is the widest thing in the
+       left column and runs to roughly 44% of the viewport - at 36% the last
+       two lines had the lattice running straight through them. */
+    rgba(247, 250, 253, 0) 44%
+  );
+}
+
+.lp-types-list { display: grid; gap: 2px; }
+.lp-type-item {
+  display: grid; grid-template-columns: auto 1fr auto;
+  align-items: center; gap: 16px;
+  padding: 15px 4px;
+  border-bottom: 1px solid var(--line);
+  transition: color 0.3s ease;
+  color: var(--faint);
+}
+.lp-type-item.is-active { color: var(--ink); }
+.lp-type-index { font-size: 0.7rem; font-variant-numeric: tabular-nums; color: var(--faint); }
+.lp-type-item.is-active .lp-type-index { color: var(--blue); }
+.lp-type-name { font-size: clamp(1.1rem, 1.9vw, 1.5rem); font-weight: 600; letter-spacing: -0.024em; }
+.lp-type-bar { width: clamp(40px, 7vw, 84px); height: 2px; background: var(--line); overflow: clip; border-radius: 1px; }
+.lp-type-bar > span { display: block; width: 100%; height: 100%; background: var(--blue); transform-origin: left center; }
+
+/* The mock: a real application window, which is the literal reading of what
+   the 3D object is saying. */
+.lp-mock {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; overflow: clip;
+  box-shadow: var(--shadow-lg);
+}
+.lp-mock-chrome {
+  display: flex; align-items: center; gap: 7px;
+  padding: 13px 16px; border-bottom: 1px solid var(--line);
+  background: var(--paper-sunk);
+}
+.lp-mock-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); }
+.lp-mock-title {
+  margin-left: 12px; font-size: 0.7rem; font-weight: 600;
+  letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted);
+}
+.lp-mock-modules { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; padding: 16px 16px 6px; }
+.lp-mock-module {
+  padding: 10px 12px; border-radius: 9px;
+  background: var(--wash); border: 1px solid var(--line);
+  font-size: 0.83rem; font-weight: 600; color: var(--blue-deep);
+}
+.lp-mock-rows { display: grid; gap: 7px; padding: 12px 16px 20px; }
+.lp-mock-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 12px 14px; border-radius: 9px;
+  background: var(--paper); border: 1px solid var(--line);
+  font-size: 0.87rem; color: var(--muted);
+}
+.lp-mock-row b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.lp-mock-note {
+  font-size: 0.84rem; color: var(--muted); line-height: 1.58;
+  margin: 14px 0 0; padding: 13px 15px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 11px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* The two-column stage runs out of room before the pin stops being useful,
+   so the stack is a layout call at 1000 and the unpin a behaviour call at
+   760 - same reasoning as the hero. */
+@media (max-width: 1000px) {
+  .lp-types-grid { grid-template-columns: 1fr; }
+  .lp-types-stage { display: none; }
+}
+@media (max-width: 760px) {
+  .lp-types { height: auto !important; }
+  .lp-types-sticky { position: static; height: auto; }
+  .lp-types-grid { padding-block: 24px; }
+  /* A swipeable strip on small screens, not a pin. */
+  .lp-types-list { grid-auto-flow: column; grid-auto-columns: 74%; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; }
+  .lp-type-item {
+    scroll-snap-align: start; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+  }
+  .lp-type-item.is-active { border-color: var(--blue); }
+  .lp-type-bar { display: none; }
+}
+
+/* ── Method ─────────────────────────────────────────────────── */
+.lp-method { display: grid; grid-template-columns: 0.86fr 1fr; gap: clamp(28px, 6vw, 84px); align-items: start; }
+.lp-method-aside { position: sticky; top: 150px; }
+.lp-method-steps { display: grid; gap: 14px; }
+
+/* Numbered cards that light up as they pass. The dark version dimmed the
+   inactive steps to near-invisible; on paper the same idea has to work the
+   other way round - inactive stays fully legible and the current one gains
+   a surface, a shadow and an accent edge. */
+.lp-step {
+  position: relative;
+  padding: 26px 28px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+}
+.lp-step.is-current {
+  background: var(--card);
+  border-color: var(--line);
+  box-shadow: var(--shadow-md);
+}
+.lp-step.is-current::before {
+  content: ''; position: absolute; left: 0; top: 22px; bottom: 22px;
+  width: 2px; border-radius: 2px; background: var(--brand);
+}
+.lp-step-n {
+  display: block; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.2em;
+  color: var(--faint); margin-bottom: 10px; font-variant-numeric: tabular-nums;
+}
+.lp-step.is-current .lp-step-n { color: var(--blue); }
+.lp-step h3 { font-size: clamp(1.22rem, 2.1vw, 1.6rem); font-weight: 700; letter-spacing: -0.026em; margin: 0 0 10px; }
+.lp-step p { font-size: 0.94rem; line-height: 1.62; color: var(--muted); margin: 0; max-width: 54ch; }
+
+@media (max-width: 860px) {
+  .lp-method { grid-template-columns: 1fr; }
+  .lp-method-aside { position: static; }
+}
+
+/* ── Stack ──────────────────────────────────────────────────── */
+.lp-stack { display: flex; flex-wrap: wrap; gap: 9px; }
+.lp-stack-item {
+  padding: 9px 16px; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--line);
+  font-size: 0.86rem; font-weight: 500; color: var(--muted);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── Figures ────────────────────────────────────────────────── */
+.lp-figures {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: 16px; overflow: clip;
+}
+/* Hairline dividers made from the grid gap showing through - one rule
+   instead of border-right plus a :last-child exception that breaks the
+   moment the grid rewraps. */
+.lp-figures > * { background: var(--card); padding: 30px 26px; }
+.lp-figure-value {
+  font-size: clamp(2.4rem, 4.6vw, 3.5rem); font-weight: 700;
+  letter-spacing: -0.045em; line-height: 1; margin-bottom: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.lp-figure-label { font-size: 0.74rem; font-weight: 500; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); }
+
+/* ── Close ──────────────────────────────────────────────────── */
+.lp-close { position: relative; padding: clamp(96px, 14vw, 168px) 0; overflow: clip; }
+.lp-close-canvas { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+/* Fades the object out toward the edges so the CTA sits in clear air. */
+.lp-close-canvas::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse 46% 52% at 50% 50%, rgba(247, 250, 253, 0.86) 0%, rgba(247, 250, 253, 0.3) 55%, rgba(247, 250, 253, 0) 100%);
+}
+.lp-close-inner { position: relative; z-index: 1; text-align: center; }
+.lp-close-inner .lp-body { margin-inline: auto; }
+
+/* ── Footer ─────────────────────────────────────────────────── */
+.lp-footer { border-top: 1px solid var(--line); background: var(--card); padding: 34px 0; }
+.lp-footer-inner { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.lp-footer-inner > p { margin: 0; font-size: 0.8rem; color: var(--faint); margin-left: auto; }
+.lp-footer-links { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.lp-footer-links a, .lp-footer-links button {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; font-size: 0.87rem; color: var(--muted); text-decoration: none;
+}
+.lp-footer-links a:hover, .lp-footer-links button:hover { color: var(--blue-deep); }
+
+/* ── Auth ───────────────────────────────────────────────────── */
+.lp-auth { min-height: 100vh; display: grid; place-items: center; padding: 48px var(--gutter); }
+.lp-auth-inner {
+  width: 100%; max-width: 940px;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: clamp(28px, 5vw, 68px); align-items: center;
+}
+.lp-auth-card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 18px; padding: clamp(26px, 4vw, 40px);
+  box-shadow: var(--shadow-lg);
+}
+.lp-auth-card h1 { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 6px; }
+.lp-auth-card > p { font-size: 0.92rem; color: var(--muted); margin: 0 0 26px; }
+
+.lp-field { display: grid; gap: 7px; margin-bottom: 15px; }
+.lp-field label { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.lp-input {
+  width: 100%; padding: 12px 14px; border-radius: 10px;
+  background: var(--paper); border: 1px solid var(--line-strong);
+  color: var(--ink); font-size: 0.95rem; font-family: inherit;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.lp-input::placeholder { color: var(--faint); }
+.lp-input:focus {
+  outline: none; background: var(--card);
+  border-color: var(--blue);
+  /* A ring rather than a thicker border: the border growing shifts the field
+     by a pixel and nudges everything below it. */
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+.lp-auth-submit { width: 100%; margin-top: 10px; }
+.lp-auth-alt { text-align: center; margin: 20px 0 0; font-size: 0.88rem; color: var(--muted); }
+.lp-auth-alt a { color: var(--blue); text-decoration: none; font-weight: 600; }
+.lp-auth-alt a:hover { text-decoration: underline; }
+
+.lp-alert {
+  padding: 11px 14px; border-radius: 10px; font-size: 0.86rem; margin-bottom: 16px;
+  background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B;
+}
+.lp-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.lp-form-grid .lp-field-full { grid-column: 1 / -1; }
+
+/* Explanatory line under a field. Was previously written inline as
+   rgba(255,255,255,0.45), which was invisible once the surface went light -
+   the kind of thing a hard-coded colour does the moment a theme changes. */
+.lp-field-hint {
+  font-size: 0.78rem; line-height: 1.5; color: var(--faint);
+  margin: -6px 0 14px;
+}
+.lp-section-label {
+  grid-column: 1 / -1; font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.11em; text-transform: uppercase; color: var(--faint);
+  margin: 18px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+}
+.lp-section-label:first-child { margin-top: 0; }
+
+/* On the primary button, which is white-on-violet. */
+.lp-spinner {
+  width: 15px; height: 15px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35); border-top-color: #fff;
+  animation: lp-rotate 0.7s linear infinite; margin-right: 8px;
+}
+@keyframes lp-rotate { to { transform: rotate(360deg); } }
+
+@media (max-width: 900px) {
+  .lp-auth-inner { grid-template-columns: 1fr; max-width: 440px; }
+  .lp-auth-aside { display: none; }
+}
+@media (max-width: 560px) { .lp-form-grid { grid-template-columns: 1fr; } }
+
+/* ── Account-type toggle ────────────────────────────────────── */
+/* A segmented control on the sign-in card. The thumb is one absolutely
+   positioned element that slides, rather than a background on whichever
+   option is active - sliding is what tells you the two are alternatives of
+   the same thing instead of two separate buttons. */
+.lp-toggle {
+  position: relative;
+  display: grid; grid-template-columns: 1fr 1fr;
+  padding: 4px; margin-bottom: 24px;
+  background: var(--paper);
+  border: 1px solid var(--line); border-radius: 12px;
+}
+/* Width and offset come from the component, which knows how many options
+   there are; only the look lives here. */
+.lp-toggle-thumb {
+  position: absolute; top: 4px; bottom: 4px; left: 4px;
+  border-radius: 9px;
+  background: var(--card); border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.lp-toggle-opt {
+  position: relative; z-index: 1;
+  background: none; border: 0; cursor: pointer;
+  padding: 10px 12px; border-radius: 9px;
+  font: inherit; font-size: 0.88rem; font-weight: 600;
+  color: var(--muted);
+  transition: color 0.2s ease;
+}
+.lp-toggle-opt.is-on { color: var(--blue-deep); }
+.lp-toggle-opt:hover { color: var(--ink); }
+
+/* ── Orbit sculpture (auth aside) ───────────────────────────── */
+/* These four classes are rendered by OrbitHero and were defined in no
+   stylesheet at all, so the sculpture had been shipping as four unstyled
+   divs. Perspective lives on the container: rotate3d without it reads as a
+   flat squash rather than a ring turning edge-on. */
+.lp-orbit {
+  position: relative; width: min(230px, 62%); aspect-ratio: 1;
+  display: grid; place-items: center;
+  perspective: 620px; margin-bottom: 4px;
+}
+.lp-orbit-ring {
+  position: absolute; border: 1px solid; border-radius: 50%;
+  animation-name: lp-spin; animation-timing-function: linear; animation-iteration-count: infinite;
+}
+.lp-orbit-core {
+  width: 15%; aspect-ratio: 1; border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 26px rgba(37, 99, 235, 0.36);
+}
+@keyframes lp-spin {
+  from { transform: rotate3d(var(--rx), var(--ry), 0, 0deg); }
+  to { transform: rotate3d(var(--rx), var(--ry), 0, 360deg); }
+}
+
+/* ── Reduced motion ─────────────────────────────────────────── */
+/* No object, no pins, sections stack at full opacity. */
+@media (prefers-reduced-motion: reduce) {
+  .lp-hero-pin, .lp-types, .lp-assembly { height: auto !important; }
+  .lp-hero-sticky, .lp-types-sticky, .lp-assembly-sticky { position: static; height: auto; padding-block: 72px; }
+  .lp-method-aside { position: static; }
+  .lp-mask > span { transform: none; transition: none; }
+  [data-reveal] { opacity: 1; transform: none; transition: none; }
+  /* .lp-hero-canvas is deliberately NOT in this list. With motion reduced
+     the scene is already off (useSceneEnabled gates on the same query), so
+     the canvas only ever holds the two static stills - and a still photo is
+     exactly what a reduced-motion visitor should get instead of a void. */
+  .lp-hero-stage, .lp-close-canvas,
+  .lp-assembly-stage, .lp-types-stage { display: none; }
+  /* The cue is absolutely positioned against a sticky stage. With the pin
+     collapsed the stage is a normal block and the cue lands in the middle of
+     the body copy - and there is nothing to scrub anyway. */
+  .lp-cue { display: none; }
+  /* The pin collapses here so the progress driving this never leaves zero -
+     but the inline style is authored per frame and would beat any normal
+     rule, so this is stated outright rather than left to depend on that. */
+  .lp-hero-copy { transform: none !important; opacity: 1 !important; }
+  /* The toggle still moves - it has to, it is the only thing saying which of
+     the two is selected - but it arrives rather than travels. */
+  .lp-toggle-thumb { transition: none; }
+  /* Stopped, but still tilted. Freezing the rings at 0deg leaves four
+     concentric circles, which reads as a bullseye rather than as rings seen
+     in perspective - the motion is what someone asked to remove, not the
+     shape. Each ring keeps its own axis, so they still interlock. */
+  .lp-orbit-ring {
+    animation: none;
+    transform: rotate3d(var(--rx), var(--ry), 0, 64deg);
+  }
+}

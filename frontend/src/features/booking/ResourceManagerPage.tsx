@@ -6,6 +6,7 @@ import { useToast, apiErrorMessage } from '../../shared/components/Toast';
 import ResourceFormModal from './ResourceFormModal';
 import ResourceDetailPanel from './ResourceDetailPanel';
 import { RESOURCE_CATEGORIES, type Resource } from './types';
+import { useSubtypeConfig } from '../dashboard/useSubtypeConfig';
 
 const STATUS_TONE: Record<string, string> = {
   Available: 'good',
@@ -15,6 +16,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export default function ResourceManagerPage() {
+  const subtype = useSubtypeConfig();
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const { show } = useToast();
@@ -47,8 +49,12 @@ export default function ResourceManagerPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Resource Manager</h1>
-          <p className="page-subtitle">Rooms, tables, vehicles and equipment, with weekly hours and live availability.</p>
+          <h1 className="page-title">{subtype.resourceTermPlural}</h1>
+          <p className="page-subtitle">
+            {subtype.subType === 'generic'
+              ? 'Rooms, tables, vehicles and equipment, with weekly hours and live availability.'
+              : `Your ${subtype.resourceTermPlural.toLowerCase()}, with weekly hours and live availability.`}
+          </p>
         </div>
         <button className="btn btn-primary" onClick={() => { setEditing(null); setShowForm(true); }}>+ New resource</button>
       </div>

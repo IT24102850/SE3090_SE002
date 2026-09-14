@@ -1,8 +1,15 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { loginUser, clearError } from '../store/authSlice';
 import { AppDispatch, RootState } from '../store/store';
+import OrbitHero from '../features/marketing/OrbitHero';
+import '../features/marketing/landing.css';
+
+/* Sign-in, on the same paper-and-violet surface as the landing page:
+ * wordmark, orbit sculpture, then a card carrying the form. The aside drops
+ * away under 900px rather than stacking, so the form is the first thing on a
+ * phone instead of being pushed below a hero. */
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -26,58 +33,73 @@ const LoginPage = () => {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '5rem auto', padding: '2rem', boxShadow: '0 0 10px rgba(0,0,0,0.1)' }}>
-      <h2>Login to SME Platform</h2>
-      
-      {error && (
-        <div style={{ padding: '0.75rem', background: '#fee2e2', color: '#dc2626', borderRadius: '4px', marginBottom: '1rem' }}>
-          {error}
+    <div className="lp">
+      <div className="lp-auth">
+        <div className="lp-auth-inner">
+          <div className="lp-auth-aside">
+            <Link className="lp-brand" to="/" style={{ marginBottom: 28 }}>
+              <span className="lp-brand-mark">U</span>
+              Unify
+            </Link>
+            <OrbitHero />
+            <h2 className="lp-h2" style={{ fontSize: '1.5rem', marginTop: 24 }}>
+              One console that <span className="lp-brandtext">becomes your business</span>
+            </h2>
+            <p className="lp-body" style={{ fontSize: '0.92rem' }}>
+              Bookings, resources, stock and reporting — shaped around what you actually do.
+            </p>
+          </div>
+
+          <div className="lp-auth-card">
+            <h1>Welcome back</h1>
+            {/* Deliberately not "your business console". One endpoint serves
+                everyone - /api/auth/login looks the account up by email and
+                returns whatever role it holds - so the form makes no claim
+                about who is signing in. */}
+            <p>Sign in to your Unify account.</p>
+
+            {error && <div className="lp-alert">{error}</div>}
+
+            <form onSubmit={handleSubmit}>
+              <div className="lp-field">
+                <label htmlFor="login-email">Email</label>
+                <input
+                  id="login-email"
+                  className="lp-input"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="lp-field">
+                <label htmlFor="login-password">Password</label>
+                <input
+                  id="login-password"
+                  className="lp-input"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <button type="submit" disabled={loading} className="lp-btn lp-btn-primary lp-auth-submit">
+                {loading ? <><span className="lp-spinner" /> Signing in…</> : 'Sign in'}
+              </button>
+            </form>
+
+            <p className="lp-auth-alt">
+              New here? <Link to="/register">Create an account</Link>
+            </p>
+          </div>
         </div>
-      )}
-
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: '100%', padding: '0.5rem', marginTop: '0.25rem' }}
-          />
-        </div>
-
-        <div style={{ marginBottom: '1rem' }}>
-          <label>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: '100%', padding: '0.5rem', marginTop: '0.25rem' }}
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            background: loading ? '#9ca3af' : '#2563eb',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {loading ? 'Signing in...' : 'Sign In'}
-        </button>
-      </form>
-
-      <p style={{ textAlign: 'center', marginTop: '1rem' }}>
-        New business? <a href="/register">Register your business</a>
-      </p>
+      </div>
     </div>
   );
 };

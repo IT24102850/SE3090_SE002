@@ -1,37 +1,55 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Provider } from 'react-redux';
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { store } from './store/store';
 import { initializeAuth } from './store/authSlice';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import DashboardPage from './pages/DashboardPage';
+import LandingPage from './features/marketing/LandingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './shared/components/AppLayout';
 import { ToastProvider } from './shared/components/Toast';
-import CalendarDashboardPage from './features/booking/CalendarDashboardPage';
-import BookingManagerPage from './features/booking/BookingManagerPage';
-import ResourceManagerPage from './features/booking/ResourceManagerPage';
-import MultiBranchSchedulePage from './features/booking/MultiBranchSchedulePage';
-import ReportsPage from './features/booking/ReportsPage';
-import AgentPlannerPage from './features/booking/AgentPlannerPage';
-import BookingTypeManagementPage from './features/booking/BookingTypeManagementPage';
-import MySchedulePage from './features/staff/MySchedulePage';
-import StaffManagementPage from './features/staff/StaffManagementPage';
-import BranchesPage from './features/branches/BranchesPage';
-import BusinessSettingsPage from './features/settings/BusinessSettingsPage';
-import BusinessProfilePage from './features/settings/BusinessProfilePage';
-import MyProfilePage from './features/settings/MyProfilePage';
 import './features/inventory/inventory.css';
 import { ToastProvider as InventoryToastProvider } from './features/inventory/ui/ToastContext';
-import { InventoryManagerPage } from './features/inventory/pages/InventoryManagerPage';
-import { StockMovementLogPage } from './features/inventory/pages/StockMovementLogPage';
-import { PurchaseOrderManagerPage } from './features/inventory/pages/PurchaseOrderManagerPage';
-import { AgentWorkflowMonitorPage } from './features/inventory/pages/AgentWorkflowMonitor';
-import { LowStockAlertsPage } from './features/inventory/pages/LowStockAlertsPage';
-import { BranchOverviewPage } from './features/inventory/pages/BranchOverviewPage';
-import { AnalyticsDashboardPage } from './features/inventory/pages/AnalyticsDashboardCharts';
-import { ForbiddenPage } from './features/inventory/pages/ForbiddenPage';
+
+/* Everything past the landing page is split out of the initial bundle.
+ *
+ * These are all admin surfaces: nobody arriving at the marketing page needs
+ * the booking manager, the inventory module or the analytics charts, and
+ * shipping them anyway is what put a single 1MB chunk in front of a visitor
+ * who came to read six paragraphs and press a button. They load on the first
+ * navigation that actually needs them, which is behind a login.
+ */
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const AdminPage = lazy(() => import('./pages/AdminPage'));
+const DashboardRouter = lazy(() => import('./features/dashboard/DashboardRouter'));
+const BookingManagerPage = lazy(() => import('./features/booking/BookingManagerPage'));
+const ResourceManagerPage = lazy(() => import('./features/booking/ResourceManagerPage'));
+const MultiBranchSchedulePage = lazy(() => import('./features/booking/MultiBranchSchedulePage'));
+const ReportsPage = lazy(() => import('./features/booking/ReportsPage'));
+const AgentPlannerPage = lazy(() => import('./features/booking/AgentPlannerPage'));
+const BookingTypeManagementPage = lazy(() => import('./features/booking/BookingTypeManagementPage'));
+const MySchedulePage = lazy(() => import('./features/staff/MySchedulePage'));
+const StaffManagementPage = lazy(() => import('./features/staff/StaffManagementPage'));
+const BranchesPage = lazy(() => import('./features/branches/BranchesPage'));
+const BusinessSettingsPage = lazy(() => import('./features/settings/BusinessSettingsPage'));
+const BusinessProfilePage = lazy(() => import('./features/settings/BusinessProfilePage'));
+const MyProfilePage = lazy(() => import('./features/settings/MyProfilePage'));
+const InventoryManagerPage = lazy(() => import('./features/inventory/pages/InventoryManagerPage').then((m) => ({ default: m.InventoryManagerPage })));
+const StockMovementLogPage = lazy(() => import('./features/inventory/pages/StockMovementLogPage').then((m) => ({ default: m.StockMovementLogPage })));
+const PurchaseOrderManagerPage = lazy(() => import('./features/inventory/pages/PurchaseOrderManagerPage').then((m) => ({ default: m.PurchaseOrderManagerPage })));
+const AgentWorkflowMonitorPage = lazy(() => import('./features/inventory/pages/AgentWorkflowMonitor').then((m) => ({ default: m.AgentWorkflowMonitorPage })));
+const LowStockAlertsPage = lazy(() => import('./features/inventory/pages/LowStockAlertsPage').then((m) => ({ default: m.LowStockAlertsPage })));
+const BranchOverviewPage = lazy(() => import('./features/inventory/pages/BranchOverviewPage').then((m) => ({ default: m.BranchOverviewPage })));
+const AnalyticsDashboardPage = lazy(() => import('./features/inventory/pages/AnalyticsDashboardCharts').then((m) => ({ default: m.AnalyticsDashboardPage })));
+const ForbiddenPage = lazy(() => import('./features/inventory/pages/ForbiddenPage').then((m) => ({ default: m.ForbiddenPage })));
+
+/* Deliberately near-empty. This shows for the length of one chunk fetch on a
+ * local network, and a spinner that appears and vanishes inside 100ms reads
+ * as a flicker of broken layout rather than as progress. */
+function RouteFallback() {
+  return <div style={{ minHeight: '60vh' }} aria-busy="true" />;
+}
 
 const AuthInitializer = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
@@ -63,6 +81,7 @@ function App() {
       <ToastProvider>
         <AuthInitializer>
           <BrowserRouter>
+            <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
@@ -71,7 +90,7 @@ function App() {
                 path="/dashboard"
                 element={
                   <ProtectedRoute>
-                    <Shell><CalendarDashboardPage /></Shell>
+                    <Shell><DashboardRouter /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -197,7 +216,7 @@ function App() {
                 path="/admin"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <Shell><div><h1 className="page-title">Admin Panel</h1></div></Shell>
+                    <Shell><AdminPage /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -268,9 +287,10 @@ function App() {
                 }
               />
 
-              <Route path="/" element={<LoginPage />} />
+              <Route path="/" element={<LandingPage />} />
               <Route path="*" element={<div style={{ padding: '2rem' }}><h1>404 - Page Not Found</h1></div>} />
             </Routes>
+            </Suspense>
           </BrowserRouter>
         </AuthInitializer>
       </ToastProvider>

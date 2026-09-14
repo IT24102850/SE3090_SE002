@@ -34,6 +34,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Agent Workflows Service")
 
+
+@app.get("/")
+def service_root() -> dict[str, str]:
+    return {"service": "agent-workflows", "status": "ok"}
+
+
+@app.get("/health")
+def service_health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 # Enable CORS for the frontend dev server(s) so the browser can call this service.
 # In production, narrow allowed origins to your real frontend hosts.
 app.add_middleware(
@@ -398,7 +409,7 @@ def workflows_approve(workflow_id: int, body: dict[str, Any]):
             est_unit_cost = tr.get("estimatedUnitCost") or tr.get("estimated_unit_cost") or tr.get("unitCost")
 
             if branch_id and supplier_id:
-                backend_url = os.environ.get("BACKEND_URL", "http://localhost:5000")
+                backend_url = os.environ.get("BACKEND_URL", "http://localhost:5107")
                 api_token = os.environ.get("BACKEND_API_KEY")
                 po_number = f"AI-PO-{workflow_id}-{int(datetime.utcnow().timestamp())}"
                 create_payload = {"BranchId": branch_id, "SupplierId": supplier_id, "Number": po_number, "Status": "Placed"}

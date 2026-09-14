@@ -1,5 +1,5 @@
 # Architecture Decision Records — SE3090_SE002
-## Universal SME Management Platform
+## Unify
 
 ---
 
