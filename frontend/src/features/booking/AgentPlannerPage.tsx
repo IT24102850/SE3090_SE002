@@ -26,10 +26,26 @@ function parseSteps(planJson?: string | null): WorkflowStep[] {
   if (!planJson) return [];
   try {
     const plan = JSON.parse(planJson);
-    return Array.isArray(plan?.steps) ? plan.steps : [];
+    const rawSteps = plan?.steps ?? plan?.Steps;
+    if (!Array.isArray(rawSteps)) return [];
+
+    return rawSteps
+      .filter((step): step is Record<string, unknown> => Boolean(step) && typeof step === 'object')
+      .map((step) => ({
+        agent: String(step.agent ?? step.Agent ?? ''),
+        action: String(step.action ?? step.Action ?? ''),
+        tool: String(step.tool ?? step.Tool ?? ''),
+        parameters: (step.parameters ?? step.Parameters ?? {}) as Record<string, unknown>,
+      }));
   } catch {
     return [];
   }
+}
+
+function formatWorkflowDate(value?: string | null): string {
+  if (!value) return 'Date unavailable';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString();
 }
 
 export default function AgentPlannerPage() {
@@ -218,7 +234,10 @@ function WorkflowCard({
 }) {
   const steps = parseSteps(workflow.planJson);
   const canApprove = workflow.approvalStatus === 'Pending';
-  const canApply = (workflow.approvalStatus === 'Approved' || workflow.approvalStatus === 'NotRequired') && workflow.status !== 'Completed';
+  const hasPlan = steps.length > 0;
+  const canApply = hasPlan
+    && (workflow.approvalStatus === 'Approved' || workflow.approvalStatus === 'NotRequired')
+    && workflow.status !== 'Completed';
 
   const [revisingOpen, setRevisingOpen] = useState(false);
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
@@ -236,7 +255,9 @@ function WorkflowCard({
         <div>
           <strong>{workflow.objective}</strong>
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
-            {steps.length} step(s) · {new Date(workflow.createdAt).toLocaleString()}
+            {hasPlan
+              ? `${steps.length} step(s) · ${formatWorkflowDate(workflow.createdAt)}`
+              : `No available slots · ${formatWorkflowDate(workflow.createdAt)}`}
           </div>
         </div>
         <span
@@ -253,7 +274,13 @@ function WorkflowCard({
         </span>
       </div>
 
-      {steps.length > 0 && (
+      {!hasPlan && (
+        <p style={{ fontSize: 13, color: 'var(--color-warning)', margin: '12px 0 0' }}>
+          No bookings were generated for this proposal. Adjust the booking type, branch, or date range and try again.
+        </p>
+      )}
+
+      {hasPlan && (
         <ul style={{ margin: '12px 0 0', paddingLeft: 18, fontSize: 13 }}>
           {steps.slice(0, 10).map((s, i) => (
             <li key={i} style={{ opacity: revisingOpen && excluded.has(i) ? 0.4 : 1 }}>
@@ -284,7 +311,7 @@ function WorkflowCard({
       {(workflow.approvedBy || workflow.errorLog) && (
         <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 10 }}>
           {workflow.approvedBy && workflow.approvedAt && (
-            <>Approved by {workflow.approvedBy} on {new Date(workflow.approvedAt).toLocaleString()}. </>
+            <>Approved by {workflow.approvedBy} on {formatWorkflowDate(workflow.approvedAt)}. </>
           )}
           {workflow.errorLog && workflow.approvalStatus === 'Rejected' && <>Rejected: {workflow.errorLog}</>}
         </p>

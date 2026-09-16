@@ -6,6 +6,9 @@ namespace SmeBackend.Models;
 public enum ResourceStatus
 {
     Available,
+    // Legacy database value retained for compatibility with resources created
+    // before statuses were renamed to Available.
+    Active = Available,
     UnderMaintenance,
     Archived,
     Reserved

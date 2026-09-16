@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
 import { getStoredToken } from '../authToken';
 import { Badge, type BadgeTone } from '../ui/Badge';
 import { useToast } from '../ui/ToastContext';
+import ConfirmDialog from '../../../shared/components/ConfirmDialog';
 
 type POStatus = 'Draft' | 'InReview' | 'Placed' | 'InTransit' | 'Received' | 'Cancelled';
 
@@ -12,6 +14,17 @@ type TimelineEvent = {
   at: string;
   by: string;
   note?: string;
+};
+
+type PurchaseOrderItem = {
+  id: string;
+  inventoryItemId?: string;
+  itemName?: string;
+  description?: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  receivedQuantity: number;
 };
 
 type PurchaseOrder = {
@@ -25,6 +38,18 @@ type PurchaseOrder = {
   createdAt: string;
   updatedAt: string;
   timeline: TimelineEvent[];
+  items?: PurchaseOrderItem[];
+};
+
+type PurchaseOrderItemResponse = {
+  id: string;
+  inventoryItemId?: string;
+  itemName?: string;
+  description?: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  receivedQuantity: number;
 };
 
 type PurchaseOrderResponse = {
@@ -35,8 +60,26 @@ type PurchaseOrderResponse = {
   supplierId: string;
   supplier?: string;
   status: string;
+  totalAmount: number;
+  lineItems: number;
   createdAt: string;
   updatedAt: string;
+  items?: PurchaseOrderItemResponse[];
+};
+
+type PurchaseOrderOption = { id: string; name: string };
+type PurchaseOrderItemOption = {
+  id: string;
+  name: string;
+  sku: string;
+  unitCost?: number;
+  branchId?: string;
+};
+
+type PurchaseOrderOptionsResponse = {
+  branches: PurchaseOrderOption[];
+  suppliers: PurchaseOrderOption[];
+  items?: PurchaseOrderItemOption[];
 };
 
 type PurchaseOrderListResponse = {
@@ -69,12 +112,7 @@ const statusTone: Record<POStatus, BadgeTone> = {
   Cancelled: 'red',
 };
 
-const suppliers = [
-  'Ceylon Coffee Traders',
-  'MetroPack Ltd',
-  'Fresh Farms Dairy',
-  'Flour & Co Bakery Supply',
-];
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api').replace(/\/$/, '');
 
 const statusFilters = ['All statuses', ...lifecycleSteps.map((step) => statusLabels[step]), 'Cancelled'] as const;
 type StatusFilter = (typeof statusFilters)[number];
@@ -170,16 +208,21 @@ const amountByNumber: Record<string, number> = {
   'PO-2141': 61400,
 };
 
+// Kept as a development fixture only; runtime state is always loaded from PostgreSQL via the API.
+void fallbackOrders;
+void amountByNumber;
+
 async function apiGet<T>(path: string, token: string | null): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
   if (!response.ok) throw new Error(`Request failed: ${path}`);
+  if (!response.ok) throw new Error(await apiErrorMessage(response, path));
   return response.json() as Promise<T>;
 }
 
 async function apiPut<T>(path: string, token: string | null, body: unknown): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -188,7 +231,32 @@ async function apiPut<T>(path: string, token: string | null, body: unknown): Pro
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(`Request failed: ${path}`);
+  if (!response.ok) throw new Error(await apiErrorMessage(response, path));
   return response.json() as Promise<T>;
+}
+
+async function apiPost<T>(path: string, token: string | null, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`Request failed: ${path}`);
+  if (!response.ok) throw new Error(await apiErrorMessage(response, path));
+  return response.json() as Promise<T>;
+}
+
+async function apiErrorMessage(response: Response, path: string): Promise<string> {
+  const fallback = `Request failed (${response.status}): ${path}`;
+  try {
+    const body = await response.json() as { message?: string; title?: string; errors?: Record<string, string[]> };
+    const validation = body.errors
+      ? Object.values(body.errors).flat().filter(Boolean).join(' ')
+      : '';
+    return body.message || body.title || validation || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function normalizeStatus(raw: string): POStatus {
@@ -240,11 +308,12 @@ function responseToOrder(response: PurchaseOrderResponse, existing?: PurchaseOrd
     supplier: response.supplier ?? 'Unknown supplier',
     branch: response.branch,
     status,
-    amount: existing?.amount ?? amountByNumber[response.number] ?? 0,
-    lineItems: existing?.lineItems ?? 1,
+    amount: Number(response.totalAmount ?? 0),
+    lineItems: Number(response.lineItems ?? (response.items?.length ?? 0)),
     createdAt: response.createdAt,
     updatedAt: response.updatedAt,
     timeline: existing?.timeline ?? [{ status: 'Draft', at: response.createdAt, by: 'System' }, ...(status !== 'Draft' ? [{ status, at: response.updatedAt, by: 'System' }] : [])],
+    items: response.items ?? existing?.items ?? [],
   };
 }
 
@@ -275,38 +344,305 @@ function LifecycleTracker({ status, compact = false }: { status: POStatus; compa
   );
 }
 
+type PoItemDraft = {
+  inventoryItemId: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+};
+
 function CreatePoModal({
   onClose,
   onCreate,
+  branches,
+  suppliers,
+  inventoryItems,
+  defaultNumber,
+  defaultBranchId,
+  initialInventoryItemId,
+  creating,
 }: {
   onClose: () => void;
-  onCreate: (supplier: string) => void;
+  onCreate: (draft: {
+    branchId: string;
+    supplierId: string;
+    number: string;
+    items: Array<{ inventoryItemId?: string; description?: string; quantity: number; unitPrice: number }>;
+  }) => Promise<void>;
+  branches: PurchaseOrderOption[];
+  suppliers: PurchaseOrderOption[];
+  inventoryItems: PurchaseOrderItemOption[];
+  defaultNumber: string;
+  defaultBranchId?: string;
+  initialInventoryItemId?: string;
+  creating: boolean;
 }) {
-  const [supplier, setSupplier] = useState(suppliers[0]);
+  const [branchId, setBranchId] = useState(defaultBranchId && branches.some((branch) => branch.id === defaultBranchId)
+    ? defaultBranchId
+    : branches[0]?.id ?? '');
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '');
+  const [poNumber, setPoNumber] = useState(defaultNumber);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  function handleSubmit(event: FormEvent) {
+  const initialItem = inventoryItems.find((item) => item.id === initialInventoryItemId) ?? inventoryItems[0];
+  const [items, setItems] = useState<PoItemDraft[]>([
+    {
+      inventoryItemId: initialItem?.id ?? '',
+      description: initialItem?.name ?? '',
+      quantity: 1,
+      unitPrice: initialItem?.unitCost ?? 0,
+    },
+  ]);
+
+  function handleItemSelect(index: number, val: string) {
+    setItems((prev) => {
+      const copy = [...prev];
+      if (val === 'custom') {
+        copy[index] = { ...copy[index], inventoryItemId: '', description: copy[index].description || '' };
+      } else {
+        const found = inventoryItems.find((inv) => inv.id === val);
+        copy[index] = {
+          ...copy[index],
+          inventoryItemId: val,
+          description: found?.name ?? copy[index].description,
+          unitPrice: found?.unitCost ?? copy[index].unitPrice,
+        };
+      }
+      return copy;
+    });
+  }
+
+  function handleFieldChange<K extends keyof PoItemDraft>(index: number, field: K, val: PoItemDraft[K]) {
+    setItems((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: val };
+      return copy;
+    });
+  }
+
+  function addItem() {
+    const nextItem = inventoryItems[0];
+    setItems((prev) => [
+      ...prev,
+      {
+        inventoryItemId: nextItem?.id ?? '',
+        description: nextItem?.name ?? '',
+        quantity: 1,
+        unitPrice: nextItem?.unitCost ?? 0,
+      },
+    ]);
+  }
+
+  function removeItem(index: number) {
+    if (items.length <= 1) return;
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  const grandTotal = items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
+
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    onCreate(supplier);
+    setError(null);
+
+    if (!branchId) {
+      setError('Branch is required.');
+      return;
+    }
+    if (!supplierId) {
+      setError('Supplier is required.');
+      return;
+    }
+    if (!poNumber.trim()) {
+      setError('PO number is required.');
+      return;
+    }
+    if (items.length === 0) {
+      setError('At least one item is required.');
+      return;
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item.inventoryItemId && !item.description.trim()) {
+        setError(`Item #${i + 1} requires an inventory item or custom description.`);
+        return;
+      }
+      if (Number(item.quantity) <= 0) {
+        setError(`Item #${i + 1} quantity must be greater than 0.`);
+        return;
+      }
+      if (Number(item.unitPrice) < 0) {
+        setError(`Item #${i + 1} unit price cannot be negative.`);
+        return;
+      }
+    }
+
+    setConfirmOpen(true);
+  }
+
+  async function confirmCreate() {
+    setConfirmOpen(false);
+    await onCreate({
+      branchId,
+      supplierId,
+      number: poNumber.trim(),
+      items: items.map((i) => ({
+        inventoryItemId: i.inventoryItemId ? i.inventoryItemId : undefined,
+        description: i.description.trim() || undefined,
+        quantity: Number(i.quantity),
+        unitPrice: Number(i.unitPrice),
+      })),
+    });
   }
 
   return (
     <div className="modal-overlay" onClick={onClose} role="presentation">
-      <div className="modal modal-sm" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-po-title">
+      <div className="modal modal-lg" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-po-title">
         <div className="modal-head">
-          <h2 id="create-po-title">Create purchase order</h2>
+          <h2 id="create-po-title">Create Purchase Order</h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          <label className="form-field form-field-wide">
-            Supplier
-            <select value={supplier} onChange={(event) => setSupplier(event.target.value)}>
-              {suppliers.map((option) => <option key={option}>{option}</option>)}
-            </select>
-          </label>
-          <p className="modal-hint">A draft PO will be created and can be advanced through the lifecycle.</p>
-          <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Create draft</button>
+          {error && <p className="modal-error">{error}</p>}
+
+          <div className="form-grid">
+            <label className="form-field">
+              PO Number
+              <input
+                value={poNumber}
+                onChange={(event) => setPoNumber(event.target.value)}
+                placeholder="e.g. PO-2148"
+                required
+              />
+            </label>
+            <label className="form-field">
+              Destination Branch
+              <select value={branchId} onChange={(event) => setBranchId(event.target.value)} required>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </label>
+            <label className="form-field form-field-wide">
+              Supplier
+              <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required>
+                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="po-items-section">
+            <div className="po-items-header">
+              <h3>Order Line Items</h3>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={addItem}>
+                + Add item
+              </button>
+            </div>
+
+            <table className="po-items-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '38%' }}>Item / Description</th>
+                  <th style={{ width: '18%' }}>Quantity</th>
+                  <th style={{ width: '22%' }}>Unit Price (LKR)</th>
+                  <th style={{ width: '18%', textAlign: 'right' }}>Subtotal</th>
+                  <th className="cell-action"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((row, idx) => {
+                  const lineSubtotal = (Number(row.quantity) || 0) * (Number(row.unitPrice) || 0);
+                  const isCustom = !row.inventoryItemId;
+
+                  return (
+                    <tr key={idx}>
+                      <td>
+                        <select
+                          value={row.inventoryItemId || 'custom'}
+                          onChange={(e) => handleItemSelect(idx, e.target.value)}
+                          style={{ marginBottom: isCustom ? '0.35rem' : '0' }}
+                        >
+                          <option value="custom">-- Custom Description --</option>
+                          {inventoryItems.map((inv) => (
+                            <option key={inv.id} value={inv.id}>
+                              {inv.name} ({inv.sku})
+                            </option>
+                          ))}
+                        </select>
+                        {isCustom && (
+                          <input
+                            type="text"
+                            placeholder="Enter custom item description"
+                            value={row.description}
+                            onChange={(e) => handleFieldChange(idx, 'description', e.target.value)}
+                            required
+                          />
+                        )}
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={row.quantity}
+                          onChange={(e) => handleFieldChange(idx, 'quantity', Number(e.target.value))}
+                          required
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={row.unitPrice}
+                          onChange={(e) => handleFieldChange(idx, 'unitPrice', Number(e.target.value))}
+                          required
+                        />
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        LKR {lineSubtotal.toLocaleString()}
+                      </td>
+                      <td className="cell-action">
+                        {items.length > 1 && (
+                          <button
+                            type="button"
+                            className="po-item-delete-btn"
+                            title="Remove item"
+                            onClick={() => removeItem(idx)}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            <div className="po-total-row">
+              <span>Total Order Value ({items.length} {items.length === 1 ? 'item' : 'items'}):</span>
+              <span style={{ fontSize: '1.05rem', color: 'var(--color-primary)' }}>
+                LKR {grandTotal.toLocaleString()}
+              </span>
+            </div>
+            {confirmOpen && (
+              <ConfirmDialog
+                title={`Create ${poNumber.trim()}?`}
+                message={`Create this purchase order for ${formatPrice(grandTotal)} with ${items.length} line item${items.length === 1 ? '' : 's'}? The order will be saved to the database as Draft.`}
+                confirmLabel="Create purchase order"
+                onConfirm={() => { void confirmCreate(); }}
+                onCancel={() => setConfirmOpen(false)}
+              />
+            )}
+          </div>
+
+          <div className="modal-actions" style={{ marginTop: '1.25rem' }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={creating}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={creating}>
+              {creating ? 'Creating…' : 'Create purchase order'}
+            </button>
           </div>
         </form>
       </div>
@@ -318,15 +654,19 @@ export function PurchaseOrderManagerPage() {
   const { notify } = useToast();
   const token = getStoredToken();
   const { user } = useSelector((state: RootState) => state.auth);
-  const [orders, setOrders] = useState<PurchaseOrder[]>(fallbackOrders);
-  const [usedFallback, setUsedFallback] = useState(true);
+  const [searchParams] = useSearchParams();
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [options, setOptions] = useState<PurchaseOrderOptionsResponse>({ branches: [], suppliers: [] });
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(statusFilters[0]);
   const [supplierFilter, setSupplierFilter] = useState('All suppliers');
-  const [selectedId, setSelectedId] = useState<string | null>(fallbackOrders[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [page, setPage] = useState(1);
+  const reorderItemId = searchParams.get('reorderItemId') ?? undefined;
+  const reorderBranchId = searchParams.get('branchId') ?? undefined;
 
   const performer = user?.fullName ?? 'Staff';
 
@@ -336,17 +676,20 @@ export function PurchaseOrderManagerPage() {
     async function load() {
       setLoading(true);
       try {
-        const response = await apiGet<PurchaseOrderListResponse>('/api/purchase-orders?pageSize=50', token);
+        const response = await apiGet<PurchaseOrderListResponse>('/purchase-orders?pageSize=100', token);
+        // An older deployed API can still provide orders while awaiting restart
+        // for the options endpoint. Never hide live orders in that window.
+        const referenceData = await apiGet<PurchaseOrderOptionsResponse>('/purchase-orders/options', token)
+          .catch(() => ({ branches: [], suppliers: [], items: [] }));
         if (cancelled) return;
-        if (response.items.length > 0) {
-          setOrders((prev) => {
-            const byNumber = new Map(prev.map((order) => [order.number, order]));
-            return response.items.map((item) => responseToOrder(item, byNumber.get(item.number)));
-          });
-          setUsedFallback(false);
-        }
+        setOrders(response.items.map((item) => responseToOrder(item)));
+        setOptions(referenceData);
+            if (reorderItemId && referenceData.items?.some((item) => item.id === reorderItemId)) {
+              setShowCreate(true);
+            }
+        setLoadError(null);
       } catch {
-        if (!cancelled) setUsedFallback(true);
+        if (!cancelled) setLoadError('Purchase orders could not be loaded from the live database. Check the API connection and sign in again.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -354,7 +697,7 @@ export function PurchaseOrderManagerPage() {
 
     load();
     return () => { cancelled = true; };
-  }, [token]);
+  }, [reorderItemId, token]);
 
   const filtered = useMemo(() => {
     const queryLower = query.trim().toLowerCase();
@@ -414,18 +757,18 @@ export function PurchaseOrderManagerPage() {
         : candidate
     )));
 
-    if (!usedFallback) {
-      try {
-        await apiPut<PurchaseOrderResponse>(`/api/purchase-orders/${order.id}/status`, token, { status: next });
-      } catch {
-        notify(`Could not sync ${order.number}; the status is only saved locally.`, 'error');
-        return;
-      }
+    try {
+      const updated = await apiPut<PurchaseOrderResponse>(`/purchase-orders/${order.id}/status`, token, { status: next });
+      setOrders((prev) => prev.map((candidate) => candidate.id === order.id ? responseToOrder(updated, candidate) : candidate));
+    } catch {
+      setOrders((prev) => prev.map((candidate) => candidate.id === order.id ? order : candidate));
+      notify(`Could not sync ${order.number}; no change was saved.`, 'error');
+      return;
     }
     notify(`${order.number} moved to ${statusLabels[next]}.`);
   }
 
-  function cancelOrder(order: PurchaseOrder) {
+  async function cancelOrder(order: PurchaseOrder) {
     if (order.status === 'Received' || order.status === 'Cancelled') return;
     const now = new Date().toISOString();
     const timelineEvent: TimelineEvent = { status: 'Cancelled', at: now, by: performer, note: 'Cancelled by user' };
@@ -434,28 +777,75 @@ export function PurchaseOrderManagerPage() {
         ? { ...candidate, status: 'Cancelled', updatedAt: now, timeline: [...candidate.timeline, timelineEvent] }
         : candidate
     )));
+    try {
+      const updated = await apiPut<PurchaseOrderResponse>(`/purchase-orders/${order.id}/status`, token, { status: 'Cancelled' });
+      setOrders((prev) => prev.map((candidate) => candidate.id === order.id ? responseToOrder(updated, candidate) : candidate));
+    } catch {
+      setOrders((prev) => prev.map((candidate) => candidate.id === order.id ? order : candidate));
+      notify(`Could not cancel ${order.number}; no change was saved.`, 'error');
+      return;
+    }
     notify(`${order.number} was cancelled.`, 'info');
   }
 
-  function createOrder(supplier: string) {
+  const [creating, setCreating] = useState(false);
+
+  async function createOrder(draft: {
+    branchId: string;
+    supplierId: string;
+    number: string;
+    items: Array<{ inventoryItemId?: string; description?: string; quantity: number; unitPrice: number }>;
+  }) {
+    const supplier = options.suppliers.find((option) => option.id === draft.supplierId);
+    const branch = options.branches.find((option) => option.id === draft.branchId);
+    if (!supplier || !branch) {
+      notify('Select a valid branch and supplier before creating a purchase order.', 'error');
+      return;
+    }
     const now = new Date().toISOString();
-    const number = nextPoNumber(orders);
+    const totalAmount = draft.items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
     const created: PurchaseOrder = {
-      id: `local-${number}`,
-      number,
-      supplier,
-      branch: 'Main branch',
+      id: '',
+      number: draft.number,
+      supplier: supplier.name,
+      branch: branch.name,
       status: 'Draft',
-      amount: 0,
-      lineItems: 0,
+      amount: totalAmount,
+      lineItems: draft.items.length,
       createdAt: now,
       updatedAt: now,
       timeline: [{ status: 'Draft', at: now, by: performer }],
+      items: draft.items.map((i, idx) => ({
+        id: `temp-${idx}`,
+        inventoryItemId: i.inventoryItemId,
+        itemName: options.items?.find((inv) => inv.id === i.inventoryItemId)?.name ?? i.description,
+        description: i.description,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        lineTotal: i.quantity * i.unitPrice,
+        receivedQuantity: 0,
+      })),
     };
-    setOrders((prev) => [created, ...prev]);
-    setSelectedId(created.id);
-    setShowCreate(false);
-    notify(`${number} draft was created.`);
+    setCreating(true);
+    try {
+      const response = await apiPost<PurchaseOrderResponse>('/purchase-orders', token, {
+        branchId: draft.branchId,
+        supplierId: draft.supplierId,
+        number: draft.number,
+        status: 'Draft',
+        items: draft.items,
+      });
+      const liveOrder = responseToOrder(response, created);
+      setOrders((prev) => [liveOrder, ...prev]);
+      setSelectedId(liveOrder.id);
+      setShowCreate(false);
+      notify(`Purchase order ${draft.number} was created successfully with ${draft.items.length} line items (Total: ${formatPrice(totalAmount)}).`, 'success');
+    } catch (err: any) {
+      console.error(err);
+      notify(`Could not create ${draft.number}: ${err?.message || 'Check connection'}`, 'error');
+    } finally {
+      setCreating(false);
+    }
   }
 
   const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
@@ -474,8 +864,8 @@ export function PurchaseOrderManagerPage() {
         </div>
       </header>
 
-      {usedFallback && !loading && (
-        <p className="page-banner">Showing demo data — connect to the API to sync live purchase orders.</p>
+      {loadError && !loading && (
+        <p className="page-banner">{loadError}</p>
       )}
 
       <section className="stat-strip" aria-label="Purchase order summary">
@@ -503,7 +893,7 @@ export function PurchaseOrderManagerPage() {
             </select>
             <select className="filter-select" value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)} aria-label="Filter by supplier">
               <option>All suppliers</option>
-              {suppliers.map((option) => <option key={option}>{option}</option>)}
+              {options.suppliers.map((option) => <option key={option.id}>{option.name}</option>)}
             </select>
           </div>
 
@@ -615,6 +1005,26 @@ export function PurchaseOrderManagerPage() {
                     ))}
                   </ol>
                 </div>
+                {selected.items && selected.items.length > 0 && (
+                  <div className="po-detail-items">
+                    <h3>Line items</h3>
+                    <table className="po-detail-items-table">
+                      <thead>
+                        <tr><th>Item / Description</th><th className="num">Quantity</th><th className="num">Unit price</th><th className="num">Total</th></tr>
+                      </thead>
+                      <tbody>
+                        {selected.items.map((item) => (
+                          <tr key={item.id}>
+                            <td>{item.itemName || item.description || 'Unnamed item'}</td>
+                            <td className="num">{item.quantity.toLocaleString()}</td>
+                            <td className="num">{formatPrice(item.unitPrice)}</td>
+                            <td className="num">{formatPrice(item.lineTotal)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -625,7 +1035,19 @@ export function PurchaseOrderManagerPage() {
         </aside>
       </div>
 
-      {showCreate && <CreatePoModal onClose={() => setShowCreate(false)} onCreate={createOrder} />}
+      {showCreate && (
+        <CreatePoModal
+          onClose={() => setShowCreate(false)}
+          onCreate={createOrder}
+          branches={options.branches}
+          suppliers={options.suppliers}
+          inventoryItems={options.items ?? []}
+          defaultNumber={nextPoNumber(orders)}
+          defaultBranchId={reorderBranchId ?? user?.branchId}
+          initialInventoryItemId={reorderItemId}
+          creating={creating}
+        />
+      )}
     </div>
   );
 }

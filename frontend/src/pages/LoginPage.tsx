@@ -10,6 +10,9 @@ const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    localStorage.getItem('unify-home-theme') === 'dark' ? 'dark' : 'light',
+  );
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { show } = useToast();
@@ -20,6 +23,11 @@ const LoginPage = () => {
     return () => { dispatch(clearError()); };
   }, [isAuthenticated, navigate, dispatch, show, user?.fullName]);
   useEffect(() => { if (error) show(error, 'error'); }, [error, show]);
+  useEffect(() => {
+    document.documentElement.dataset.unifyTheme = theme;
+    localStorage.setItem('unify-home-theme', theme);
+    return () => { delete document.documentElement.dataset.unifyTheme; };
+  }, [theme]);
 
   return <main className="lp lp-auth-page"><div className="lp-auth-backdrop" aria-hidden="true" /><div className="lp-auth"><div className="lp-auth-inner">
     <section className="lp-auth-aside lp-auth-story" aria-label="About Unify">
@@ -27,6 +35,7 @@ const LoginPage = () => {
       <div className="lp-auth-photo"><img src="/landing/dive-centre.jpg" alt="A team preparing for a day of work" /></div><p className="lp-kicker"><span /> OPERATIONS, SIMPLIFIED</p><h1>Run the day.<br /><span>See the whole picture.</span></h1><p className="lp-body">Bookings, staff, inventory and customer activity — one calm workspace for the work that matters.</p><div className="lp-proof"><span>✓</span><span>Private, role-based access for every team</span></div>
     </section>
     <section className="lp-auth-card lp-auth-card-rich" aria-labelledby="login-title">
+      <div className="lp-auth-theme" aria-label="Choose colour theme"><button type="button" className={theme === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')} aria-pressed={theme === 'light'}>Light</button><button type="button" className={theme === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')} aria-pressed={theme === 'dark'}>Dark</button></div>
       <Link className="lp-auth-home" to="/"><span aria-hidden="true">⌂</span> Home</Link>
       <Link className="lp-auth-mobile-brand" to="/"><img src="/unify-logo.svg" alt="Unify" /></Link><div className="lp-auth-eyebrow">WELCOME BACK</div><h1 id="login-title">Sign in to your workspace</h1><p>Use the account details you registered with.</p>
       {error && <div className="lp-alert" role="alert"><span>!</span>{error}</div>}

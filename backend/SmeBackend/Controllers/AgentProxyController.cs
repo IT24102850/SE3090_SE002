@@ -140,6 +140,13 @@ public sealed class AgentProxyController(
             .Where(supplier => supplierIds.Contains(supplier.Id))
             .ToDictionaryAsync(supplier => supplier.Id, supplier => supplier.Name, cancellationToken);
 
+        var orderIds = orders.Select(order => order.Id).ToList();
+        var totals = await db.PurchaseOrderItems.AsNoTracking()
+            .Where(item => orderIds.Contains(item.PurchaseOrderId))
+            .GroupBy(item => item.PurchaseOrderId)
+            .Select(group => new { Id = group.Key, Amount = group.Sum(item => item.Quantity * item.UnitPrice), LineItems = group.Count() })
+            .ToDictionaryAsync(item => item.Id, cancellationToken);
+
         return orders
             .Select(order => new PurchaseOrderResponse(
                 order.Id,
@@ -149,6 +156,8 @@ public sealed class AgentProxyController(
                 order.SupplierId,
                 suppliers.GetValueOrDefault(order.SupplierId),
                 order.Status,
+                totals.GetValueOrDefault(order.Id)?.Amount ?? 0m,
+                totals.GetValueOrDefault(order.Id)?.LineItems ?? 0,
                 order.CreatedAt,
                 order.UpdatedAt))
             .ToList();

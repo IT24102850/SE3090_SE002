@@ -84,7 +84,7 @@ export default function ReportsPage() {
         </div>
         <div className="stat-tile">
           <div className="stat-tile-label">Est. revenue</div>
-          <div className="stat-tile-value">${totalRevenue.toFixed(0)}</div>
+          <div className="stat-tile-value">LKR {totalRevenue.toFixed(0)}</div>
           <div className="stat-tile-sub">booked hours × hourly rate</div>
         </div>
       </div>
@@ -120,7 +120,7 @@ export default function ReportsPage() {
               .map(({ resource, metrics: m }) => ({
                 label: resource.name,
                 value: m!.estimatedRevenue,
-                displayValue: `$${m!.estimatedRevenue.toFixed(0)}`,
+                displayValue: `LKR ${m!.estimatedRevenue.toFixed(0)}`,
                 color: 'var(--color-good)',
               }))}
           />

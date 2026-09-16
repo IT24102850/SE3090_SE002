@@ -13,14 +13,14 @@ function relativeTime(value: string) {
 // workflow updates. The panel is intentionally loaded only once opened.
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const { data: countData } = useGetUnreadNotificationCountQuery(undefined, { pollingInterval: 60000 });
-  const { data, isLoading } = useGetNotificationsQuery(undefined, { skip: !open });
+  const { data: countData } = useGetUnreadNotificationCountQuery(undefined, { pollingInterval: 30000 });
+  const { data, isLoading } = useGetNotificationsQuery(undefined, { pollingInterval: 30000 });
   const [markRead] = useMarkNotificationReadMutation();
   const unread = countData?.count ?? 0;
 
   return <div className="notification-center">
     <button className={`notification-trigger${unread > 0 ? ' has-unread' : ''}`} type="button" onClick={() => setOpen((value) => !value)} aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`} aria-expanded={open}>
-      <span aria-hidden="true">♢</span><small>Updates</small>{unread > 0 && <b>{unread > 9 ? '9+' : unread}</b>}
+      <span aria-hidden="true">🔔</span><small>Updates</small>{unread > 0 && <b>{unread > 9 ? '9+' : unread}</b>}
     </button>
     {open && <><button className="notification-scrim" type="button" aria-label="Close notifications" onClick={() => setOpen(false)} />
       <section className="notification-panel" aria-label="Notifications">

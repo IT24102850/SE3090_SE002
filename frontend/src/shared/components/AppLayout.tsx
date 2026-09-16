@@ -8,6 +8,7 @@ import { bookingApi } from '../../api/bookingApi';
 import { resetSubtypeCache } from '../../features/dashboard/subtype';
 import { useSubtypeConfig } from '../../features/dashboard/useSubtypeConfig';
 import { useToast } from './Toast';
+import WorkspaceAssistant from './WorkspaceAssistant';
 
 interface NavItem {
   path: string;
@@ -149,6 +150,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     : location.pathname === '/inventory'
       ? 'STOCK MANAGEMENT'
       : location.pathname.replace('/', '').replace(/-/g, ' ').toUpperCase() || 'OPERATIONS';
+  const pageCategory = location.pathname.startsWith('/inventory') || location.pathname === '/purchase-orders' || location.pathname === '/stock-movements' || location.pathname === '/low-stock-alerts' || location.pathname === '/branch-overview'
+    ? 'inventory'
+    : location.pathname === '/planner' || location.pathname === '/agent-workflows'
+      ? 'automation'
+      : location.pathname === '/resources' || location.pathname === '/staff' || location.pathname === '/branches'
+        ? 'resources'
+        : location.pathname === '/bookings' || location.pathname === '/my-schedule' || location.pathname === '/multi-branch' || location.pathname === '/booking-types'
+          ? 'scheduling'
+          : location.pathname === '/business-profile' || location.pathname === '/settings'
+            ? 'business'
+            : 'overview';
 
   // Collapsed by default except the section you are in, so the list stays
   // short without putting anything more than one click away. Once the user
@@ -324,7 +336,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <NotificationBell />
           </div>
         </header>}
-        <div className="app-content">{children}</div>
+        <div className={`app-content page-category-${pageCategory}`}>{children}</div>
         {user && <footer className="app-footer">
           <span><b>UNIFY</b> · Your work, in flow</span>
           <span className="app-footer-status"><i /> Workspace synced</span>
@@ -349,6 +361,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </nav>
         )}
       </div>
+      {user && <WorkspaceAssistant />}
       {logoutConfirmOpen && (
         <div className="confirm-backdrop" role="presentation" onMouseDown={() => setLogoutConfirmOpen(false)}>
           <section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="logout-title" onMouseDown={(event) => event.stopPropagation()}>

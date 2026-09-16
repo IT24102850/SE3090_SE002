@@ -103,8 +103,6 @@ ThemeData appTheme(AppThemeChoice choice) {
   const primary = Color(0xFF3B6BEA);
   const secondary = Color(0xFFE86D5A);
   final surface = isDark ? const Color(0xFF151D35) : Colors.white;
-  final surfaceRaised =
-      isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
   final background = isDark ? const Color(0xFF090D1F) : const Color(0xFFF7F8FF);
   final onSurface = isDark ? ink : const Color(0xFF0F172A);
   final onSurfaceVariant =

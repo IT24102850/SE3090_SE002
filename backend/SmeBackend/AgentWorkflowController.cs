@@ -57,9 +57,6 @@ public class AgentWorkflowController : ControllerBase
             .Where(r => !dto.BranchId.HasValue || r.BranchId == dto.BranchId)
             .ToListAsync();
 
-        if (resources.Count == 0)
-            return Ok(new { message = "No resources available to schedule against.", steps = Array.Empty<object>() });
-
         var resourceIds = resources.Select(r => r.Id).ToList();
         var today = DateTime.UtcNow.Date;
         var horizonEnd = today.AddDays(withinDays);
@@ -126,6 +123,15 @@ public class AgentWorkflowController : ControllerBase
                         endTime = openSlot.EndTime
                     }));
             }
+        }
+
+        if (proposedSteps.Count == 0)
+        {
+            var branchScope = dto.BranchId.HasValue ? " in the selected branch" : " across all branches";
+            return Conflict(new
+            {
+                message = $"No available booking slots were found{branchScope} within the next {withinDays} day(s). Try a shorter booking type, a different branch, or a wider date range."
+            });
         }
 
         var plan = new PlanDto(proposedSteps, 0);
@@ -215,6 +221,21 @@ public class AgentWorkflowController : ControllerBase
         wf.Status = "Completed";
         wf.CompletedAt = DateTime.UtcNow;
         wf.FinalOutcome = $"Applied: {created} booking(s) created, {skipped} skipped.";
+        wf.ToolResultsJson = JsonSerializer.Serialize(new
+        {
+            workflowType = "schedule",
+            plannedBookings = plan.Steps.Count,
+            createdBookings = created,
+            skippedBookings = skipped,
+            notes = wf.FinalOutcome
+        });
+        wf.ValidationResults = JsonSerializer.Serialize(new
+        {
+            valid = skipped == 0,
+            checkedBookings = plan.Steps.Count,
+            conflictsSkipped = skipped,
+            confidence = skipped == 0 ? 1 : (double)created / plan.Steps.Count
+        });
         wf.UpdatedAt = DateTime.UtcNow;
 
         if (wf.RequestedByUserId.HasValue && created > 0)

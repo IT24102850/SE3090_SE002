@@ -54,6 +54,9 @@ const RegisterPage = () => {
   const [mode, setMode] = useState<Mode>('business');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    localStorage.getItem('unify-home-theme') === 'dark' ? 'dark' : 'light',
+  );
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const { show } = useToast();
@@ -92,6 +95,11 @@ const RegisterPage = () => {
   const [tenantsError, setTenantsError] = useState('');
 
   useEffect(() => { if (error) show(error, 'error'); }, [error, show]);
+  useEffect(() => {
+    document.documentElement.dataset.unifyTheme = theme;
+    localStorage.setItem('unify-home-theme', theme);
+    return () => { delete document.documentElement.dataset.unifyTheme; };
+  }, [theme]);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,6 +174,7 @@ const RegisterPage = () => {
           </div>
 
           <div className="lp-auth-card lp-auth-card-rich lp-register-card">
+            <div className="lp-auth-theme" aria-label="Choose colour theme"><button type="button" className={theme === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')} aria-pressed={theme === 'light'}>Light</button><button type="button" className={theme === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')} aria-pressed={theme === 'dark'}>Dark</button></div>
             <Link className="lp-auth-home" to="/"><span aria-hidden="true">⌂</span> Home</Link>
             <div className="lp-auth-eyebrow">GET STARTED</div>
             <div className="lp-register-heading">

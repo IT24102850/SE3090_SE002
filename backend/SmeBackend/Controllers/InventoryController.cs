@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SmeBackend.Authorization;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Shared;
 
 namespace SmeBackend.Controllers;
 
@@ -63,7 +64,7 @@ public sealed class InventoryController(
 
         if (lowStock)
         {
-            query = query.Where(item => item.Quantity <= 0 || item.Quantity < item.ReorderLevel);
+            query = query.Where(item => item.Quantity <= 0 || item.Quantity <= item.ReorderLevel);
         }
 
         if (branchId.HasValue)
@@ -297,6 +298,7 @@ public sealed class InventoryController(
         item.UnitCost = request.UnitCost;
         item.UpdatedAt = DateTime.UtcNow;
 
+        NotificationHelper.Queue(db, tenantId, null, "InventoryUpdated", "Inventory item updated", $"{item.Name} was updated.");
         await db.SaveChangesAsync(cancellationToken);
         var updated = await LoadItemAsync(item.Id, cancellationToken);
         return Ok(ToResponse(updated!));
@@ -336,6 +338,7 @@ public sealed class InventoryController(
 
         item.IsActive = false;
         item.UpdatedAt = DateTime.UtcNow;
+        NotificationHelper.Queue(db, tenantId, null, "InventoryDeleted", "Inventory item removed", $"{item.Name} was removed from inventory.");
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
@@ -402,6 +405,7 @@ public sealed class InventoryController(
             OccurredAt = DateTime.UtcNow,
         });
 
+        NotificationHelper.Queue(db, tenantId, null, "StockAdjusted", "Stock adjusted", $"{item.Name} stock changed by {request.Quantity}.");
         await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(item));
     }
@@ -474,6 +478,7 @@ public sealed class InventoryController(
             OccurredAt = DateTime.UtcNow,
         });
 
+        NotificationHelper.Queue(db, tenantId, null, "StockReceived", "Stock received", $"{item.Name} received {request.Quantity} units.");
         await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(item));
     }
@@ -580,6 +585,7 @@ public sealed class InventoryController(
         };
 
         db.InventoryItems.Add(item);
+        NotificationHelper.Queue(db, tenantId, null, "InventoryCreated", "New inventory item", $"{item.Name} was added to inventory.");
         await db.SaveChangesAsync(cancellationToken);
 
         var created = await db.InventoryItems

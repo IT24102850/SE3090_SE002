@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
 import { Badge, type BadgeTone } from '../ui/Badge';
 import { useToast } from '../ui/ToastContext';
 import { Icon } from '../ui/Icon';
 import { getStoredToken } from '../authToken';
+import ConfirmDialog from '../../../shared/components/ConfirmDialog';
 
 type StockStatus = 'In stock' | 'Low stock' | 'Out of stock';
 
@@ -27,14 +29,9 @@ type StockForm = Omit<StockRow, 'sku'>;
 
 const PAGE_SIZE = 5;
 
-const suppliers = [
-  { name: 'Ceylon Coffee Traders', category: 'Coffee & beverages', outstanding: 'LKR 184,500', rating: 4 },
-  { name: 'MetroPack Ltd', category: 'Packaging & supplies', outstanding: 'LKR 96,200', rating: 5 },
-  { name: 'Fresh Farms Dairy', category: 'Dairy & chilled', outstanding: 'LKR 72,850', rating: 4 },
-  { name: 'Flour & Co Bakery Supply', category: 'Bakery & desserts', outstanding: 'LKR 61,400', rating: 3 },
-];
+type SupplierRow = { id: string; name: string };
 
-const categoryOptions = ['Coffee & beverages', 'Packaging & supplies', 'Bakery & desserts', 'Dairy & chilled', 'Groceries'];
+const categoryOptions = ['Office essentials', 'Technology', 'Provisions', 'Print & marketing', 'Other items'];
 const categories = ['All categories', ...categoryOptions];
 const statusFilters = ['All statuses', 'In stock', 'Low stock', 'Out of stock'] as const;
 type StatusFilter = (typeof statusFilters)[number];
@@ -65,6 +62,16 @@ function formatPrice(amount: number) {
   return `LKR ${amount.toLocaleString()}`;
 }
 
+function displayCategory(category: string | null | undefined, itemName: string) {
+  if (category?.trim()) return category.trim();
+  const normalized = itemName.toLowerCase();
+  if (/(laptop|computer|usb|printer|electronic|tech)/.test(normalized)) return 'Technology';
+  if (/(paper|cabinet|marker|stationery|office|desk|chair)/.test(normalized)) return 'Office essentials';
+  if (/(water|rice|food|beverage|coffee|sugar|milk|provision)/.test(normalized)) return 'Provisions';
+  if (/(toner|card|print|marketing|brochure)/.test(normalized)) return 'Print & marketing';
+  return 'Other items';
+}
+
 function nextSku(items: StockRow[]) {
   const max = items.reduce((acc, row) => {
     const num = parseInt(row.sku.replace(/\D/g, ''), 10);
@@ -93,6 +100,8 @@ function Stars({ rating }: { rating: number }) {
   );
 }
 
+void Stars;
+
 function ItemModal({
   title,
   initial,
@@ -108,6 +117,7 @@ function ItemModal({
 }) {
   const [form, setForm] = useState(initial);
   const [error, setError] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   function update<K extends keyof StockForm>(key: K, value: StockForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -131,6 +141,11 @@ function ItemModal({
       setError('Price, quantity, and reorder level must be zero or greater.');
       return;
     }
+    setConfirmOpen(true);
+  }
+
+  function confirmSave() {
+    setConfirmOpen(false);
     onSave(form);
   }
 
@@ -181,6 +196,17 @@ function ItemModal({
           </div>
         </form>
       </div>
+      {confirmOpen && (
+        <ConfirmDialog
+          title={title.startsWith('Add') ? 'Add this item to inventory?' : 'Save inventory changes?'}
+          message={title.startsWith('Add')
+            ? `Create "${form.item}" with ${form.qty} ${form.unit} in the database?`
+            : `Update "${form.item}" and save the changes to the database?`}
+          confirmLabel={title.startsWith('Add') ? 'Add item' : 'Save changes'}
+          onConfirm={confirmSave}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -189,11 +215,13 @@ export function InventoryManagerPage() {
   const { notify } = useToast();
   const token = getStoredToken();
   const { user } = useSelector((state: RootState) => state.auth);
+  const [searchParams] = useSearchParams();
   const [items, setItems] = useState<StockRow[]>([]);
+  const [supplierRows, setSupplierRows] = useState<SupplierRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => searchParams.get('search') ?? '');
   const [category, setCategory] = useState(categories[0]);
   const [status, setStatus] = useState<StatusFilter>(statusFilters[0]);
   const [page, setPage] = useState(1);
@@ -240,7 +268,7 @@ export function InventoryManagerPage() {
 
   const editingItem = modal?.mode === 'edit' ? items.find((row) => row.sku === modal.sku) : undefined;
 
-  async function loadInventory() {
+  async function loadInventory(): Promise<boolean> {
     setLoading(true);
     setLoadError('');
     try {
@@ -248,12 +276,16 @@ export function InventoryManagerPage() {
         headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
       });
       if (!response.ok) throw new Error(`Inventory request failed (${response.status})`);
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.message || errorBody?.title || `Inventory request failed (${response.status})`);
+      }
       const data = await response.json();
       setItems((data.items ?? []).map((item: any): StockRow => ({
         id: item.id,
         sku: item.sku,
         item: item.name,
-        category: item.category ?? 'Uncategorized',
+        category: displayCategory(item.category, item.name),
         unit: item.unit ?? 'unit',
         categoryId: item.categoryId ?? undefined,
         unitId: item.unitId ?? undefined,
@@ -263,18 +295,36 @@ export function InventoryManagerPage() {
         reorder: Number(item.reorderLevel ?? 0),
         owner: item.branch ?? 'Inventory Admin',
       })));
+      const supplierResponse = await fetch('/api/purchase-orders/options', {
+        headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
+      });
+      if (supplierResponse.ok) {
+        const supplierData = await supplierResponse.json();
+        setSupplierRows(supplierData.suppliers ?? []);
+      }
     } catch (error) {
       console.error(error);
       setItems([]);
       setLoadError('Unable to load inventory from the database. Refresh and try again.');
+      const message = error instanceof Error ? error.message : 'Unable to load inventory from the database.';
+      setLoadError(`${message} Refresh and try again.`);
+      notify(message, 'error');
+      return false;
     } finally {
       setLoading(false);
     }
+    return true;
   }
 
   useEffect(() => {
     void loadInventory();
   }, [token]);
+
+  async function handleRefresh() {
+    if (await loadInventory()) {
+      notify('Inventory refreshed.', 'success');
+    }
+  }
 
   async function handleSave(form: StockForm) {
     setSaving(true);
@@ -297,21 +347,29 @@ export function InventoryManagerPage() {
           unitCost: form.price,
         }),
       });
-      if (!response.ok) throw new Error(`Save failed (${response.status})`);
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => null);
+        const errDetail = errJson?.message || errJson?.title || `Save failed (${response.status})`;
+        throw new Error(errDetail);
+      }
       if (existing && form.qty !== existing.qty) {
         const adjustment = await fetch(`/api/inventory/${existing.id}/adjust`, {
           method: 'POST',
           headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: token ? 'Bearer ' + token : '' },
           body: JSON.stringify({ quantity: form.qty - existing.qty, reference: 'Inventory manager edit' }),
         });
-        if (!adjustment.ok) throw new Error(`Quantity adjustment failed (${adjustment.status})`);
+        if (!adjustment.ok) {
+          const adjJson = await adjustment.json().catch(() => null);
+          const adjDetail = adjJson?.message || `Quantity adjustment failed (${adjustment.status})`;
+          throw new Error(adjDetail);
+        }
       }
       await loadInventory();
       setModal(null);
-      notify(`${form.item} was ${existing ? 'updated' : 'added'} in inventory.`);
-    } catch (error) {
+      notify(`${form.item} was successfully ${existing ? 'updated' : 'added'} in inventory.`, 'success');
+    } catch (error: any) {
       console.error(error);
-      notify('Inventory could not be saved. Check your connection and permissions.', 'error');
+      notify(error?.message || 'Inventory could not be saved. Check your connection and permissions.', 'error');
     } finally {
       setSaving(false);
     }
@@ -322,7 +380,7 @@ export function InventoryManagerPage() {
     const item = items.find((row) => row.sku === deleteSku);
     if (!item?.id) {
       setDeleteSku(null);
-      notify('This fallback row is not connected to the live inventory.', 'warning');
+      notify('This inventory item is missing its database ID. Refresh and try again.', 'warning');
       return;
     }
     try {
@@ -330,13 +388,16 @@ export function InventoryManagerPage() {
         method: 'DELETE',
         headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
       });
-      if (!response.ok) throw new Error(`Delete failed (${response.status})`);
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => null);
+        throw new Error(errJson?.message || `Delete failed (${response.status})`);
+      }
       await loadInventory();
       setDeleteSku(null);
-      notify(`${item.item} was deleted.`, 'info');
-    } catch (error) {
+      notify(`${item.item} was successfully deleted from inventory.`, 'success');
+    } catch (error: any) {
       console.error(error);
-      notify('Inventory item could not be deleted.', 'error');
+      notify(error?.message || 'Inventory item could not be deleted.', 'error');
     }
   }
 
@@ -352,7 +413,7 @@ export function InventoryManagerPage() {
           <p className="page-sub">Search items, monitor stock levels, and keep suppliers in check.</p>
         </div>
         <div className="page-actions">
-          <button className="btn btn-secondary" type="button" onClick={() => void loadInventory()} disabled={loading}>Refresh</button>
+          <button className="btn btn-secondary" type="button" onClick={() => void handleRefresh()} disabled={loading}>Refresh</button>
           <button className="btn btn-secondary" type="button" onClick={() => notify('Import is ready for a CSV file. File selection will be available next.', 'warning')}>Import</button>
           <button className="btn btn-primary" type="button" onClick={() => setModal({ mode: 'add' })}>Add item</button>
         </div>
@@ -483,21 +544,20 @@ export function InventoryManagerPage() {
             </div>
           </div>
           <ul className="supplier-list">
-            {suppliers.map((supplier) => (
+            {supplierRows.map((supplier) => (
               <li className="supplier" key={supplier.name}>
                 <div className="supplier-avatar">{supplier.name.charAt(0)}</div>
                 <div className="supplier-body">
                   <p className="supplier-name">{supplier.name}</p>
-                  <p className="supplier-category">{supplier.category}</p>
+                  <p className="supplier-category">Active supplier</p>
                   <div className="supplier-meta">
-                    <Stars rating={supplier.rating} />
-                    <span className="supplier-outstanding">{supplier.outstanding} outstanding</span>
+                    <span className="supplier-outstanding">Managed in the live database</span>
                   </div>
                 </div>
               </li>
             ))}
           </ul>
-          <button className="btn btn-secondary supplier-action" type="button" onClick={() => notify('Showing the four suppliers with the highest outstanding balances.', 'info')}>View all suppliers</button>
+          {supplierRows.length === 0 && <p className="cell-sub">No active suppliers in the database.</p>}
         </aside>
       </div>
 

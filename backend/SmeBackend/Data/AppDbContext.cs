@@ -79,13 +79,13 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Resource>(entity =>
         {
             entity.ToTable("resources");
-            entity.HasQueryFilter(r => r.DeletedAt == null);
+            entity.HasQueryFilter(r => r.TenantId == CurrentTenantId && r.DeletedAt == null);
 
             entity.HasIndex(r => new { r.TenantId, r.Category });
             entity.HasIndex(r => new { r.TenantId, r.Status });
             entity.HasIndex(r => new { r.TenantId, r.Name });
             entity.HasIndex(r => new { r.TenantId, r.BranchId });
-            entity.HasIndex(r => r.Code).IsUnique();
+            entity.HasIndex(r => new { r.TenantId, r.Code }).IsUnique();
 
             entity.Property(r => r.Status)
                   .HasConversion<string>()

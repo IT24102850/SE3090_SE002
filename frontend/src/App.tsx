@@ -67,11 +67,13 @@ function Shell({ children }: { children: React.ReactNode }) {
 // locally rather than touch every already-working booking page.
 function InventoryShell({ children }: { children: React.ReactNode }) {
   return (
-    <InventoryToastProvider>
-      <AppLayout>
-        <div className="inventory-scope">{children}</div>
-      </AppLayout>
-    </InventoryToastProvider>
+    <div className="inventory-scope">
+      <InventoryToastProvider>
+        <AppLayout>
+          {children}
+        </AppLayout>
+      </InventoryToastProvider>
+    </div>
   );
 }
 
