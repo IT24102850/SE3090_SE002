@@ -144,7 +144,7 @@ export function AnalyticsDashboardPage() {
   const tooltipStyle = chart.tooltip;
   const tooltipItem = chart.tooltipItem;
   const chartColors = {
-    blue: chart.series.violet,
+    blue: chart.series.blue,
     green: chart.series.green,
     amber: chart.series.amber,
     red: chart.series.red,

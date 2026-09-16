@@ -1,9 +1,19 @@
 /* Unify admin console theme.
  *
- * Light is the default and the designed theme: warm paper ground, aubergine
- * ink, one violet accent - the same palette as the public site, so signing
- * in is not a change of product. Dark is the toggle's other option and is
- * kept honest, but the light values are the ones that were tuned by eye.
+ * Light is the default and the designed theme: cool paper ground, navy ink,
+ * one blue accent - the same palette as the public site, so signing in is
+ * not a change of product. Both are drawn from the logo
+ * (public/unify-logo.svg): its tile is the ink, its cyan -> blue gradient is
+ * the signature, its sky node is the accent. Dark is the toggle's other
+ * option and is kept honest, but the light values are the ones that were
+ * tuned by eye.
+ *
+ * Contrast is computed, not eyeballed, and written beside each token. The
+ * rule that shaped the palette: the logo's raw cyan (#06B6D4) and sky
+ * (#38BDF8) are 2.3:1 and 2.1:1 on paper - they fail even the large-text
+ * bar - so in light mode they are accents only and never carry text. In
+ * dark mode the same sky is 9.1:1 on the navy ground, so there it *is* the
+ * primary: the one colour that flips role between themes.
  *
  * Every colour a component uses is a token. Components never carry literal
  * dark or light values, because that is exactly how the previous theme
@@ -15,29 +25,29 @@
   color-scheme: light;
 
   /* Ground and surfaces */
-  --color-bg: #F7F5FB;
+  --color-bg: #F7FAFD;
   --color-surface: #FFFFFF;
-  --color-surface-muted: #F5F2F9;
+  --color-surface-muted: #EDF3F9;
   --color-surface-raised: #FFFFFF;
-  --color-border: #E7E2EE;
-  --color-border-strong: #D5CDE2;
+  --color-border: #DCE5EF;
+  --color-border-strong: #C5D3E3;
 
   /* Ink */
-  --color-text: #16121F;
-  --color-text-secondary: #5F586F;
-  --color-text-muted: #8E88A0;
+  --color-text: #0A0F1D;              /* the logo tile, verbatim. 18.2:1 */
+  --color-text-secondary: #4A5872;    /* 6.8:1 */
+  --color-text-muted: #63728C;        /* 4.6:1 - was 3.3:1; even the faintest text now clears AA */
 
   /* The one accent */
-  --color-primary: #6D28D9;
-  --color-primary-hover: #5B21B6;
-  --color-primary-soft: rgba(109, 40, 217, 0.10);
+  --color-primary: #2563EB;           /* logo gradient end. 4.9:1 on paper, 5.2:1 under white */
+  --color-primary-hover: #1D4ED8;     /* 6.4:1 */
+  --color-primary-soft: rgba(37, 99, 235, 0.10);
   --color-primary-contrast: #FFFFFF;
-  --color-accent-high: #C026D3;
-  --color-accent-soft: rgba(192, 38, 211, 0.10);
-  --color-accent-cyan: #0891B2;
+  --color-accent-high: #0E7490;       /* carries badge text, so cyan-700 (5.1:1), not the raw cyan (2.3:1) */
+  --color-accent-soft: rgba(6, 182, 212, 0.10);
+  --color-accent-cyan: #0E7490;       /* used as text in reports; 3.5:1 -> 5.1:1 */
 
-  --gradient-brand: linear-gradient(135deg, #6D28D9 0%, #C026D3 100%);
-  --gradient-hero: linear-gradient(100deg, #5B21B6 0%, #6D28D9 48%, #9333EA 100%);
+  --gradient-brand: linear-gradient(135deg, #0E7490 0%, #2563EB 100%); /* the logo's gradient, cyan end deepened to hold white text */
+  --gradient-hero: linear-gradient(100deg, #0A0F1D 0%, #1E3A8A 48%, #2563EB 100%); /* navy -> blue; white text is 5.2:1 at the light end */
 
   /* Status - saturated enough to read on white without a filled chip */
   --color-good: #15803D;
@@ -46,34 +56,34 @@
   --color-warning-soft: rgba(180, 83, 9, 0.10);
   --color-critical: #B91C1C;
   --color-critical-soft: rgba(185, 28, 28, 0.08);
-  --color-neutral: #6B6580;
-  --color-neutral-soft: rgba(107, 101, 128, 0.10);
+  --color-neutral: #63728C;
+  --color-neutral-soft: rgba(99, 114, 140, 0.10);
 
   /* The rail. Light like the canvas, separated by a hairline and a shade of
      tint rather than by being a different world. */
   --sidebar-bg: #FFFFFF;
-  --sidebar-line: #ECE7F2;
-  --sidebar-text: #4E4760;
-  --sidebar-text-strong: #16121F;
-  --sidebar-muted: #9A94AB;
-  --sidebar-hover: rgba(109, 40, 217, 0.06);
+  --sidebar-line: #E3EAF2;
+  --sidebar-text: #4A5872;
+  --sidebar-text-strong: #0A0F1D;
+  --sidebar-muted: #63728C;
+  --sidebar-hover: rgba(37, 99, 235, 0.06);
 
   /* Tints that were literal near-black alphas before */
-  --hover-tint: rgba(22, 18, 31, 0.035);
+  --hover-tint: rgba(10, 15, 29, 0.035);
   --chip-bg: rgba(255, 255, 255, 0.85);
-  --overlay: rgba(22, 18, 31, 0.42);
-  --scrollbar: rgba(22, 18, 31, 0.18);
+  --overlay: rgba(10, 15, 29, 0.42);
+  --scrollbar: rgba(10, 15, 29, 0.18);
 
   /* Two faint glows behind the page - the only decoration on the ground */
-  --bg-glow-1: rgba(109, 40, 217, 0.08);
-  --bg-glow-2: rgba(192, 38, 211, 0.05);
+  --bg-glow-1: rgba(37, 99, 235, 0.08);
+  --bg-glow-2: rgba(6, 182, 212, 0.05);
 
   /* Recharts paints its own chrome and needs real values, read by hook */
-  --chart-tick: #8E88A0;
-  --chart-grid: rgba(22, 18, 31, 0.07);
+  --chart-tick: #63728C;
+  --chart-grid: rgba(10, 15, 29, 0.07);
   --chart-tooltip-bg: #FFFFFF;
-  --chart-tooltip-fg: #16121F;
-  --chart-tooltip-border: #E7E2EE;
+  --chart-tooltip-fg: #0A0F1D;
+  --chart-tooltip-border: #DCE5EF;
 
   /* Generous radii are most of what makes the surface read as soft. */
   --radius-sm: 10px;
@@ -82,9 +92,9 @@
 
   /* Lift from blur and a violet tint, never from darkness - on paper a
      heavy shadow reads as dirt. */
-  --shadow-sm: 0 2px 8px rgba(64, 40, 110, 0.06), 0 1px 2px rgba(64, 40, 110, 0.04);
-  --shadow-md: 0 10px 30px rgba(64, 40, 110, 0.10), 0 2px 6px rgba(64, 40, 110, 0.04);
-  --shadow-lg: 0 24px 60px rgba(64, 40, 110, 0.16), 0 4px 12px rgba(64, 40, 110, 0.06);
+  --shadow-sm: 0 2px 8px rgba(15, 40, 90, 0.06), 0 1px 2px rgba(15, 40, 90, 0.04);
+  --shadow-md: 0 10px 30px rgba(15, 40, 90, 0.10), 0 2px 6px rgba(15, 40, 90, 0.04);
+  --shadow-lg: 0 24px 60px rgba(15, 40, 90, 0.16), 0 4px 12px rgba(15, 40, 90, 0.06);
 
   --space-1: 4px;
   --space-2: 8px;
@@ -100,26 +110,26 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --color-bg: #0B0A12;
-  --color-surface: #14121D;
-  --color-surface-muted: #1B1826;
-  --color-surface-raised: #1B1826;
-  --color-border: rgba(180, 160, 220, 0.12);
-  --color-border-strong: rgba(180, 160, 220, 0.24);
+  --color-bg: #080C17;                /* one step under the logo tile */
+  --color-surface: #0F1626;
+  --color-surface-muted: #141C2E;
+  --color-surface-raised: #141C2E;
+  --color-border: rgba(148, 180, 220, 0.12);
+  --color-border-strong: rgba(148, 180, 220, 0.24);
 
-  --color-text: #F1EDF7;
-  --color-text-secondary: #A69FB8;
-  --color-text-muted: #776F8A;
+  --color-text: #EEF3FA;              /* 17.5:1 */
+  --color-text-secondary: #A3B1C6;    /* 9.0:1 */
+  --color-text-muted: #7D8BA3;        /* 5.7:1 */
 
-  --color-primary: #A78BFA;
-  --color-primary-hover: #C4B5FD;
-  --color-primary-soft: rgba(167, 139, 250, 0.16);
-  --color-primary-contrast: #16121F;
-  --color-accent-high: #E879F9;
-  --color-accent-soft: rgba(232, 121, 249, 0.14);
+  --color-primary: #38BDF8;           /* the logo's sky node. 9.1:1 here - the accent that becomes primary in the dark */
+  --color-primary-hover: #7DD3FC;
+  --color-primary-soft: rgba(56, 189, 248, 0.16);
+  --color-primary-contrast: #0A0F1D;  /* navy on sky: 8.9:1 */
+  --color-accent-high: #22D3EE;       /* 10.8:1 */
+  --color-accent-soft: rgba(34, 211, 238, 0.14);
   --color-accent-cyan: #22D3EE;
 
-  --gradient-hero: linear-gradient(100deg, #4C1D95 0%, #6D28D9 48%, #7E22CE 100%);
+  --gradient-hero: linear-gradient(100deg, #0E7490 0%, #1D4ED8 48%, #2563EB 100%);
 
   --color-good: #4ADE80;
   --color-good-soft: rgba(74, 222, 128, 0.12);
@@ -127,29 +137,29 @@
   --color-warning-soft: rgba(251, 191, 36, 0.12);
   --color-critical: #F87171;
   --color-critical-soft: rgba(248, 113, 113, 0.10);
-  --color-neutral: #A69FB8;
-  --color-neutral-soft: rgba(166, 159, 184, 0.12);
+  --color-neutral: #A3B1C6;
+  --color-neutral-soft: rgba(163, 177, 198, 0.12);
 
-  --sidebar-bg: #0F0D17;
-  --sidebar-line: rgba(180, 160, 220, 0.10);
-  --sidebar-text: #A69FB8;
-  --sidebar-text-strong: #F1EDF7;
-  --sidebar-muted: #6F6883;
-  --sidebar-hover: rgba(167, 139, 250, 0.10);
+  --sidebar-bg: #060A12;
+  --sidebar-line: rgba(148, 180, 220, 0.10);
+  --sidebar-text: #A3B1C6;
+  --sidebar-text-strong: #EEF3FA;
+  --sidebar-muted: #6B7A94;
+  --sidebar-hover: rgba(56, 189, 248, 0.10);
 
   --hover-tint: rgba(255, 255, 255, 0.04);
-  --chip-bg: rgba(20, 18, 29, 0.8);
+  --chip-bg: rgba(15, 22, 38, 0.8);
   --overlay: rgba(0, 0, 0, 0.6);
   --scrollbar: rgba(255, 255, 255, 0.16);
 
-  --bg-glow-1: rgba(109, 40, 217, 0.22);
-  --bg-glow-2: rgba(34, 211, 238, 0.05);
+  --bg-glow-1: rgba(37, 99, 235, 0.22);
+  --bg-glow-2: rgba(34, 211, 238, 0.06);
 
-  --chart-tick: #776F8A;
+  --chart-tick: #7D8BA3;
   --chart-grid: rgba(255, 255, 255, 0.07);
-  --chart-tooltip-bg: #1B1826;
-  --chart-tooltip-fg: #F1EDF7;
-  --chart-tooltip-border: rgba(180, 160, 220, 0.24);
+  --chart-tooltip-bg: #141C2E;
+  --chart-tooltip-fg: #EEF3FA;
+  --chart-tooltip-border: rgba(148, 180, 220, 0.24);
 
   --shadow-sm: 0 8px 20px rgba(0, 0, 0, 0.22);
   --shadow-md: 0 14px 32px rgba(0, 0, 0, 0.30);
@@ -162,48 +172,48 @@
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
     color-scheme: dark;
-    --color-bg: #0B0A12;
-    --color-surface: #14121D;
-    --color-surface-muted: #1B1826;
-    --color-surface-raised: #1B1826;
-    --color-border: rgba(180, 160, 220, 0.12);
-    --color-border-strong: rgba(180, 160, 220, 0.24);
-    --color-text: #F1EDF7;
-    --color-text-secondary: #A69FB8;
-    --color-text-muted: #776F8A;
-    --color-primary: #A78BFA;
-    --color-primary-hover: #C4B5FD;
-    --color-primary-soft: rgba(167, 139, 250, 0.16);
-    --color-primary-contrast: #16121F;
-    --color-accent-high: #E879F9;
-    --color-accent-soft: rgba(232, 121, 249, 0.14);
+    --color-bg: #080C17;                /* one step under the logo tile */
+    --color-surface: #0F1626;
+    --color-surface-muted: #141C2E;
+    --color-surface-raised: #141C2E;
+    --color-border: rgba(148, 180, 220, 0.12);
+    --color-border-strong: rgba(148, 180, 220, 0.24);
+    --color-text: #EEF3FA;              /* 17.5:1 */
+    --color-text-secondary: #A3B1C6;    /* 9.0:1 */
+    --color-text-muted: #7D8BA3;        /* 5.7:1 */
+    --color-primary: #38BDF8;           /* the logo's sky node. 9.1:1 here - the accent that becomes primary in the dark */
+    --color-primary-hover: #7DD3FC;
+    --color-primary-soft: rgba(56, 189, 248, 0.16);
+    --color-primary-contrast: #0A0F1D;  /* navy on sky: 8.9:1 */
+    --color-accent-high: #22D3EE;       /* 10.8:1 */
+    --color-accent-soft: rgba(34, 211, 238, 0.14);
     --color-accent-cyan: #22D3EE;
-    --gradient-hero: linear-gradient(100deg, #4C1D95 0%, #6D28D9 48%, #7E22CE 100%);
+    --gradient-hero: linear-gradient(100deg, #0E7490 0%, #1D4ED8 48%, #2563EB 100%);
     --color-good: #4ADE80;
     --color-good-soft: rgba(74, 222, 128, 0.12);
     --color-warning: #FBBF24;
     --color-warning-soft: rgba(251, 191, 36, 0.12);
     --color-critical: #F87171;
     --color-critical-soft: rgba(248, 113, 113, 0.10);
-    --color-neutral: #A69FB8;
-    --color-neutral-soft: rgba(166, 159, 184, 0.12);
-    --sidebar-bg: #0F0D17;
-    --sidebar-line: rgba(180, 160, 220, 0.10);
-    --sidebar-text: #A69FB8;
-    --sidebar-text-strong: #F1EDF7;
-    --sidebar-muted: #6F6883;
-    --sidebar-hover: rgba(167, 139, 250, 0.10);
+    --color-neutral: #A3B1C6;
+    --color-neutral-soft: rgba(163, 177, 198, 0.12);
+    --sidebar-bg: #060A12;
+    --sidebar-line: rgba(148, 180, 220, 0.10);
+    --sidebar-text: #A3B1C6;
+    --sidebar-text-strong: #EEF3FA;
+    --sidebar-muted: #6B7A94;
+    --sidebar-hover: rgba(56, 189, 248, 0.10);
     --hover-tint: rgba(255, 255, 255, 0.04);
-    --chip-bg: rgba(20, 18, 29, 0.8);
+    --chip-bg: rgba(15, 22, 38, 0.8);
     --overlay: rgba(0, 0, 0, 0.6);
     --scrollbar: rgba(255, 255, 255, 0.16);
-    --bg-glow-1: rgba(109, 40, 217, 0.22);
-    --bg-glow-2: rgba(34, 211, 238, 0.05);
-    --chart-tick: #776F8A;
+    --bg-glow-1: rgba(37, 99, 235, 0.22);
+    --bg-glow-2: rgba(34, 211, 238, 0.06);
+    --chart-tick: #7D8BA3;
     --chart-grid: rgba(255, 255, 255, 0.07);
-    --chart-tooltip-bg: #1B1826;
-    --chart-tooltip-fg: #F1EDF7;
-    --chart-tooltip-border: rgba(180, 160, 220, 0.24);
+    --chart-tooltip-bg: #141C2E;
+    --chart-tooltip-fg: #EEF3FA;
+    --chart-tooltip-border: rgba(148, 180, 220, 0.24);
     --shadow-sm: 0 8px 20px rgba(0, 0, 0, 0.22);
     --shadow-md: 0 14px 32px rgba(0, 0, 0, 0.30);
     --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.45);
@@ -382,7 +392,7 @@ button, input, select, textarea { font-family: inherit; }
   color: #FFFFFF;
   font-size: 0.78rem;
   font-weight: 800;
-  box-shadow: 0 8px 22px rgba(109, 40, 217, 0.25);
+  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.25);
 }
 
 .sidebar-brand strong,
@@ -899,7 +909,7 @@ table.data-table tbody tr:hover { background: var(--hover-tint); }
   z-index: -1;
   background:
     var(--gradient-hero),
-    radial-gradient(55% 120% at 88% 20%, rgba(232, 121, 249, 0.35), transparent 70%);
+    radial-gradient(55% 120% at 88% 20%, rgba(56, 189, 248, 0.35), transparent 70%);
 }
 
 .hero-body { position: relative; padding: var(--space-5) var(--space-5) var(--space-5); }
@@ -1015,7 +1025,7 @@ table.data-table tbody tr:hover { background: var(--hover-tint); }
 .sidebar-link.active .sidebar-link-icon {
   color: #fff;
   background: var(--gradient-brand);
-  box-shadow: 0 6px 14px rgba(109, 40, 217, 0.25);
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.25);
 }
 
 .sidebar-section-chevron {

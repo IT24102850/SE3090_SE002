@@ -93,7 +93,7 @@ export type DepartureStatus =
   | 'CancelledOther';
 
 export const DEPARTURE_STATUS_COLORS: Record<DepartureStatus, { bg: string; label: string }> = {
-  Scheduled: { bg: '#8B5CF6', label: 'Scheduled' },
+  Scheduled: { bg: '#2563EB', label: 'Scheduled' },
   Boarding: { bg: '#FBBF24', label: 'Boarding' },
   AtSea: { bg: '#22D3EE', label: 'At sea' },
   Returned: { bg: '#4ADE80', label: 'Returned' },
@@ -533,9 +533,9 @@ export interface ConflictPair {
 
 export const STATUS_COLORS: Record<BookingStatus, { fg: string; bg: string; tone: 'good' | 'warning' | 'critical' | 'neutral' | 'primary' }> = {
   Pending: { fg: '#92400e', bg: '#FBBF24', tone: 'warning' },
-  Confirmed: { fg: '#1d4ed8', bg: '#8B5CF6', tone: 'primary' },
+  Confirmed: { fg: '#1d4ed8', bg: '#2563EB', tone: 'primary' },
   CheckedIn: { fg: '#0f766e', bg: '#22D3EE', tone: 'good' },
-  InProgress: { fg: '#5b21b6', bg: '#E040FB', tone: 'primary' },
+  InProgress: { fg: '#155e75', bg: '#0E7490', tone: 'primary' },
   Completed: { fg: '#065f46', bg: '#4ADE80', tone: 'good' },
   Cancelled: { fg: '#475569', bg: '#7C7C85', tone: 'neutral' },
   NoShow: { fg: '#991b1b', bg: '#F87171', tone: 'critical' },

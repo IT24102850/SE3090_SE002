@@ -36,7 +36,7 @@
 .inventory-scope .badge-amber { color: var(--color-warning); background: var(--color-warning-soft); }
 .inventory-scope .badge-red { color: var(--color-critical); background: var(--color-critical-soft); }
 .inventory-scope .badge-blue { color: var(--color-primary); background: var(--color-primary-soft); }
-.inventory-scope .badge-violet { color: var(--color-accent-high); background: var(--color-accent-soft); }
+.inventory-scope .badge-accent { color: var(--color-accent-high); background: var(--color-accent-soft); }
 .inventory-scope .badge-slate { color: var(--color-text-secondary); background: var(--color-neutral-soft); }
 
 /* KPI cards */

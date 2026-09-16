@@ -586,7 +586,7 @@ function PreviewPanel({
       <div
         style={{
           height: 120,
-          background: coverImageUrl ? `url(${coverImageUrl}) center/cover` : 'linear-gradient(135deg, #8B5CF6, #E040FB)',
+          background: coverImageUrl ? `url(${coverImageUrl}) center/cover` : 'var(--gradient-brand)',
           position: 'relative',
         }}
       >

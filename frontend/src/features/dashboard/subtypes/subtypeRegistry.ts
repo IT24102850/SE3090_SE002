@@ -8,7 +8,18 @@
  * Only whaleWatching turns on the full operational module set in this
  * iteration; the other eleven define their terminology, KPIs, resource
  * columns and booking form fields, and declare which shared modules they
- * would use, so extending a module to them is config, not code. */
+ * would use, so extending a module to them is config, not code.
+ *
+ * themeColor is a CATEGORICAL identity colour, not brand chrome - twelve
+ * businesses should not all look like the same dashboard, so these stay
+ * twelve distinct hues rather than collapsing into the brand blue.
+ *
+ * They are rendered as TEXT (SubtypeDashboard's .hero-eyebrow), so every one
+ * must clear AA 4.5:1 on the light ground. The original set was picked for
+ * the old dark dashboard and ranged from 1.34:1 to 3.18:1 on paper - all
+ * twelve failed, several were effectively invisible. This set is the same
+ * twelve hue families darkened into the 600-800 range; the lowest is now
+ * 4.77:1. If you add a thirteenth, check it before committing. */
 
 import {
   NO_MODULES,
@@ -38,7 +49,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Safety Equipment & Gear',
     heroActionLabel: "Manage today's departures",
     icon: '🐋',
-    themeColor: '#0EA5E9',
+    themeColor: '#0369A1',
     // An operator running four sailings a day does not think of the home
     // screen as "Dashboard" or of a boat as a "Resource".
     navOverrides: {
@@ -92,7 +103,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Dive Gear & Tanks',
     heroActionLabel: "Manage today's dives",
     icon: '🤿',
-    themeColor: '#38BDF8',
+    themeColor: '#1D4ED8',
     kpis: [
       { id: 'today', label: 'Dives today', source: 'bookings', field: 'today', sub: 'scheduled dives' },
       { id: 'divers', label: 'Divers today', source: 'bookings', field: 'attendeesToday', sub: 'across all trips' },
@@ -140,7 +151,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Vehicle Equipment',
     heroActionLabel: "Manage today's drives",
     icon: '🐆',
-    themeColor: '#F0A868',
+    themeColor: '#9A5B18',
     kpis: [
       { id: 'today', label: 'Drives today', source: 'bookings', field: 'today', sub: 'scheduled drives' },
       { id: 'pax', label: 'Pax carried', source: 'bookings', field: 'attendeesToday', sub: 'across all jeeps' },
@@ -193,7 +204,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Boards & Wetsuits',
     heroActionLabel: "Manage today's lessons",
     icon: '🏄',
-    themeColor: '#22D3EE',
+    themeColor: '#0E7490',
     kpis: [
       { id: 'today', label: 'Lessons today', source: 'bookings', field: 'today', sub: 'scheduled lessons' },
       { id: 'students', label: 'Students today', source: 'bookings', field: 'attendeesToday' },
@@ -235,7 +246,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Trekking Gear',
     heroActionLabel: "Manage this week's treks",
     icon: '🥾',
-    themeColor: '#4ADE80',
+    themeColor: '#15803D',
     kpis: [
       { id: 'thisWeek', label: 'Treks this week', source: 'bookings', field: 'thisWeek' },
       { id: 'today', label: 'Departing today', source: 'bookings', field: 'today' },
@@ -276,7 +287,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Tour Equipment',
     heroActionLabel: "Manage today's tours",
     icon: '🏛️',
-    themeColor: '#E0A87A',
+    themeColor: '#8C5524',
     kpis: [
       { id: 'today', label: 'Tours today', source: 'bookings', field: 'today' },
       { id: 'avgParty', label: 'Avg party size', source: 'bookings', field: 'avgGroupSize' },
@@ -321,7 +332,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Package Inclusions',
     heroActionLabel: 'Review pending packages',
     icon: '🗺️',
-    themeColor: '#A78BFA',
+    themeColor: '#5B4BC4',
     kpis: [
       { id: 'pendingApproval', label: 'Pending approval', source: 'bookings', field: 'pending', sub: 'packages awaiting sign-off', tone: 'warning' },
       { id: 'confirmedRevenue', label: 'Confirmed revenue', source: 'bookings', field: 'confirmedRevenue', format: 'currency' },
@@ -366,7 +377,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Housekeeping Supplies',
     heroActionLabel: "Manage tonight's rooms",
     icon: '🛏️',
-    themeColor: '#E040FB',
+    themeColor: '#9333A8',
     kpis: [
       { id: 'occupancy', label: 'Occupancy tonight', source: 'bookings', field: 'occupancyTonight', format: 'percent', tone: 'good' },
       { id: 'adr', label: 'ADR', source: 'bookings', field: 'adr', format: 'currency', sub: 'average daily rate' },
@@ -411,7 +422,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Housekeeping Supplies',
     heroActionLabel: "Manage tonight's rooms",
     icon: '🏝️',
-    themeColor: '#F472B6',
+    themeColor: '#B03A72',
     kpis: [
       { id: 'occupancy', label: 'Occupancy tonight', source: 'bookings', field: 'occupancyTonight', format: 'percent', tone: 'good' },
       { id: 'adr', label: 'ADR', source: 'bookings', field: 'adr', format: 'currency', sub: 'average daily rate' },
@@ -456,7 +467,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Vehicle Equipment',
     heroActionLabel: 'Manage the fleet',
     icon: '🛵',
-    themeColor: '#67E8F9',
+    themeColor: '#475569',
     kpis: [
       { id: 'fleetUtilisation', label: 'Fleet utilisation', source: 'resources', field: 'utilisation', format: 'percent', tone: 'good' },
       { id: 'dueBack', label: 'Due back today', source: 'bookings', field: 'endingToday', sub: 'vehicles returning', tone: 'warning' },
@@ -496,7 +507,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Treatment Supplies',
     heroActionLabel: "Manage today's appointments",
     icon: '🧘',
-    themeColor: '#86EFAC',
+    themeColor: '#4D7C0F',
     kpis: [
       { id: 'today', label: 'Appointments today', source: 'bookings', field: 'today' },
       { id: 'roomUtilisation', label: 'Room utilisation', source: 'resources', field: 'utilisation', format: 'percent' },
@@ -544,7 +555,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
     equipmentTerm: 'Bikes & Helmets',
     heroActionLabel: "Manage today's rides",
     icon: '🚴',
-    themeColor: '#2DD4BF',
+    themeColor: '#0F766E',
     kpis: [
       { id: 'today', label: 'Tours today', source: 'bookings', field: 'today' },
       { id: 'bikeUtilisation', label: 'Bike utilisation', source: 'resources', field: 'utilisation', format: 'percent' },

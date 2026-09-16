@@ -15,31 +15,32 @@ export interface ChartTheme {
   grid: string;
   tooltip: { background: string; border: string; borderRadius: number; color: string };
   tooltipItem: { color: string };
-  /** Series colours. Chosen to hold up on both grounds. */
-  series: { violet: string; magenta: string; green: string; amber: string; red: string; slate: string; cyan: string };
+  /** Series colours, named by role rather than hue - the palette has been
+   *  re-pointed once already and hue names go stale the moment it is. */
+  series: { blue: string; teal: string; green: string; amber: string; red: string; slate: string; cyan: string };
 }
 
 function read(): ChartTheme {
   const css = getComputedStyle(document.documentElement);
   const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
   return {
-    tick: v('--chart-tick', '#8E88A0'),
-    grid: v('--chart-grid', 'rgba(22,18,31,0.07)'),
+    tick: v('--chart-tick', '#63728C'),
+    grid: v('--chart-grid', 'rgba(10,15,29,0.07)'),
     tooltip: {
       background: v('--chart-tooltip-bg', '#FFFFFF'),
-      border: `1px solid ${v('--chart-tooltip-border', '#E7E2EE')}`,
+      border: `1px solid ${v('--chart-tooltip-border', '#DCE5EF')}`,
       borderRadius: 10,
-      color: v('--chart-tooltip-fg', '#16121F'),
+      color: v('--chart-tooltip-fg', '#0A0F1D'),
     },
-    tooltipItem: { color: v('--chart-tooltip-fg', '#16121F') },
+    tooltipItem: { color: v('--chart-tooltip-fg', '#0A0F1D') },
     series: {
-      violet: v('--color-primary', '#6D28D9'),
-      magenta: v('--color-accent-high', '#C026D3'),
+      blue: v('--color-primary', '#2563EB'),
+      teal: v('--color-accent-high', '#0E7490'),
       green: v('--color-good', '#15803D'),
       amber: v('--color-warning', '#B45309'),
       red: v('--color-critical', '#B91C1C'),
-      slate: v('--color-neutral', '#6B6580'),
-      cyan: v('--color-accent-cyan', '#0891B2'),
+      slate: v('--color-neutral', '#63728C'),
+      cyan: v('--color-accent-cyan', '#0E7490'),
     },
   };
 }

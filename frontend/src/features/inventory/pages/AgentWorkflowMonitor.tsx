@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Badge } from '../ui/Badge';
+import { useChartTheme } from '../../../shared/useChartTheme';
 import { Icon } from '../ui/Icon';
 
 const workflowApiBaseUrl = import.meta.env.VITE_WORKFLOW_API_URL || 'http://localhost:8000';
@@ -20,6 +21,9 @@ type WorkflowItem = {
 };
 
 export function AgentWorkflowMonitorPage() {
+  // Recharts takes SVG attributes, which cannot resolve var(), so the
+  // sparkline reads its stroke from the theme hook rather than a literal.
+  const chart = useChartTheme();
   const [items, setItems] = useState<WorkflowItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -309,7 +313,7 @@ export function AgentWorkflowMonitorPage() {
                           <XAxis dataKey="x" />
                           <YAxis />
                           <Tooltip />
-                          <Line type="monotone" dataKey="y" stroke="#8B5CF6" strokeWidth={3} dot={false} isAnimationActive={true} animationDuration={900} />
+                          <Line type="monotone" dataKey="y" stroke={chart.series.blue} strokeWidth={3} dot={false} isAnimationActive={true} animationDuration={900} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
