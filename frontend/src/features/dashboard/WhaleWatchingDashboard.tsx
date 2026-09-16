@@ -60,7 +60,9 @@ export default function WhaleWatchingDashboard({
   // stay visible flagged as hidden because they are one toggle from live.
   const { tours, addons } = useMemo(
     () => splitProducts(
-      (bookingTypes ?? []).filter((bt) => bt.status !== 'Archived'),
+      // The endpoint is an array in production. A safe guard keeps a bad
+      // intermediary response from taking down the operator's home screen.
+      (Array.isArray(bookingTypes) ? bookingTypes : []).filter((bt) => bt.status !== 'Archived'),
       // config.subType is the config-key form ("whaleWatching"), which is
       // what ConfigJson.subType stores - NOT the Tenant.SubType label.
       config.subType,

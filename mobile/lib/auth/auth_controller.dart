@@ -11,15 +11,17 @@ class AuthController extends ChangeNotifier {
   AuthSession? session;
   bool isRestoring = true;
 
-  Future<void> restore() async {
+  /// Clears any previous-device session and exposes the login screen.
+  ///
+  /// Mobile devices are often shared in a workplace, so this app deliberately
+  /// asks for credentials on every fresh launch instead of restoring a token.
+  Future<void> startSignedOut() async {
     try {
-      session = await _repository.restoreSession();
+      await _repository.logout();
     } catch (_) {
-      // Browser storage can be unavailable in private browsing or when it is
-      // blocked by a site policy. A stored session is a convenience, not a
-      // prerequisite for opening the app, so fall back to the sign-in screen.
-      session = null;
+      // Storage cleanup is best-effort: lack of storage must not block login.
     } finally {
+      session = null;
       isRestoring = false;
       notifyListeners();
     }

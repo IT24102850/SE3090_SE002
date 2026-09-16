@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
 
-type ToastKind = 'success' | 'error' | 'info';
+type ToastKind = 'success' | 'error' | 'warning' | 'info';
 interface ToastItem { id: number; kind: ToastKind; message: string }
 
 const ToastContext = createContext<{ show: (message: string, kind?: ToastKind) => void } | null>(null);
@@ -14,7 +14,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => [...prev, { id, kind, message }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    }, kind === 'error' || kind === 'warning' ? 6000 : 4500);
+  }, []);
+
+  const dismiss = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
   return (
@@ -22,7 +26,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="toast-stack">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast toast-${t.kind}`}>{t.message}</div>
+          <div key={t.id} className={`toast toast-${t.kind}`} role={t.kind === 'error' ? 'alert' : 'status'}>
+            <span className="toast-icon" aria-hidden="true">{t.kind === 'success' ? '✓' : t.kind === 'error' ? '×' : t.kind === 'warning' ? '!' : 'i'}</span>
+            <span className="toast-content">
+              <strong>{t.kind === 'success' ? 'Success' : t.kind === 'error' ? 'Failed' : t.kind === 'warning' ? 'Warning' : 'Information'}</strong>
+              <span>{t.message}</span>
+            </span>
+            <button className="toast-dismiss" type="button" aria-label="Dismiss message" onClick={() => dismiss(t.id)}>×</button>
+            <span className="toast-progress" aria-hidden="true" />
+          </div>
         ))}
       </div>
     </ToastContext.Provider>

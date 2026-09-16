@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
+import { Link, useNavigate } from 'react-router-dom';
 import { TOURISM_SUB_TYPES } from '../features/booking/types';
 import SegmentedToggle from '../features/marketing/SegmentedToggle';
+import { useToast } from '../shared/components/Toast';
+import { initializeAuth } from '../store/authSlice';
+import type { AppDispatch } from '../store/store';
 import '../features/marketing/landing.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api';
@@ -50,6 +54,12 @@ const RegisterPage = () => {
   const [mode, setMode] = useState<Mode>('business');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    localStorage.getItem('unify-home-theme') === 'dark' ? 'dark' : 'light',
+  );
+  const navigate = useNavigate();
+  const dispatch = useDispatch<AppDispatch>();
+  const { show } = useToast();
 
   const [form, setForm] = useState({
     businessName: '',
@@ -83,6 +93,13 @@ const RegisterPage = () => {
    * payload. */
   const [tenants, setTenants] = useState<PublicTenant[] | null>(null);
   const [tenantsError, setTenantsError] = useState('');
+
+  useEffect(() => { if (error) show(error, 'error'); }, [error, show]);
+  useEffect(() => {
+    document.documentElement.dataset.unifyTheme = theme;
+    localStorage.setItem('unify-home-theme', theme);
+    return () => { delete document.documentElement.dataset.unifyTheme; };
+  }, [theme]);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,7 +148,9 @@ const RegisterPage = () => {
 
       localStorage.setItem('token', data.accessToken);
       localStorage.setItem('user', JSON.stringify(data.user));
-      window.location.href = '/dashboard';
+      dispatch(initializeAuth());
+      show(mode === 'business' ? 'Your business workspace is ready!' : 'Your account has been created!', 'success');
+      navigate('/dashboard');
     } catch (err: unknown) {
       const message = axios.isAxiosError(err)
         ? err.response?.data?.message
@@ -143,32 +162,42 @@ const RegisterPage = () => {
   };
 
   return (
-    <div className="lp">
+    <main className="lp lp-auth-page">
+      <div className="lp-auth-backdrop" aria-hidden="true" />
       <div className="lp-auth">
         <div className="lp-auth-inner" style={{ maxWidth: 560, gridTemplateColumns: '1fr' }}>
-          <div style={{ textAlign: 'center', marginBottom: 4 }}>
+          <div className="lp-register-brand">
             <Link className="lp-brand" to="/" style={{ justifyContent: 'center' }}>
-              <span className="lp-brand-mark">U</span>
-              Unify
+              <img className="lp-brand-mark" src="/unify-logo.svg" alt="" width={34} height={34} />
+              <span className="lp-brand-name">Unify<span className="lp-brand-tag">Your work, in flow</span></span>
             </Link>
           </div>
 
-          <div className="lp-auth-card">
+          <div className="lp-auth-card lp-auth-card-rich lp-register-card">
+            <div className="lp-auth-theme" aria-label="Choose colour theme"><button type="button" className={theme === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')} aria-pressed={theme === 'light'}>Light</button><button type="button" className={theme === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')} aria-pressed={theme === 'dark'}>Dark</button></div>
+            <Link className="lp-auth-home" to="/"><span aria-hidden="true">⌂</span> Home</Link>
+            <div className="lp-auth-eyebrow">GET STARTED</div>
+            <div className="lp-register-heading">
+              <div>
+                <h1>{mode === 'business' ? 'Make work feel lighter.' : 'Join your business on Unify.'}</h1>
+                <p>Choose the path that fits you. You can be ready to go in just a few minutes.</p>
+              </div>
+              <span className="lp-register-step">01 <small>of 02</small></span>
+            </div>
+            <div className="lp-register-journey" aria-label="Registration progress">
+              <span className="is-current"><b>1</b> Account</span><i /><span><b>2</b> Workspace</span>
+            </div>
             <SegmentedToggle
               options={MODES}
               value={mode}
               onChange={switchMode}
               label="What are you signing up as"
             />
+            <p className="lp-register-mode-copy">{mode === 'business'
+              ? 'Set up your operations space, invite your team, and make it yours.'
+              : 'Connect with a business and keep every booking in one place.'}</p>
 
-            <h1>{mode === 'business' ? 'Create your business' : 'Create your account'}</h1>
-            <p>
-              {mode === 'business'
-                ? 'A couple of minutes, and the console configures itself around what you do.'
-                : 'Join a business already on Unify to book with them and track what you have booked.'}
-            </p>
-
-            {error && <div className="lp-alert">{error}</div>}
+            {error && <div className="lp-alert" role="alert"><span>!</span>{error}</div>}
 
             <form onSubmit={handleSubmit}>
               {mode === 'business' ? (
@@ -313,10 +342,11 @@ const RegisterPage = () => {
             <p className="lp-auth-alt">
               Already have an account? <Link to="/login">Sign in</Link>
             </p>
+            <div className="lp-register-assurance"><span>✓</span><span>Your details stay private and secure.</span><span>•</span><span>No credit card required.</span></div>
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 };
 

@@ -166,14 +166,14 @@ class _EquipmentMaintenanceScreenState
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : ListView(padding: const EdgeInsets.all(20), children: [
-                  Text('EQUIPMENT CARE',
+                  Text('ASSET CARE',
                       style: TextStyle(
                           color: Theme.of(context).colorScheme.primary,
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 1.1)),
                   const SizedBox(height: 4),
-                  Text('Maintenance',
+                  Text('Keep everything ready',
                       style: Theme.of(context)
                           .textTheme
                           .headlineSmall

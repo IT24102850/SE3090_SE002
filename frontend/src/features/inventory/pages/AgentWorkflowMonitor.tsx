@@ -1,13 +1,17 @@
 import { useEffect, useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Badge } from '../ui/Badge';
 import { useChartTheme } from '../../../shared/useChartTheme';
 import { Icon } from '../ui/Icon';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../../store/store';
+import { getStoredToken } from '../authToken';
 
-const workflowApiBaseUrl = import.meta.env.VITE_WORKFLOW_API_URL || 'http://localhost:8000';
+const apiBaseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:5298/api').replace(/\/$/, '');
 
 type WorkflowItem = {
-  id: number;
+  id: string;
   created_at: string;
   actionType: string;
   payload: any;
@@ -17,13 +21,74 @@ type WorkflowItem = {
   validation_result: any;
   tool_result: any;
   llm_response: string | null;
+  planJson: string | null;
+  finalOutcome: string | null;
+  errorLog: string | null;
   status: string;
 };
+
+function parseWorkflowJson(value: unknown): any {
+  if (!value) return null;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+function readableWorkflowJson(value: unknown, emptyMessage: string) {
+  const parsed = parseWorkflowJson(value);
+  if (parsed == null || parsed === '' || (typeof parsed === 'object' && Object.keys(parsed).length === 0)) {
+    return emptyMessage;
+  }
+
+  return typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
+}
+
+function workflowValidationSummary(workflow: WorkflowItem) {
+  if (workflow.validation_result) return workflow.validation_result;
+  const plan = parseWorkflowJson(workflow.planJson);
+  const steps = plan?.steps ?? plan?.Steps;
+  if (Array.isArray(steps)) {
+    return {
+      valid: workflow.status !== 'rejected' && workflow.status !== 'blocked',
+      plannedActions: steps.length,
+      status: workflow.status,
+      note: 'Validation summary reconstructed from the stored workflow plan.'
+    };
+  }
+  return null;
+}
+
+function workflowStatusDetail(workflow: WorkflowItem) {
+  const confidence = workflow.validation_result?.confidence ?? workflow.tool_result?.confidence;
+  if (confidence != null) return `Confidence ${formatWorkflowConfidence(confidence)}`;
+
+  const plan = parseWorkflowJson(workflow.planJson);
+  const steps = plan?.steps ?? plan?.Steps;
+  const plannedCount = Array.isArray(steps) ? steps.length : 0;
+  const createdCount = workflow.tool_result?.createdBookings;
+  const skippedCount = workflow.tool_result?.skippedBookings;
+
+  if (workflow.status === 'completed' && createdCount != null) {
+    return `${createdCount} applied${skippedCount ? ` · ${skippedCount} skipped` : ''}`;
+  }
+  if (plannedCount > 0) return `${plannedCount} planned action${plannedCount === 1 ? '' : 's'}`;
+  if (workflow.status === 'approved') return 'Ready to apply';
+  if (workflow.status === 'rejected') return 'Decision declined';
+  if (workflow.status === 'blocked') return 'Action blocked';
+  return 'Awaiting decision';
+}
+
+function formatWorkflowConfidence(value: unknown) {
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  return n > 0 && n <= 1 ? `${Math.round(n * 100)}%` : `${Math.round(n)}%`;
+}
 
 export function AgentWorkflowMonitorPage() {
   // Recharts takes SVG attributes, which cannot resolve var(), so the
   // sparkline reads its stroke from the theme hook rather than a literal.
   const chart = useChartTheme();
+  const { user } = useSelector((state: RootState) => state.auth);
+  const token = getStoredToken();
   const [items, setItems] = useState<WorkflowItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -68,31 +133,48 @@ export function AgentWorkflowMonitorPage() {
   const [actionFilter, setActionFilter] = useState<string | null>(null);
   const [tenantFilter, setTenantFilter] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const prevIdsRef = useRef<number[]>([]);
-  const [newIds, setNewIds] = useState<Set<number>>(new Set());
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const prevIdsRef = useRef<string[]>([]);
+  const [newIds, setNewIds] = useState<Set<string>>(new Set());
 
   async function fetchItems() {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.set('page', String(page));
-      params.set('pageSize', String(pageSize));
-      if (statusFilter) params.set('status', statusFilter);
-      if (actionFilter) params.set('actionType', actionFilter);
-      if (tenantFilter) params.set('tenantId', tenantFilter);
-      if (search) params.set('search', search);
-      const url = `${workflowApiBaseUrl}/workflows?${params.toString()}`;
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('fetch failed');
-      const data = await resp.json();
+      if (!user?.tenantId) throw new Error('Your tenant could not be identified.');
+      const params = new URLSearchParams({ tenantId: tenantFilter || user.tenantId });
+      if (statusFilter) params.set('status', statusFilter === 'pending' ? 'AwaitingApproval' : statusFilter);
+      const resp = await fetch(`${apiBaseUrl}/agent/workflow?${params.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!resp.ok) throw new Error(`Workflow request failed (${resp.status})`);
+      const raw = await resp.json() as Array<Record<string, any>>;
+      const data = raw
+        .filter((workflow) => !search || `${workflow.objective} ${workflow.id}`.toLowerCase().includes(search.toLowerCase()))
+        .map((workflow): WorkflowItem => ({
+          id: String(workflow.id),
+          created_at: workflow.createdAt,
+          actionType: 'workflow',
+          payload: workflow.objective,
+          userRole: workflow.requestedByUserId ? 'Requested' : 'System',
+          tenantId: workflow.tenantId,
+          riskLevel: workflow.approvalStatus,
+          validation_result: parseWorkflowJson(workflow.validationResults),
+          tool_result: parseWorkflowJson(workflow.toolResultsJson) ?? (workflow.finalOutcome ? { notes: workflow.finalOutcome } : null),
+          llm_response: workflow.errorLog || null,
+          planJson: workflow.planJson || null,
+          finalOutcome: workflow.finalOutcome || null,
+          errorLog: workflow.errorLog || null,
+          status: workflow.status === 'AwaitingApproval' ? 'pending' : workflow.status.toLowerCase(),
+        }));
       setLoadError('');
-      setItems(data.items || []);
-      setTotal(data.total ?? null);
+      setItems(data);
+      setTotal(data.length);
+      setLastUpdated(new Date());
 
       // detect new ids for entry animation
       const prev = prevIdsRef.current || [];
-      const nowIds = (data.items || []).map((i: any) => i.id);
-      const added = nowIds.filter((id: number) => !prev.includes(id));
+      const nowIds = data.map((i) => i.id);
+      const added = nowIds.filter((id) => !prev.includes(id));
       setNewIds(new Set(added));
       prevIdsRef.current = nowIds;
     } catch (err) {
@@ -108,13 +190,13 @@ export function AgentWorkflowMonitorPage() {
     const id = setInterval(fetchItems, 5000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, statusFilter, actionFilter, tenantFilter, search]);
+  }, [page, pageSize, statusFilter, actionFilter, tenantFilter, search, token, user?.tenantId]);
 
-  async function approve(id: number) {
+  async function approve(id: string) {
     try {
-      const resp = await fetch(`${workflowApiBaseUrl}/workflows/${id}/approve`, {
+      const resp = await fetch(`${apiBaseUrl}/agent/workflow/${id}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ approverRole: 'Manager' }),
       });
       if (!resp.ok) throw new Error('approve failed');
@@ -125,12 +207,12 @@ export function AgentWorkflowMonitorPage() {
     }
   }
 
-  async function reject(id: number) {
+  async function reject(id: string) {
     const reason = prompt('Rejection reason (optional)') || 'rejected';
     try {
-      const resp = await fetch(`${workflowApiBaseUrl}/workflows/${id}/reject`, {
+      const resp = await fetch(`${apiBaseUrl}/agent/workflow/${id}/reject`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ approverRole: 'Manager', reason }),
       });
       if (!resp.ok) throw new Error('reject failed');
@@ -145,15 +227,27 @@ export function AgentWorkflowMonitorPage() {
   const pendingCount = items.filter(i => i.status === 'pending').length;
   const approvedCount = items.filter(i => i.status === 'approved').length;
   const avgConfidence = items.reduce((acc, i) => acc + (Number(i.validation_result?.confidence ?? i.tool_result?.confidence ?? 0) || 0), 0) / Math.max(1, items.length);
+  const statusLabel = (status: string) => ({
+    pending: 'Awaiting review',
+    approved: 'Approved',
+    completed: 'Completed',
+    rejected: 'Rejected',
+    blocked: 'Blocked',
+  }[status] ?? status);
+  const statusTone = (status: string) => status === 'approved' ? 'green' : status === 'rejected' || status === 'blocked' ? 'red' : status === 'completed' ? 'violet' : 'amber';
 
   return (
     <div className="page">
-      <header className="page-head">
-        <div>
+      <header className="page-head workflow-page-head workflow-hero">
+        <div className="workflow-hero-copy">
           <p className="eyebrow">AUTOMATION / WORKFLOWS</p>
           <h1>Agent Workflow Monitor</h1>
-          <p className="page-sub">View AI-generated purchase orders, approve/reject auto-reorders, and inspect prediction evidence.</p>
+          <p className="page-sub">Review AI recommendations, understand the evidence behind each decision, and safely approve the next action.</p>
+          <div className="workflow-hero-tags">
+            <span>✦ AI-assisted</span><span>◉ Live updates</span><span>✓ Human controlled</span>
+          </div>
         </div>
+        <div className="workflow-hero-orbit" aria-hidden="true"><span>✦</span><i /><b /></div>
         <div className="page-actions workflow-filters">
           <input className="filter-select" placeholder="Search..." value={search} onChange={(e)=>{ setSearch(e.target.value); setPage(1); }} />
           <select className="filter-select" value={statusFilter ?? ''} onChange={(e)=>{ setStatusFilter(e.target.value || null); setPage(1); }}>
@@ -174,56 +268,67 @@ export function AgentWorkflowMonitorPage() {
           <button className="btn btn-secondary" onClick={() => fetchItems()}>Refresh</button>
         </div>
       </header>
-      {loadError && <p className="page-notice" role="alert">{loadError}</p>}
+      {loadError && <p className="page-notice" role="alert">⚠ {loadError}</p>}
+
+      <div className="workflow-live-strip">
+        <div className="live-indicator"><span /> Live monitoring{lastUpdated && <small>Updated {lastUpdated.toLocaleTimeString()}</small>}</div>
+        <p>Workflow activity refreshes automatically every 5 seconds.</p>
+      </div>
 
       <div className="workflow-kpi-grid">
-        <div className="kpi-card">
+        <div className="kpi-card workflow-kpi workflow-kpi-total">
           <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="workflow" /><div className="kpi-label">Total Workflows</div></div><div className="kpi-value">{totalCount}</div></div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="predict" /><div className="kpi-label">Pending</div></div><div className="kpi-value">{pendingCount}</div></div>
+        <div className="kpi-card workflow-kpi workflow-kpi-review">
+          <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="predict" /><div className="kpi-label">Needs review</div></div><div className="kpi-value">{pendingCount}</div></div>
         </div>
-        <div className="kpi-card">
+        <div className="kpi-card workflow-kpi workflow-kpi-approved">
           <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="approve" /><div className="kpi-label">Approved</div></div><div className="kpi-value">{approvedCount}</div></div>
         </div>
-        <div className="kpi-card">
+        <div className="kpi-card workflow-kpi workflow-kpi-confidence">
           <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="chart" /><div className="kpi-label">Avg Confidence</div></div><div className="kpi-value">{formatConfidence(avgConfidence)}</div></div>
         </div>
       </div>
 
-      {loading && <div className="panel p-6">Loading workflows…</div>}
+      {loading && <div className="workflow-loading" role="status"><span className="spinner spinner-dark" /> Syncing workflow activity…</div>}
 
       <div className="panel workflow-panel">
         <div className="panel-head">
-          <h2>Recent AI Workflows</h2>
-          <p className="hint">Automatically generated suggestions from the demand prediction agent.</p>
+          <div>
+            <h2>Recent AI workflows</h2>
+            <p className="hint">A clear audit trail of automated recommendations and human decisions.</p>
+          </div>
+          <span className="workflow-count">{items.length} {items.length === 1 ? 'workflow' : 'workflows'}</span>
         </div>
 
         <div className="table-wrap">
           {items.length === 0 ? (
             <div className="empty-state">
-              <div style={{maxWidth:420, margin: '0 auto'}}>
-                <h3>No AI workflows yet</h3>
-                <p className="hint">Generate a workflow by posting to <code>/workflows/execute</code> or wait for the agent to produce suggestions.</p>
+              <div className="workflow-empty-content">
+                <div className="workflow-empty-icon">✦</div>
+                <h3>No workflows match these filters</h3>
+                <p className="hint">{search || statusFilter || actionFilter ? 'Try clearing a filter or refreshing the monitor.' : 'Start with the AI Planner to create a schedule proposal for this workspace.'}</p>
+                <Link className="btn btn-primary" to="/planner">Open AI Planner</Link>
               </div>
             </div>
           ) : (
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>When</th>
-                  <th>Action</th>
-                  <th>Suggestion</th>
-                  <th style={{width:140}}>Status</th>
-                  <th style={{width:210}}>Actions</th>
+                  <th>Workflow</th>
+                  <th>Source</th>
+                  <th>Recommendation</th>
+                  <th style={{width:160}}>Status</th>
+                  <th style={{width:210}}>Review</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map(it => (
-                  <tr key={it.id} className={`hover-row ${newIds.has(it.id) ? 'row-new' : ''}`}>
+                  <tr key={it.id} className={`hover-row workflow-row ${newIds.has(it.id) ? 'row-new' : ''}`}>
                     <td>
-                      <div className="cell-title">#{it.id}</div>
+                      <div className="workflow-id"><span className="workflow-id-icon">✦</span><div><div className="cell-title">#{it.id.slice(0, 8)}</div>
                       <div className="cell-sub">{new Date(it.created_at).toLocaleString()}</div>
+                      </div></div>
                     </td>
                     <td>
                       <div className="cell-title">{it.actionType}</div>
@@ -241,14 +346,14 @@ export function AgentWorkflowMonitorPage() {
                     </td>
                     <td>
                       <div style={{display:'flex', justifyContent:'flex-start', gap:8, alignItems:'center'}}>
-                        <Badge tone={it.status === 'approved' ? 'green' : it.status === 'rejected' ? 'red' : it.status === 'completed' ? 'violet' : 'amber'} icon={it.actionType === 'generate_purchase_order' ? <Icon name="po" /> : it.actionType === 'predict_demand' ? <Icon name="predict" /> : <Icon name="info" />}>{it.status}</Badge>
-                        <div className="cell-sub">{formatConfidence(it.validation_result?.confidence ?? it.tool_result?.confidence)}</div>
+                        <Badge tone={statusTone(it.status)} icon={it.status === 'completed' ? <Icon name="approve" /> : it.status === 'rejected' || it.status === 'blocked' ? <Icon name="info" /> : <Icon name="predict" />}>{statusLabel(it.status)}</Badge>
+                        <div className="cell-sub status-detail">{workflowStatusDetail(it)}</div>
                       </div>
                     </td>
                     <td>
                       <div className="row-actions">
                         <button className="btn" onClick={() => setSelected(it)}>Details</button>
-                        {it.actionType === 'generate_purchase_order' && it.status !== 'approved' && (
+                        {it.status === 'pending' && (
                           <>
                               <button className="btn btn-primary" onClick={() => { approve(it.id); setNewIds(prev=>{ const copy=new Set(prev); copy.delete(it.id); return copy;}); }}>Approve</button>
                             <button className="btn btn-secondary" onClick={() => reject(it.id)}>Reject</button>
@@ -276,7 +381,7 @@ export function AgentWorkflowMonitorPage() {
             <div className="modal-body">
               <div className="workflow-modal-grid">
                 <div>
-                  <h4 className="font-medium">Tool result</h4>
+                  <h4 className="font-medium">Execution result</h4>
                   {selected.tool_result?.items && Array.isArray(selected.tool_result.items) ? (
                     <div className="table-wrap">
                       <table className="data-table">
@@ -291,17 +396,23 @@ export function AgentWorkflowMonitorPage() {
                       </table>
                     </div>
                   ) : (
-                    <pre className="workflow-json">{JSON.stringify(selected.tool_result, null, 2)}</pre>
+                    <div className="workflow-detail-callout">
+                      <strong>{selected.finalOutcome || selected.tool_result?.notes || 'No execution result was recorded.'}</strong>
+                      {selected.status === 'completed' && <span>The workflow completed and the planned schedule was updated.</span>}
+                    </div>
                   )}
 
-                  <h4 className="mt-3 font-medium">Validation</h4>
-                  <pre className="workflow-json workflow-json-short">{JSON.stringify(selected.validation_result, null, 2)}</pre>
+                  <h4 className="mt-3 font-medium">Planned actions</h4>
+                  <pre className="workflow-json workflow-json-short">{readableWorkflowJson(selected.planJson, 'No plan details were recorded for this workflow.')}</pre>
 
-                  <h4 className="mt-3 font-medium">LLM reasoning</h4>
-                  <pre className="workflow-json workflow-json-short">{selected.llm_response}</pre>
+                  <h4 className="mt-3 font-medium">Validation</h4>
+                  <pre className="workflow-json workflow-json-short">{readableWorkflowJson(workflowValidationSummary(selected), 'No validation data was recorded for this workflow.')}</pre>
+
+                  <h4 className="mt-3 font-medium">Decision notes</h4>
+                  <pre className="workflow-json workflow-json-short">{readableWorkflowJson(selected.llm_response, selected.errorLog ? `Workflow note: ${selected.errorLog}` : 'This workflow used the deterministic scheduling planner; no LLM reasoning was generated.')}</pre>
                 </div>
                 <div>
-                  <h4 className="font-medium">Prediction evidence</h4>
+                  <h4 className="font-medium">Decision evidence</h4>
                   {selected.validation_result?.auditLog && (
                     <div className="text-xs text-slate-600 mb-2">Confidence: {formatConfidence(selected.validation_result?.confidence ?? selected.tool_result?.confidence)}</div>
                   )}
@@ -323,6 +434,12 @@ export function AgentWorkflowMonitorPage() {
                     <div className="mt-3">
                       <h5 className="font-medium">Backend PO</h5>
                       <pre className="workflow-json workflow-json-tall">{JSON.stringify(selected.tool_result.backend_response, null, 2)}</pre>
+                    </div>
+                  )}
+                  {!selected.tool_result?.predictedDailyDemand && !selected.tool_result?.backend_response && (
+                    <div className="workflow-detail-callout workflow-detail-neutral">
+                      <strong>Schedule planning evidence</strong>
+                      <span>This workflow was evaluated using resource availability, opening hours, existing bookings, and booking duration. Demand prediction evidence does not apply to this schedule workflow.</span>
                     </div>
                   )}
 

@@ -16,6 +16,9 @@ public class ResourcesController : ControllerBase
     private readonly AppDbContext _db;
     public ResourcesController(AppDbContext db) => _db = db;
 
+    private bool TryGetTenantId(out Guid tenantId) =>
+        Guid.TryParse(User.FindFirst("tenantId")?.Value, out tenantId);
+
     // GET /api/resources?tenantId=&branchId=&category=&status=&search=&specialty=&page=&pageSize=
     [HttpGet]
     public async Task<IActionResult> GetResources(
@@ -31,7 +34,8 @@ public class ResourcesController : ControllerBase
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var query = _db.Resources.AsNoTracking().Where(r => r.TenantId == tenantId);
+        if (!TryGetTenantId(out var currentTenantId)) return Unauthorized();
+        var query = _db.Resources.AsNoTracking();
 
         if (branchId.HasValue) query = query.Where(r => r.BranchId == branchId);
         if (!string.IsNullOrEmpty(category) && Enum.TryParse<ResourceCategory>(category, true, out var cat))
@@ -82,6 +86,7 @@ public class ResourcesController : ControllerBase
     [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     public async Task<IActionResult> CreateResource([FromBody] CreateResourceDto dto)
     {
+        if (!TryGetTenantId(out var currentTenantId)) return Unauthorized();
         if (!string.IsNullOrEmpty(dto.Code))
         {
             var codeTaken = await _db.Resources.AnyAsync(r => r.Code == dto.Code);
@@ -90,7 +95,7 @@ public class ResourcesController : ControllerBase
 
         var resource = new Resource
         {
-            TenantId = dto.TenantId,
+            TenantId = currentTenantId,
             BranchId = dto.BranchId,
             Name = dto.Name,
             Code = dto.Code,

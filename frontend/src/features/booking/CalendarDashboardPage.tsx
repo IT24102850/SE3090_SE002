@@ -24,7 +24,7 @@ export default function CalendarDashboardPage() {
   const gridStart = grid[0];
   const gridEnd = grid[grid.length - 1];
 
-  const { data: resourcesData } = useGetResourcesQuery({ tenantId, pageSize: 100 }, { skip: !tenantId });
+  const { data: resourcesData, isLoading: isResourcesLoading } = useGetResourcesQuery({ tenantId, pageSize: 100 }, { skip: !tenantId });
   const { data, isLoading } = useGetBookingsQuery(
     {
       tenantId,
@@ -35,27 +35,30 @@ export default function CalendarDashboardPage() {
     },
     { skip: !tenantId }
   );
+  const bookings = Array.isArray(data?.items) ? data.items : [];
+  const resources = Array.isArray(resourcesData?.items) ? resourcesData.items : [];
+  const selectedResource = resources.find((resource) => resource.id === resourceFilter);
 
   const bookingsByDay = useMemo(() => {
     const map = new Map<string, Booking[]>();
-    for (const b of data?.items ?? []) {
+    for (const b of bookings) {
       const key = toISODate(startOfDay(new Date(b.startTime)));
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(b);
     }
     for (const list of map.values()) list.sort((a, b) => a.startTime.localeCompare(b.startTime));
     return map;
-  }, [data]);
+  }, [bookings]);
 
   const today = new Date();
   const currentMonth = anchor.getMonth();
 
   const todayCount = bookingsByDay.get(toISODate(startOfDay(today)))?.length ?? 0;
-  const totalThisView = data?.items.length ?? 0;
-  const pendingCount = (data?.items ?? []).filter((b) => b.status === 'Pending').length;
-  const cancelledCount = (data?.items ?? []).filter((b) => b.status === 'Cancelled').length;
-  const confirmedCount = (data?.items ?? []).filter((b) => b.status === 'Confirmed').length;
-  const completedCount = (data?.items ?? []).filter((b) => b.status === 'Completed').length;
+  const totalThisView = bookings.length;
+  const pendingCount = bookings.filter((b) => b.status === 'Pending').length;
+  const cancelledCount = bookings.filter((b) => b.status === 'Cancelled').length;
+  const confirmedCount = bookings.filter((b) => b.status === 'Confirmed').length;
+  const completedCount = bookings.filter((b) => b.status === 'Completed').length;
 
   // The hero photograph is keyed to what this tenant actually does — its own
   // cover image when the owner has set one, else its Tourism sub-type, else
@@ -92,13 +95,19 @@ export default function CalendarDashboardPage() {
               <div className="hero-figure">{totalThisView.toLocaleString()}</div>
               <p className="hero-sub">bookings in {formatMonthYear(anchor)}</p>
             </div>
-            <div className="filter-bar" style={{ marginBottom: 0 }}>
-              <select className="input" value={resourceFilter} onChange={(e) => setResourceFilter(e.target.value)}>
-                <option value="">All resources</option>
-                {resourcesData?.items.map((r) => (
+            <div className="dashboard-resource-filter">
+              <label htmlFor="dashboard-resource-filter">Showing</label>
+              <div className="dashboard-resource-filter-control">
+                <span aria-hidden="true">⌘</span>
+                <select id="dashboard-resource-filter" className="input" value={resourceFilter} onChange={(e) => setResourceFilter(e.target.value)} aria-label="Filter bookings by resource" disabled={isResourcesLoading}>
+                <option value="">{isResourcesLoading ? 'Loading resources…' : 'All resources'}</option>
+                {resources.map((r) => (
                   <option key={r.id} value={r.id}>{r.name}</option>
                 ))}
               </select>
+              </div>
+              <small>{selectedResource ? `${selectedResource.name} selected` : `${resources.length} resource${resources.length === 1 ? '' : 's'} included`}</small>
+              {resourceFilter && <button type="button" onClick={() => setResourceFilter('')}>Clear filter ×</button>}
             </div>
           </div>
 

@@ -13,6 +13,17 @@ using SmeBackend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// The Windows Event Log provider can be injected by local tooling. It requires
+// elevated permissions and turns otherwise harmless EF Core warnings into a
+// startup crash for a normal developer account. Development logs belong in the
+// console/debug output instead.
+if (builder.Environment.IsDevelopment())
+{
+    builder.Logging.ClearProviders();
+    builder.Logging.AddSimpleConsole();
+    builder.Logging.AddDebug();
+}
+
 // Railway (and most PaaS hosts) assign the listen port via $PORT at runtime
 // rather than appsettings/launchSettings - bind to it when present so the
 // container isn't unreachable. Local dev is unaffected (PORT is unset).
@@ -185,8 +196,9 @@ using (var scope = app.Services.CreateScope())
         var seedTenant = await db.Tenants
             .IgnoreQueryFilters()
             .Where(tenant => tenant.Name == "SME Demo Store")
+            .OrderBy(tenant => tenant.CreatedAt)
             .Select(tenant => new { tenant.Id })
-            .SingleOrDefaultAsync();
+            .FirstOrDefaultAsync();
 
         if (seedTenant is not null && !await db.Sales.IgnoreQueryFilters().AnyAsync(sale => sale.TenantId == seedTenant.Id))
         {

@@ -31,10 +31,19 @@ import type {
 
 // VITE_API_URL lets the deployed (Vercel) build point at a real deployed
 // backend instead of the local dev server - see frontend/.env.example.
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api';
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
+const API_BASE_URL = configuredApiUrl || '/api';
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: API_BASE_URL,
+  prepareHeaders: (headers) => {
+    const token = localStorage.getItem('token');
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return headers;
+  },
+});
+const localBackendQuery = fetchBaseQuery({
+  baseUrl: 'http://localhost:5298/api',
   prepareHeaders: (headers) => {
     const token = localStorage.getItem('token');
     if (token) headers.set('Authorization', `Bearer ${token}`);
@@ -55,7 +64,10 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
   api,
   extraOptions,
 ) => {
-  const result = await rawBaseQuery(args, api, extraOptions);
+  let result = await rawBaseQuery(args, api, extraOptions);
+  if (result.error?.status === 'PARSING_ERROR' && API_BASE_URL === '/api') {
+    result = await localBackendQuery(args, api, extraOptions);
+  }
   // Guard on the token still being present so concurrent 401s (this page
   // fires several queries at once) only redirect once, and so a genuine 401
   // while already logged out can't loop us back into /login.
@@ -190,7 +202,7 @@ export const bookingApi = createApi({
     >({
       query: (params) => ({ url: '/bookings', params }),
       providesTags: (result) =>
-        result
+        Array.isArray(result?.items)
           ? [...result.items.map((b) => ({ type: 'Booking' as const, id: b.id })), { type: 'Booking', id: 'LIST' }]
           : [{ type: 'Booking', id: 'LIST' }],
     }),
@@ -508,7 +520,7 @@ export const bookingApi = createApi({
     >({
       query: (params) => ({ url: '/resources', params }),
       providesTags: (result) =>
-        result
+        Array.isArray(result?.items)
           ? [...result.items.map((r) => ({ type: 'Resource' as const, id: r.id })), { type: 'Resource', id: 'LIST' }]
           : [{ type: 'Resource', id: 'LIST' }],
     }),
@@ -612,6 +624,9 @@ export const bookingApi = createApi({
       query: ({ id, plan }) => ({ url: `/agent/workflow/${id}/revise`, method: 'POST', body: { plan } }),
       invalidatesTags: (_r, _e, { id }) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }],
     }),
+    askWorkspaceAssistant: builder.mutation<{ answer: string; answeredAt: string }, { message: string }>({
+      query: (body) => ({ url: '/workspace-assistant/chat', method: 'POST', body }),
+    }),
   }),
 });
 
@@ -701,4 +716,5 @@ export const {
   useApproveWorkflowMutation,
   useRejectWorkflowMutation,
   useApplyWorkflowMutation,
+  useAskWorkspaceAssistantMutation,
 } = bookingApi;

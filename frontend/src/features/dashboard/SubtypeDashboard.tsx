@@ -98,20 +98,28 @@ export default function SubtypeDashboard({ config }: { config: SubtypeDashboardC
   );
 
   return (
-    <div>
-      <div className="page-header" style={{ marginBottom: 12 }}>
-        <div>
-          <p className="hero-eyebrow" style={{ color: config.themeColor }}>
-            {config.icon} {config.label}
+    <div className="dashboard-landing">
+      <section className="dashboard-welcome" aria-label={`${config.label} overview`}>
+        <span className="dashboard-welcome-orb dashboard-welcome-orb-a" style={{ background: config.themeColor }} aria-hidden="true" />
+        <span className="dashboard-welcome-orb dashboard-welcome-orb-b" aria-hidden="true" />
+        <div className="dashboard-welcome-copy">
+          <p className="dashboard-welcome-eyebrow">
+            <span style={{ background: config.themeColor }} aria-hidden="true" />
+            {config.icon} {config.label} workspace
           </p>
-          <h1 className="page-title" style={{ margin: 0 }}>{config.resourceTermPlural}</h1>
-          <p className="page-subtitle">{config.heroActionLabel}</p>
+          <h1>{config.resourceTermPlural}</h1>
+          <p>{config.heroActionLabel}</p>
         </div>
-      </div>
+        <div className="dashboard-welcome-status">
+          <span>LIVE TODAY</span>
+          <strong>{isLoading ? '…' : values.today ?? 0}</strong>
+          <small>bookings on the board</small>
+        </div>
+      </section>
 
       <KpiCards kpis={config.kpis} values={values} loading={isLoading} />
 
-      <div style={{ marginTop: 20 }}>
+      <div className="dashboard-calendar-wrap">
         <CalendarDashboardPage />
       </div>
     </div>

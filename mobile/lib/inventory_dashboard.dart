@@ -96,21 +96,40 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                     child: ListView(
                       padding: const EdgeInsets.all(20),
                       children: [
-                        Row(children: [
+                        Container(
+                          clipBehavior: Clip.antiAlias,
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF2563EB), Color(0xFF7C3AED), Color(0xFFEC4899)],
+                            ),
+                            borderRadius: BorderRadius.circular(26),
+                            boxShadow: const [BoxShadow(color: Color(0x553B82F6), blurRadius: 24, offset: Offset(0, 12))],
+                          ),
+                          child: Stack(children: [
+                            Positioned(right: -44, top: -52, child: _HeroOrb(size: 142, color: Colors.white.withValues(alpha: .12))),
+                            Positioned(right: 64, bottom: -58, child: _HeroOrb(size: 110, color: const Color(0xFFFDE68A).withValues(alpha: .18))),
+                            Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
                           Expanded(
                               child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                Text('INVENTORY OVERVIEW',
+                                Text('BUSINESS OVERVIEW',
                                     style: TextStyle(
-                                        color: theme.colorScheme.primary,
+                                        color: Colors.white.withValues(alpha: .78),
                                         fontSize: 12,
                                         fontWeight: FontWeight.w800,
                                         letterSpacing: 1.1)),
                                 const SizedBox(height: 4),
-                                Text('Inventory at a glance',
+                                Text('Your business at a glance',
                                     style: theme.textTheme.headlineSmall
                                         ?.copyWith(
+                                            color: Colors.white,
                                             fontWeight: FontWeight.w900)),
                               ])),
                           if (widget.onOpenStockOperations != null)
@@ -124,10 +143,19 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                               onPressed: _load,
                               tooltip: 'Refresh dashboard',
                               icon: const Icon(Icons.refresh_rounded)),
-                        ]),
+                              ]),
+                              const SizedBox(height: 15),
+                              Row(children: const [
+                                _HeroStatus(icon: Icons.bolt_rounded, label: 'Live workspace'),
+                                SizedBox(width: 9),
+                                _HeroStatus(icon: Icons.auto_awesome_rounded, label: 'Ready for today'),
+                              ]),
+                            ],
+                          )]),
+                        ),
                         const SizedBox(height: 8),
                         Text(
-                          'Live stock, procurement, and branch signals for your SME Inventory workspace.',
+                          'Live operations, resources, and team signals for your business workspace.',
                           style: TextStyle(
                               color: theme.colorScheme.onSurfaceVariant),
                         ),
@@ -136,7 +164,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                           _DashboardError(message: _error!, onRetry: _load),
                         if (_summary != null) _MetricGrid(summary: _summary!),
                         const SizedBox(height: 24),
-                        Text('Quick Operations',
+                        Text('Quick actions',
                             style: theme.textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.w800)),
                         const SizedBox(height: 12),
@@ -195,7 +223,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Stock Health & Levels',
+                            Text('Operational health',
                                 style: theme.textTheme.titleMedium
                                     ?.copyWith(fontWeight: FontWeight.w800)),
                             Text(
@@ -209,7 +237,10 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        ..._previewItems.map((item) => Card(
+                        if (_previewItems.isEmpty && _error == null)
+                          const _EmptyHealthState()
+                        else
+                          ..._previewItems.map((item) => Card(
                                   margin: const EdgeInsets.only(bottom: 10),
                                   child: Padding(
                                     padding: const EdgeInsets.all(16),
@@ -390,6 +421,56 @@ class DashboardSummary {
   final double totalValue;
 }
 
+class _HeroOrb extends StatelessWidget {
+  const _HeroOrb({required this.size, required this.color});
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+        ),
+      );
+}
+
+class _EmptyHealthState extends StatelessWidget {
+  const _EmptyHealthState();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: .7)),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: const Color(0xFF10B981).withValues(alpha: .14),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Icon(Icons.inventory_2_outlined, color: Color(0xFF10B981)),
+        ),
+        const SizedBox(height: 12),
+        Text('Your inventory will appear here',
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
+        Text('Add a catalog item or pull to refresh your live operations.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12.5)),
+      ]),
+    );
+  }
+}
+
 class _MetricGrid extends StatelessWidget {
   const _MetricGrid({required this.summary});
   final DashboardSummary summary;
@@ -467,7 +548,11 @@ class _DashboardMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
-          child: Padding(
+          clipBehavior: Clip.antiAlias,
+          child: Stack(children: [
+            Positioned(left: 0, top: 0, bottom: 0, child: Container(width: 4, color: color)),
+            Positioned(right: -21, bottom: -29, child: Container(width: 92, height: 92, decoration: BoxDecoration(shape: BoxShape.circle, color: color.withValues(alpha: .09)))),
+            Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -505,7 +590,7 @@ class _DashboardMetric extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
             ]),
-      ));
+      )]));
 }
 
 class _QuickActionCard extends StatelessWidget {
@@ -524,13 +609,14 @@ class _QuickActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
             color: Theme.of(context).cardTheme.color,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Theme.of(context).colorScheme.outline),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: color.withValues(alpha: .28)),
+            boxShadow: [BoxShadow(color: color.withValues(alpha: .12), blurRadius: 18, offset: const Offset(0, 8))],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -540,7 +626,7 @@ class _QuickActionCard extends StatelessWidget {
                 height: 38,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
@@ -555,6 +641,27 @@ class _QuickActionCard extends StatelessWidget {
             ],
           ),
         ),
+      );
+}
+
+class _HeroStatus extends StatelessWidget {
+  const _HeroStatus({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .16),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(color: Colors.white.withValues(alpha: .23)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 13, color: Colors.white),
+          const SizedBox(width: 5),
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+        ]),
       );
 }
 

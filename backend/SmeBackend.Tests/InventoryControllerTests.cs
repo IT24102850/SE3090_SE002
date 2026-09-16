@@ -182,3 +182,150 @@ public class InventoryAnalyticsTests
         Assert.Equal(441m, result.TotalCost);
     }
 }
+
+public class PurchaseOrdersControllerTests
+{
+    [Fact]
+    public async Task CreatePurchaseOrder_WithItems_PersistsItemsAndComputesTotals()
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        var itemId = Guid.NewGuid();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        db.Branches.Add(new Branch { Id = branchId, TenantId = tenantId, Name = "Main Branch" });
+        db.Suppliers.Add(new Supplier { Id = supplierId, TenantId = tenantId, Name = "Acme Supplies" });
+        db.InventoryItems.Add(new InventoryItem
+        {
+            Id = itemId,
+            TenantId = tenantId,
+            BranchId = branchId,
+            Name = "Organic Coffee",
+            Sku = "SKU-COF-01",
+            Quantity = 10,
+            UnitCost = 1500m,
+            IsActive = true,
+        });
+        await db.SaveChangesAsync();
+
+        var authorizationService = new Mock<IAuthorizationService>();
+        authorizationService.Setup(x => x.AuthorizeAsync(
+                It.IsAny<ClaimsPrincipal>(),
+                It.IsAny<object?>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(AuthorizationResult.Success());
+
+        var controller = new PurchaseOrdersController(db, authorizationService.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId)
+                }
+            }
+        };
+
+        var request = new CreatePurchaseOrderRequest(
+            branchId,
+            supplierId,
+            "PO-TEST-001",
+            "Draft",
+            new List<PurchaseOrderItemRequest>
+            {
+                new(itemId, null, 10m, 1400m),
+                new(null, "Paper cups (x100)", 5m, 800m),
+            });
+
+        var actionResult = await controller.CreatePurchaseOrder(request, CancellationToken.None);
+        var createdResult = Assert.IsType<CreatedAtActionResult>(actionResult.Result);
+        var response = Assert.IsType<PurchaseOrderResponse>(createdResult.Value);
+
+        Assert.Equal("PO-TEST-001", response.Number);
+        Assert.Equal(2, response.LineItems);
+        Assert.Equal(18000m, response.TotalAmount);
+        Assert.NotNull(response.Items);
+        Assert.Equal(2, response.Items!.Count);
+        var coffeeItem = response.Items.Single(i => i.InventoryItemId == itemId);
+        Assert.Equal("Organic Coffee", coffeeItem.ItemName);
+        Assert.Equal(10m, coffeeItem.Quantity);
+        Assert.Equal(1400m, coffeeItem.UnitPrice);
+        Assert.Equal(14000m, coffeeItem.LineTotal);
+
+        var customItem = response.Items.Single(i => i.InventoryItemId == null);
+        Assert.Equal("Paper cups (x100)", customItem.Description);
+        Assert.Equal(5m, customItem.Quantity);
+        Assert.Equal(800m, customItem.UnitPrice);
+        Assert.Equal(4000m, customItem.LineTotal);
+    }
+
+    [Fact]
+    public async Task CreatePurchaseOrder_WithNegativeQuantity_ReturnsValidationProblem()
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        db.Branches.Add(new Branch { Id = branchId, TenantId = tenantId, Name = "Main Branch" });
+        db.Suppliers.Add(new Supplier { Id = supplierId, TenantId = tenantId, Name = "Acme Supplies" });
+        await db.SaveChangesAsync();
+
+        var authorizationService = new Mock<IAuthorizationService>();
+        authorizationService.Setup(x => x.AuthorizeAsync(
+                It.IsAny<ClaimsPrincipal>(),
+                It.IsAny<object?>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(AuthorizationResult.Success());
+
+        var controller = new PurchaseOrdersController(db, authorizationService.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId)
+                }
+            }
+        };
+
+        var request = new CreatePurchaseOrderRequest(
+            branchId,
+            supplierId,
+            "PO-TEST-002",
+            "Draft",
+            new List<PurchaseOrderItemRequest>
+            {
+                new(null, "Test item", -5m, 100m),
+            });
+
+        var actionResult = await controller.CreatePurchaseOrder(request, CancellationToken.None);
+        Assert.IsType<ObjectResult>(actionResult.Result);
+    }
+
+    private static ClaimsPrincipal CreateUser(Guid tenantId)
+    {
+        var claims = new[]
+        {
+            new Claim(InventoryAccessHandler.TenantIdClaimType, tenantId.ToString()),
+            new Claim(ClaimTypes.Role, UserRole.Admin.ToString()),
+        };
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"));
+    }
+
+    private static AppDbContext CreateDbContext(ITenantContext? tenantContext = null)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        return new AppDbContext(options, tenantContext ?? new TenantContext());
+    }
+}

@@ -152,7 +152,7 @@ class _PurchaseOrderApprovalScreenState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'PURCHASE ORDERS',
+                                'APPROVALS',
                                 style: TextStyle(
                                   color: theme.colorScheme.primary,
                                   fontSize: 12,
@@ -162,7 +162,7 @@ class _PurchaseOrderApprovalScreenState
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Approval queue',
+                                'Keep work moving',
                                 style: theme.textTheme.headlineSmall
                                     ?.copyWith(fontWeight: FontWeight.w800),
                               ),
@@ -179,7 +179,7 @@ class _PurchaseOrderApprovalScreenState
                     const SizedBox(height: 6),
                     Text(
                       widget.canApprove
-                          ? 'Review and approve pending supplier orders.'
+                          ? 'Review priority requests and keep your team moving.'
                           : 'Viewing as read-only. Sign in as Manager to approve.',
                       style: TextStyle(
                         color: theme.colorScheme.onSurfaceVariant,

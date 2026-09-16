@@ -52,6 +52,7 @@ export default function SafetyPanel({ equipmentTerm }: { equipmentTerm: string }
   }
 
   const vessels = data?.vessels ?? [];
+  const sharedEquipment = data?.sharedEquipment ?? [];
 
   return (
     <div className="card chart-card" style={{ padding: 16 }}>
@@ -75,13 +76,13 @@ export default function SafetyPanel({ equipmentTerm }: { equipmentTerm: string }
                   {!v.jacketsSufficient && ` · ${v.lifeJacketShortfall} short`}
                 </span>
               </div>
-              {v.equipment.length === 0 ? (
+              {(v.equipment ?? []).length === 0 ? (
                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
                   No gear recorded against this vessel. Name equipment items after the vessel to link them.
                 </p>
               ) : (
                 <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0' }}>
-                  {v.equipment.map((item) => (
+                  {(v.equipment ?? []).map((item) => (
                     <GearRow key={item.equipmentItemId} item={item} />
                   ))}
                 </ul>
@@ -91,11 +92,11 @@ export default function SafetyPanel({ equipmentTerm }: { equipmentTerm: string }
         </div>
       )}
 
-      {(data?.sharedEquipment.length ?? 0) > 0 && (
+      {sharedEquipment.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <p className="chart-subtitle" style={{ margin: '0 0 4px' }}>Shared gear</p>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {data!.sharedEquipment.map((item) => (
+            {sharedEquipment.map((item) => (
               <GearRow key={item.equipmentItemId} item={item} />
             ))}
           </ul>

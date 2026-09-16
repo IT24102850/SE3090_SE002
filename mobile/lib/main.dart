@@ -28,7 +28,9 @@ void main() {
   final auth = AuthController(AuthRepository(apiBaseUrl: apiBaseUrl));
   final themes = ThemeController();
   runApp(App(auth: auth, themes: themes));
-  auth.restore();
+  // A cold launch always begins at sign in. This is a shared business device
+  // app, so retaining a previous person's workspace would be unsafe.
+  auth.startSignedOut();
   themes.restore();
 }
 
@@ -98,12 +100,10 @@ class ThemeController extends ChangeNotifier {
 
 ThemeData appTheme(AppThemeChoice choice) {
   final isDark = choice == AppThemeChoice.dark;
-  const primary = Color(0xFF6366F1);
-  const secondary = Color(0xFF06B6D4);
-  final surface = isDark ? const Color(0xFF131B2E) : Colors.white;
-  final surfaceRaised =
-      isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
-  final background = isDark ? canvas : const Color(0xFFF8FAFC);
+  const primary = Color(0xFF3B6BEA);
+  const secondary = Color(0xFFE86D5A);
+  final surface = isDark ? const Color(0xFF151D35) : Colors.white;
+  final background = isDark ? const Color(0xFF090D1F) : const Color(0xFFF7F8FF);
   final onSurface = isDark ? ink : const Color(0xFF0F172A);
   final onSurfaceVariant =
       isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
@@ -121,27 +121,33 @@ ThemeData appTheme(AppThemeChoice choice) {
       colorScheme: scheme.copyWith(
           primary: primary,
           secondary: secondary,
+          tertiary: const Color(0xFFF2B84B),
           surface: surface,
           onSurface: onSurface,
           outline: outline,
           onSurfaceVariant: onSurfaceVariant),
       scaffoldBackgroundColor: background,
       fontFamily: 'Roboto',
+      textTheme: ThemeData(brightness: isDark ? Brightness.dark : Brightness.light).textTheme.apply(bodyColor: onSurface, displayColor: onSurface),
       appBarTheme: AppBarTheme(
-          backgroundColor: Colors.transparent,
+          backgroundColor: background.withValues(alpha: .92),
           foregroundColor: onSurface,
           elevation: 0,
-          scrolledUnderElevation: 0),
+          scrolledUnderElevation: 0,
+          centerTitle: false,
+          titleTextStyle: TextStyle(
+              color: onSurface, fontSize: 18, fontWeight: FontWeight.w800)),
       cardTheme: CardThemeData(
-          elevation: 0,
           color: surface,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-              side: BorderSide(color: outline))),
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: outline.withValues(alpha: .85))),
+          shadowColor: primary.withValues(alpha: isDark ? .12 : .08),
+          elevation: isDark ? 0 : 2),
       inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: surfaceRaised,
+          fillColor: isDark ? const Color(0xFF1B2541) : const Color(0xFFF4F6FF),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           border: border(),
@@ -178,10 +184,40 @@ ThemeData appTheme(AppThemeChoice choice) {
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)))),
       navigationBarTheme: NavigationBarThemeData(
           height: 72,
-          backgroundColor: isDark ? const Color(0xFF0F1528) : Colors.white,
+          backgroundColor: isDark ? const Color(0xFF101936) : Colors.white,
           indicatorColor: primary.withValues(alpha: .18),
+          indicatorShape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14)),
           labelTextStyle: WidgetStateProperty.all(
-              const TextStyle(fontSize: 11, fontWeight: FontWeight.w700))));
+              const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800)),
+          iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+              size: 23,
+              color: states.contains(WidgetState.selected)
+                  ? primary
+                  : onSurfaceVariant))),
+      pageTransitionsTheme: const PageTransitionsTheme(builders: {
+        TargetPlatform.android: _SharedAxisPageTransitionsBuilder(),
+        TargetPlatform.iOS: _SharedAxisPageTransitionsBuilder(),
+      }));
+}
+
+/// Keeps every module transition deliberate, including legacy inventory forms.
+class _SharedAxisPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _SharedAxisPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => FadeTransition(
+      opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+      child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(.035, .02), end: Offset.zero)
+              .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+          child: child));
 }
 
 class LoginScreen extends StatefulWidget {
@@ -319,94 +355,10 @@ class _LoginScreenState extends State<LoginScreen>
                                     ),
                                   ),
                                   const SizedBox(height: 18),
-                                  Container(
-                                    padding: const EdgeInsets.all(18),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          const Color(0xFF6366F1)
-                                              .withValues(alpha: .22),
-                                          const Color(0xFF06B6D4)
-                                              .withValues(alpha: .10),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(22),
-                                      border: Border.all(
-                                        color: const Color(0xFF6366F1)
-                                            .withValues(alpha: .30),
-                                      ),
-                                    ),
-                                    child: Stack(
-                                      children: [
-                                        Positioned.fill(
-                                          child: ClipRRect(
-                                            borderRadius:
-                                                BorderRadius.circular(22),
-                                            child: Image.network(
-                                              'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=900&q=80',
-                                              fit: BoxFit.cover,
-                                              opacity:
-                                                  const AlwaysStoppedAnimation(
-                                                      .20),
-                                              errorBuilder: (_, __, ___) =>
-                                                  const SizedBox.shrink(),
-                                            ),
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.all(18),
-                                          child: Row(
-                                            children: [
-                                              Container(
-                                                width: 46,
-                                                height: 46,
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF6366F1)
-                                                      .withValues(alpha: .20),
-                                                  borderRadius:
-                                                      BorderRadius.circular(14),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.inventory_2_rounded,
-                                                  color: Color(0xFF818CF8),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 14),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      'Your operations, in sync',
-                                                      style: theme
-                                                          .textTheme.titleMedium
-                                                          ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w900,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 4),
-                                                    const Text(
-                                                      'Stock, procurement and analytics in one secure workspace.',
-                                                      style: TextStyle(
-                                                        color: Colors.white70,
-                                                        fontSize: 12.5,
-                                                        height: 1.35,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                  const _LoginWelcomeCard(),
                                   const SizedBox(height: 24),
                                   Text(
-                                    'Welcome back',
+                                    'Ready when you are',
                                     style: theme.textTheme.headlineMedium
                                         ?.copyWith(
                                       fontWeight: FontWeight.w900,
@@ -415,7 +367,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Sign in to continue managing your SME Inventory workspace.',
+                                    'Sign in to open your live business workspace.',
                                     style: TextStyle(
                                       color: theme.colorScheme.onSurfaceVariant,
                                       fontSize: 14.5,
@@ -433,7 +385,7 @@ class _LoginScreenState extends State<LoginScreen>
                                                           .stretch,
                                                   children: [
                                                     Text(
-                                                      'Secure sign in',
+                                                      'Sign in securely',
                                                       style: theme
                                                           .textTheme.titleMedium
                                                           ?.copyWith(
@@ -443,7 +395,7 @@ class _LoginScreenState extends State<LoginScreen>
                                                     ),
                                                     const SizedBox(height: 4),
                                                     Text(
-                                                      'Use your organization account to access live data.',
+                                                      'Your business data stays protected and in sync.',
                                                       style: TextStyle(
                                                         color: theme.colorScheme
                                                             .onSurfaceVariant,
@@ -527,19 +479,82 @@ class _LoginScreenState extends State<LoginScreen>
                                                             : 'Sign in')),
                                                   ])))),
                                   const SizedBox(height: 22),
-                                  Row(children: [
-                                    const Icon(Icons.verified_user_outlined,
-                                        color: mint, size: 18),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                        child: Text(
-                                            'Protected access for your stock, procurement and analytics workspace.',
-                                            style: TextStyle(
-                                                color: theme.colorScheme
-                                                    .onSurfaceVariant,
-                                                fontSize: 12.5)))
-                                  ])
+                                  const _LoginTrustRow(),
                                 ])))))));
+  }
+}
+
+class _LoginWelcomeCard extends StatelessWidget {
+  const _LoginWelcomeCard();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        clipBehavior: Clip.antiAlias,
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF2563EB), Color(0xFF7C3AED), Color(0xFFDB2777)],
+          ),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: const [
+            BoxShadow(color: Color(0x553B82F6), blurRadius: 28, offset: Offset(0, 14)),
+          ],
+        ),
+        child: Stack(children: [
+          Positioned(right: -34, top: -48, child: _LoginOrb(size: 154, color: Colors.white.withValues(alpha: .13))),
+          Positioned(right: 42, bottom: -64, child: _LoginOrb(size: 126, color: const Color(0xFFFDE68A).withValues(alpha: .2))),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(15)),
+              child: const Icon(Icons.auto_awesome_rounded, color: Colors.white),
+            ),
+            const SizedBox(height: 20),
+            const Text('One calm place\nfor busy work.',
+                style: TextStyle(color: Colors.white, fontSize: 27, height: 1.05, fontWeight: FontWeight.w900, letterSpacing: -.8)),
+            const SizedBox(height: 9),
+            Text('Track stock, coordinate purchasing, and see what matters next.',
+                style: TextStyle(color: Colors.white.withValues(alpha: .86), fontSize: 13, height: 1.4)),
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: .15), border: Border.all(color: Colors.white.withValues(alpha: .22)), borderRadius: BorderRadius.circular(99)),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.bolt_rounded, color: Color(0xFFFDE68A), size: 15),
+                SizedBox(width: 6),
+                Text('LIVE BUSINESS WORKSPACE', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: .7)),
+              ]),
+            ),
+          ]),
+        ]),
+      );
+}
+
+class _LoginOrb extends StatelessWidget {
+  const _LoginOrb({required this.size, required this.color});
+  final double size;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Container(width: size, height: size, decoration: BoxDecoration(shape: BoxShape.circle, color: color));
+}
+
+class _LoginTrustRow extends StatelessWidget {
+  const _LoginTrustRow();
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(color: const Color(0xFF10B981).withValues(alpha: .09), borderRadius: BorderRadius.circular(15)),
+      child: Row(children: [
+        const Icon(Icons.verified_user_outlined, color: mint, size: 20),
+        const SizedBox(width: 10),
+        Expanded(child: Text('Secure access for your operations and team.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600, fontSize: 12.5))),
+      ]),
+    );
   }
 }
 
@@ -604,19 +619,19 @@ class _ShellState extends State<Shell> {
       NavigationDestination(
           icon: Icon(Icons.space_dashboard_outlined),
           selectedIcon: Icon(Icons.space_dashboard_rounded),
-          label: 'Inventory'),
+          label: 'Workspace'),
       NavigationDestination(
           icon: Icon(Icons.qr_code_scanner_outlined),
           selectedIcon: Icon(Icons.qr_code_scanner_rounded),
-          label: 'Stock Log'),
+          label: 'Operations'),
       NavigationDestination(
           icon: Icon(Icons.assignment_turned_in_outlined),
           selectedIcon: Icon(Icons.assignment_turned_in_rounded),
-          label: 'Purchase Orders'),
+          label: 'Approvals'),
       NavigationDestination(
           icon: Icon(Icons.handyman_outlined),
           selectedIcon: Icon(Icons.handyman_rounded),
-          label: 'Maintenance'),
+          label: 'Assets'),
       NavigationDestination(
           icon: Icon(Icons.insights_outlined),
           selectedIcon: Icon(Icons.insights_rounded),
@@ -667,9 +682,27 @@ class _ShellState extends State<Shell> {
                   tooltip: 'Sign out',
                   icon: const Icon(Icons.logout_rounded))
             ]),
-        body: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            child: KeyedSubtree(key: ValueKey(index), child: pages[index])),
+        body: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(.95, -.95),
+                radius: 1.1,
+                colors: [
+                  const Color(0xFF6366F1).withValues(alpha: .13),
+                  Theme.of(context).scaffoldBackgroundColor,
+                ],
+              ),
+            ),
+            child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 320),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                        position: Tween<Offset>(begin: const Offset(.025, .015), end: Offset.zero).animate(animation),
+                        child: child)),
+                child: KeyedSubtree(key: ValueKey(index), child: pages[index]))),
         bottomNavigationBar: NavigationBar(
             selectedIndex: index,
             onDestinationSelected: (v) => setState(() => index = v),
@@ -690,7 +723,7 @@ class _BootScreen extends StatelessWidget {
             const BrandLockup(),
             const SizedBox(height: 18),
             Text(
-              'Preparing SME Inventory',
+              'Preparing your workspace',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -739,7 +772,7 @@ class BrandLockup extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('SME INVENTORY',
+                  Text('UNIFY',
                       style: TextStyle(
                           letterSpacing: 1.2,
                           fontWeight: FontWeight.w900,

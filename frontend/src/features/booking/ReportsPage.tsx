@@ -51,13 +51,13 @@ export default function ReportsPage() {
     : [];
 
   return (
-    <div>
+    <div className="reports-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Reports</h1>
           <p className="page-subtitle">Booking utilization, no-show statistics and estimated revenue per resource.</p>
         </div>
-        <div className="filter-bar">
+        <div className="filter-bar reports-date-filter">
           <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           <span style={{ color: 'var(--color-text-muted)' }}>to</span>
           <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
@@ -84,12 +84,12 @@ export default function ReportsPage() {
         </div>
         <div className="stat-tile">
           <div className="stat-tile-label">Est. revenue</div>
-          <div className="stat-tile-value">${totalRevenue.toFixed(0)}</div>
+          <div className="stat-tile-value">LKR {totalRevenue.toFixed(0)}</div>
           <div className="stat-tile-sub">booked hours × hourly rate</div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div className="reports-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         <div className="card chart-card">
           <p className="chart-title">Booking outcomes</p>
           <p className="chart-subtitle">{from} – {to}</p>
@@ -120,7 +120,7 @@ export default function ReportsPage() {
               .map(({ resource, metrics: m }) => ({
                 label: resource.name,
                 value: m!.estimatedRevenue,
-                displayValue: `$${m!.estimatedRevenue.toFixed(0)}`,
+                displayValue: `LKR ${m!.estimatedRevenue.toFixed(0)}`,
                 color: 'var(--color-good)',
               }))}
           />

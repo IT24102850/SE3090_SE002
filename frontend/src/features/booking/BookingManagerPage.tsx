@@ -144,13 +144,13 @@ export default function BookingManagerPage() {
   };
 
   return (
-    <div>
+    <div className="booking-manager-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">{subtype.bookingTermPlural}</h1>
           <p className="page-subtitle">Drag a booking card onto another day to reschedule it.</p>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div className="booking-page-actions" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <form onSubmit={handleCheckIn} style={{ display: 'flex', gap: 6 }}>
             <input
               className="input"
@@ -183,8 +183,8 @@ export default function BookingManagerPage() {
         </div>
       ))}
 
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
+      <div className="card booking-week-card" style={{ marginBottom: 24 }}>
+        <div className="booking-week-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button className="btn btn-secondary btn-sm" onClick={() => setWeekAnchor(addDays(weekAnchor, -7))}>‹</button>
             <strong>{formatDayLabel(weekDays[0])} – {formatDayLabel(weekDays[6])}</strong>
@@ -192,7 +192,7 @@ export default function BookingManagerPage() {
           </div>
           <button className="btn btn-ghost btn-sm" onClick={() => setWeekAnchor(new Date())}>This week</button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+        <div className="booking-week-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
           {weekDays.map((day) => {
             const key = toISODate(day);
             const events = bookingsByDay.get(key) ?? [];

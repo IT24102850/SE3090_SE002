@@ -5,6 +5,7 @@ import { useDeleteResourceMutation, useGetResourcesQuery } from '../../api/booki
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
 import ResourceFormModal from './ResourceFormModal';
 import ResourceDetailPanel from './ResourceDetailPanel';
+import ConfirmDialog from '../../shared/components/ConfirmDialog';
 import { RESOURCE_CATEGORIES, type Resource } from './types';
 import { useSubtypeConfig } from '../dashboard/useSubtypeConfig';
 
@@ -27,15 +28,18 @@ export default function ResourceManagerPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Resource | null>(null);
   const [selected, setSelected] = useState<Resource | null>(null);
-
-  const { data, isLoading } = useGetResourcesQuery(
+  const [archiveTarget, setArchiveTarget] = useState<Resource | null>(null);
+  const { data, error, isLoading, isError, refetch } = useGetResourcesQuery(
     { tenantId, category: category || undefined, search: search || undefined, page, pageSize: 10 },
     { skip: !tenantId }
   );
   const [deleteResource] = useDeleteResourceMutation();
+  const items = data?.items ?? [];
+  const loadError = error && 'status' in error
+    ? `Could not load resources (HTTP ${String(error.status)}).`
+    : 'Could not load resources. Please refresh and try again.';
 
   const handleDelete = async (r: Resource) => {
-    if (!window.confirm(`Archive "${r.name}"? It will no longer be bookable.`)) return;
     try {
       await deleteResource(r.id).unwrap();
       show('Resource archived.', 'success');
@@ -46,7 +50,7 @@ export default function ResourceManagerPage() {
   };
 
   return (
-    <div>
+    <div className="resource-manager-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">{subtype.resourceTermPlural}</h1>
@@ -83,10 +87,11 @@ export default function ResourceManagerPage() {
           </thead>
           <tbody>
             {isLoading && <tr><td colSpan={6} className="loading-row"><span className="spinner spinner-dark" /> Loading…</td></tr>}
-            {!isLoading && (data?.items.length ?? 0) === 0 && (
+            {isError && <tr><td colSpan={6} className="empty-state">{loadError}</td></tr>}
+            {!isLoading && !isError && items.length === 0 && (
               <tr><td colSpan={6} className="empty-state">No resources yet. Create your first one.</td></tr>
             )}
-            {data?.items.map((r) => (
+            {items.map((r) => (
               <tr key={r.id}>
                 <td>
                   <div style={{ fontWeight: 600 }}>{r.name}</div>
@@ -94,13 +99,13 @@ export default function ResourceManagerPage() {
                 </td>
                 <td>{r.category}</td>
                 <td>{r.capacity ?? '—'}</td>
-                <td>{r.hourlyRate ? `$${r.hourlyRate.toFixed(2)}/hr` : '—'}</td>
+                <td>{r.hourlyRate ? `LKR ${r.hourlyRate.toFixed(2)}/hr` : '—'}</td>
                 <td><span className={`badge badge-${STATUS_TONE[r.status] ?? 'neutral'}`}>{r.status}</span></td>
                 <td>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button className="btn btn-secondary btn-sm" onClick={() => setSelected(r)}>Manage</button>
                     <button className="btn btn-ghost btn-sm" onClick={() => { setEditing(r); setShowForm(true); }}>Edit</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(r)}>Archive</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => setArchiveTarget(r)}>Archive</button>
                   </div>
                 </td>
               </tr>
@@ -118,7 +123,22 @@ export default function ResourceManagerPage() {
       )}
 
       {showForm && (
-        <ResourceFormModal tenantId={tenantId} resource={editing} onClose={() => setShowForm(false)} />
+        <ResourceFormModal
+          tenantId={tenantId}
+          resource={editing}
+          onSaved={() => { void refetch(); }}
+          onClose={() => setShowForm(false)}
+        />
+      )}
+      {archiveTarget && (
+        <ConfirmDialog
+          title={`Archive ${archiveTarget.name}?`}
+          message="This resource will no longer be bookable, but its database record will be retained."
+          confirmLabel="Archive resource"
+          tone="danger"
+          onConfirm={() => { const target = archiveTarget; setArchiveTarget(null); void handleDelete(target); }}
+          onCancel={() => setArchiveTarget(null)}
+        />
       )}
     </div>
   );

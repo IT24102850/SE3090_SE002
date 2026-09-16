@@ -7,6 +7,8 @@ import NotificationBell from './NotificationBell';
 import { bookingApi } from '../../api/bookingApi';
 import { resetSubtypeCache } from '../../features/dashboard/subtype';
 import { useSubtypeConfig } from '../../features/dashboard/useSubtypeConfig';
+import { useToast } from './Toast';
+import WorkspaceAssistant from './WorkspaceAssistant';
 
 interface NavItem {
   path: string;
@@ -95,6 +97,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('unify-theme') || 'light');
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const { show } = useToast();
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -133,18 +137,37 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     .filter((section) => section.items.length > 0);
 
   const activeSectionId = sections.find((s) => s.items.some((i) => i.path === location.pathname))?.id;
+  // A small thumb-zone nav gives phone users the three places they use most
+  // without asking them to open the full drawer for every move. The drawer
+  // remains the source of truth for all destinations.
+  const mobileQuickLinks = [
+    sections.flatMap((section) => section.items).find((item) => item.path === '/dashboard'),
+    sections.find((section) => section.id === 'scheduling')?.items[0],
+    sections.find((section) => section.id === 'inventory')?.items[0],
+  ].filter((item): item is NavItem => Boolean(item));
   const pageName = location.pathname === '/inventory-analytics'
     ? 'ENTERPRISE ANALYTICS'
     : location.pathname === '/inventory'
       ? 'STOCK MANAGEMENT'
       : location.pathname.replace('/', '').replace(/-/g, ' ').toUpperCase() || 'OPERATIONS';
+  const pageCategory = location.pathname.startsWith('/inventory') || location.pathname === '/purchase-orders' || location.pathname === '/stock-movements' || location.pathname === '/low-stock-alerts' || location.pathname === '/branch-overview'
+    ? 'inventory'
+    : location.pathname === '/planner' || location.pathname === '/agent-workflows'
+      ? 'automation'
+      : location.pathname === '/resources' || location.pathname === '/staff' || location.pathname === '/branches'
+        ? 'resources'
+        : location.pathname === '/bookings' || location.pathname === '/my-schedule' || location.pathname === '/multi-branch' || location.pathname === '/booking-types'
+          ? 'scheduling'
+          : location.pathname === '/business-profile' || location.pathname === '/settings'
+            ? 'business'
+            : 'overview';
 
   // Collapsed by default except the section you are in, so the list stays
   // short without putting anything more than one click away. Once the user
   // opens a section it stays open while they navigate — `null` means
   // "untouched", so the active section keeps auto-following the route.
   const [openIds, setOpenIds] = useState<Set<string> | null>(null);
-  const isOpen = (id: string) => (openIds ? openIds.has(id) : true);
+  const isOpen = (id: string) => (openIds ? openIds.has(id) : id === activeSectionId);
   const toggleSection = (id: string) => {
     setOpenIds((prev) => {
       const next = new Set(prev ?? (activeSectionId ? [activeSectionId] : []));
@@ -163,6 +186,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     // list data until a hard refresh.
     dispatch(bookingApi.util.resetApiState());
     resetSubtypeCache();
+    show('You have been signed out safely. See you next time!', 'success');
     navigate('/login');
   };
 
@@ -266,7 +290,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 <div className="sidebar-role">{user.role}</div>
               </span>
             </NavLink>
-            <button className="sidebar-logout" onClick={handleLogout}>Log out</button>
+            <button className="sidebar-logout" onClick={() => setLogoutConfirmOpen(true)}>Log out</button>
           </div>
         )}
       </aside>
@@ -279,6 +303,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <span>{pageName}</span>
           </div>
           <div className="app-topbar-actions">
+            <NavLink to="/dashboard" className="app-home" title="Go to dashboard">
+              <span aria-hidden="true">⌂</span>
+              <span>Home</span>
+            </NavLink>
             <label className="theme-select" title="Choose theme">
               <span className="theme-select-icon" aria-hidden="true">◐</span>
               <span className="theme-select-label">Theme</span>
@@ -304,12 +332,47 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <strong>{user.fullName || user.email}</strong>
               <span className="app-role-chip">{user.role}</span>
             </NavLink>
-            <button className="app-signout" onClick={handleLogout}>Sign out</button>
+            <button className="app-signout" onClick={() => setLogoutConfirmOpen(true)}>Sign out</button>
             <NotificationBell />
           </div>
         </header>}
-        <div className="app-content">{children}</div>
+        <div className={`app-content page-category-${pageCategory}`}>{children}</div>
+        {user && <footer className="app-footer">
+          <span><b>UNIFY</b> · Your work, in flow</span>
+          <span className="app-footer-status"><i /> Workspace synced</span>
+          <nav aria-label="Footer navigation"><NavLink to="/dashboard">Home</NavLink><NavLink to="/profile">Profile</NavLink><button type="button" onClick={() => setLogoutConfirmOpen(true)}>Sign out</button></nav>
+        </footer>}
+        {user && (
+          <nav className="mobile-quick-nav" aria-label="Quick navigation">
+            {mobileQuickLinks.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) => `mobile-quick-link${isActive ? ' active' : ''}`}
+              >
+                <span aria-hidden="true">{item.icon}</span>
+                <small>{item.label.replace(' Manager', '')}</small>
+              </NavLink>
+            ))}
+            <button type="button" className="mobile-quick-link mobile-quick-more" onClick={() => setMobileNavOpen(true)}>
+              <span aria-hidden="true">•••</span>
+              <small>More</small>
+            </button>
+          </nav>
+        )}
       </div>
+      {user && <WorkspaceAssistant />}
+      {logoutConfirmOpen && (
+        <div className="confirm-backdrop" role="presentation" onMouseDown={() => setLogoutConfirmOpen(false)}>
+          <section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="logout-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="confirm-dialog-icon" aria-hidden="true">↗</div>
+            <p className="confirm-dialog-kicker">READY TO WRAP UP?</p>
+            <h2 id="logout-title">Sign out of your workspace?</h2>
+            <p>Your session will be closed on this device. Your work and updates are already saved.</p>
+            <div className="confirm-dialog-actions"><button type="button" className="btn btn-secondary" onClick={() => setLogoutConfirmOpen(false)}>Stay signed in</button><button type="button" className="btn btn-primary" onClick={handleLogout}>Yes, sign me out</button></div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
