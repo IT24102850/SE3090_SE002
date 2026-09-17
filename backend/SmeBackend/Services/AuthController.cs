@@ -71,12 +71,25 @@ public class AuthController : ControllerBase
     {
         // Login happens before a tenant is known, so tenant query filters
         // cannot be applied until the user's tenant has been resolved.
-        var user = await _context.Users
+        //
+        // Email is not unique across tenants (users has no global email
+        // index; the seed scripts and onboarding both create an admin per
+        // tenant with whatever email they are given), so the same address
+        // can name an account in several tenants. Taking the first row meant
+        // a demo tenant seeded with someone's email shadowed their real
+        // account: they could never sign in, because only the demo copy's
+        // password was ever checked. The password is the disambiguator - it
+        // is checked against every account carrying the email, and the one
+        // it matches is the one they meant.
+        var candidates = await _context.Users
             .IgnoreQueryFilters()
             .Include(u => u.Tenant)
-            .FirstOrDefaultAsync(u => u.Email == dto.Email && u.IsActive);
-        
-        if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+            .Where(u => u.Email == dto.Email && u.IsActive)
+            .OrderByDescending(u => u.CreatedAt)
+            .ToListAsync();
+
+        var user = candidates.FirstOrDefault(u => BCrypt.Net.BCrypt.Verify(dto.Password, u.PasswordHash));
+        if (user == null)
             return Unauthorized(new { message = "Invalid email or password" });
         
         if (!user.Tenant.IsActive)
