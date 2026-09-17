@@ -1,7 +1,7 @@
-﻿import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+﻿import { API_BASE_URL } from '../api/apiBaseUrl';
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api';
 
 export interface User {
   id: string;

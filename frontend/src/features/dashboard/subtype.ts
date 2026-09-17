@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../api/apiBaseUrl';
 import { TOURISM_SUB_TYPES } from '../booking/types';
 
 /* Tenant sub-type resolution for callers that are not React components, or
@@ -23,7 +24,6 @@ if (WHALE_WATCHING_SUBTYPE !== 'Whale / dolphin watching') {
   );
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api';
 
 /** Resolved value, and the in-flight promise so concurrent callers on first
  *  paint share one request rather than racing. */

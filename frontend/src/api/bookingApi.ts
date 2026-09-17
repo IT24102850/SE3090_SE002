@@ -1,5 +1,6 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
+import { API_BASE_URL, LOCAL_API_BASE_URL } from './apiBaseUrl';
 import type {
   AgentWorkflow,
   AvailabilityDay,
@@ -29,10 +30,7 @@ import type {
   UpdateTenantProfileBody,
 } from '../features/booking/types';
 
-// VITE_API_URL lets the deployed (Vercel) build point at a real deployed
-// backend instead of the local dev server - see frontend/.env.example.
-const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
-const API_BASE_URL = configuredApiUrl || '/api';
+// Where the API is - see api/apiBaseUrl.ts for the rules.
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: API_BASE_URL,
@@ -43,7 +41,7 @@ const rawBaseQuery = fetchBaseQuery({
   },
 });
 const localBackendQuery = fetchBaseQuery({
-  baseUrl: 'http://localhost:5298/api',
+  baseUrl: LOCAL_API_BASE_URL,
   prepareHeaders: (headers) => {
     const token = localStorage.getItem('token');
     if (token) headers.set('Authorization', `Bearer ${token}`);

@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../api/apiBaseUrl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -22,7 +23,6 @@ import './embed.css';
  *   { type: 'unify-booking:booked', reference }  after a successful booking
  */
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api').replace(/\/$/, '');
 
 interface Catalog {
   tenant: { id: string; name: string; logoUrl: string | null; website: string | null; businessType: string; subType: string | null; contactPhone: string | null };

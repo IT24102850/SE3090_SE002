@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/apiBaseUrl';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useDispatch } from 'react-redux';
@@ -9,7 +10,6 @@ import { initializeAuth } from '../store/authSlice';
 import type { AppDispatch } from '../store/store';
 import '../features/marketing/landing.css';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api';
 
 /* Sign-up, as a split frame: photograph on the left, the form on the right.
  *

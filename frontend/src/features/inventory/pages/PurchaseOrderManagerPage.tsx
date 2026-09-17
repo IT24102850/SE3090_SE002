@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../../api/apiBaseUrl';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -112,7 +113,6 @@ const statusTone: Record<POStatus, BadgeTone> = {
   Cancelled: 'red',
 };
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api').replace(/\/$/, '');
 
 const statusFilters = ['All statuses', ...lifecycleSteps.map((step) => statusLabels[step]), 'Cancelled'] as const;
 type StatusFilter = (typeof statusFilters)[number];

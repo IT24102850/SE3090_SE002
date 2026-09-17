@@ -1,3 +1,4 @@
+import { API_BASE_URL as apiBaseUrl } from '../../../api/apiBaseUrl';
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -8,7 +9,6 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
 import { getStoredToken } from '../authToken';
 
-const apiBaseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:5298/api').replace(/\/$/, '');
 
 type WorkflowItem = {
   id: string;
