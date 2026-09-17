@@ -23,6 +23,17 @@ public class JwtService : IJwtService
         _config = config;
     }
     
+    // InventoryAccessHandler gates Staff on explicit "component" grants. Until
+    // per-user grants are stored, Staff get the baseline set the mobile device
+    // app needs (stock counts, scans, PO queue view); purchase-order approval
+    // stays with Manager/Admin.
+    public static readonly string[] StaffComponentGrants =
+    {
+        "inventory.read",
+        "inventory.write",
+        "purchase-orders.read"
+    };
+
     public string GenerateAccessToken(User user)
     {
         var key = new SymmetricSecurityKey(
@@ -41,7 +52,13 @@ public class JwtService : IJwtService
         
         if (user.BranchId.HasValue)
             claims.Add(new Claim("branchId", user.BranchId.Value.ToString()));
-        
+
+        if (user.Role == UserRole.Staff)
+        {
+            foreach (var component in StaffComponentGrants)
+                claims.Add(new Claim("component", component));
+        }
+
         var token = new JwtSecurityToken(
             issuer: _config["Jwt:Issuer"],
             audience: _config["Jwt:Audience"],
