@@ -145,10 +145,19 @@ export default function EmbedBookingPage() {
     return () => { cancelled = true; };
   }, [hasDepartures, resourceId, date, catalog]);
 
+  /* The type that prices the form. Once a sailing is chosen it is that
+   * sailing's type. Before that, the type the upcoming sailings actually
+   * run on - not the alphabetically first type the business offers, which
+   * for a whale-watching operator that also lists "Coastal Boat Tours"
+   * would show the wrong prices until the visitor picked a date. */
   const bookingType: BookingType | null = useMemo(() => {
     if (!catalog) return null;
-    if (departure?.bookingTypeId) return catalog.bookingTypes.find((bt) => bt.id === departure.bookingTypeId) ?? catalog.bookingTypes[0] ?? null;
-    return catalog.bookingTypes[0] ?? null;
+    const byId = (id: string | null | undefined) => (id ? catalog.bookingTypes.find((bt) => bt.id === id) ?? null : null);
+    if (departure) return byId(departure.bookingTypeId) ?? catalog.bookingTypes[0] ?? null;
+    const counts = new Map<string, number>();
+    for (const d of catalog.departures) if (d.bookingTypeId) counts.set(d.bookingTypeId, (counts.get(d.bookingTypeId) ?? 0) + 1);
+    const commonest = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    return byId(commonest) ?? catalog.bookingTypes[0] ?? null;
   }, [catalog, departure]);
 
   const currency = bookingType?.currency ?? 'LKR';
