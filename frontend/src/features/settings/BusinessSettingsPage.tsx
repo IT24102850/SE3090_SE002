@@ -4,6 +4,7 @@ import { RootState } from '../../store/store';
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
 import { useGetTenantQuery, useUpdateTenantMutation } from '../../api/bookingApi';
 import { TOURISM_SUB_TYPES } from '../booking/types';
+import WebsiteWidgetCard from './WebsiteWidgetCard';
 
 // FR-AS4/FR-AS11: business details + the reschedule/cancellation cutoff
 // policy (previously hardcoded in BookingsController, now per-tenant).
@@ -101,6 +102,8 @@ export default function BusinessSettingsPage() {
           </div>
         </form>
       </div>
+
+      {tenantId && <WebsiteWidgetCard tenantId={tenantId} />}
     </div>
   );
 }

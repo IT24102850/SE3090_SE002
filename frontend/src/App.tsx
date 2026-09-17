@@ -20,6 +20,8 @@ import { ToastProvider as InventoryToastProvider } from './features/inventory/ui
  */
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+// Public, chrome-less: the booking widget a business embeds on its own site.
+const EmbedBookingPage = lazy(() => import('./features/embed/EmbedBookingPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const DashboardRouter = lazy(() => import('./features/dashboard/DashboardRouter'));
@@ -87,6 +89,7 @@ function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/embed/book/:tenantId" element={<EmbedBookingPage />} />
 
               <Route
                 path="/dashboard"

@@ -335,79 +335,16 @@ public class BookingsController : ControllerBase
     // each; excludeRejected preserves that (RouteOrCreateBatchAsync's bulk
     // path already excluded Rejected bookings from conflicting; Create and
     // Reschedule never did) rather than silently changing either.
-    private async Task<bool> HasConflictAsync(
-        Guid resourceId, DateTime start, DateTime end, Guid? excludeBookingId = null, bool excludeRejected = false)
-    {
-        return await _db.Bookings.AnyAsync(b =>
-            b.ResourceId == resourceId
-            && b.DeletedAt == null
-            && b.Status != Models.BookingStatus.Cancelled
-            && (!excludeRejected || b.Status != Models.BookingStatus.Rejected)
-            && (excludeBookingId == null || b.Id != excludeBookingId)
-            && b.StartTime < end
-            && b.EndTime > start);
-    }
+    // Both rules live in Shared/Availability so the public website widget
+    // books against exactly the same conflict and capacity checks.
+    private Task<bool> HasConflictAsync(
+        Guid resourceId, DateTime start, DateTime end, Guid? excludeBookingId = null, bool excludeRejected = false) =>
+        Availability.HasConflictAsync(_db, resourceId, start, end, excludeBookingId, excludeRejected);
 
-    /// The outcome of asking "can this booking go here?".
-    /// Exclusive resources fail with a conflict; shared vehicles fail with a
-    /// capacity error, which the caller renders as a 400 rather than a 409
-    /// because there is nothing conflicting - the boat is simply full.
-    private sealed record AvailabilityOutcome(
-        string? Error, string? Warning, bool IsCapacityFailure, int? Capacity, int? SeatsRemaining);
-
-    // Sits in front of HasConflictAsync rather than replacing it.
-    //
-    // Exclusive occupancy (any overlap is a conflict) stays the rule for
-    // every resource that has no declared passenger capacity above one -
-    // consulting rooms, hire cars, and every resource that existed before
-    // departures did. Only a resource whose operator has actually set a
-    // capacity (CustomAttributes.capacity, Resource.Capacity, or the
-    // booking type's MaxParticipants) switches to summing seats, because
-    // only there does "twenty bookings on one boat" mean twenty guests on
-    // one sailing rather than twenty double-bookings.
-    private async Task<AvailabilityOutcome> CheckAvailabilityAsync(
+    private Task<AvailabilityOutcome> CheckAvailabilityAsync(
         Guid resourceId, Guid bookingTypeId, Guid? departureId,
-        DateTime start, DateTime end, int seats, Guid? excludeBookingId = null)
-    {
-        var resource = await _db.Resources.AsNoTracking().FirstOrDefaultAsync(r => r.Id == resourceId);
-        var bookingType = await _db.BookingTypes.AsNoTracking().FirstOrDefaultAsync(bt => bt.Id == bookingTypeId);
-        var departure = departureId.HasValue
-            ? await _db.Departures.AsNoTracking().FirstOrDefaultAsync(d => d.Id == departureId)
-            : null;
-
-        var capacity = CapacityRules.Resolve(resource, bookingType, departure);
-        if (capacity is not > 1)
-        {
-            return await HasConflictAsync(resourceId, start, end, excludeBookingId)
-                ? new AvailabilityOutcome("This time slot is already booked.", null, false, null, null)
-                : new AvailabilityOutcome(null, null, false, null, null);
-        }
-
-        // Seats already sold on the same sailing. Matched by departure when
-        // there is one, and by overlapping time otherwise, so a shared
-        // resource still enforces capacity for tenants that book it without
-        // creating Departure rows at all.
-        var query = _db.Bookings.AsNoTracking()
-            .Where(b => b.DeletedAt == null
-                && b.Status != Models.BookingStatus.Cancelled
-                && b.Status != Models.BookingStatus.WeatherCancelled
-                && b.Status != Models.BookingStatus.Rejected
-                && (excludeBookingId == null || b.Id != excludeBookingId));
-
-        query = departureId.HasValue
-            ? query.Where(b => b.DepartureId == departureId)
-            : query.Where(b => b.ResourceId == resourceId && b.StartTime < end && b.EndTime > start);
-
-        var existing = await query
-            .Select(b => new { b.TicketBreakdown, b.AttendeeCount })
-            .ToListAsync();
-
-        var seatsTaken = existing.Sum(b => TicketPricing.SeatsUsed(b.TicketBreakdown, b.AttendeeCount));
-        var check = CapacityRules.Check(capacity.Value, seatsTaken, seats);
-
-        return new AvailabilityOutcome(
-            check.Error, check.Warning, check.Error != null, check.Capacity, check.SeatsRemaining);
-    }
+        DateTime start, DateTime end, int seats, Guid? excludeBookingId = null) =>
+        Availability.CheckAsync(_db, resourceId, bookingTypeId, departureId, start, end, seats, excludeBookingId);
 
     // Enforces per-resource lunch-break gaps and a max-hours/day cap, both
     // configured on ResourceSchedule (ResourcesController's schedule

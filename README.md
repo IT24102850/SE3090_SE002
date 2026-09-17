@@ -1,4 +1,4 @@
-﻿# SE3090_SE002 - Universal SME Management Platform
+# SE3090_SE002 - Universal SME Management Platform
 
 ## Team Members
 - Hasiru - Universal Booking & Resource Engine + Planner/Coordinator Agent
@@ -35,6 +35,12 @@ Flutter app depends on, are in
 
 Demo data: `./scripts/seed-whalewatching-full.ps1` (needs `dotnet run` in
 `backend/SmeBackend` first).
+
+## Website booking widget
+A business can take bookings on its own website by pasting a two-line snippet
+(Settings → Business Settings → Website booking widget). Bookings arrive in
+the dashboard as Pending with source `Website`. See
+[`docs/website-booking-widget.md`](docs/website-booking-widget.md).
 
 ## Getting Started
 See `/docs/` for setup instructions.
