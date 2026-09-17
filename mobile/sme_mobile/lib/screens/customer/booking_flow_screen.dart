@@ -860,7 +860,7 @@ class _ConfirmStep extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             value: repeatWeekly,
             onChanged: onRepeatWeeklyChanged,
-            activeThumbColor: accent,
+            activeColor: accent,
             title: const Text('Repeat weekly', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             subtitle: const Text('e.g. weekly physiotherapy sessions', style: TextStyle(fontSize: 12)),
           ),

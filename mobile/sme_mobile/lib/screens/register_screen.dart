@@ -143,7 +143,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       Text('BUSINESS TYPE *', style: AppTextStyles.label),
                       const SizedBox(height: 10),
                       DropdownButtonFormField<String>(
-                        initialValue: _businessType,
+                        value: _businessType,
                         decoration: _dropdownDecoration(Icons.category),
                         dropdownColor: AppColors.overlaySurface,
                         borderRadius: BorderRadius.circular(AppRadii.control),
@@ -166,7 +166,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         Text('TOURISM SUB-TYPE *', style: AppTextStyles.label),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<String>(
-                          initialValue: _subType,
+                          value: _subType,
                           decoration: _dropdownDecoration(Icons.travel_explore),
                           dropdownColor: AppColors.overlaySurface,
                           borderRadius: BorderRadius.circular(AppRadii.control),

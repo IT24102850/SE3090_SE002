@@ -114,40 +114,52 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                             Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(children: [
-                          Expanded(
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                Text('BUSINESS OVERVIEW',
-                                    style: TextStyle(
-                                        color: Colors.white.withValues(alpha: .78),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1.1)),
-                                const SizedBox(height: 4),
-                                Text('Your business at a glance',
-                                    style: theme.textTheme.headlineSmall
-                                        ?.copyWith(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w900)),
-                              ])),
-                          if (widget.onOpenStockOperations != null)
-                            IconButton.filledTonal(
-                              onPressed: widget.onOpenStockOperations,
-                              tooltip: 'Open stock operations',
-                              icon: const Icon(Icons.inventory_2_rounded),
-                            ),
-                          const SizedBox(width: 8),
-                          IconButton.filledTonal(
-                              onPressed: _load,
-                              tooltip: 'Refresh dashboard',
-                              icon: const Icon(Icons.refresh_rounded)),
-                              ]),
+                              LayoutBuilder(builder: (context, constraints) {
+                                final title = Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('BUSINESS OVERVIEW',
+                                          style: TextStyle(
+                                              color: Colors.white.withValues(alpha: .78),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 1.1)),
+                                      const SizedBox(height: 4),
+                                      Text('Your business at a glance',
+                                          style: theme.textTheme.headlineSmall
+                                              ?.copyWith(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w900)),
+                                    ]);
+                                final actions = Wrap(spacing: 8, runSpacing: 8, children: [
+                                  if (widget.onOpenStockOperations != null)
+                                    IconButton.filledTonal(
+                                      onPressed: widget.onOpenStockOperations,
+                                      tooltip: 'Open stock operations',
+                                      icon: const Icon(Icons.inventory_2_rounded),
+                                    ),
+                                  IconButton.filledTonal(
+                                      onPressed: _load,
+                                      tooltip: 'Refresh dashboard',
+                                      icon: const Icon(Icons.refresh_rounded)),
+                                ]);
+                                // Too narrow for title + action buttons side by
+                                // side (a briefly tiny browser window, a docked
+                                // inspector): stack them instead of overflowing.
+                                if (constraints.maxWidth < 240) {
+                                  return Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [title, const SizedBox(height: 10), actions]);
+                                }
+                                return Row(children: [
+                                  Expanded(child: title),
+                                  const SizedBox(width: 8),
+                                  actions,
+                                ]);
+                              }),
                               const SizedBox(height: 15),
-                              Row(children: const [
+                              const Wrap(spacing: 9, runSpacing: 8, children: [
                                 _HeroStatus(icon: Icons.bolt_rounded, label: 'Live workspace'),
-                                SizedBox(width: 9),
                                 _HeroStatus(icon: Icons.auto_awesome_rounded, label: 'Ready for today'),
                               ]),
                             ],

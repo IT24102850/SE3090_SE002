@@ -29,7 +29,7 @@ class BookingFieldInput extends StatelessWidget {
           children: [
             SectionHeader(field.label),
             DropdownButtonFormField<String>(
-              initialValue: value as String?,
+              value: value as String?,
               // The menu is a popup, not part of the field, so it needs its
               // own dark fill — otherwise it opens as a white Material sheet.
               dropdownColor: AppColors.overlaySurface,
