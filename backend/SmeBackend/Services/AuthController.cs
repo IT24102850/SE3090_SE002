@@ -135,6 +135,29 @@ public class AuthController : ControllerBase
         return Ok(MapToUserDto(user));
     }
 
+    /// <summary>Changes the signed-in user's password. Requires the current one, so a stolen token alone cannot lock the owner out.</summary>
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
+    {
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null) return Unauthorized();
+
+        var user = await _context.Users.FindAsync(Guid.Parse(userId));
+        if (user == null) return NotFound();
+
+        if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+            return BadRequest(new { message = "Current password is incorrect." });
+        if (dto.NewPassword == dto.CurrentPassword)
+            return BadRequest(new { message = "New password must be different from the current one." });
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Password changed." });
+    }
+
     private static UserResponseDto MapToUserDto(User user) => new()
     {
         Id = user.Id,
