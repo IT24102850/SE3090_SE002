@@ -1,0 +1,153 @@
+/* Reservations page.
+ *
+ * A two-column operations screen: the work (KPIs, trend, the list or the
+ * week board) on the left, orientation (a month calendar and what is coming
+ * up next) on the right. Every colour is a token so both themes hold; the
+ * four KPI tiles are the one place with fixed gradients, because they carry
+ * white text and are meant to read as a signal strip, not as surfaces. */
+
+.rsv { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 22px; align-items: start; }
+.rsv-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+/* Grid items default to min-width:auto, so the table's min-content width
+   would widen the whole column and push every row above it under the rail. */
+.rsv-main > *, .rsv-trend > * { min-width: 0; }
+.rsv-rail { min-width: 0; display: grid; gap: 20px; position: sticky; top: 16px; }
+
+/* ── KPI tiles ──────────────────────────────────────────────── */
+.rsv-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.rsv-kpi {
+  position: relative; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 96px; padding: 18px 20px; border-radius: 18px; color: #fff;
+  box-shadow: 0 14px 30px -18px rgba(10, 15, 29, .45);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.rsv-kpi:hover { transform: translateY(-2px); box-shadow: 0 20px 36px -18px rgba(10, 15, 29, .5); }
+.rsv-kpi::after { content: ''; position: absolute; right: -30px; bottom: -46px; width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,.14); }
+.rsv-kpi-value { font-size: 1.85rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+.rsv-kpi-label { margin-top: 6px; font-size: .78rem; font-weight: 600; opacity: .92; }
+.rsv-kpi-sub { margin-top: 3px; font-size: .68rem; opacity: .75; }
+.rsv-kpi-icon { position: relative; z-index: 1; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: rgba(255,255,255,.2); font-size: 1.3rem; backdrop-filter: blur(6px); }
+.rsv-kpi--blue   { background: linear-gradient(135deg, #2563EB 0%, #22D3EE 100%); }
+.rsv-kpi--green  { background: linear-gradient(135deg, #059669 0%, #34D399 100%); }
+.rsv-kpi--amber  { background: linear-gradient(135deg, #F59E0B 0%, #FB923C 100%); }
+.rsv-kpi--pink   { background: linear-gradient(135deg, #DB2777 0%, #F472B6 100%); }
+
+/* ── Cards & headers ────────────────────────────────────────── */
+.rsv-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px; box-shadow: var(--shadow-sm); }
+.rsv-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--color-border); }
+.rsv-card-title { margin: 0; font-size: .98rem; font-weight: 800; letter-spacing: -.01em; }
+.rsv-card-sub { margin: 2px 0 0; font-size: .76rem; color: var(--color-text-muted); }
+
+/* ── Trend row ──────────────────────────────────────────────── */
+.rsv-trend { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+.rsv-stat { padding: 18px 20px; }
+.rsv-stat-label { font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-muted); }
+.rsv-stat-row { display: flex; align-items: baseline; gap: 10px; margin-top: 6px; }
+.rsv-stat-value { font-size: 1.6rem; font-weight: 800; letter-spacing: -.03em; }
+.rsv-delta { font-size: .74rem; font-weight: 700; padding: 3px 8px; border-radius: 99px; }
+.rsv-delta--up { color: var(--color-good); background: var(--color-good-soft); }
+.rsv-delta--down { color: var(--color-critical); background: var(--color-critical-soft); }
+.rsv-delta--flat { color: var(--color-text-muted); background: var(--color-surface-muted); }
+.rsv-spark { height: 64px; margin-top: 10px; }
+.rsv-bars { display: flex; align-items: flex-end; gap: 5px; height: 64px; margin-top: 10px; }
+.rsv-bar { flex: 1; height: 100%; min-width: 4px; border-radius: 4px 4px 2px 2px; background: var(--color-primary-soft); position: relative; transition: background .15s; }
+.rsv-bar > i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 4px 4px 2px 2px; background: var(--gradient-brand); }
+.rsv-bar:hover { background: var(--hover-tint); }
+.rsv-bar-labels { display: flex; justify-content: space-between; margin-top: 6px; font-size: .66rem; color: var(--color-text-muted); }
+
+/* ── Toolbar ────────────────────────────────────────────────── */
+.rsv-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--color-border); }
+.rsv-search { position: relative; flex: 1 1 220px; min-width: 200px; }
+.rsv-search input { width: 100%; padding-left: 36px; }
+.rsv-search > span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--color-text-muted); pointer-events: none; }
+.rsv-toolbar .input { width: auto; min-width: 140px; }
+.rsv-seg { display: inline-flex; padding: 3px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-muted); }
+.rsv-seg button { border: 0; padding: 6px 12px; border-radius: 8px; background: transparent; color: var(--color-text-secondary); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.rsv-seg button.is-on { background: var(--color-surface); color: var(--color-primary); box-shadow: var(--shadow-sm); }
+.rsv-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 99px; font-size: .72rem; font-weight: 700; color: var(--color-primary); background: var(--color-primary-soft); }
+.rsv-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; font-weight: 800; line-height: 1; padding: 0; }
+
+/* ── List ───────────────────────────────────────────────────── */
+.rsv-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.rsv-table th { padding: 10px 14px; text-align: left; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-muted); border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+.rsv-table td { padding: 12px 14px; border-bottom: 1px solid var(--color-border); vertical-align: middle; font-size: .86rem; }
+.rsv-table tbody tr { transition: background .12s; }
+.rsv-table tbody tr:hover { background: var(--hover-tint); }
+.rsv-table tbody tr:last-child td { border-bottom: 0; }
+.rsv-guest { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rsv-guest-avatar { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: .74rem; font-weight: 800; }
+.rsv-guest-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.rsv-guest-meta { display: flex; gap: 6px; align-items: center; margin-top: 3px; font-size: .7rem; color: var(--color-text-muted); }
+.rsv-type { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 99px; font-size: .68rem; font-weight: 700; }
+.rsv-type i { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.rsv-src { padding: 2px 7px; border-radius: 6px; font-size: .64rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; background: var(--color-surface-muted); color: var(--color-text-secondary); }
+.rsv-src--website { color: var(--color-good); background: var(--color-good-soft); }
+.rsv-table td.rsv-when { white-space: nowrap; }
+.rsv-when strong { display: block; font-weight: 700; }
+.rsv-when .rsv-resource { display: block; max-width: 210px; overflow: hidden; text-overflow: ellipsis; font-size: .72rem; color: var(--color-text-muted); }
+.rsv-party { white-space: nowrap; }
+.rsv-party small { color: var(--color-text-muted); }
+.rsv-amount { font-weight: 800; white-space: nowrap; }
+.rsv-status { appearance: none; -webkit-appearance: none; border: 1px solid transparent; border-radius: 99px; padding: 5px 26px 5px 10px; font: inherit; font-size: .72rem; font-weight: 800; cursor: pointer; background-repeat: no-repeat; background-position: right 8px center; background-size: 10px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.rsv-status:focus { outline: none; box-shadow: 0 0 0 3px var(--color-primary-soft); }
+/* The light-theme ink (a deep amber, a navy) vanishes on a dark surface;
+   the status's own bright swatch, set as --sc by the page, reads there. */
+:root[data-theme="dark"] .rsv-status { color: var(--sc) !important; }
+@media (prefers-color-scheme: dark) { :root[data-theme="system"] .rsv-status { color: var(--sc) !important; } }
+:root[data-theme="dark"] .rsv-status option, .rsv-status option { color: var(--color-text); background: var(--color-surface); }
+.rsv-actions { display: flex; gap: 4px; justify-content: flex-end; opacity: .55; transition: opacity .12s; }
+tr:hover .rsv-actions { opacity: 1; }
+.rsv-icon-btn { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--color-text-secondary); cursor: pointer; font-size: .9rem; }
+.rsv-icon-btn:hover { background: var(--hover-tint); color: var(--color-text); border-color: var(--color-border); }
+.rsv-icon-btn--danger:hover { color: var(--color-critical); background: var(--color-critical-soft); }
+.rsv-empty { padding: 44px 20px; text-align: center; color: var(--color-text-muted); }
+.rsv-empty b { display: block; margin-bottom: 4px; color: var(--color-text); }
+.rsv-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 20px; font-size: .78rem; color: var(--color-text-secondary); }
+.rsv-foot > div { display: flex; gap: 6px; }
+
+/* ── Week board (kept from the previous page) ───────────────── */
+.rsv-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.rsv-week .calendar-cell { min-height: 150px; }
+
+/* ── Mini calendar ──────────────────────────────────────────── */
+.rsv-cal { padding: 16px 18px 14px; }
+.rsv-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.rsv-cal-head strong { font-size: .9rem; }
+.rsv-cal-nav { display: flex; gap: 4px; }
+.rsv-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.rsv-cal-dow { text-align: center; font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted); padding: 4px 0 6px; }
+.rsv-cal-day { position: relative; aspect-ratio: 1; display: grid; place-items: center; border: 0; border-radius: 10px; background: transparent; color: var(--color-text); font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; transition: background .12s, color .12s; }
+.rsv-cal-day:hover { background: var(--hover-tint); }
+.rsv-cal-day.is-other { color: var(--color-text-muted); opacity: .55; }
+.rsv-cal-day.is-today { color: var(--color-primary); font-weight: 800; }
+.rsv-cal-day.is-selected { background: var(--gradient-brand); color: #fff; box-shadow: 0 8px 18px -10px var(--color-primary); }
+.rsv-cal-day.has-bookings::after { content: ''; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .85; }
+.rsv-cal-day.is-selected.has-bookings::after { background: #fff; }
+.rsv-cal-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: .72rem; color: var(--color-text-muted); }
+
+/* ── Upcoming timeline ──────────────────────────────────────── */
+.rsv-up { padding: 6px 18px 12px; }
+.rsv-up-item { display: grid; grid-template-columns: 52px 1fr; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--color-border); }
+.rsv-up-item:last-child { border-bottom: 0; }
+.rsv-up-time { display: grid; place-items: center; align-self: start; padding: 7px 0; border-radius: 10px; font-size: .72rem; font-weight: 800; color: #fff; text-align: center; line-height: 1.15; }
+.rsv-up-time small { font-weight: 600; opacity: .85; font-size: .6rem; }
+.rsv-up-title { font-weight: 700; font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rsv-up-meta { margin-top: 2px; font-size: .72rem; color: var(--color-text-muted); }
+.rsv-up-empty { padding: 18px 0; font-size: .8rem; color: var(--color-text-muted); }
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 1500px) { .rsv { grid-template-columns: minmax(0, 1fr) 290px; gap: 18px; } .rsv-table td { padding: 11px 12px; } }
+@media (max-width: 1280px) {
+  .rsv { grid-template-columns: 1fr; }
+  .rsv-rail { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 1000px) { .rsv-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) {
+  .rsv-rail { grid-template-columns: 1fr; }
+  .rsv-trend { grid-template-columns: 1fr; }
+  .rsv-kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rsv-kpi { min-height: 84px; padding: 14px 16px; }
+  .rsv-kpi-value { font-size: 1.5rem; }
+  .rsv-table th:nth-child(4), .rsv-table td:nth-child(4) { display: none; }
+}
