@@ -9,6 +9,7 @@ import { resetSubtypeCache } from '../../features/dashboard/subtype';
 import { useSubtypeConfig } from '../../features/dashboard/useSubtypeConfig';
 import { useToast } from './Toast';
 import WorkspaceAssistant from './WorkspaceAssistant';
+import UserAvatar from './UserAvatar';
 
 interface NavItem {
   path: string;
@@ -259,32 +260,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               onClick={() => setMobileNavOpen(false)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit', marginBottom: 10 }}
             >
-              <span
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: '50%',
-                  overflow: 'hidden',
-                  flexShrink: 0,
-                  background: 'rgba(255,255,255,0.12)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 13,
-                  fontWeight: 700,
-                }}
-              >
-                {user.profilePictureUrl ? (
-                  <img src={user.profilePictureUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  (user.fullName || user.email || '?')
-                    .trim()
-                    .split(/\s+/)
-                    .slice(0, 2)
-                    .map((p) => p[0]?.toUpperCase())
-                    .join('')
-                )}
-              </span>
+              <UserAvatar
+                name={user.fullName}
+                email={user.email}
+                src={user.profilePictureUrl}
+                size={36}
+                className="sidebar-avatar"
+              />
               <span>
                 <div className="sidebar-user">{user.fullName}</div>
                 <div className="sidebar-role">{user.role}</div>
@@ -328,7 +310,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             </label>
             <span className="app-clock" aria-label="Current time">◷ {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             <NavLink to="/profile" className="app-user-chip">
-              <span className="app-user-avatar">{(user.fullName || user.email || 'A').trim().charAt(0).toUpperCase()}</span>
+              <UserAvatar name={user.fullName} email={user.email} src={user.profilePictureUrl} size={27} className="app-user-avatar" />
               <strong>{user.fullName || user.email}</strong>
               <span className="app-role-chip">{user.role}</span>
             </NavLink>

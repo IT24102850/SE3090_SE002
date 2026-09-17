@@ -454,6 +454,7 @@ button, input, select, textarea { font-family: inherit; }
 .app-home:hover { border-color: var(--color-primary); background: var(--color-primary-soft); }
 .app-user-chip { color: var(--color-text); }
 .app-user-avatar { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--gradient-brand); font-weight: 800; }
+.sidebar-avatar { color: #fff; background: rgba(255,255,255,0.12); }
 .app-role-chip { padding: 3px 8px; color: var(--color-primary); background: var(--color-primary-soft); border-radius: 999px; font-size: 0.68rem; }
 .app-signout { color: var(--color-text); cursor: pointer; font-weight: 700; }
 .app-signout:hover, .app-user-chip:hover, .app-clock:hover { border-color: var(--color-primary); background: var(--color-primary-soft); }
