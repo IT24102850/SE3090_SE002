@@ -50,6 +50,9 @@ export type KpiSource = 'bookings' | 'excursion' | 'resources';
 
 export interface KpiDefinition {
   id: string;
+  /** May contain `{name}` placeholders, filled from the `vars` the
+   *  dashboard hands KpiCards (the selected horizon, the raw KPI figures),
+   *  so a card can read "Next 30 days" rather than a fixed "Next 7 days". */
   label: string;
   source: KpiSource;
   /** The field to read for `excursion`, or the derivation for the others. */

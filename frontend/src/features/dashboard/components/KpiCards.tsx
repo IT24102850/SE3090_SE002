@@ -37,14 +37,26 @@ const TONE_COLOR: Record<NonNullable<KpiDefinition['tone']>, string> = {
   critical: 'var(--color-critical)',
 };
 
+/* "{days}" in a label or sub becomes vars.days, so the registry can describe
+ * a card whose window the operator chooses. An unknown name is left as-is
+ * rather than blanked, which makes a typo visible instead of silent. */
+function fill(text: string, vars: Record<string, number | string | null | undefined>): string {
+  return text.replace(/\{(\w+)\}/g, (match, name: string) => {
+    const v = vars[name];
+    return v === null || v === undefined ? match : typeof v === 'number' ? v.toLocaleString() : String(v);
+  });
+}
+
 export default function KpiCards({
   kpis,
   values,
+  vars = {},
   currency = 'LKR',
   loading = false,
 }: {
   kpis: KpiDefinition[];
   values: KpiValues;
+  vars?: Record<string, number | string | null | undefined>;
   currency?: string;
   loading?: boolean;
 }) {
@@ -57,11 +69,11 @@ export default function KpiCards({
         const color = TONE_COLOR[kpi.tone ?? 'default'];
         return (
           <div className="stat-tile" key={kpi.id}>
-            <div className="stat-tile-label">{kpi.label}</div>
+            <div className="stat-tile-label">{fill(kpi.label, vars)}</div>
             <div className="stat-tile-value" style={{ color }}>
               {loading ? '…' : formatValue(raw, kpi.format, currency)}
             </div>
-            {kpi.sub && <div className="stat-tile-sub">{kpi.sub}</div>}
+            {kpi.sub && <div className="stat-tile-sub">{loading ? '…' : fill(kpi.sub, vars)}</div>}
           </div>
         );
       })}

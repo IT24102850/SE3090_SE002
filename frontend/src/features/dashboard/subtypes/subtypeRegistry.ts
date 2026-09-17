@@ -64,7 +64,7 @@ const CONFIGS: Record<TourismSubType, SubtypeDashboardConfig> = {
       { id: 'revenueToday', label: 'Revenue today', source: 'excursion', field: 'revenueToday', format: 'currency' },
       { id: 'weatherCancelled', label: 'Weather-cancelled', source: 'excursion', field: 'weatherCancelledThisMonth', sub: 'departures this month', tone: 'critical' },
       { id: 'waivers', label: 'Waiver completion', source: 'excursion', field: 'waiverCompletionPercent', format: 'percent', tone: 'warning' },
-      { id: 'forwardOccupancy', label: 'Next 7 days', source: 'excursion', field: 'nextDaysOccupancyPercent', format: 'percent', sub: 'forward occupancy' },
+      { id: 'forwardOccupancy', label: 'Next {days} days', source: 'excursion', field: 'nextDaysOccupancyPercent', format: 'percent', sub: '{nextDaysPax} of {nextDaysCapacity} seats booked' },
     ],
     resourceColumns: [
       { key: 'name', label: 'Vessel' },
