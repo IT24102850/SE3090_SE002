@@ -719,30 +719,80 @@
 .lp-auth-divider span { position: relative; top: -9px; padding: 0 10px; background: var(--card); color: var(--faint); font-size: .76rem; }
 .lp-auth-create { display: flex; width: 100%; }
 .lp-auth-mobile-brand { display: none; }
-.lp-register-brand { text-align: center; margin-bottom: 4px; }
-.lp-register-brand .lp-brand { justify-content: center; }
-.lp-register-card { animation-duration: .42s; }
-.lp-register-card { max-width: 640px; margin-inline: auto; }
-.lp-register-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
-.lp-register-heading h1 { max-width: 15ch; }
-.lp-register-heading p { max-width: 48ch; margin: 6px 0 0; color: var(--muted); font-size: .9rem; line-height: 1.5; }
-.lp-register-step { flex: 0 0 auto; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--blue); font-size: .85rem; font-weight: 800; letter-spacing: -.02em; }
-.lp-register-step small { display: block; margin-top: 2px; color: var(--faint); font-size: .58rem; letter-spacing: .06em; text-transform: uppercase; }
-.lp-register-journey { display: flex; align-items: center; gap: 9px; margin: 18px 0 22px; color: var(--faint); font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.lp-register-journey span { display: flex; align-items: center; gap: 6px; }
-.lp-register-journey b { display: grid; place-items: center; width: 19px; height: 19px; border: 1px solid var(--line-strong); border-radius: 50%; font-size: .66rem; }
-.lp-register-journey .is-current { color: var(--blue); }
-.lp-register-journey .is-current b { border-color: var(--blue); background: var(--blue); color: white; box-shadow: 0 0 0 4px rgba(37,99,235,.1); }
-.lp-register-journey i { width: 34px; height: 1px; background: var(--line-strong); }
-.lp-register-card .lp-toggle { margin-bottom: 10px; box-shadow: inset 0 1px 2px rgba(10,15,29,.03); }
-.lp-register-mode-copy { margin-bottom: 25px !important; padding: 10px 12px; border-left: 3px solid var(--cyan); border-radius: 0 8px 8px 0; background: linear-gradient(90deg, var(--wash), transparent); color: var(--muted) !important; font-size: .83rem !important; line-height: 1.5; }
-.lp-register-assurance { display: flex; justify-content: center; gap: 8px; margin-top: 20px; color: var(--faint); font-size: .7rem; }
-.lp-register-assurance > span:first-child { color: #15803d; font-weight: 800; }
-@media (max-width: 560px) { .lp-register-heading h1 { font-size: 1.45rem; } .lp-register-journey { margin-block: 15px 18px; } .lp-register-assurance { flex-wrap: wrap; } }
 @keyframes lp-card-in { from { opacity: 0; transform: translateY(16px) scale(.985); } to { opacity: 1; transform: none; } }
 @media (max-width: 900px) { .lp-auth-story { display: none; } .lp-auth-mobile-brand { display: inline-flex; margin-bottom: 22px; } .lp-auth-mobile-brand img { width: 34px; height: 34px; } }
 @media (max-width: 560px) { .lp-auth { padding-inline: 16px; } .lp-auth-card { padding: 64px 22px 28px; border-radius: 16px; } .lp-auth-home { top: 16px; right: 16px; } .lp-label-row > span { display: none; } }
 @media (prefers-reduced-motion: reduce) { .lp-auth-card-rich { animation: none; } }
+
+/* ── Sign up: split frame ───────────────────────────────────────
+   One framed panel, photograph left and the form right, the way a device
+   mockup presents it: a thick ink border and a large radius so the two
+   halves read as a single object rather than a card beside a picture. The
+   photo is tinted with the brand pair so it belongs to the same system as
+   the button beneath it. */
+.lp-signup-wrap { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: clamp(18px, 5vh, 56px) var(--gutter); }
+/* Grid items default to min-width:auto, so one long <select> option or an
+   unbreakable placeholder can push the frame wider than the phone. */
+.lp-signup-frame, .lp-signup-panel, .lp-signup-panel .lp-field, .lp-signup-panel .lp-input, .lp-signup-panel form { min-width: 0; max-width: 100%; }
+.lp-signup-frame {
+  width: 100%; max-width: 1100px;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  overflow: hidden; border: 3px solid var(--ink); border-radius: 30px;
+  background: var(--card); box-shadow: var(--shadow-lg);
+  animation: lp-card-in .5s cubic-bezier(.22,1,.36,1) both;
+}
+.lp-signup-visual { position: relative; min-height: 600px; background: var(--ink); overflow: hidden; }
+.lp-signup-visual img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; object-position: 42% 50%; filter: brightness(1.18) contrast(1.06) saturate(1.1); }
+/* Hue-only blend keeps the photograph's light and detail while recolouring
+   it into the brand pair; a multiply here turns a dark image to mud. */
+.lp-signup-visual::before {
+  content: ''; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(160deg, var(--blue) 0%, var(--teal) 55%, var(--cyan) 100%);
+  mix-blend-mode: color; opacity: .9;
+}
+.lp-signup-visual::after {
+  content: ''; position: absolute; inset: 0; z-index: 2;
+  background: linear-gradient(160deg, rgba(37,99,235,.28), rgba(6,182,212,.22)), linear-gradient(to top, rgba(10,15,29,.28), transparent 40%);
+}
+.lp-signup-panel {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  padding: clamp(66px, 7vw, 84px) clamp(24px, 4.2vw, 60px) clamp(28px, 4vw, 46px);
+}
+.lp-signup-logo { display: block; width: 48px; height: 48px; margin-bottom: 16px; }
+.lp-signup-logo img { display: block; width: 100%; height: 100%; }
+.lp-signup-panel h1 { margin: 0 0 22px; font-size: clamp(1.6rem, 2.4vw, 2rem); font-weight: 800; letter-spacing: -.03em; text-align: center; }
+.lp-signup-panel form, .lp-signup-panel .lp-toggle, .lp-signup-panel .lp-alert { width: 100%; }
+.lp-signup-panel .lp-toggle { margin-bottom: 22px; }
+.lp-signup-panel .lp-field { gap: 8px; margin-bottom: 16px; }
+.lp-signup-panel .lp-field label { font-size: .84rem; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.lp-signup-panel .lp-input { padding: 13px 15px; border-radius: 10px; background: var(--card); }
+.lp-signup-panel .lp-field-hint { margin-top: -8px; }
+.lp-signup-pw { position: relative; display: flex; align-items: center; }
+.lp-signup-pw .lp-input { padding-right: 46px; }
+.lp-signup-eye {
+  position: absolute; right: 8px; display: grid; place-items: center;
+  padding: 7px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--faint); cursor: pointer; transition: color .16s ease, background .16s ease;
+}
+.lp-signup-eye:hover { color: var(--ink); background: var(--paper-sunk); }
+.lp-signup-panel .lp-auth-submit { min-height: 52px; margin-top: 12px; border-radius: 14px; font-size: 1rem; }
+.lp-signup-alt { margin: 20px 0 0; font-size: .9rem; color: var(--muted); text-align: center; }
+.lp-signup-alt a { color: var(--blue); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.lp-signup-alt a:hover { color: var(--blue-deep); }
+@media (max-width: 900px) {
+  .lp-signup-frame { grid-template-columns: 1fr; max-width: 540px; border-width: 2px; border-radius: 22px; }
+  .lp-signup-visual { min-height: 190px; }
+  .lp-signup-panel { padding-top: 60px; }
+}
+@media (max-width: 560px) {
+  .lp-signup-wrap { padding-inline: 12px; }
+  .lp-signup-frame { border-radius: 18px; }
+  .lp-signup-visual { min-height: 150px; }
+  .lp-signup-panel { padding: 58px 18px 24px; }
+  .lp-signup-panel .lp-form-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .lp-signup-frame { animation: none; } }
+
 @media (max-width: 620px) { .lp-home-signals { grid-template-columns: 1fr; margin-top: 26px; } .lp-home-signals > div { display: grid; grid-template-columns: 26px 1fr; column-gap: 9px; align-items: center; } .lp-home-signals strong { margin: 0; } .lp-home-signals small { grid-column: 2; margin-top: 1px; } }
 
 /* ── Account-type toggle ────────────────────────────────────── */
@@ -1006,6 +1056,10 @@ html[data-unify-theme='dark'] .lp-auth-card-rich { border-color: var(--line); }
 html[data-unify-theme='dark'] .lp-auth-theme button.is-active { color: #102326; background: #78d6c0; }
 html[data-unify-theme='dark'] .lp-input:focus { background: #1c3c40; }
 html[data-unify-theme='dark'] .lp-proof > span:first-child { background: #244b45; color: #9be8d2; }
-html[data-unify-theme='dark'] .lp-register-mode-copy { color: #d8eee8 !important; background: linear-gradient(90deg, rgba(63, 187, 164, .24), rgba(63, 187, 164, .04)); border-left-color: #78d6c0; }
+/* The ink frame vanishes against a dark ground, so it becomes a line instead. */
+html[data-unify-theme='dark'] .lp-signup-frame { border-color: var(--line-strong); }
+html[data-unify-theme='dark'] .lp-signup-visual::before { opacity: .62; }
+html[data-unify-theme='dark'] .lp-signup-panel .lp-input { background: var(--paper); }
+html[data-unify-theme='dark'] .lp-signup-eye:hover { background: var(--paper-sunk); }
 
 @media (max-width: 560px) { .lp-auth-theme { top: 16px; left: 16px; } }

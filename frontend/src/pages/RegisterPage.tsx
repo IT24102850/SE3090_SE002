@@ -11,7 +11,7 @@ import '../features/marketing/landing.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api';
 
-/* Sign-up, on the public surface's paper-and-violet card.
+/* Sign-up, as a split frame: photograph on the left, the form on the right.
  *
  * Two genuinely different things behind one toggle, which is why the toggle
  * is here and not on the sign-in page: registering a business creates a
@@ -50,10 +50,21 @@ interface PublicTenant {
   subType: string | null;
 }
 
+/* Eye / eye-off, inline so the toggle needs no icon dependency. */
+const EyeIcon = ({ off }: { off: boolean }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+    <circle cx="12" cy="12" r="3" />
+    {off && <path d="M3 3l18 18" />}
+  </svg>
+);
+
 const RegisterPage = () => {
   const [mode, setMode] = useState<Mode>('business');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     localStorage.getItem('unify-home-theme') === 'dark' ? 'dark' : 'light',
   );
@@ -161,57 +172,51 @@ const RegisterPage = () => {
     }
   };
 
-  return (
-    <main className="lp lp-auth-page">
-      <div className="lp-auth-backdrop" aria-hidden="true" />
-      <div className="lp-auth">
-        <div className="lp-auth-inner" style={{ maxWidth: 560, gridTemplateColumns: '1fr' }}>
-          <div className="lp-register-brand">
-            <Link className="lp-brand" to="/" style={{ justifyContent: 'center' }}>
-              <img className="lp-brand-mark" src="/unify-logo.svg" alt="" width={34} height={34} />
-              <span className="lp-brand-name">Unify<span className="lp-brand-tag">Your work, in flow</span></span>
-            </Link>
-          </div>
+  const passwordToggle = (
+    <button type="button" className="lp-signup-eye" onClick={() => setShowPassword((v) => !v)}
+      aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>
+      <EyeIcon off={!showPassword} />
+    </button>
+  );
 
-          <div className="lp-auth-card lp-auth-card-rich lp-register-card">
+  return (
+    <main className="lp lp-auth-page lp-signup-page">
+      <div className="lp-auth-backdrop" aria-hidden="true" />
+      <div className="lp-signup-wrap">
+        <div className="lp-signup-frame">
+          <aside className="lp-signup-visual" aria-hidden="true">
+            <img src="/landing/team-screen.jpg" alt="" />
+          </aside>
+
+          <section className="lp-signup-panel" aria-labelledby="signup-title">
             <div className="lp-auth-theme" aria-label="Choose colour theme"><button type="button" className={theme === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')} aria-pressed={theme === 'light'}>Light</button><button type="button" className={theme === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')} aria-pressed={theme === 'dark'}>Dark</button></div>
             <Link className="lp-auth-home" to="/"><span aria-hidden="true">⌂</span> Home</Link>
-            <div className="lp-auth-eyebrow">GET STARTED</div>
-            <div className="lp-register-heading">
-              <div>
-                <h1>{mode === 'business' ? 'Make work feel lighter.' : 'Join your business on Unify.'}</h1>
-                <p>Choose the path that fits you. You can be ready to go in just a few minutes.</p>
-              </div>
-              <span className="lp-register-step">01 <small>of 02</small></span>
-            </div>
-            <div className="lp-register-journey" aria-label="Registration progress">
-              <span className="is-current"><b>1</b> Account</span><i /><span><b>2</b> Workspace</span>
-            </div>
+
+            <Link className="lp-signup-logo" to="/" aria-label="Unify home">
+              <img src="/unify-logo.svg" alt="" width={48} height={48} />
+            </Link>
+            <h1 id="signup-title">Create an account</h1>
+
             <SegmentedToggle
               options={MODES}
               value={mode}
               onChange={switchMode}
               label="What are you signing up as"
             />
-            <p className="lp-register-mode-copy">{mode === 'business'
-              ? 'Set up your operations space, invite your team, and make it yours.'
-              : 'Connect with a business and keep every booking in one place.'}</p>
 
             {error && <div className="lp-alert" role="alert"><span>!</span>{error}</div>}
 
             <form onSubmit={handleSubmit}>
               {mode === 'business' ? (
                 <div className="lp-form-grid">
-                  <p className="lp-section-label">Business</p>
-
                   <div className="lp-field lp-field-full">
-                    <label htmlFor="businessName">Business name</label>
-                    <input id="businessName" name="businessName" className="lp-input" placeholder="Mirissa Jetliner"
+                    <label htmlFor="businessName">Business Name</label>
+                    <input id="businessName" name="businessName" className="lp-input" placeholder="Enter your business name"
                       value={form.businessName} onChange={handleChange} required />
                   </div>
 
                   <div className={form.businessType === 'Tourism' ? 'lp-field' : 'lp-field lp-field-full'}>
-                    <label htmlFor="businessType">Type</label>
+                    <label htmlFor="businessType">Business Type</label>
                     <select id="businessType" name="businessType" className="lp-input"
                       value={form.businessType} onChange={handleChange}>
                       {BUSINESS_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -220,7 +225,7 @@ const RegisterPage = () => {
 
                   {form.businessType === 'Tourism' && (
                     <div className="lp-field">
-                      <label htmlFor="subType">What kind</label>
+                      <label htmlFor="subType">What Kind</label>
                       <select id="subType" name="subType" className="lp-input"
                         value={form.subType} onChange={handleChange}>
                         <option value="">Select…</option>
@@ -238,54 +243,53 @@ const RegisterPage = () => {
 
                   <div className="lp-field">
                     <label htmlFor="address">Address</label>
-                    <input id="address" name="address" className="lp-input" placeholder="Mirissa Harbour"
+                    <input id="address" name="address" className="lp-input" placeholder="Enter your address"
                       value={form.address} onChange={handleChange} />
                   </div>
 
                   <div className="lp-field">
-                    <label htmlFor="phone">Business phone</label>
+                    <label htmlFor="phone">Business Phone</label>
                     <input id="phone" name="phone" className="lp-input" placeholder="+94 77 000 0000"
                       value={form.phone} onChange={handleChange} />
                   </div>
 
-                  <p className="lp-section-label">Your admin account</p>
-
                   <div className="lp-field lp-field-full">
-                    <label htmlFor="adminFullName">Full name</label>
-                    <input id="adminFullName" name="adminFullName" className="lp-input" autoComplete="name"
-                      value={form.adminFullName} onChange={handleChange} required />
+                    <label htmlFor="adminEmail">Email Address</label>
+                    <input id="adminEmail" name="adminEmail" type="email" className="lp-input" autoComplete="email"
+                      placeholder="Enter your email address" value={form.adminEmail} onChange={handleChange} required />
                   </div>
 
                   <div className="lp-field lp-field-full">
-                    <label htmlFor="adminEmail">Email</label>
-                    <input id="adminEmail" name="adminEmail" type="email" className="lp-input" autoComplete="email"
-                      placeholder="you@business.com" value={form.adminEmail} onChange={handleChange} required />
+                    <label htmlFor="adminFullName">Full Name</label>
+                    <input id="adminFullName" name="adminFullName" className="lp-input" autoComplete="name"
+                      placeholder="Enter your full name" value={form.adminFullName} onChange={handleChange} required />
                   </div>
 
                   <div className="lp-field">
                     <label htmlFor="adminPassword">Password</label>
-                    <input id="adminPassword" name="adminPassword" type="password" className="lp-input"
-                      autoComplete="new-password" placeholder="••••••••"
-                      value={form.adminPassword} onChange={handleChange} required />
+                    <div className="lp-signup-pw">
+                      <input id="adminPassword" name="adminPassword" type={showPassword ? 'text' : 'password'}
+                        className="lp-input" autoComplete="new-password" placeholder="Create your password"
+                        value={form.adminPassword} onChange={handleChange} required />
+                      {passwordToggle}
+                    </div>
                   </div>
 
                   <div className="lp-field">
                     <label htmlFor="adminPhone">Phone</label>
                     <input id="adminPhone" name="adminPhone" className="lp-input" autoComplete="tel"
-                      value={form.adminPhone} onChange={handleChange} />
+                      placeholder="+94 77 000 0000" value={form.adminPhone} onChange={handleChange} />
                   </div>
                 </div>
               ) : (
                 <div className="lp-form-grid">
-                  <p className="lp-section-label">Which business</p>
-
                   <div className="lp-field lp-field-full">
                     <label htmlFor="tenantId">Business</label>
                     <select id="tenantId" name="tenantId" className="lp-input"
                       value={customer.tenantId} onChange={handleCustomerChange}
                       disabled={tenants === null} required>
                       <option value="">
-                        {tenants === null ? 'Loading businesses…' : 'Select…'}
+                        {tenants === null ? 'Loading businesses…' : 'Select the business you are joining'}
                       </option>
                       {(tenants ?? []).map((t) => (
                         <option key={t.id} value={t.id}>
@@ -301,49 +305,47 @@ const RegisterPage = () => {
                       : 'A customer account belongs to one business. To book with another, sign up with them too.'}
                   </p>
 
-                  <p className="lp-section-label">Your details</p>
-
                   <div className="lp-field lp-field-full">
-                    <label htmlFor="customerFullName">Full name</label>
-                    <input id="customerFullName" name="fullName" className="lp-input" autoComplete="name"
-                      value={customer.fullName} onChange={handleCustomerChange} required />
+                    <label htmlFor="customerEmail">Email Address</label>
+                    <input id="customerEmail" name="email" type="email" className="lp-input" autoComplete="email"
+                      placeholder="Enter your email address" value={customer.email} onChange={handleCustomerChange} required />
                   </div>
 
                   <div className="lp-field lp-field-full">
-                    <label htmlFor="customerEmail">Email</label>
-                    <input id="customerEmail" name="email" type="email" className="lp-input" autoComplete="email"
-                      placeholder="you@email.com" value={customer.email} onChange={handleCustomerChange} required />
+                    <label htmlFor="customerFullName">Full Name</label>
+                    <input id="customerFullName" name="fullName" className="lp-input" autoComplete="name"
+                      placeholder="Enter your full name" value={customer.fullName} onChange={handleCustomerChange} required />
                   </div>
 
                   <div className="lp-field">
                     <label htmlFor="customerPassword">Password</label>
                     {/* minLength matches RegisterDto's [MinLength(6)]; without
                         it the only feedback is a 400 after a round trip. */}
-                    <input id="customerPassword" name="password" type="password" className="lp-input"
-                      autoComplete="new-password" placeholder="••••••••" minLength={6}
-                      value={customer.password} onChange={handleCustomerChange} required />
+                    <div className="lp-signup-pw">
+                      <input id="customerPassword" name="password" type={showPassword ? 'text' : 'password'}
+                        className="lp-input" autoComplete="new-password" placeholder="Create your password" minLength={6}
+                        value={customer.password} onChange={handleCustomerChange} required />
+                      {passwordToggle}
+                    </div>
                   </div>
 
                   <div className="lp-field">
                     <label htmlFor="customerPhone">Phone</label>
                     <input id="customerPhone" name="phone" className="lp-input" autoComplete="tel"
-                      value={customer.phone} onChange={handleCustomerChange} />
+                      placeholder="+94 77 000 0000" value={customer.phone} onChange={handleCustomerChange} />
                   </div>
                 </div>
               )}
 
               <button type="submit" disabled={loading} className="lp-btn lp-btn-primary lp-auth-submit">
-                {loading
-                  ? <><span className="lp-spinner" /> Creating…</>
-                  : mode === 'business' ? 'Create business account' : 'Create customer account'}
+                {loading ? <><span className="lp-spinner" /> Creating…</> : 'Create an account'}
               </button>
             </form>
 
-            <p className="lp-auth-alt">
-              Already have an account? <Link to="/login">Sign in</Link>
+            <p className="lp-signup-alt">
+              Already have an account? <Link to="/login">Login</Link>
             </p>
-            <div className="lp-register-assurance"><span>✓</span><span>Your details stay private and secure.</span><span>•</span><span>No credit card required.</span></div>
-          </div>
+          </section>
         </div>
       </div>
     </main>
