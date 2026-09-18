@@ -4,12 +4,13 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { RootState } from '../../store/store';
 import { logout } from '../../store/authSlice';
 import NotificationBell from './NotificationBell';
-import { bookingApi } from '../../api/bookingApi';
+import { bookingApi, useGetTenantProfileQuery, useGetTenantQuery } from '../../api/bookingApi';
 import { resetSubtypeCache } from '../../features/dashboard/subtype';
 import { useSubtypeConfig } from '../../features/dashboard/useSubtypeConfig';
 import { useToast } from './Toast';
 import WorkspaceAssistant from './WorkspaceAssistant';
 import UserAvatar from './UserAvatar';
+import BusinessAvatar from './BusinessAvatar';
 
 interface NavItem {
   path: string;
@@ -92,6 +93,12 @@ export const ALL_NAV_PATHS = NAV_SECTIONS.flatMap((s) => s.items.map((i) => i.pa
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user } = useSelector((state: RootState) => state.auth);
+  // The top-bar chip carries the business's identity - its logo from
+  // Settings -> Business Profile - rather than the person's photo, which
+  // stays on the sidebar profile link. Skipped until someone is signed in.
+  const chipTenantId = user?.tenantId ?? '';
+  const { data: chipTenant } = useGetTenantQuery({ tenantId: chipTenantId }, { skip: !chipTenantId });
+  const { data: chipProfile } = useGetTenantProfileQuery({ tenantId: chipTenantId }, { skip: !chipTenantId });
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -99,6 +106,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState(() => localStorage.getItem('unify-theme') || 'light');
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  // The rail is viewport-height, so below the nav there is room for one
+  // useful card. Dismissed once, it stays dismissed on this browser.
+  const [tipDismissed, setTipDismissed] = useState(() => {
+    try { return localStorage.getItem('unify-sidebar-tip-widget') === '1'; } catch { return false; }
+  });
+  const dismissTip = () => {
+    setTipDismissed(true);
+    try { localStorage.setItem('unify-sidebar-tip-widget', '1'); } catch { /* private mode */ }
+  };
   const { show } = useToast();
 
   useEffect(() => {
@@ -253,6 +269,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+        {user && !tipDismissed && (user.role === 'Admin' || user.role === 'Manager') && (
+          <div className="sidebar-tip" role="note">
+            <button type="button" className="sidebar-tip-close" aria-label="Dismiss" onClick={dismissTip}>×</button>
+            <div className="sidebar-tip-eyebrow">Website bookings</div>
+            <div className="sidebar-tip-title">Take reservations on your own site</div>
+            <p className="sidebar-tip-body">Paste a two-line snippet and bookings land here, pending your approval.</p>
+            <NavLink to="/settings" className="sidebar-tip-cta" onClick={() => setMobileNavOpen(false)}>Get the snippet →</NavLink>
+          </div>
+        )}
         {user && (
           <div className="sidebar-footer">
             <NavLink
@@ -309,8 +334,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </div>}
             </label>
             <span className="app-clock" aria-label="Current time">◷ {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <NavLink to="/profile" className="app-user-chip">
-              <UserAvatar name={user.fullName} email={user.email} src={user.profilePictureUrl} size={27} className="app-user-avatar" />
+            <NavLink to="/profile" className="app-user-chip" title={chipTenant?.name ? `${chipTenant.name} · ${user.fullName || user.email}` : undefined}>
+              <BusinessAvatar name={chipTenant?.name} src={chipProfile?.logoUrl} size={27} className="app-user-avatar" />
               <strong>{user.fullName || user.email}</strong>
               <span className="app-role-chip">{user.role}</span>
             </NavLink>

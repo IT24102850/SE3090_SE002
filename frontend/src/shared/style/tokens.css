@@ -454,6 +454,8 @@ button, input, select, textarea { font-family: inherit; }
 .app-home:hover { border-color: var(--color-primary); background: var(--color-primary-soft); }
 .app-user-chip { color: var(--color-text); }
 .app-user-avatar { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--gradient-brand); font-weight: 800; }
+.app-user-chip .business-avatar { border-radius: 9px; border-width: 1px; border-color: var(--color-border); box-shadow: none; }
+.app-user-chip .business-avatar img { padding: 2px; }
 .sidebar-avatar { color: #fff; background: rgba(255,255,255,0.12); }
 .app-role-chip { padding: 3px 8px; color: var(--color-primary); background: var(--color-primary-soft); border-radius: 999px; font-size: 0.68rem; }
 .app-signout { color: var(--color-text); cursor: pointer; font-weight: 700; }
@@ -571,6 +573,18 @@ button, input, select, textarea { font-family: inherit; }
 /* Reference pattern: the active item is a soft filled pill, not a tinted
    label — legible on a dark rail without needing a bright accent colour. */
 .sidebar-link.active { background: var(--color-primary-soft); color: var(--color-primary); font-weight: 700; box-shadow: inset 3px 0 var(--color-primary); }
+
+/* One useful card in the space under the nav. Reads from the same rail
+   tokens; the accent is the brand gradient at low opacity so it sits inside
+   the rail rather than shouting from it. */
+.sidebar-tip { position: relative; margin: 0 4px 10px; padding: 14px 14px 12px; border: 1px solid var(--sidebar-line); border-radius: 14px; background: linear-gradient(135deg, rgba(37, 99, 235, .14), rgba(14, 116, 144, .08)); }
+.sidebar-tip-close { position: absolute; top: 6px; right: 8px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--sidebar-muted); font-size: 1rem; line-height: 1; cursor: pointer; }
+.sidebar-tip-close:hover { color: var(--sidebar-text-strong); background: var(--sidebar-hover); }
+.sidebar-tip-eyebrow { font-size: .62rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--color-primary); }
+.sidebar-tip-title { margin-top: 4px; font-size: .84rem; font-weight: 700; color: var(--sidebar-text-strong); line-height: 1.3; }
+.sidebar-tip-body { margin: 6px 0 10px; font-size: .74rem; line-height: 1.45; color: var(--sidebar-text); }
+.sidebar-tip-cta { display: inline-block; font-size: .76rem; font-weight: 800; color: var(--color-primary); text-decoration: none; }
+.sidebar-tip-cta:hover { text-decoration: underline; }
 
 .sidebar-footer {
   margin-top: auto;
@@ -1053,7 +1067,7 @@ body.modal-open { overflow: hidden; }
   --chart-tooltip-border: rgba(185, 232, 220, .20);
 }
 .app-shell { background: var(--color-bg); }.app-topbar { margin: 14px 20px 0; min-height: 58px; padding: 10px 16px; border: 1px solid var(--color-border); border-radius: 18px; background: color-mix(in srgb, var(--color-surface) 80%, transparent); box-shadow: var(--shadow-sm); }.app-content { padding: 28px 40px 42px; }.app-breadcrumb { font-size: .66rem; }.app-breadcrumb strong { color: var(--color-text); }.app-breadcrumb span:last-child { padding: 5px 8px; border-radius: 99px; color: var(--color-primary); background: var(--color-primary-soft); letter-spacing: .05em; }.app-clock { display: none; }.app-user-chip { padding: 4px 10px 4px 5px; box-shadow: var(--shadow-sm); }.app-user-avatar { width: 30px; height: 30px; }.app-signout { border-color: transparent; background: transparent; }.app-signout:hover { color: var(--color-critical); background: var(--color-critical-soft); border-color: transparent; }
-.sidebar { width: 286px; margin: 12px 0 12px 12px; min-height: calc(100vh - 24px); padding: 18px 13px; border: 0; border-radius: 24px; box-shadow: 0 22px 52px rgba(4, 28, 29, .18); }.sidebar-brand { padding: 7px 9px 21px; border-bottom-color: var(--sidebar-line); }.sidebar-brand-mark { box-shadow: 0 10px 21px rgba(0,0,0,.22); }.sidebar-nav { gap: 6px; }.sidebar-section { padding: 0 4px; }.sidebar-section-header { border-radius: 9px; }.sidebar-link { margin-block: 1px; padding: 10px 11px; border-radius: 10px; font-size: .84rem; }.sidebar-link.active { color: #F1FFFB; background: linear-gradient(90deg, rgba(129,220,194,.20), rgba(129,220,194,.06)); box-shadow: inset 2px 0 #81DCC2; }.sidebar-link:hover { background: rgba(255,255,255,.06); }.sidebar-footer { margin-inline: 4px; padding: 13px 9px 4px; border-top-color: var(--sidebar-line); }.sidebar-logout { background: rgba(255,255,255,.06); color: #E3F2ED; }.sidebar-logout:hover { color: #FFB6A8; border-color: rgba(255,170,142,.4); background: rgba(255,170,142,.09); }
+.sidebar { width: 286px; margin: 12px 0 12px 12px; min-height: 0; height: calc(100vh - 24px); position: sticky; top: 12px; align-self: flex-start; overflow: hidden; padding: 18px 13px; border: 0; border-radius: 24px; box-shadow: 0 22px 52px rgba(4, 28, 29, .18); }.sidebar-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 2px; }.sidebar-brand { padding: 7px 9px 21px; border-bottom-color: var(--sidebar-line); }.sidebar-brand-mark { box-shadow: 0 10px 21px rgba(0,0,0,.22); }.sidebar-nav { gap: 6px; }.sidebar-section { padding: 0 4px; }.sidebar-section-header { border-radius: 9px; }.sidebar-link { margin-block: 1px; padding: 10px 11px; border-radius: 10px; font-size: .84rem; }.sidebar-link.active { color: #F1FFFB; background: linear-gradient(90deg, rgba(129,220,194,.20), rgba(129,220,194,.06)); box-shadow: inset 2px 0 #81DCC2; }.sidebar-link:hover { background: rgba(255,255,255,.06); }.sidebar-footer { margin-inline: 4px; padding: 13px 9px 4px; border-top-color: var(--sidebar-line); }.sidebar-logout { background: rgba(255,255,255,.06); color: #E3F2ED; }.sidebar-logout:hover { color: #FFB6A8; border-color: rgba(255,170,142,.4); background: rgba(255,170,142,.09); }
 .page-header { padding-bottom: 17px; border-bottom: 1px solid var(--color-border); }.page-title { font-size: clamp(1.55rem, 2.4vw, 2rem); letter-spacing: -.05em; }.page-subtitle { max-width: 65ch; }.card { border-radius: 20px; }.card-pad { padding: 26px; }.stat-grid { gap: 14px; }.stat-tile { min-height: 128px; padding: 19px 20px; border-radius: 18px; }.stat-tile-label { color: var(--color-text-muted); }.stat-tile-value { position: relative; z-index: 1; font-size: 2rem; }.stat-tile-sub { position: relative; z-index: 1; }
 .btn { min-height: 40px; padding-inline: 18px; border-radius: 12px; box-shadow: none; }.btn-primary { background: var(--gradient-brand); box-shadow: 0 9px 17px -12px var(--color-primary); }.btn-primary:hover:not(:disabled) { background: var(--gradient-brand); transform: translateY(-1px); box-shadow: 0 13px 21px -13px var(--color-primary); }.btn-secondary { background: var(--color-surface-raised); }.input, select.input, textarea.input { min-height: 42px; border-radius: 11px; background: var(--color-surface); }.input:focus, select.input:focus, textarea.input:focus { box-shadow: 0 0 0 4px var(--color-primary-soft); }.filter-bar { padding: 11px; border: 1px solid var(--color-border); border-radius: 15px; background: var(--color-surface-muted); }.table-wrap { border-radius: 16px; box-shadow: var(--shadow-sm); }.table-wrap table.data-table th { padding: 13px 15px; background: var(--color-surface-muted); }.table-wrap table.data-table td { padding: 14px 15px; }.badge { padding: 4px 9px; border-radius: 8px; }
 @media (max-width: 900px) { .app-topbar { margin: 0; border-width: 0 0 1px; border-radius: 0; background: var(--color-surface); }.app-content { padding: 24px 18px 32px; }.sidebar { margin: 0; min-height: 100vh; border-radius: 0 22px 22px 0; } }
@@ -1259,6 +1273,7 @@ body.modal-open { overflow: hidden; }
 
   .sidebar {
     position: fixed;
+    height: auto;
     inset: 0 auto 0 0;
     z-index: 50;
     transform: translateX(-100%);
@@ -1321,6 +1336,25 @@ body.modal-open { overflow: hidden; }
 }
 
 .hero-body { position: relative; padding: var(--space-5) var(--space-5) var(--space-5); }
+
+/* The business's profile picture (its logo) beside the hero copy, on every
+   dashboard. White-backed rounded square so wordmarks stay legible over
+   the photo; initials on the brand gradient when no logo is uploaded. */
+.hero-identity { display: flex; align-items: flex-start; gap: 16px; min-width: 0; }
+.hero-identity > div { min-width: 0; }
+.business-avatar {
+  display: inline-grid; place-items: center; flex-shrink: 0; overflow: hidden;
+  border-radius: 18px; border: 2px solid rgba(255, 255, 255, 0.85);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent-high, #0E7490));
+  color: #fff; font-weight: 800; letter-spacing: -0.02em; line-height: 1;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.business-avatar img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; padding: 6px; box-sizing: border-box; }
+.hero-identity .business-avatar { margin-top: 2px; }
+@media (max-width: 720px) {
+  .hero-identity { gap: 12px; }
+  .hero-identity .business-avatar { width: 44px !important; height: 44px !important; border-radius: 14px; }
+}
 
 .hero-eyebrow {
   font-size: 0.68rem;
