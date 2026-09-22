@@ -75,6 +75,13 @@ public class Booking
 
     public DateTime? CheckInAt { get; set; }
 
+    /// When the consultation actually began (status moved to InProgress).
+    /// CheckInAt -> this is the patient's real waiting-room time, which is
+    /// what the clinic dashboard's wait-time KPI reports; without it the
+    /// only option was to guess from the scheduled start, which is the
+    /// number a receptionist already knows is wrong.
+    public DateTime? ConsultationStartedAt { get; set; }
+
     public DateTime? CheckOutAt { get; set; }
 
     public Guid? ApprovedBy { get; set; }

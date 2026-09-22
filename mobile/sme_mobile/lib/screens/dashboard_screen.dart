@@ -4,6 +4,7 @@ import '../models/booking_model.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/booking_providers.dart';
+import '../providers/clinic_providers.dart';
 import '../providers/notification_providers.dart';
 import '../shared/color_utils.dart';
 import '../shared/date_format.dart';
@@ -13,6 +14,7 @@ import '../widgets/route_transitions.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/ui/ui.dart';
 import 'business_profile_editor_screen.dart';
+import 'clinic/clinic_desk_screen.dart';
 import 'customer/ai_planner_screen.dart';
 import 'customer/book_business_list_screen.dart';
 import 'customer/my_bookings_screen.dart';
@@ -35,6 +37,9 @@ class DashboardScreen extends ConsumerWidget {
     }
 
     final role = RoleTheme.of(user.role);
+    // Admin/Manager/Staff of a clinic get the operations desk on their home
+    // screen; every other business type's dashboard is exactly as before.
+    final isClinicDesk = user.role != 'Customer' && ref.watch(isClinicTenantProvider);
 
     return AppBackgroundScaffold(
       // Particles only on the dashboard header area, per the design: they add
@@ -69,6 +74,10 @@ class DashboardScreen extends ConsumerWidget {
                 const SizedBox(height: 16),
                 const _UpcomingBookingSection(),
               ],
+              if (isClinicDesk) ...[
+                const SizedBox(height: 16),
+                const _ClinicDeskCard(),
+              ],
               const SizedBox(height: 24),
               const SectionHeader('Quick actions'),
               GridView(
@@ -83,7 +92,7 @@ class DashboardScreen extends ConsumerWidget {
                   crossAxisSpacing: 16,
                   mainAxisExtent: 140,
                 ),
-                children: _quickActionsFor(context, user.role, role.color),
+                children: _quickActionsFor(context, user.role, role.color, clinic: isClinicDesk),
               ),
               const SizedBox(height: 24),
               const SectionHeader('Account'),
@@ -399,7 +408,7 @@ const _quickActionImages = <String, String>{
 /// management tooling lives in the web app — except Staff's "Mark
 /// attendance"/"Process walk-ins", which FR-B7/FR-B8 require on mobile
 /// specifically (QR check-in scanning, doctor's own schedule).
-List<Widget> _quickActionsFor(BuildContext context, String role, Color color) {
+List<Widget> _quickActionsFor(BuildContext context, String role, Color color, {bool clinic = false}) {
   if (role == 'Customer') {
     return [
       _QuickActionCard(
@@ -454,6 +463,14 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color) {
     'Mark attendance': () => const MyScheduleScreen(),
     'Process walk-ins': () => const CheckInScannerScreen(),
     'Business Profile': () => const BusinessProfileEditorScreen(),
+    // For a clinic the analytics / reports / bookings tiles have a real
+    // screen behind them: the clinic desk's Reports and Today tabs.
+    if (clinic) ...{
+      'View system analytics': () => const ClinicDeskScreen(initialTab: 1),
+      'View branch reports': () => const ClinicDeskScreen(initialTab: 1),
+      'Manage branch bookings': () => const ClinicDeskScreen(),
+      'Create / view bookings': () => const ClinicDeskScreen(),
+    },
   };
 
   return RoleTheme.of(role)
@@ -568,6 +585,104 @@ class _QuickActionCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The clinic desk summary for Admin/Manager/Staff of a Clinic tenant: how
+/// many patients are still to see, who is waiting, and how many alerts are
+/// open - one tap into [ClinicDeskScreen]. Renders nothing until the flow
+/// has loaded, and a compact retry if it cannot.
+class _ClinicDeskCard extends ConsumerWidget {
+  const _ClinicDeskCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final flowAsync = ref.watch(clinicFlowProvider);
+    final alerts = ref.watch(clinicAlertsProvider).valueOrNull ?? const [];
+    final critical = alerts.where((a) => a.severity == 'critical').length;
+
+    void open([int tab = 0]) => Navigator.of(context).push(slideFadeRoute(ClinicDeskScreen(initialTab: tab)));
+
+    return flowAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => GlassCard(
+        padding: const EdgeInsets.all(14),
+        onTap: () => ref.invalidate(clinicFlowProvider),
+        child: Row(children: [
+          const IconWell(icon: Icons.local_hospital_outlined, color: AppColors.textMuted, size: 40),
+          const SizedBox(width: 12),
+          Expanded(child: Text('Clinic desk is unavailable. Tap to retry.', style: AppTextStyles.caption.copyWith(fontSize: 13))),
+        ]),
+      ),
+      data: (flow) {
+        final longWait = (flow.longestWaitMinutes ?? 0) >= 20;
+        final accent = critical > 0 || longWait ? AppColors.danger : AppColors.cyan;
+        final stats = <(String, String)>[
+          ('To see', '${flow.remaining}'),
+          ('Waiting', '${flow.waiting}'),
+          ('In consult', '${flow.inConsultation}'),
+          ('Alerts', '${alerts.length}'),
+        ];
+        final headline = flow.remaining == 0
+            ? "Everyone on today's list has been seen."
+            : longWait
+                ? 'Longest wait ${flow.longestWaitMinutes} min - check the queue.'
+                : '${flow.doctorsOnDuty} doctor${flow.doctorsOnDuty == 1 ? '' : 's'} on duty · ${flow.patientsToday} patients today';
+        return GlassCard(
+          padding: const EdgeInsets.all(16),
+          borderColor: accent.withValues(alpha: 0.4),
+          onTap: open,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  IconWell(icon: Icons.local_hospital_outlined, color: accent, size: 42),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Clinic desk',
+                          style: AppTextStyles.label.copyWith(color: accent, fontSize: 11, letterSpacing: 1.5),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(headline, style: AppTextStyles.subtitle.copyWith(fontSize: 13.5)),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, color: AppColors.chevron),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  for (final (label, value) in stats)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(value, style: AppTextStyles.stat.copyWith(fontSize: 20, color: label == 'Alerts' && critical > 0 ? AppColors.danger : AppColors.textPrimary)),
+                          Text(label.toUpperCase(), style: AppTextStyles.label.copyWith(fontSize: 9.5)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: GhostButton(label: 'Reports', icon: Icons.insights_outlined, height: 40, onPressed: () => open(1))),
+                  const SizedBox(width: 8),
+                  Expanded(child: GhostButton(label: 'Reminders', icon: Icons.notifications_active_outlined, height: 40, onPressed: () => open(2))),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

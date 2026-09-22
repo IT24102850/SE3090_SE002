@@ -13,6 +13,7 @@ import '../../widgets/unify_auth/social_sign_in_row.dart';
 import '../../widgets/unify_auth/unify_wordmark.dart';
 import '../customer/book_business_list_screen.dart';
 import '../register_screen.dart';
+import '../customer/customer_register_screen.dart';
 
 /// The app's first screen for a signed-out visitor: sign in to Unify —
 /// Enterprise Management System.
@@ -60,6 +61,14 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
   void _openRegister() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const RegisterScreen()),
+    );
+  }
+
+  // A customer account is global - no business to pick - so it has its own
+  // entry point here rather than only from a business's page.
+  void _openCustomerRegister() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const CustomerRegisterScreen()),
     );
   }
 
@@ -353,7 +362,31 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                     ),
                     children: [
                       TextSpan(
-                        text: 'Create account',
+                        text: 'Register a business',
+                        style: TextStyle(
+                          color: AppColors.cyan,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: 8 * gap),
+            Center(
+              child: _TextLink(
+                onTap: _openCustomerRegister,
+                child: const Text.rich(
+                  TextSpan(
+                    text: 'Here to book? ',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: 'Create a customer account',
                         style: TextStyle(
                           color: AppColors.cyan,
                           fontWeight: FontWeight.bold,

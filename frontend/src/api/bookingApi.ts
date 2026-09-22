@@ -16,6 +16,24 @@ import type {
   AvailabilitySearchResult,
   AvailableSlotsResponse,
   Booking,
+  ClinicAlert,
+  ClinicFlow,
+  ClinicOverview,
+  ClinicOverviewParams,
+  ClinicReminders,
+  GymAttendance,
+  SchoolOverview,
+  SchoolOverviewParams,
+  SchoolGradebook,
+  SchoolStudentDetail,
+  SchoolToday,
+  GymLive,
+  GymOverview,
+  GymOverviewParams,
+  RestaurantInventory,
+  RestaurantLive,
+  RestaurantOverview,
+  RestaurantOverviewParams,
   BookingType,
   Branch,
   ConflictPair,
@@ -80,7 +98,7 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
 export const bookingApi = createApi({
   reducerPath: 'bookingApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification', 'Departure', 'Sighting', 'Weather', 'Safety'],
+  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification', 'Departure', 'Sighting', 'Weather', 'Safety', 'RestaurantInventory'],
   endpoints: (builder) => ({
     // ── Branches ──────────────────────────────────────────
     getBranches: builder.query<Branch[], { tenantId: string }>({
@@ -511,6 +529,106 @@ export const bookingApi = createApi({
       query: (params) => ({ url: '/reports/excursions/channel-split', params }),
     }),
 
+    // ── Clinic operations dashboard ─────────────────────
+    // All four carry the Booking LIST tag: a check-in, a status change or
+    // a reminder sent from the flow board invalidates that tag already, so
+    // the waiting room and the alerts refresh without extra wiring.
+    getClinicOverview: builder.query<ClinicOverview, ClinicOverviewParams | void>({
+      query: (params) => ({ url: '/reports/clinic/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getClinicFlow: builder.query<ClinicFlow, { on?: string; branchId?: string; resourceId?: string } | void>({
+      query: (params) => ({ url: '/reports/clinic/flow', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getClinicAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string } | void>({
+      query: (params) => ({ url: '/reports/clinic/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getClinicReminders: builder.query<ClinicReminders, { withinHours?: number; branchId?: string } | void>({
+      query: (params) => ({ url: '/reports/clinic/reminders', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
+    // ── Restaurant operations dashboard ─────────────────
+    // Same tagging as the clinic: Booking LIST so an order moved along the
+    // feed refreshes the KPIs, kitchen board and alerts. Inventory carries
+    // its own tag so logging waste refreshes only the stock panel.
+    getRestaurantOverview: builder.query<RestaurantOverview, RestaurantOverviewParams | void>({
+      query: (params) => ({ url: '/reports/restaurant/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+    getRestaurantLive: builder.query<RestaurantLive, { on?: string; branchId?: string; resourceId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/restaurant/live', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getRestaurantAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/restaurant/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+    getRestaurantInventory: builder.query<RestaurantInventory, { from?: string; to?: string; branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/restaurant/inventory', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+    logInventoryWaste: builder.mutation<unknown, { id: string; quantity: number; reason?: string; notes?: string; reference?: string }>({
+      query: ({ id, ...body }) => ({ url: `/inventory/${id}/waste`, method: 'POST', body }),
+      invalidatesTags: [{ type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+
+    // ── Gym / fitness operations dashboard ──────────────
+    getGymOverview: builder.query<GymOverview, GymOverviewParams | void>({
+      query: (params) => ({ url: '/reports/gym/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getGymLive: builder.query<GymLive, { branchId?: string; resourceId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/gym/live', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getGymAttendance: builder.query<GymAttendance, { from?: string; to?: string; branchId?: string; resourceId?: string; search?: string; method?: string; page?: number; pageSize?: number; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/gym/attendance', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getGymAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/gym/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
+    // ── School / tuition-centre dashboard ───────────────
+    // Marking attendance or entering a grade invalidates Booking LIST, so
+    // the timetable, KPIs and at-risk list refresh together.
+    getSchoolOverview: builder.query<SchoolOverview, SchoolOverviewParams | void>({
+      query: (params) => ({ url: '/reports/school/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    getSchoolToday: builder.query<SchoolToday, { on?: string; branchId?: string; resourceId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/school/today', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    getSchoolStudent: builder.query<SchoolStudentDetail, { id: string; from?: string; to?: string; tz?: number }>({
+      query: ({ id, ...params }) => ({ url: `/reports/school/students/${id}`, params }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getSchoolGradebook: builder.query<SchoolGradebook, { from?: string; to?: string; branchId?: string; bookingTypeId?: string; grade?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/school/gradebook', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getSchoolAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/school/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    markSchoolAttendance: builder.mutation<unknown, { bookingId: string; mark: string; points?: number | null; note?: string | null }>({
+      query: (body) => ({ url: '/reports/school/attendance', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    approveSchoolUser: builder.mutation<unknown, { userId: string; role?: string }>({
+      query: (body) => ({ url: '/reports/school/approve', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    gradeSchoolAssessment: builder.mutation<unknown, { bookingId: string; score: number | null; maxScore?: number | null; feedback?: string | null }>({
+      query: (body) => ({ url: '/reports/school/grade', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
     // ── Resources ─────────────────────────────────────────
     getResources: builder.query<
       PagedResult<Resource>,
@@ -592,6 +710,23 @@ export const bookingApi = createApi({
     }),
 
     // ── Agent workflows (FR-B12: planner propose/approve/apply) ───────────
+    // ── Customer side (mirrors the Flutter customer screens) ──
+    getMyWorkflows: builder.query<AgentWorkflow[], void>({
+      query: () => '/agent/workflow/mine',
+      providesTags: [{ type: 'Workflow', id: 'MINE' }],
+    }),
+    findAndBook: builder.mutation<
+      { workflowId: string; status: string; bookingId?: string | null; message?: string | null },
+      { objective: string; dateFrom?: string; dateTo?: string; extraConstraints?: Record<string, unknown> }
+    >({
+      query: (body) => ({ url: '/agent/find-and-book', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Workflow', id: 'MINE' }, { type: 'Booking', id: 'LIST' }],
+    }),
+    getUnavailableRanges: builder.query<{ startTime: string; endTime: string }[], { resourceId: string; from: string; to: string }>({
+      query: (params) => ({ url: '/bookings/unavailable-ranges', params }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
     getWorkflows: builder.query<AgentWorkflow[], { tenantId: string; status?: string }>({
       query: (params) => ({ url: '/agent/workflow', params }),
       providesTags: (result) =>
@@ -691,6 +826,30 @@ export const {
   useSetBookingTicketsMutation,
   useSetBookingWaiverMutation,
   useGetExcursionKpisQuery,
+  useGetClinicOverviewQuery,
+  useGetClinicFlowQuery,
+  useGetClinicAlertsQuery,
+  useGetClinicRemindersQuery,
+  useGetRestaurantOverviewQuery,
+  useGetRestaurantLiveQuery,
+  useGetRestaurantAlertsQuery,
+  useGetRestaurantInventoryQuery,
+  useLogInventoryWasteMutation,
+  useGetGymOverviewQuery,
+  useGetGymLiveQuery,
+  useGetGymAttendanceQuery,
+  useGetGymAlertsQuery,
+  useGetSchoolOverviewQuery,
+  useGetSchoolTodayQuery,
+  useGetSchoolStudentQuery,
+  useGetSchoolAlertsQuery,
+  useGetSchoolGradebookQuery,
+  useMarkSchoolAttendanceMutation,
+  useGradeSchoolAssessmentMutation,
+  useApproveSchoolUserMutation,
+  useGetMyWorkflowsQuery,
+  useFindAndBookMutation,
+  useGetUnavailableRangesQuery,
   useGetRevenueByTicketTypeQuery,
   useGetPerDepartureReportQuery,
   useGetWeatherCancellationReportQuery,

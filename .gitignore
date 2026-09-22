@@ -66,3 +66,6 @@ vite-start-output.txt
 # Regenerate with design/unify-ui-kit/build.mjs + the seed helper; the
 # .dc.html artboards and canvas.json in that folder are the real source.
 design/unify-ui-kit/unify-design-system.html
+
+# Local scratch file holding a plaintext password - never commit.
+scripts/pass.txt

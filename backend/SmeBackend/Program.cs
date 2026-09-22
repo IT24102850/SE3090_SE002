@@ -117,13 +117,20 @@ builder.Services.AddAuthorization(options =>
     // Inventory module's branch-scoped resource policies (InventoryRead,
     // InventoryWrite, PurchaseOrderRead, PurchaseOrderWrite).
     InventoryAuthorizationPolicies.AddInventoryPolicies(options);
+
+    // The platform owner's console: SuperAdmin role + MFA-minted token +
+    // a live server-side session (Authorization/PlatformOwnerPolicy.cs).
+    PlatformOwnerPolicy.Add(options);
 });
 builder.Services.AddSingleton<IAuthorizationHandler, InventoryAccessHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, PlatformSessionHandler>();
+builder.Services.AddSingleton<IPlatformSecretProtector, PlatformSecretProtector>();
 
 // Custom services
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddScoped<ICustomerAccountService, CustomerAccountService>();
 builder.Services.AddHostedService<SmeBackend.Services.ReminderDispatchService>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPlannerAgentService, SmeBackend.Services.PlannerAgentService>();
 builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.StubReminderChannelSender>();
@@ -136,6 +143,18 @@ builder.Services.AddScoped<SmeBackend.Services.ICloudinaryImageService, SmeBacke
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // Platform console sign-in: five tries a minute per address, on top of
+    // the per-account lockout. An online guess of a 14+ character password
+    // and a 6-digit code is not happening at 5/min.
+    options.AddPolicy(SmeBackend.Controllers.PlatformAuthController.LoginRateLimitPolicy, context =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
     options.AddPolicy(SmeBackend.Controllers.PublicBookingController.RateLimitPolicy, context =>
         System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -185,6 +204,21 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseRateLimiter();
+// Nothing the platform console returns may be cached or framed: every
+// response under /api/platform is no-store and carries the usual hardening
+// headers, whatever proxy sits in front.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/platform"))
+    {
+        context.Response.Headers.CacheControl = "no-store, max-age=0";
+        context.Response.Headers.Pragma = "no-cache";
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Response.Headers["X-Frame-Options"] = "DENY";
+        context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    }
+    await next();
+});
 app.UseAuthentication();
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthorization();
@@ -206,6 +240,13 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+
+    // The platform owner exists in every environment - the console is for
+    // the deployed site. See Data/PlatformOwnerSeeder.cs for the config keys.
+    await PlatformOwnerSeeder.SeedAsync(
+        db,
+        app.Configuration,
+        scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PlatformOwnerSeeder"));
 
     if (app.Environment.IsDevelopment())
     {

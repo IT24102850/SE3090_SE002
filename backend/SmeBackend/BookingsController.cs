@@ -25,6 +25,14 @@ public class BookingsController : ControllerBase
         _pushSender = pushSender;
     }
 
+    // A customer is one global account with a membership row per business
+    // (Services/CustomerAccountService.cs), and each membership makes its
+    // own bookings under its own id. "My bookings" and ownership therefore
+    // mean the whole account, not just the row the token was minted for.
+    // Built on _db rather than injected so the constructor the tests use
+    // stays as it is.
+    private ICustomerAccountService Customers => new CustomerAccountService(_db);
+
     // ── FR-B1: Search availability ─────────────────────────────
     // Consults the resource's weekly ResourceSchedule (falls back to 9am-5pm if
     // the resource has no schedule configured yet) and honors the booking type's
@@ -244,7 +252,7 @@ public class BookingsController : ControllerBase
         var booking = await _db.Bookings.FindAsync(id);
         if (booking == null || booking.DeletedAt != null) return NotFound();
 
-        var ownership = CheckOwnership(booking);
+        var ownership = await CheckOwnershipAsync(booking);
         if (ownership != null) return ownership;
 
         var newStart = DateTimeUtil.AsUtc(dto.NewStartTime);
@@ -290,7 +298,7 @@ public class BookingsController : ControllerBase
         var booking = await _db.Bookings.FindAsync(id);
         if (booking == null || booking.DeletedAt != null) return NotFound();
 
-        var ownership = CheckOwnership(booking);
+        var ownership = await CheckOwnershipAsync(booking);
         if (ownership != null) return ownership;
 
         var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == booking.TenantId);
@@ -321,12 +329,14 @@ public class BookingsController : ControllerBase
     // A booking can only be read/changed by the patient who made it, or by
     // Staff/Manager/Admin (front-desk / clinical staff). Returns an
     // ActionResult to short-circuit on failure, or null to proceed.
-    private IActionResult? CheckOwnership(Booking booking)
+    private async Task<IActionResult?> CheckOwnershipAsync(Booking booking)
     {
         var (callerId, callerRole) = CallerIdentity();
         if (callerId == null) return Unauthorized();
         if (callerRole is Roles.Admin or Roles.Manager or Roles.Staff) return null;
         if (booking.BookedBy == callerId) return null;
+        // Booked under another membership of the same customer account.
+        if (callerRole == Roles.Customer && (await Customers.AccountIdsAsync(callerId.Value)).Contains(booking.BookedBy)) return null;
         return Forbid();
     }
 
@@ -438,6 +448,9 @@ public class BookingsController : ControllerBase
         booking.Status = Models.BookingStatus.CheckedIn;
         booking.CheckInAt = DateTime.UtcNow;
         booking.UpdatedAt = DateTime.UtcNow;
+        // A restaurant order checked in from the QR scanner is in the
+        // kitchen too, so its recipe (if any) comes off stock the same way.
+        await RecipeConsumptionService.ApplyAsync(_db, booking);
         await _db.SaveChangesAsync();
 
         return Ok(new { message = "Patient checked in.", booking.Status });
@@ -455,7 +468,7 @@ public class BookingsController : ControllerBase
         var booking = await _db.Bookings.FindAsync(id);
         if (booking == null || booking.DeletedAt != null) return NotFound();
 
-        var ownership = CheckOwnership(booking);
+        var ownership = await CheckOwnershipAsync(booking);
         if (ownership != null) return ownership;
 
         if (string.IsNullOrWhiteSpace(dto.SignerName))
@@ -595,8 +608,31 @@ public class BookingsController : ControllerBase
         var booking = await _db.Bookings.FindAsync(id);
         if (booking == null || booking.DeletedAt != null) return NotFound();
 
+        var now = DateTime.UtcNow;
         booking.Status = dto.Status;
-        booking.UpdatedAt = DateTime.UtcNow;
+        // Stamp the flow milestones the clinic dashboard measures wait and
+        // visit time from. Only the first transition into each stage sets
+        // its timestamp, so re-saving a status never rewrites history.
+        // The restaurant board reads the same three stamps as "in kitchen",
+        // "ready" and "served/delivered".
+        switch (dto.Status)
+        {
+            case Models.BookingStatus.CheckedIn:
+                booking.CheckInAt ??= now;
+                // Ingredients leave the store when the kitchen starts, so a
+                // menu type with a recipe decrements stock here (idempotent).
+                await RecipeConsumptionService.ApplyAsync(_db, booking);
+                break;
+            case Models.BookingStatus.InProgress:
+                booking.CheckInAt ??= now;
+                booking.ConsultationStartedAt ??= now;
+                await RecipeConsumptionService.ApplyAsync(_db, booking);
+                break;
+            case Models.BookingStatus.Completed:
+                booking.CheckOutAt ??= now;
+                break;
+        }
+        booking.UpdatedAt = now;
         await _db.SaveChangesAsync();
         return Ok(booking);
     }
@@ -649,6 +685,8 @@ public class BookingsController : ControllerBase
                 b.AttendeeCount,
                 b.TotalCost,
                 b.CheckInAt,
+                b.ConsultationStartedAt,
+                b.CheckOutAt,
                 b.DepartureId,
                 b.TicketBreakdown,
                 b.Waiver,
@@ -735,26 +773,41 @@ public class BookingsController : ControllerBase
         [FromQuery] int pageSize = 20)
     {
         page = Math.Max(page, 1);
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        // The Bookings page loads its 14-day window + month grid in one call
+        // (pageSize 1000). A class-based tenant has a booking per student per
+        // session, so 200 rows did not even reach today.
+        pageSize = Math.Clamp(pageSize, 1, 1000);
 
         // FR-C3: a Customer can only ever list their own bookings — any
         // bookedBy they pass is overridden, not just defaulted, so one
         // patient can't page through another patient's appointments.
         var (callerId, callerRole) = CallerIdentity();
         if (callerId == null) return Unauthorized();
-        if (callerRole == Roles.Customer) bookedBy = callerId;
+        List<Guid>? customerIds = null;
+        if (callerRole == Roles.Customer)
+        {
+            bookedBy = null;
+            customerIds = await Customers.AccountIdsAsync(callerId.Value);
+        }
 
-        var query = _db.Bookings.AsNoTracking()
+        // A customer's bookings span businesses, and Resource is filtered by
+        // the token's tenant: with the filter on, a booking made at another
+        // business is counted but its row vanishes from the page. Customers
+        // are already confined to their own bookings above, so for them the
+        // tenant filters are dropped (soft-deletes stay explicit below).
+        var source = customerIds != null ? _db.Bookings.IgnoreQueryFilters() : _db.Bookings;
+        var query = source.AsNoTracking()
             .Include(b => b.Resource)
             .Include(b => b.BookingType)
-            .Where(b => b.DeletedAt == null)
+            .Where(b => b.DeletedAt == null && b.BookingType.DeletedAt == null)
             .AsQueryable();
 
         if (tenantId.HasValue) query = query.Where(b => b.TenantId == tenantId);
         if (bookingTypeId.HasValue) query = query.Where(b => b.BookingTypeId == bookingTypeId);
         if (resourceId.HasValue) query = query.Where(b => b.ResourceId == resourceId);
         if (branchId.HasValue) query = query.Where(b => b.Resource.BranchId == branchId);
-        if (bookedBy.HasValue) query = query.Where(b => b.BookedBy == bookedBy);
+        if (customerIds != null) query = query.Where(b => customerIds.Contains(b.BookedBy));
+        else if (bookedBy.HasValue) query = query.Where(b => b.BookedBy == bookedBy);
         if (dateFrom.HasValue) query = query.Where(b => b.StartTime >= DateTimeUtil.AsUtc(dateFrom.Value));
         if (dateTo.HasValue) query = query.Where(b => b.StartTime <= DateTimeUtil.AsUtc(dateTo.Value));
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<Models.BookingStatus>(status, true, out var s))
@@ -790,6 +843,8 @@ public class BookingsController : ControllerBase
                 b.Waiver,
                 b.Source,
                 b.CheckInAt,
+                b.ConsultationStartedAt,
+                b.CheckOutAt,
                 b.CreatedAt
             })
             .ToListAsync();
@@ -1040,9 +1095,21 @@ public class BookingsController : ControllerBase
                 ResourceName = b.Resource.Name,
                 b.Title,
                 b.StartTime,
-                b.EndTime
+                b.EndTime,
+                b.BookingTypeId,
+                BookingType = b.BookingType
             })
             .ToListAsync();
+
+        // Two bookings of the same type starting together on one resource
+        // are one group session (a class register, a gym class), not a
+        // clash - a 14-student lesson would otherwise report 91 conflicts.
+        // Plain gym-floor visits share a zone by design and are skipped too.
+        static bool SharesFloor(Models.BookingType t) => GymConfig.KindOf(t) == GymConfig.Access;
+        // School exams / assignments are records against a student, not
+        // time on the teacher: an essay "set Monday, due next Monday" is
+        // not a week-long clash with every lesson in between.
+        static bool IsRecordOnly(Models.BookingType t) => SchoolConfig.KindOf(t) is SchoolConfig.Exam or SchoolConfig.Assignment;
 
         var conflicts = new List<object>();
         foreach (var group in bookings.GroupBy(b => b.ResourceId))
@@ -1053,6 +1120,9 @@ public class BookingsController : ControllerBase
                 for (var j = i + 1; j < sorted.Count; j++)
                 {
                     if (sorted[j].StartTime >= sorted[i].EndTime) break; // sorted by start; no overlap possible beyond this point
+                    if (sorted[i].BookingTypeId == sorted[j].BookingTypeId && sorted[i].StartTime == sorted[j].StartTime) continue;
+                    if (SharesFloor(sorted[i].BookingType) && SharesFloor(sorted[j].BookingType)) continue;
+                    if (IsRecordOnly(sorted[i].BookingType) || IsRecordOnly(sorted[j].BookingType)) continue;
                     conflicts.Add(new
                     {
                         resourceId = group.Key,
@@ -1075,8 +1145,18 @@ public class BookingsController : ControllerBase
         // back to this same booking, and System.Text.Json has no default
         // cycle handling, so returning the tracked/included entity directly
         // 500s. GetAll/GetMySchedule already avoid this the same way.
-        var booking = await _db.Bookings.AsNoTracking()
+        // A customer opening one of their own bookings at a business other
+        // than the token's: the Resource/Tenant filters would hide it (same
+        // reasoning as GetAll), so they are dropped and ownership is checked
+        // against the whole account instead.
+        var (callerId, callerRole) = CallerIdentity();
+        if (callerId == null) return Unauthorized();
+        var customerIds = callerRole == Roles.Customer ? await Customers.AccountIdsAsync(callerId.Value) : null;
+        var source = customerIds != null ? _db.Bookings.IgnoreQueryFilters() : _db.Bookings;
+
+        var booking = await source.AsNoTracking()
             .Where(b => b.Id == id && b.DeletedAt == null)
+            .Where(b => customerIds == null || customerIds.Contains(b.BookedBy))
             .Select(b => new
             {
                 b.Id,

@@ -37,6 +37,10 @@ const BranchesPage = lazy(() => import('./features/branches/BranchesPage'));
 const BusinessSettingsPage = lazy(() => import('./features/settings/BusinessSettingsPage'));
 const BusinessProfilePage = lazy(() => import('./features/settings/BusinessProfilePage'));
 const MyProfilePage = lazy(() => import('./features/settings/MyProfilePage'));
+const CustomerBookPage = lazy(() => import('./features/customer/CustomerBookPage'));
+const MyBookingsPage = lazy(() => import('./features/customer/MyBookingsPage'));
+const CustomerAiPlannerPage = lazy(() => import('./features/customer/CustomerAiPlannerPage'));
+const BusinessInfoPage = lazy(() => import('./features/customer/BusinessInfoPage'));
 const InventoryManagerPage = lazy(() => import('./features/inventory/pages/InventoryManagerPage').then((m) => ({ default: m.InventoryManagerPage })));
 const StockMovementLogPage = lazy(() => import('./features/inventory/pages/StockMovementLogPage').then((m) => ({ default: m.StockMovementLogPage })));
 const PurchaseOrderManagerPage = lazy(() => import('./features/inventory/pages/PurchaseOrderManagerPage').then((m) => ({ default: m.PurchaseOrderManagerPage })));
@@ -45,6 +49,16 @@ const LowStockAlertsPage = lazy(() => import('./features/inventory/pages/LowStoc
 const BranchOverviewPage = lazy(() => import('./features/inventory/pages/BranchOverviewPage').then((m) => ({ default: m.BranchOverviewPage })));
 const AnalyticsDashboardPage = lazy(() => import('./features/inventory/pages/AnalyticsDashboardCharts').then((m) => ({ default: m.AnalyticsDashboardPage })));
 const ForbiddenPage = lazy(() => import('./features/inventory/pages/ForbiddenPage').then((m) => ({ default: m.ForbiddenPage })));
+
+/* The platform owner's console. Its own sign-in (password + authenticator
+ * code), its own session store and its own shell - see features/platform.
+ * Nothing under /platform is reachable with a tenant login. */
+const PlatformLoginPage = lazy(() => import('./features/platform/PlatformLoginPage'));
+const PlatformOverviewPage = lazy(() => import('./features/platform/PlatformOverviewPage'));
+const PlatformTenantsPage = lazy(() => import('./features/platform/PlatformTenantsPage'));
+const PlatformUsersPage = lazy(() => import('./features/platform/PlatformUsersPage'));
+const PlatformAuditPage = lazy(() => import('./features/platform/PlatformAuditPage'));
+const PlatformSecurityPage = lazy(() => import('./features/platform/PlatformSecurityPage'));
 
 /* Deliberately near-empty. This shows for the length of one chunk fetch on a
  * local network, and a spinner that appears and vanishes inside 100ms reads
@@ -114,6 +128,40 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <DashboardPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Customer side - the web twin of the Flutter customer screens. */}
+              <Route
+                path="/book"
+                element={
+                  <ProtectedRoute allowedRoles={['Customer']}>
+                    <Shell><CustomerBookPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/my-bookings"
+                element={
+                  <ProtectedRoute allowedRoles={['Customer']}>
+                    <Shell><MyBookingsPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/ai-planner"
+                element={
+                  <ProtectedRoute allowedRoles={['Customer']}>
+                    <Shell><CustomerAiPlannerPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/business"
+                element={
+                  <ProtectedRoute>
+                    <Shell><BusinessInfoPage /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -291,6 +339,14 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+
+              {/* ── Platform console (owner only; guarded inside PlatformLayout) ── */}
+              <Route path="/platform/login" element={<PlatformLoginPage />} />
+              <Route path="/platform" element={<PlatformOverviewPage />} />
+              <Route path="/platform/tenants" element={<PlatformTenantsPage />} />
+              <Route path="/platform/users" element={<PlatformUsersPage />} />
+              <Route path="/platform/audit" element={<PlatformAuditPage />} />
+              <Route path="/platform/security" element={<PlatformSecurityPage />} />
 
               <Route path="/" element={<LandingPage />} />
               <Route path="*" element={<div style={{ padding: '2rem' }}><h1>404 - Page Not Found</h1></div>} />

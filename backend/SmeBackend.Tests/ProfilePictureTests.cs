@@ -18,6 +18,7 @@ public class ProfilePictureTests
     private sealed class StubJwtService : IJwtService
     {
         public string GenerateAccessToken(User user) => "stub";
+        public string GeneratePlatformAccessToken(User user, string jti, DateTime expiresAt) => "stub";
         public string GenerateRefreshToken() => "stub";
         public ClaimsPrincipal? ValidateToken(string token) => null;
     }
@@ -74,7 +75,7 @@ public class ProfilePictureTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var controller = new AuthController(db, new StubJwtService());
+        var controller = new AuthController(db, new StubJwtService(), new CustomerAccountService(db));
         TestHelpers.SetUser(controller, user.Id, user.TenantId, Roles.Customer);
 
         var result = await controller.UpdateCurrentUser(new UpdateProfileDto { ProfilePictureUrl = "" });
@@ -101,7 +102,7 @@ public class ProfilePictureTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var controller = new AuthController(db, new StubJwtService());
+        var controller = new AuthController(db, new StubJwtService(), new CustomerAccountService(db));
         TestHelpers.SetUser(controller, user.Id, user.TenantId, Roles.Customer);
 
         var result = await controller.UpdateCurrentUser(new UpdateProfileDto { Phone = "0771234567" });

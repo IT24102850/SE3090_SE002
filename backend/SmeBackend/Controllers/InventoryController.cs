@@ -483,6 +483,80 @@ public sealed class InventoryController(
         return Ok(ToResponse(item));
     }
 
+    /// Logs food/stock waste: takes the quantity off hand and writes a
+    /// "Waste" movement priced at the item's unit cost, so the restaurant
+    /// dashboard can report waste cost and variance separately from
+    /// ordinary adjustments. Kept as its own movement type rather than a
+    /// negative Adjustment because that distinction is the whole report.
+    [HttpPost("{id:guid}/waste")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<InventoryItemResponse>> LogWaste(
+        Guid id,
+        WasteInventoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var item = await LoadItemAsync(id, cancellationToken);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        if (!await RequireItemAccessAsync(
+                InventoryAuthorizationPolicies.InventoryWrite,
+                item,
+                cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (request.Quantity <= 0)
+        {
+            ModelState.AddModelError("quantity", "Waste quantity must be greater than zero.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (!item.BranchId.HasValue)
+        {
+            return Conflict(new { message = "Stock operations require the item to be assigned to a branch." });
+        }
+
+        if (item.Quantity - request.Quantity < 0)
+        {
+            return Conflict(new { message = $"Waste would take '{item.Name}' below zero ({item.Quantity} on hand)." });
+        }
+
+        var reason = string.IsNullOrWhiteSpace(request.Reason) ? "Unspecified" : request.Reason.Trim();
+        item.Quantity -= request.Quantity;
+        item.UpdatedAt = DateTime.UtcNow;
+
+        db.StockMovements.Add(new StockMovement
+        {
+            InventoryItemId = item.Id,
+            BranchId = item.BranchId.Value,
+            MovementType = "Waste",
+            Quantity = -request.Quantity,
+            UnitCost = item.UnitCost,
+            Reference = string.IsNullOrWhiteSpace(request.Reference) ? $"WASTE-{DateTime.UtcNow:yyyyMMdd-HHmm}" : request.Reference.Trim(),
+            Notes = string.IsNullOrWhiteSpace(request.Notes) ? reason : $"{reason}: {request.Notes.Trim()}",
+            OccurredAt = DateTime.UtcNow,
+        });
+
+        NotificationHelper.Queue(db, tenantId, null, "StockWasted", "Waste logged", $"{item.Name}: {request.Quantity} written off ({reason}).");
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToResponse(item));
+    }
+
     [HttpPost]
     [Consumes("application/json")]
     [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status201Created)]
@@ -721,6 +795,15 @@ public sealed record UpdateInventoryRequest(
 
 public sealed record AdjustInventoryRequest(
     decimal Quantity,
+    string? Reference = null,
+    string? Notes = null);
+
+/// Reason is free text on purpose ("Spoiled", "Over-prepped", "Dropped",
+/// "Expired") - the waste report groups by it, and every kitchen names
+/// these differently.
+public sealed record WasteInventoryRequest(
+    decimal Quantity,
+    string? Reason = null,
     string? Reference = null,
     string? Notes = null);
 

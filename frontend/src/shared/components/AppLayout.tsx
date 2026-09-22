@@ -40,6 +40,18 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    // The customer's own destinations - the same four the Flutter app's
+    // customer tabs offer. Staff roles never see this section.
+    id: 'customer',
+    label: 'My visits',
+    items: [
+      { path: '/book', label: 'Book a service', icon: '📅', roles: ['Customer'] },
+      { path: '/my-bookings', label: 'My bookings', icon: '🎟️', roles: ['Customer'] },
+      { path: '/ai-planner', label: 'AI planner', icon: '🤖', roles: ['Customer'] },
+      { path: '/business', label: 'About the business', icon: '🏪', roles: ['Customer'] },
+    ],
+  },
+  {
     id: 'scheduling',
     label: 'Scheduling',
     items: [
