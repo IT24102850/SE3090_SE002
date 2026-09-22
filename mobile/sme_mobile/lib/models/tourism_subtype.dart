@@ -1,4 +1,4 @@
-/// The 11 tourism sub-types this platform supports. Adding a 12th sub-type
+/// The 12 tourism sub-types this platform supports. Adding another sub-type
 /// later means adding one enum value + one registry entry - nothing else
 /// in the app changes.
 enum TourismSubType {
@@ -10,12 +10,13 @@ enum TourismSubType {
   culturalTour,
   multiDayPackage,
   accommodation,
+  villaHotel,
   vehicleRental,
   wellness,
   cyclingTour,
 }
 
-/// The 11 human-readable Tenant.SubType labels, in the exact order/spelling
+/// The 12 human-readable Tenant.SubType labels, in the exact order/spelling
 /// TourismSubTypeParsing.fromTenantSubType expects. Single source of truth
 /// for the "which type of tourism business" dropdown shown at registration
 /// (mirrors frontend/src/features/booking/types.ts's TOURISM_SUB_TYPES).
@@ -28,6 +29,7 @@ const List<String> kTourismSubTypeLabels = [
   'Cultural / heritage tours',
   'Multi-day packages',
   'Accommodation',
+  'Villa / Hotel',
   'Vehicle rental / transport',
   'Wellness / Ayurveda',
   'Cycling tours',
@@ -53,6 +55,8 @@ extension TourismSubTypeParsing on TourismSubType {
         return TourismSubType.multiDayPackage;
       case 'accommodation':
         return TourismSubType.accommodation;
+      case 'villaHotel':
+        return TourismSubType.villaHotel;
       case 'vehicleRental':
         return TourismSubType.vehicleRental;
       case 'wellness':
@@ -88,6 +92,8 @@ extension TourismSubTypeParsing on TourismSubType {
         return TourismSubType.multiDayPackage;
       case 'Accommodation':
         return TourismSubType.accommodation;
+      case 'Villa / Hotel':
+        return TourismSubType.villaHotel;
       case 'Vehicle rental / transport':
         return TourismSubType.vehicleRental;
       case 'Wellness / Ayurveda':

@@ -142,14 +142,14 @@ public record CreateSubscriptionRequest(
     Guid CustomerId,
 
     [Required(ErrorMessage = "PlanName is required.")]
-    [MaxLength(150)]
+    [MaxLength(100)]
     string PlanName,
 
     [Range(0, double.MaxValue, ErrorMessage = "Amount must not be negative.")]
     decimal Amount,
 
     [Required(ErrorMessage = "BillingCycle is required.")]
-    [MaxLength(30)]
+    [MaxLength(20)]
     string BillingCycle,
 
     [Required(ErrorMessage = "StartDate is required.")]

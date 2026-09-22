@@ -32,6 +32,13 @@ public class AppDbContext : DbContext
     public DbSet<Notification> Notifications { get; set; } = null!;
     public DbSet<DeviceToken> DeviceTokens { get; set; } = null!;
 
+    // Fixed-departure excursion ops (whale watching, safari jeeps, ...) -
+    // archetype A in docs/tourism-business-template.md. Only tenants whose
+    // SubType selects a departure-board dashboard write to these.
+    public DbSet<Departure> Departures { get; set; } = null!;
+    public DbSet<SightingsLog> SightingsLogs { get; set; } = null!;
+    public DbSet<WeatherObservation> WeatherObservations { get; set; } = null!;
+
     // Equipment reserved as part of a booking (dive tanks, wheelchairs, ...) -
     // distinct from the full Inventory module below; see EquipmentItem.cs.
     public DbSet<EquipmentItem> EquipmentItems { get; set; } = null!;
@@ -46,12 +53,23 @@ public class AppDbContext : DbContext
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; } = null!;
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; } = null!;
     public DbSet<StockMovement> StockMovements { get; set; } = null!;
+    public DbSet<Sale> Sales { get; set; } = null!;
+
+    // Memberships (gym / fitness): see Models/Subscription.cs.
+    public DbSet<Subscription> Subscriptions { get; set; } = null!;
+
+    // Platform console (the owner's cross-tenant dashboard). None of these
+    // carry a tenant filter: they are the one place that is meant to see
+    // every tenant, and they are only ever read through the PlatformOwner
+    // policy.
+    public DbSet<PlatformAdmin> PlatformAdmins { get; set; } = null!;
+    public DbSet<PlatformSession> PlatformSessions { get; set; } = null!;
+    public DbSet<PlatformAuditLog> PlatformAuditLogs { get; set; } = null!;
 
      // Billing engine
     public DbSet<Invoice> Invoices { get; set; } = null!;
     public DbSet<InvoiceItem> InvoiceItems { get; set; } = null!;
     public DbSet<Payment> Payments { get; set; } = null!;
-    public DbSet<Subscription> Subscriptions { get; set; } = null!;
     public DbSet<InsuranceClaim> InsuranceClaims { get; set; } = null!;
     public DbSet<DynamicForm> DynamicForms { get; set; } = null!;
     public DbSet<FormSubmission> FormSubmissions { get; set; } = null!;
@@ -82,13 +100,13 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Resource>(entity =>
         {
             entity.ToTable("resources");
-            entity.HasQueryFilter(r => r.DeletedAt == null);
+            entity.HasQueryFilter(r => r.TenantId == CurrentTenantId && r.DeletedAt == null);
 
             entity.HasIndex(r => new { r.TenantId, r.Category });
             entity.HasIndex(r => new { r.TenantId, r.Status });
             entity.HasIndex(r => new { r.TenantId, r.Name });
             entity.HasIndex(r => new { r.TenantId, r.BranchId });
-            entity.HasIndex(r => r.Code).IsUnique();
+            entity.HasIndex(r => new { r.TenantId, r.Code }).IsUnique();
 
             entity.Property(r => r.Status)
                   .HasConversion<string>()
@@ -135,6 +153,9 @@ public class AppDbContext : DbContext
             entity.HasIndex(b => new { b.TenantId, b.StartTime, b.EndTime });
             entity.HasIndex(b => new { b.ResourceId, b.StartTime, b.EndTime });
             entity.HasIndex(b => new { b.BookingTypeId, b.StartTime });
+            entity.HasIndex(b => b.DepartureId);
+
+            entity.Property(b => b.Source).HasMaxLength(50);
 
             entity.Property(b => b.Status)
                   .HasConversion<string>()
@@ -154,6 +175,81 @@ public class AppDbContext : DbContext
                   .WithMany(bt => bt.Bookings)
                   .HasForeignKey(b => b.BookingTypeId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            // SetNull, not Cascade: deleting a departure must never delete
+            // the guests' reservations - the weather-cancel flow relies on
+            // those bookings surviving so they can be rescheduled.
+            entity.HasOne<Departure>()
+                  .WithMany()
+                  .HasForeignKey(b => b.DepartureId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ==================== DEPARTURES ====================
+        modelBuilder.Entity<Departure>(entity =>
+        {
+            entity.ToTable("departures");
+            entity.HasQueryFilter(d => d.DeletedAt == null);
+
+            entity.HasIndex(d => new { d.TenantId, d.ScheduledDeparture });
+            entity.HasIndex(d => new { d.TenantId, d.Status });
+            entity.HasIndex(d => new { d.ResourceId, d.ScheduledDeparture }).IsUnique();
+
+            entity.Property(d => d.Status)
+                  .HasConversion<string>()
+                  .HasMaxLength(20);
+
+            entity.HasOne(d => d.Resource)
+                  .WithMany()
+                  .HasForeignKey(d => d.ResourceId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.BookingType)
+                  .WithMany()
+                  .HasForeignKey(d => d.BookingTypeId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ==================== SIGHTINGS LOG ====================
+        modelBuilder.Entity<SightingsLog>(entity =>
+        {
+            entity.ToTable("sightings_logs");
+            entity.HasQueryFilter(s => s.DeletedAt == null);
+
+            entity.HasIndex(s => new { s.TenantId, s.DepartureDateTime });
+            entity.HasIndex(s => new { s.TenantId, s.Species });
+            entity.HasIndex(s => s.DepartureId);
+
+            entity.Property(s => s.Species)
+                  .HasConversion<string>()
+                  .HasMaxLength(30);
+            entity.Property(s => s.Behaviour)
+                  .HasConversion<string>()
+                  .HasMaxLength(30);
+
+            entity.HasOne(s => s.Resource)
+                  .WithMany()
+                  .HasForeignKey(s => s.ResourceId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Cascade, unlike the other two FKs here: a sighting has no
+            // meaning once its departure is gone, whereas a departure and a
+            // vessel both outlive individual bookings.
+            entity.HasOne(s => s.Departure)
+                  .WithMany()
+                  .HasForeignKey(s => s.DepartureId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ==================== WEATHER OBSERVATIONS ====================
+        modelBuilder.Entity<WeatherObservation>(entity =>
+        {
+            entity.ToTable("weather_observations");
+
+            entity.HasIndex(w => new { w.TenantId, w.ObservedAt });
+            entity.HasIndex(w => w.DepartureId);
+
+            entity.Property(w => w.Source).HasMaxLength(50);
         });
 
         // ==================== RESOURCE SCHEDULES ====================
@@ -306,12 +402,19 @@ public class AppDbContext : DbContext
         });
 
         // ==================== INVENTORY MODULE ====================
+        // Tenant isolation filters apply to both booking and inventory data.
+        modelBuilder.Entity<Tenant>().HasQueryFilter(t => t.IsActive);
+        modelBuilder.Entity<Branch>().HasQueryFilter(b => b.TenantId == CurrentTenantId && b.IsActive);
+        modelBuilder.Entity<User>().HasQueryFilter(u => u.TenantId == CurrentTenantId && u.Tenant.IsActive);
         modelBuilder.Entity<InventoryCategory>().HasQueryFilter(c => c.TenantId == CurrentTenantId && c.Tenant.IsActive && c.IsActive);
         modelBuilder.Entity<InventoryUnit>().HasQueryFilter(u => u.TenantId == CurrentTenantId && u.Tenant.IsActive && u.IsActive);
         modelBuilder.Entity<InventoryItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId && item.IsActive);
         modelBuilder.Entity<Supplier>().HasQueryFilter(supplier => supplier.TenantId == CurrentTenantId && supplier.IsActive);
         modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(order => order.TenantId == CurrentTenantId);
+        modelBuilder.Entity<PurchaseOrderItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
         modelBuilder.Entity<StockMovement>().HasQueryFilter(movement => movement.TenantId == CurrentTenantId);
+        modelBuilder.Entity<Sale>().HasQueryFilter(sale => sale.TenantId == CurrentTenantId);
+        modelBuilder.Entity<Subscription>().HasQueryFilter(s => s.TenantId == CurrentTenantId);
 
         modelBuilder.Entity<InventoryCategory>().HasIndex(c => new { c.TenantId, c.Name }).IsUnique();
         modelBuilder.Entity<InventoryUnit>().HasIndex(u => new { u.TenantId, u.Code }).IsUnique();
@@ -320,6 +423,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<PurchaseOrder>().HasIndex(order => new { order.TenantId, order.Number }).IsUnique();
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.TenantId, movement.BranchId });
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.InventoryItemId, movement.OccurredAt });
+        modelBuilder.Entity<Notification>().HasIndex(notification => new { notification.TenantId, notification.BranchId, notification.IsRead });
+        modelBuilder.Entity<Notification>().HasIndex(notification => notification.CreatedAt);
+        modelBuilder.Entity<Sale>().HasIndex(sale => new { sale.TenantId, sale.BranchId, sale.OccurredAt });
 
         modelBuilder.Entity<InventoryItem>(entity =>
         {
@@ -356,6 +462,74 @@ public class AppDbContext : DbContext
             entity.HasOne<PurchaseOrder>().WithMany().HasForeignKey(movement => movement.PurchaseOrderId).OnDelete(DeleteBehavior.SetNull);
         });
 
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.Property(notification => notification.Type).HasMaxLength(50).IsRequired();
+            entity.Property(notification => notification.Title).HasMaxLength(150).IsRequired();
+            entity.Property(notification => notification.Message).HasMaxLength(1000).IsRequired();
+            entity.HasOne<Branch>().WithMany().HasForeignKey(notification => notification.BranchId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Sale>(entity =>
+        {
+            entity.Property(sale => sale.Amount).HasPrecision(18, 2);
+            entity.Property(sale => sale.Reference).HasMaxLength(100).IsRequired();
+            entity.HasOne<Branch>().WithMany().HasForeignKey(sale => sale.BranchId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<Subscription>(entity =>
+        {
+            entity.Property(s => s.Amount).HasPrecision(18, 2);
+            entity.Property(s => s.PlanName).HasMaxLength(100).IsRequired();
+            entity.Property(s => s.BillingCycle).HasMaxLength(20).IsRequired();
+            entity.Property(s => s.Status).HasMaxLength(20).IsRequired();
+            entity.Property(s => s.PaymentStatus).HasMaxLength(20).IsRequired();
+            entity.Property(s => s.Notes).HasMaxLength(500);
+            entity.HasOne<User>().WithMany().HasForeignKey(s => s.CustomerId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Branch>().WithMany().HasForeignKey(s => s.BranchId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(s => new { s.TenantId, s.Status });
+            entity.HasIndex(s => new { s.TenantId, s.CustomerId });
+            entity.HasIndex(s => new { s.TenantId, s.EndDate });
+        });
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.Property(u => u.Gender).HasMaxLength(30);
+            // Global customer identity -> per-business memberships.
+            entity.HasIndex(u => u.LinkedAccountId);
+        });
+
+        // ==================== PLATFORM CONSOLE ====================
+        modelBuilder.Entity<PlatformAdmin>(entity =>
+        {
+            entity.ToTable("platform_admins");
+            entity.HasIndex(a => a.UserId).IsUnique();
+            entity.HasOne(a => a.User).WithOne().HasForeignKey<PlatformAdmin>(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(a => a.LastLoginIp).HasMaxLength(64);
+            entity.Property(a => a.MfaSetupTokenHash).HasMaxLength(64);
+        });
+        modelBuilder.Entity<PlatformSession>(entity =>
+        {
+            entity.ToTable("platform_sessions");
+            entity.HasIndex(s => s.Jti).IsUnique();
+            entity.HasIndex(s => new { s.UserId, s.RevokedAt });
+            entity.HasOne(s => s.User).WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(s => s.Jti).HasMaxLength(64);
+            entity.Property(s => s.IpAddress).HasMaxLength(64);
+            entity.Property(s => s.UserAgent).HasMaxLength(512);
+            entity.Property(s => s.RevokedReason).HasMaxLength(64);
+        });
+        modelBuilder.Entity<PlatformAuditLog>(entity =>
+        {
+            entity.ToTable("platform_audit_logs");
+            entity.HasIndex(a => a.CreatedAt);
+            entity.HasIndex(a => a.Action);
+            entity.Property(a => a.ActorEmail).HasMaxLength(256);
+            entity.Property(a => a.Action).HasMaxLength(64);
+            entity.Property(a => a.TargetType).HasMaxLength(32);
+            entity.Property(a => a.TargetLabel).HasMaxLength(256);
+            entity.Property(a => a.Detail).HasMaxLength(2000);
+            entity.Property(a => a.IpAddress).HasMaxLength(64);
+            entity.Property(a => a.UserAgent).HasMaxLength(512);
+        });
         // Purchase order items
         modelBuilder.Entity<PurchaseOrderItem>(entity =>
         {
@@ -462,29 +636,7 @@ public class AppDbContext : DbContext
         });
 
 
-        modelBuilder.Entity<Subscription>(entity =>
-        {
-            entity.ToTable("subscriptions");
-
-            entity.HasIndex(s => new { s.TenantId, s.CustomerId });
-
-            entity.HasIndex(s => new { s.TenantId, s.Status });
-
-            entity.Property(s => s.Amount)
-                .HasPrecision(18, 2);
-
-            entity.Property(s => s.PlanName)
-                .HasMaxLength(150)
-                .IsRequired();
-
-            entity.Property(s => s.BillingCycle)
-                .HasMaxLength(30)
-                .IsRequired();
-
-            entity.Property(s => s.Status)
-                .HasMaxLength(30);
-        });
-
+        // Subscription is configured once, with the gym memberships above.
 
         modelBuilder.Entity<InsuranceClaim>(entity =>
         {

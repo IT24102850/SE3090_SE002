@@ -6,9 +6,13 @@ import {
   useCreateRecurringBookingMutation,
   useGetBookingTypesQuery,
   useGetResourcesQuery,
+  useGetTenantQuery,
 } from '../../api/bookingApi';
 import { addDays, toISODate } from '../../shared/dateUtils';
-import type { BookingPriority } from './types';
+import TicketBreakdownField from '../dashboard/components/TicketBreakdownField';
+import { getSubtypeConfig } from '../dashboard/subtypes/subtypeRegistry';
+import { parseTenantSubType } from '../dashboard/subtypes/tourismSubTypes';
+import type { BookingPriority, TicketLine } from './types';
 
 export default function BookingFormModal({
   tenantId,
@@ -26,6 +30,16 @@ export default function BookingFormModal({
   const { show } = useToast();
   const { data: resources } = useGetResourcesQuery({ tenantId, pageSize: 100 }, { skip: !tenantId });
   const { data: bookingTypes } = useGetBookingTypesQuery({ tenantId }, { skip: !tenantId });
+  // The sub-type decides which extra fields this form collects - ticket
+  // types for a whale-watching boat, certification level for a dive centre.
+  // An unrecognised sub-type resolves to the generic config, whose
+  // bookingFormFields list is empty and whose modules are all off, so the
+  // form renders exactly as it did before.
+  const { data: tenant } = useGetTenantQuery({ tenantId }, { skip: !tenantId });
+  const subtypeConfig = useMemo(
+    () => getSubtypeConfig(parseTenantSubType(tenant?.subType)),
+    [tenant],
+  );
   const [createBooking, { isLoading }] = useCreateBookingMutation();
   const [createRecurringBooking, { isLoading: creatingRecurring }] = useCreateRecurringBookingMutation();
 
@@ -37,6 +51,9 @@ export default function BookingFormModal({
   const [time, setTime] = useState('09:00');
   const [priority, setPriority] = useState<BookingPriority>('Normal');
   const [attendeeCount, setAttendeeCount] = useState('');
+  const [tickets, setTickets] = useState<TicketLine[]>([]);
+  const [source, setSource] = useState('');
+  const [extraFields, setExtraFields] = useState<Record<string, string | boolean>>({});
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatUntil, setRepeatUntil] = useState(() => toISODate(addDays(defaultDate ?? new Date(), 28)));
   const [formError, setFormError] = useState<string | null>(null);
@@ -77,7 +94,10 @@ export default function BookingFormModal({
         }
       } else {
         const end = new Date(start.getTime() + duration * 60000);
-        await createBooking({
+        const populatedExtras = Object.fromEntries(
+          Object.entries(extraFields).filter(([, v]) => v !== '' && v !== false),
+        );
+        const created = await createBooking({
           tenantId,
           resourceId,
           bookingTypeId,
@@ -88,8 +108,15 @@ export default function BookingFormModal({
           endTime: end.toISOString(),
           priority,
           attendeeCount: attendeeCount ? Number(attendeeCount) : undefined,
+          // Ticket breakdown is priced server-side; only the type and the
+          // quantity are sent.
+          ticketBreakdown: tickets.length > 0 ? tickets : undefined,
+          source: source || undefined,
+          formData: Object.keys(populatedExtras).length > 0 ? JSON.stringify(populatedExtras) : undefined,
         }).unwrap();
-        show('Booking created.', 'success');
+        // The 90%-full warning is informational: the booking was made.
+        const warning = (created as { capacityWarning?: string | null })?.capacityWarning;
+        show(warning ? `Booking created. ${warning}` : 'Booking created.', warning ? 'info' : 'success');
       }
       onCreated?.();
       onClose();
@@ -163,6 +190,67 @@ export default function BookingFormModal({
               />
             </div>
           )}
+          {!repeatWeekly && subtypeConfig.modules.ticketTypes && bookingTypeId && (
+            <TicketBreakdownField
+              bookingTypeId={bookingTypeId}
+              startTime={new Date(`${date}T${time}:00`).toISOString()}
+              value={tickets}
+              onChange={setTickets}
+            />
+          )}
+          {!repeatWeekly && subtypeConfig.modules.ticketTypes && (
+            <div className="field">
+              <label>Booking channel</label>
+              <select className="input" value={source} onChange={(e) => setSource(e.target.value)}>
+                <option value="">Not recorded</option>
+                <option value="WalkIn">Walk-in</option>
+                <option value="Online">Online</option>
+                <option value="OTA">OTA / agent</option>
+                <option value="Phone">Phone</option>
+              </select>
+            </div>
+          )}
+          {!repeatWeekly && subtypeConfig.bookingFormFields.map((f) => (
+            <div className={f.type === 'textArea' ? 'field field-full' : 'field'} key={f.key}>
+              <label>{f.label}</label>
+              {f.type === 'dropdown' ? (
+                <select
+                  className="input"
+                  value={String(extraFields[f.key] ?? '')}
+                  onChange={(e) => setExtraFields({ ...extraFields, [f.key]: e.target.value })}
+                >
+                  <option value="">Select…</option>
+                  {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : f.type === 'checkbox' ? (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400 }}>
+                  <input
+                    type="checkbox"
+                    checked={extraFields[f.key] === true}
+                    onChange={(e) => setExtraFields({ ...extraFields, [f.key]: e.target.checked })}
+                  />
+                  {f.hint ?? 'Yes'}
+                </label>
+              ) : f.type === 'textArea' ? (
+                <textarea
+                  className="input"
+                  rows={2}
+                  value={String(extraFields[f.key] ?? '')}
+                  onChange={(e) => setExtraFields({ ...extraFields, [f.key]: e.target.value })}
+                />
+              ) : (
+                <input
+                  className="input"
+                  type={f.type === 'numberStepper' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+                  value={String(extraFields[f.key] ?? '')}
+                  onChange={(e) => setExtraFields({ ...extraFields, [f.key]: e.target.value })}
+                />
+              )}
+              {f.hint && f.type !== 'checkbox' && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{f.hint}</span>
+              )}
+            </div>
+          ))}
           <div className="field">
             <label>Title</label>
             <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Optional" />

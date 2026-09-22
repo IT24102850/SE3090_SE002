@@ -1,11 +1,14 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
-import { useGetNoShowStatsQuery, useGetResourcesQuery } from '../../api/bookingApi';
+import { useGetNoShowStatsQuery, useGetResourcesQuery, useGetTenantQuery } from '../../api/bookingApi';
 import { addDays, toISODate } from '../../shared/dateUtils';
 import HorizontalBarChart from './HorizontalBarChart';
 import ResourceMetricsCollector, { type ResourceMetrics } from './ResourceMetricsCollector';
 import { STATUS_COLORS } from './types';
+import ExcursionReports from '../dashboard/ExcursionReports';
+import { getSubtypeConfig } from '../dashboard/subtypes/subtypeRegistry';
+import { parseTenantSubType } from '../dashboard/subtypes/tourismSubTypes';
 
 export default function ReportsPage() {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -20,6 +23,11 @@ export default function ReportsPage() {
     { skip: !tenantId }
   );
   const { data: resourcesData } = useGetResourcesQuery({ tenantId, pageSize: 50 }, { skip: !tenantId });
+  // Sub-type-specific report sections are additive: an unrecognised or
+  // unset SubType resolves to the generic config, whose departures module
+  // is off, so this page renders exactly as it did before.
+  const { data: tenant } = useGetTenantQuery({ tenantId }, { skip: !tenantId });
+  const subtypeConfig = useMemo(() => getSubtypeConfig(parseTenantSubType(tenant?.subType)), [tenant]);
 
   const handleMetrics = useCallback((m: ResourceMetrics) => {
     setMetrics((prev) => ({ ...prev, [m.resourceId]: m }));
@@ -43,13 +51,13 @@ export default function ReportsPage() {
     : [];
 
   return (
-    <div>
+    <div className="reports-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Reports</h1>
           <p className="page-subtitle">Booking utilization, no-show statistics and estimated revenue per resource.</p>
         </div>
-        <div className="filter-bar">
+        <div className="filter-bar reports-date-filter">
           <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           <span style={{ color: 'var(--color-text-muted)' }}>to</span>
           <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
@@ -76,12 +84,12 @@ export default function ReportsPage() {
         </div>
         <div className="stat-tile">
           <div className="stat-tile-label">Est. revenue</div>
-          <div className="stat-tile-value">${totalRevenue.toFixed(0)}</div>
+          <div className="stat-tile-value">LKR {totalRevenue.toFixed(0)}</div>
           <div className="stat-tile-sub">booked hours × hourly rate</div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div className="reports-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         <div className="card chart-card">
           <p className="chart-title">Booking outcomes</p>
           <p className="chart-subtitle">{from} – {to}</p>
@@ -112,12 +120,16 @@ export default function ReportsPage() {
               .map(({ resource, metrics: m }) => ({
                 label: resource.name,
                 value: m!.estimatedRevenue,
-                displayValue: `$${m!.estimatedRevenue.toFixed(0)}`,
+                displayValue: `LKR ${m!.estimatedRevenue.toFixed(0)}`,
                 color: 'var(--color-good)',
               }))}
           />
         </div>
       </div>
+
+      {subtypeConfig.modules.departures && (
+        <ExcursionReports from={from} to={to} config={subtypeConfig} />
+      )}
     </div>
   );
 }

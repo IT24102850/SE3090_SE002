@@ -13,7 +13,7 @@ void main() {
     test('parses every known registry key without throwing', () {
       const known = [
         'diving', 'safari', 'whaleWatching', 'surfSchool', 'trekking', 'culturalTour',
-        'multiDayPackage', 'accommodation', 'vehicleRental', 'wellness', 'cyclingTour',
+        'multiDayPackage', 'accommodation', 'villaHotel', 'vehicleRental', 'wellness', 'cyclingTour',
       ];
       for (final value in known) {
         expect(() => TourismSubTypeParsing.fromConfigString(value), returnsNormally, reason: value);
@@ -25,6 +25,7 @@ void main() {
     test('maps Tenant.SubType\'s human-readable strings onto the enum', () {
       expect(TourismSubTypeParsing.fromTenantSubType('Water sports / diving'), TourismSubType.diving);
       expect(TourismSubTypeParsing.fromTenantSubType('Accommodation'), TourismSubType.accommodation);
+      expect(TourismSubTypeParsing.fromTenantSubType('Villa / Hotel'), TourismSubType.villaHotel);
       expect(TourismSubTypeParsing.fromTenantSubType('Vehicle rental / transport'), TourismSubType.vehicleRental);
     });
 

@@ -16,6 +16,11 @@ namespace SmeBackend.Controllers
         {
             var tenants = await _db.Tenants
                 .Where(t => t.IsActive)
+                // The "Unify Platform" tenant only exists to host the
+                // owner's account (Data/PlatformOwnerSeeder.cs); it is not
+                // a business anyone can book.
+                .Where(t => t.BusinessType != SmeBackend.Data.PlatformOwnerSeeder.PlatformBusinessType
+                            && t.BusinessType != SmeBackend.Services.CustomerAccountService.PoolBusinessType)
                 .Select(t => new
                 {
                     t.Id,

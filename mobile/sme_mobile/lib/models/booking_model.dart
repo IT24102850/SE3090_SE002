@@ -57,10 +57,15 @@ class Booking {
   bool get isUpcoming =>
       startLocal.isAfter(DateTime.now()) &&
       status != 'Cancelled' &&
+      status != 'WeatherCancelled' &&
       status != 'Completed' &&
       status != 'NoShow' &&
       status != 'Rejected';
 
+  /// A weather-cancelled booking is off the water already: the operator
+  /// cancelled it for the guest, so there is nothing left for the guest to
+  /// cancel or reschedule from here - the rebooking offer comes from the
+  /// operator's departure board instead.
   bool get isCancellable => status == 'Pending' || status == 'Confirmed';
   bool get isReschedulable => status == 'Pending' || status == 'Confirmed';
 

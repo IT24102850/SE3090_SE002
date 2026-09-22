@@ -1,7 +1,7 @@
-﻿import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+﻿import { API_BASE_URL } from '../api/apiBaseUrl';
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api';
 
 export interface User {
   id: string;
@@ -55,10 +55,19 @@ export const loginUser = createAsyncThunk<
     localStorage.setItem('user', JSON.stringify(user));
 
     return { accessToken, user };
-  } catch (error: any) {
-    return rejectWithValue(
-      error.response?.data?.message || 'Invalid email or password'
-    );
+  } catch (error: unknown) {
+    // No response at all means the request never reached the server - the
+    // backend is down, or the URL is wrong. Reporting that as a bad password
+    // sends the visitor off to reset credentials that were never checked.
+    if (axios.isAxiosError(error) && !error.response) {
+      return rejectWithValue(
+        'Cannot reach the server. Check that the backend is running.'
+      );
+    }
+    const message = axios.isAxiosError(error)
+      ? error.response?.data?.message
+      : undefined;
+    return rejectWithValue(message || 'Invalid email or password');
   }
 });
 

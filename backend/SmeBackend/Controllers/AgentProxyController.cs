@@ -3,13 +3,15 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Services;
 
 namespace SmeBackend.Controllers;
 
 [ApiController]
 [Route("api/agents")]
 public sealed class AgentProxyController(
-    AppDbContext db) : ControllerBase
+    AppDbContext db,
+    ITenantContext tenantContext) : ControllerBase
 {
     // POST /api/agents/create-po
     // Agent must provide X-Agent-Secret header matching AGENT_SERVICE_SECRET env var
@@ -44,6 +46,8 @@ public sealed class AgentProxyController(
             return ValidationProblem(ModelState);
         }
 
+        tenantContext.SetTenantId(request.TenantId);
+
         if (!await db.Branches.AnyAsync(branch => branch.TenantId == request.TenantId && branch.Id == request.BranchId, cancellationToken))
         {
             ModelState.AddModelError("branchId", "The branch does not exist for this tenant.");
@@ -68,8 +72,21 @@ public sealed class AgentProxyController(
             return Conflict(new { message = $"A purchase order with number '{number}' already exists." });
         }
 
-        var status = "Placed";
-        if (!string.IsNullOrWhiteSpace(request.Status)) status = request.Status;
+        var status = string.IsNullOrWhiteSpace(request.Status) ? "Placed" : request.Status.Trim();
+        if (!new[] { "Draft", "InReview", "Placed", "InTransit", "Received", "Cancelled" }
+            .Contains(status, StringComparer.OrdinalIgnoreCase))
+        {
+            ModelState.AddModelError("status", "The purchase order status is invalid.");
+            return ValidationProblem(ModelState);
+        }
+        status = new[] { "Draft", "InReview", "Placed", "InTransit", "Received", "Cancelled" }
+            .First(value => string.Equals(value, status, StringComparison.OrdinalIgnoreCase));
+
+        if (request.Items is not null && request.Items.Any(item => item.Quantity <= 0 || item.UnitPrice < 0))
+        {
+            ModelState.AddModelError("items", "Purchase order quantities must be greater than zero and unit prices cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
 
         var order = new PurchaseOrder
         {
@@ -123,6 +140,13 @@ public sealed class AgentProxyController(
             .Where(supplier => supplierIds.Contains(supplier.Id))
             .ToDictionaryAsync(supplier => supplier.Id, supplier => supplier.Name, cancellationToken);
 
+        var orderIds = orders.Select(order => order.Id).ToList();
+        var totals = await db.PurchaseOrderItems.AsNoTracking()
+            .Where(item => orderIds.Contains(item.PurchaseOrderId))
+            .GroupBy(item => item.PurchaseOrderId)
+            .Select(group => new { Id = group.Key, Amount = group.Sum(item => item.Quantity * item.UnitPrice), LineItems = group.Count() })
+            .ToDictionaryAsync(item => item.Id, cancellationToken);
+
         return orders
             .Select(order => new PurchaseOrderResponse(
                 order.Id,
@@ -132,6 +156,8 @@ public sealed class AgentProxyController(
                 order.SupplierId,
                 suppliers.GetValueOrDefault(order.SupplierId),
                 order.Status,
+                totals.GetValueOrDefault(order.Id)?.Amount ?? 0m,
+                totals.GetValueOrDefault(order.Id)?.LineItems ?? 0,
                 order.CreatedAt,
                 order.UpdatedAt))
             .ToList();

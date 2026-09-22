@@ -9,6 +9,7 @@ using SmeBackend.Models;
 namespace SmeBackend.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/reports")]
 public sealed class ReportsController(
     AppDbContext db,
@@ -25,6 +26,7 @@ public sealed class ReportsController(
         {
             return Unauthorized();
         }
+        branchId = ResolveBranchScope(branchId);
 
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
@@ -113,6 +115,7 @@ public sealed class ReportsController(
         {
             return Unauthorized();
         }
+        branchId = ResolveBranchScope(branchId);
 
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
@@ -130,17 +133,31 @@ public sealed class ReportsController(
             return ValidationProblem(ModelState);
         }
 
+        var salesQuery = db.Sales
+            .AsNoTracking()
+            .Where(sale => sale.OccurredAt >= range.Value.From && sale.OccurredAt < range.Value.ToExclusive);
+
+        if (branchId.HasValue)
+        {
+            salesQuery = salesQuery.Where(sale => sale.BranchId == branchId.Value);
+        }
+
+        var salesByDay = await salesQuery
+            .GroupBy(sale => sale.OccurredAt.Date)
+            .Select(group => new { Date = group.Key, Revenue = group.Sum(sale => sale.Amount) })
+            .ToDictionaryAsync(row => row.Date, row => row.Revenue, cancellationToken);
+
         var buckets = CreateDailyBuckets(range.Value)
-            .Select(day => new RevenueBucketResponse(day, FormatDay(day), 0m))
+            .Select(day => new RevenueBucketResponse(day, FormatDay(day), salesByDay.GetValueOrDefault(day)))
             .ToList();
 
         return Ok(new RevenueReportResponse(
             range.Value.From,
             range.Value.ToInclusive,
             branchId,
-            0m,
+            buckets.Sum(bucket => bucket.Revenue),
             buckets,
-            "Revenue tables are not available yet; this report returns zero-valued buckets until sales data is added."));
+            buckets.Any(bucket => bucket.Revenue > 0) ? null : "No sales were recorded for the selected reporting window."));
     }
 
     [HttpGet("patient-count")]
@@ -154,6 +171,7 @@ public sealed class ReportsController(
         {
             return Unauthorized();
         }
+        branchId = ResolveBranchScope(branchId);
 
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
@@ -208,6 +226,18 @@ public sealed class ReportsController(
 
     private bool TryGetTenantId(out Guid tenantId) =>
         Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out tenantId);
+
+    private Guid? ResolveBranchScope(Guid? requestedBranchId)
+    {
+        if (User.IsInRole(UserRole.Admin.ToString()) || requestedBranchId.HasValue)
+        {
+            return requestedBranchId;
+        }
+
+        return Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var branchId)
+            ? branchId
+            : null;
+    }
 
     private static ReportDateRange? NormalizeRange(DateTime? from, DateTime? to)
     {
@@ -279,7 +309,7 @@ public sealed record RevenueReportResponse(
     Guid? BranchId,
     decimal TotalRevenue,
     IReadOnlyList<RevenueBucketResponse> Buckets,
-    string DataSourceNote);
+    string? DataSourceNote);
 
 public sealed record RevenueBucketResponse(
     DateTime Date,

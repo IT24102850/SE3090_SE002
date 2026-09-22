@@ -5,10 +5,12 @@ using Microsoft.EntityFrameworkCore;
 using SmeBackend.Authorization;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Shared;
 
 namespace SmeBackend.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/inventory")]
 [Produces("application/json")]
 public sealed class InventoryController(
@@ -33,6 +35,7 @@ public sealed class InventoryController(
         {
             return Unauthorized();
         }
+        branchId = ResolveBranchScope(branchId);
 
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
@@ -61,7 +64,7 @@ public sealed class InventoryController(
 
         if (lowStock)
         {
-            query = query.Where(item => item.Quantity <= 0 || item.Quantity < item.ReorderLevel);
+            query = query.Where(item => item.Quantity <= 0 || item.Quantity <= item.ReorderLevel);
         }
 
         if (branchId.HasValue)
@@ -102,6 +105,60 @@ public sealed class InventoryController(
             page: page,
             pageSize: pageSize,
             cancellationToken: cancellationToken);
+
+    [HttpGet("movements")]
+    public async Task<ActionResult<IReadOnlyList<InventoryMovementResponse>>> GetMovements(
+        [FromQuery] Guid? branchId = null,
+        [FromQuery] int pageSize = 100,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+        branchId = ResolveBranchScope(branchId);
+
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService,
+                InventoryAuthorizationPolicies.InventoryRead,
+                tenantId,
+                branchId))
+        {
+            return Forbid();
+        }
+
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var query = db.StockMovements
+            .AsNoTracking()
+            .OrderByDescending(movement => movement.OccurredAt)
+            .AsQueryable();
+
+        if (branchId.HasValue)
+        {
+            query = query.Where(movement => movement.BranchId == branchId.Value);
+        }
+
+        var movements = await query.Take(pageSize).ToListAsync(cancellationToken);
+        var itemIds = movements.Select(movement => movement.InventoryItemId).Distinct().ToList();
+        var items = await db.InventoryItems
+            .AsNoTracking()
+            .Where(item => itemIds.Contains(item.Id))
+            .ToDictionaryAsync(item => item.Id, cancellationToken);
+
+        return Ok(movements.Select(movement =>
+        {
+            items.TryGetValue(movement.InventoryItemId, out var item);
+            return new InventoryMovementResponse(
+                movement.Id,
+                movement.OccurredAt,
+                item?.Name ?? "Unknown item",
+                item?.Sku ?? "Unknown SKU",
+                movement.MovementType,
+                movement.Quantity,
+                movement.Reference,
+                movement.Notes);
+        }).ToList());
+    }
 
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
@@ -241,6 +298,7 @@ public sealed class InventoryController(
         item.UnitCost = request.UnitCost;
         item.UpdatedAt = DateTime.UtcNow;
 
+        NotificationHelper.Queue(db, tenantId, null, "InventoryUpdated", "Inventory item updated", $"{item.Name} was updated.");
         await db.SaveChangesAsync(cancellationToken);
         var updated = await LoadItemAsync(item.Id, cancellationToken);
         return Ok(ToResponse(updated!));
@@ -280,6 +338,7 @@ public sealed class InventoryController(
 
         item.IsActive = false;
         item.UpdatedAt = DateTime.UtcNow;
+        NotificationHelper.Queue(db, tenantId, null, "InventoryDeleted", "Inventory item removed", $"{item.Name} was removed from inventory.");
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
@@ -346,6 +405,7 @@ public sealed class InventoryController(
             OccurredAt = DateTime.UtcNow,
         });
 
+        NotificationHelper.Queue(db, tenantId, null, "StockAdjusted", "Stock adjusted", $"{item.Name} stock changed by {request.Quantity}.");
         await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(item));
     }
@@ -418,6 +478,81 @@ public sealed class InventoryController(
             OccurredAt = DateTime.UtcNow,
         });
 
+        NotificationHelper.Queue(db, tenantId, null, "StockReceived", "Stock received", $"{item.Name} received {request.Quantity} units.");
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToResponse(item));
+    }
+
+    /// Logs food/stock waste: takes the quantity off hand and writes a
+    /// "Waste" movement priced at the item's unit cost, so the restaurant
+    /// dashboard can report waste cost and variance separately from
+    /// ordinary adjustments. Kept as its own movement type rather than a
+    /// negative Adjustment because that distinction is the whole report.
+    [HttpPost("{id:guid}/waste")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<InventoryItemResponse>> LogWaste(
+        Guid id,
+        WasteInventoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var item = await LoadItemAsync(id, cancellationToken);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        if (!await RequireItemAccessAsync(
+                InventoryAuthorizationPolicies.InventoryWrite,
+                item,
+                cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (request.Quantity <= 0)
+        {
+            ModelState.AddModelError("quantity", "Waste quantity must be greater than zero.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (!item.BranchId.HasValue)
+        {
+            return Conflict(new { message = "Stock operations require the item to be assigned to a branch." });
+        }
+
+        if (item.Quantity - request.Quantity < 0)
+        {
+            return Conflict(new { message = $"Waste would take '{item.Name}' below zero ({item.Quantity} on hand)." });
+        }
+
+        var reason = string.IsNullOrWhiteSpace(request.Reason) ? "Unspecified" : request.Reason.Trim();
+        item.Quantity -= request.Quantity;
+        item.UpdatedAt = DateTime.UtcNow;
+
+        db.StockMovements.Add(new StockMovement
+        {
+            InventoryItemId = item.Id,
+            BranchId = item.BranchId.Value,
+            MovementType = "Waste",
+            Quantity = -request.Quantity,
+            UnitCost = item.UnitCost,
+            Reference = string.IsNullOrWhiteSpace(request.Reference) ? $"WASTE-{DateTime.UtcNow:yyyyMMdd-HHmm}" : request.Reference.Trim(),
+            Notes = string.IsNullOrWhiteSpace(request.Notes) ? reason : $"{reason}: {request.Notes.Trim()}",
+            OccurredAt = DateTime.UtcNow,
+        });
+
+        NotificationHelper.Queue(db, tenantId, null, "StockWasted", "Waste logged", $"{item.Name}: {request.Quantity} written off ({reason}).");
         await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(item));
     }
@@ -450,6 +585,24 @@ public sealed class InventoryController(
         if (string.IsNullOrWhiteSpace(sku))
         {
             ModelState.AddModelError("sku", "Sku is required.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.Quantity < 0)
+        {
+            ModelState.AddModelError("quantity", "Quantity cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.ReorderLevel < 0)
+        {
+            ModelState.AddModelError("reorderLevel", "Reorder level cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.UnitCost < 0)
+        {
+            ModelState.AddModelError("unitCost", "Unit cost cannot be negative.");
             return ValidationProblem(ModelState);
         }
 
@@ -506,6 +659,7 @@ public sealed class InventoryController(
         };
 
         db.InventoryItems.Add(item);
+        NotificationHelper.Queue(db, tenantId, null, "InventoryCreated", "New inventory item", $"{item.Name} was added to inventory.");
         await db.SaveChangesAsync(cancellationToken);
 
         var created = await db.InventoryItems
@@ -520,6 +674,18 @@ public sealed class InventoryController(
 
     private bool TryGetTenantId(out Guid tenantId) =>
         Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out tenantId);
+
+    private Guid? ResolveBranchScope(Guid? requestedBranchId)
+    {
+        if (User.IsInRole(UserRole.Admin.ToString()) || requestedBranchId.HasValue)
+        {
+            return requestedBranchId;
+        }
+
+        return Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var branchId)
+            ? branchId
+            : null;
+    }
 
     private async Task<InventoryItem?> LoadItemAsync(Guid id, CancellationToken cancellationToken) =>
         await db.InventoryItems
@@ -596,6 +762,16 @@ public sealed record InventoryItemResponse(
     string Status,
     DateTime CreatedAt);
 
+public sealed record InventoryMovementResponse(
+    Guid Id,
+    DateTime OccurredAt,
+    string Item,
+    string Sku,
+    string MovementType,
+    decimal Quantity,
+    string? Reference,
+    string? Notes);
+
 public sealed record CreateInventoryRequest(
     string Name,
     string Sku,
@@ -619,6 +795,15 @@ public sealed record UpdateInventoryRequest(
 
 public sealed record AdjustInventoryRequest(
     decimal Quantity,
+    string? Reference = null,
+    string? Notes = null);
+
+/// Reason is free text on purpose ("Spoiled", "Over-prepped", "Dropped",
+/// "Expired") - the waste report groups by it, and every kitchen names
+/// these differently.
+public sealed record WasteInventoryRequest(
+    decimal Quantity,
+    string? Reason = null,
     string? Reference = null,
     string? Notes = null);
 

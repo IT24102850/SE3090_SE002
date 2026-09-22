@@ -4,6 +4,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../providers/api_service_provider.dart';
 import '../../providers/booking_providers.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_text_styles.dart';
+import '../../widgets/ui/ui.dart';
 
 /// FR-B7: staff scans a patient's booking QR (shown on their booking
 /// confirmation / "My Bookings") and checks them in on arrival.
@@ -36,13 +38,11 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
       await checkInBooking(ref.read(apiServiceProvider), bookingId);
       ref.invalidate(myScheduleProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Patient checked in.'), backgroundColor: AppColors.success),
-        );
+        AppSnackBar.success(context, 'Patient checked in.');
       }
     } on BookingRequestException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        AppSnackBar.error(context, e.message);
       }
     } finally {
       if (mounted) {
@@ -54,14 +54,13 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // The camera preview *is* this screen's background — the app gradient
+    // would be entirely hidden behind it — so the theme shows up in the glass
+    // chrome and the cyan reticle instead.
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text('Scan to check in'),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
+      backgroundColor: AppColors.bgTop,
+      extendBodyBehindAppBar: true,
+      appBar: const GlassAppBar(title: 'Scan to check in'),
       body: Stack(
         children: [
           MobileScanner(controller: _controller, onDetect: _onDetect),
@@ -70,8 +69,11 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
               width: 240,
               height: 240,
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 3),
-                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.cyan, width: 3),
+                borderRadius: BorderRadius.circular(AppRadii.card),
+                boxShadow: const [
+                  BoxShadow(color: AppColors.buttonGlow, blurRadius: 24, spreadRadius: 2),
+                ],
               ),
             ),
           ),
@@ -82,12 +84,22 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
             child: Column(
               children: [
                 if (_processing)
-                  const CircularProgressIndicator(color: Colors.white)
+                  const AppLoader()
                 else
-                  const Text(
-                    'Point the camera at the patient\'s booking QR code',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, fontSize: 13),
+                  // A dark pill behind the caption: over a live camera feed
+                  // plain white text is unreadable on a bright scene.
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.overlaySurface.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(AppRadii.control),
+                      border: Border.all(color: AppColors.glassBorder),
+                    ),
+                    child: Text(
+                      'Point the camera at the patient\'s booking QR code',
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.body.copyWith(fontSize: 13),
+                    ),
                   ),
               ],
             ),

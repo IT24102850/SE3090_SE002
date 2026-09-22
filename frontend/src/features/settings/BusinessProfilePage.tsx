@@ -296,10 +296,10 @@ export default function BusinessProfilePage() {
                 Copy Monday to all weekdays
               </button>
             </div>
-            {businessHours.map((h) => {
+            {businessHours.map((h, index) => {
               const rowError = !h.isClosed && h.openTime && h.closeTime && h.openTime >= h.closeTime;
               return (
-                <div key={h.dayOfWeek} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, fontSize: 13 }}>
+                <div key={`${h.dayOfWeek}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, fontSize: 13 }}>
                   <span style={{ width: 90 }}>{h.dayOfWeek}</span>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <input type="checkbox" checked={h.isClosed} onChange={(e) => updateHour(h.dayOfWeek, { isClosed: e.target.checked })} />
@@ -531,8 +531,8 @@ function AmenityInput({
   return (
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-        {amenities.map((a) => (
-          <span key={a} style={chipStyle}>
+        {amenities.map((a, index) => (
+          <span key={`${a}-${index}`} style={chipStyle}>
             {a}
             <button type="button" onClick={() => onRemove(a)} style={chipCloseStyle} aria-label={`Remove ${a}`}>
               ×
@@ -586,7 +586,7 @@ function PreviewPanel({
       <div
         style={{
           height: 120,
-          background: coverImageUrl ? `url(${coverImageUrl}) center/cover` : 'linear-gradient(135deg, #2563eb, #7209B7)',
+          background: coverImageUrl ? `url(${coverImageUrl}) center/cover` : 'var(--gradient-brand)',
           position: 'relative',
         }}
       >
@@ -598,7 +598,7 @@ function PreviewPanel({
             width: 56,
             height: 56,
             borderRadius: '50%',
-            border: '3px solid #fff',
+            border: '3px solid var(--color-surface)',
             background: logoUrl ? `url(${logoUrl}) center/cover` : 'var(--color-surface-muted)',
             boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
           }}
@@ -625,8 +625,8 @@ function PreviewPanel({
 
         {amenities.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-            {amenities.map((a) => (
-              <span key={a} style={{ ...chipStyle, fontSize: 11, padding: '3px 8px' }}>
+            {amenities.map((a, index) => (
+              <span key={`${a}-${index}`} style={{ ...chipStyle, fontSize: 11, padding: '3px 8px' }}>
                 {a}
               </span>
             ))}

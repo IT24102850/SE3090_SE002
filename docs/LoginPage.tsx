@@ -27,7 +27,7 @@ const LoginPage = () => {
 
   return (
     <div style={{ maxWidth: '400px', margin: '5rem auto', padding: '2rem', boxShadow: '0 0 10px rgba(0,0,0,0.1)' }}>
-      <h2>Login to SME Platform</h2>
+      <h2>Login to Unify</h2>
       
       {error && (
         <div style={{ padding: '0.75rem', background: '#fee2e2', color: '#dc2626', borderRadius: '4px', marginBottom: '1rem' }}>

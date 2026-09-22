@@ -199,11 +199,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// POST /api/auth/register — customer self-registration, scoped to a
-  /// single existing tenant (never creates a new business). The backend
-  /// always assigns Role=Customer regardless of what's sent.
+  /// POST /api/auth/register — customer self-registration. One global
+  /// account; [tenantId] is optional and, when the sign-up started from a
+  /// business's page, joins that business straight away so the token that
+  /// comes back is already scoped to it. Never creates a new business, and
+  /// the backend always assigns Role=Customer regardless of what's sent.
   Future<bool> registerCustomer({
-    required String tenantId,
+    String? tenantId,
     required String fullName,
     required String email,
     required String password,
@@ -215,7 +217,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final response = await ApiService.dio.post(
         '/auth/register',
         data: {
-          'tenantId': tenantId,
+          if (tenantId != null) 'tenantId': tenantId,
           'fullName': fullName.trim(),
           'email': email.trim(),
           'password': password,
@@ -259,6 +261,44 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// POST /api/auth/join/{tenantId} — a customer opens a business they have
+  /// not booked with before. The account is global, but the resource, slot
+  /// and booking endpoints are scoped by the token's tenant, so the server
+  /// creates the membership (first time only) and hands back a token for
+  /// that business. Cheap and idempotent; called whenever the signed-in
+  /// customer's token is for a different business than the one on screen.
+  Future<bool> joinBusiness(String tenantId) async {
+    final current = state.user;
+    if (current == null || current.role != 'Customer') return true;
+    if (current.tenantId == tenantId) return true;
+
+    try {
+      final response = await ApiService.dio.post('/auth/join/$tenantId');
+      final data = response.data as Map<String, dynamic>;
+      final accessToken = data['accessToken'] as String? ?? data['token'] as String?;
+      if (accessToken == null || accessToken.isEmpty) return false;
+
+      final userMap = data['user'] as Map<String, dynamic>? ?? data;
+      final user = User.fromJson(userMap);
+
+      await SecureStorageService.saveToken(accessToken);
+      await SecureStorageService.saveUser(jsonEncode(user.toJson()));
+      final refresh = data['refreshToken'] as String?;
+      if (refresh != null) {
+        await SecureStorageService.saveRefreshToken(refresh);
+      }
+
+      state = state.copyWith(user: user, token: accessToken, clearError: true);
+      return true;
+    } on DioException catch (e) {
+      state = state.copyWith(error: _extractError(e) ?? 'Could not open this business.');
+      return false;
+    } catch (_) {
+      state = state.copyWith(error: 'Something went wrong. Please try again.');
+      return false;
+    }
+  }
+
   /// PUT /api/auth/me — FR-C2 self-service profile update.
   Future<bool> updateProfile({
     String? fullName,
@@ -267,6 +307,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? insuranceProvider,
     String? insuranceNumber,
     String? medicalNotes,
+    String? profilePictureUrl,
+    /// Send an explicit empty string to clear the photo; null just leaves
+    /// it untouched, matching how the other optional fields behave.
+    bool removeProfilePicture = false,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
@@ -278,6 +322,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         if (insuranceProvider != null) 'insuranceProvider': insuranceProvider,
         if (insuranceNumber != null) 'insuranceNumber': insuranceNumber,
         if (medicalNotes != null) 'medicalNotes': medicalNotes,
+        if (removeProfilePicture) 'profilePictureUrl': ''
+        else if (profilePictureUrl != null) 'profilePictureUrl': profilePictureUrl,
       });
 
       final user = User.fromJson(response.data as Map<String, dynamic>);
@@ -296,6 +342,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Clear secure storage + reset state
   Future<void> logout() async {
     await SecureStorageService.clearAll();
+    state = const AuthState(isInitialized: true);
+  }
+
+  /// Drops the session locally after the backend has already rejected it.
+  ///
+  /// Distinct from logout(): the token is gone by the time this runs (the
+  /// Dio interceptor cleared it), and there is no server call to make - this
+  /// only flips the in-memory state so main.dart routes back to the login
+  /// screen instead of leaving the user on a screen that can no longer load
+  /// anything. Ignores repeat calls once already logged out.
+  void onSessionExpired() {
+    if (!state.isAuthenticated) return;
     state = const AuthState(isInitialized: true);
   }
 
@@ -326,5 +384,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
 // Provider
 // ─────────────────────────────────────────────────────────
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier();
+  final notifier = AuthNotifier();
+  // A 401 from any request now ends the session everywhere, rather than
+  // leaving each screen to fail on its own.
+  ApiService.onUnauthorized = notifier.onSessionExpired;
+  return notifier;
 });

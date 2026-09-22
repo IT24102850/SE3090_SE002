@@ -101,28 +101,6 @@ namespace SmeBackend.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "subscriptions",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    TenantId = table.Column<Guid>(type: "uuid", nullable: false),
-                    CustomerId = table.Column<Guid>(type: "uuid", nullable: false),
-                    PlanName = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: false),
-                    Amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
-                    BillingCycle = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
-                    StartDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    EndDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    AutoRenew = table.Column<bool>(type: "boolean", nullable: false),
-                    Status = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_subscriptions", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "form_submissions",
                 columns: table => new
                 {
@@ -305,16 +283,6 @@ namespace SmeBackend.Migrations
                 name: "IX_payments_TransactionRef",
                 table: "payments",
                 column: "TransactionRef");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_subscriptions_TenantId_CustomerId",
-                table: "subscriptions",
-                columns: new[] { "TenantId", "CustomerId" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_subscriptions_TenantId_Status",
-                table: "subscriptions",
-                columns: new[] { "TenantId", "Status" });
         }
 
         /// <inheritdoc />
@@ -337,9 +305,6 @@ namespace SmeBackend.Migrations
 
             migrationBuilder.DropTable(
                 name: "payments");
-
-            migrationBuilder.DropTable(
-                name: "subscriptions");
 
             migrationBuilder.DropTable(
                 name: "dynamic_forms");

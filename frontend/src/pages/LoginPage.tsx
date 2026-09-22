@@ -1,85 +1,50 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { loginUser, clearError } from '../store/authSlice';
 import { AppDispatch, RootState } from '../store/store';
+import { useToast } from '../shared/components/Toast';
+import '../features/marketing/landing.css';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    localStorage.getItem('unify-home-theme') === 'dark' ? 'dark' : 'light',
+  );
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const { isAuthenticated, loading, error } = useSelector((state: RootState) => state.auth);
+  const { show } = useToast();
+  const { isAuthenticated, loading, error, user } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/dashboard');
-    }
-    return () => {
-      dispatch(clearError());
-    };
-  }, [isAuthenticated, navigate, dispatch]);
+    if (isAuthenticated) { show(`Welcome${user?.fullName ? ` back, ${user.fullName}` : ' back'}!`, 'success'); navigate('/dashboard'); }
+    return () => { dispatch(clearError()); };
+  }, [isAuthenticated, navigate, dispatch, show, user?.fullName]);
+  useEffect(() => { if (error) show(error, 'error'); }, [error, show]);
+  useEffect(() => {
+    document.documentElement.dataset.unifyTheme = theme;
+    localStorage.setItem('unify-home-theme', theme);
+    return () => { delete document.documentElement.dataset.unifyTheme; };
+  }, [theme]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    dispatch(loginUser({ email, password }));
-  };
-
-  return (
-    <div style={{ maxWidth: '400px', margin: '5rem auto', padding: '2rem', boxShadow: '0 0 10px rgba(0,0,0,0.1)' }}>
-      <h2>Login to SME Platform</h2>
-      
-      {error && (
-        <div style={{ padding: '0.75rem', background: '#fee2e2', color: '#dc2626', borderRadius: '4px', marginBottom: '1rem' }}>
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: '100%', padding: '0.5rem', marginTop: '0.25rem' }}
-          />
-        </div>
-
-        <div style={{ marginBottom: '1rem' }}>
-          <label>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: '100%', padding: '0.5rem', marginTop: '0.25rem' }}
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            background: loading ? '#9ca3af' : '#2563eb',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {loading ? 'Signing in...' : 'Sign In'}
-        </button>
-      </form>
-
-      <p style={{ textAlign: 'center', marginTop: '1rem' }}>
-        New business? <a href="/register">Register your business</a>
-      </p>
-    </div>
-  );
+  return <main className="lp lp-auth-page"><div className="lp-auth-backdrop" aria-hidden="true" /><div className="lp-auth"><div className="lp-auth-inner">
+    <section className="lp-auth-aside lp-auth-story" aria-label="About Unify">
+      <Link className="lp-brand" to="/"><img className="lp-brand-mark" src="/unify-logo.svg" alt="" width={34} height={34} /><span className="lp-brand-name">Unify<span className="lp-brand-tag">Your work, in flow</span></span></Link>
+      <div className="lp-auth-photo"><img src="/landing/dive-centre.jpg" alt="A team preparing for a day of work" /></div><p className="lp-kicker"><span /> OPERATIONS, SIMPLIFIED</p><h1>Run the day.<br /><span>See the whole picture.</span></h1><p className="lp-body">Bookings, staff, inventory and customer activity — one calm workspace for the work that matters.</p><div className="lp-proof"><span>✓</span><span>Private, role-based access for every team</span></div>
+    </section>
+    <section className="lp-auth-card lp-auth-card-rich" aria-labelledby="login-title">
+      <div className="lp-auth-theme" aria-label="Choose colour theme"><button type="button" className={theme === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')} aria-pressed={theme === 'light'}>Light</button><button type="button" className={theme === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')} aria-pressed={theme === 'dark'}>Dark</button></div>
+      <Link className="lp-auth-home" to="/"><span aria-hidden="true">⌂</span> Home</Link>
+      <Link className="lp-auth-mobile-brand" to="/"><img src="/unify-logo.svg" alt="Unify" /></Link><div className="lp-auth-eyebrow">WELCOME BACK</div><h1 id="login-title">Sign in to your workspace</h1><p>Use the account details you registered with.</p>
+      {error && <div className="lp-alert" role="alert"><span>!</span>{error}</div>}
+      <form onSubmit={(e) => { e.preventDefault(); dispatch(loginUser({ email: email.trim(), password })); }}>
+        <div className="lp-field"><label htmlFor="login-email">Email address</label><div className="lp-input-wrap"><span aria-hidden="true">✉</span><input id="login-email" className="lp-input" type="email" autoComplete="email" placeholder="you@business.com" value={email} onChange={(e) => setEmail(e.target.value)} required /></div></div>
+        <div className="lp-field"><div className="lp-label-row"><label htmlFor="login-password">Password</label><span>Keep your account secure</span></div><div className="lp-input-wrap"><span aria-hidden="true">●</span><input id="login-password" className="lp-input" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} required /><button className="lp-password-toggle" type="button" onClick={() => setShowPassword((v) => !v)}>{showPassword ? 'Hide' : 'Show'}</button></div></div>
+        <button type="submit" disabled={loading} className="lp-btn lp-btn-primary lp-auth-submit">{loading ? <><span className="lp-spinner" /> Signing you in…</> : <>Sign in <span aria-hidden="true">→</span></>}</button>
+      </form><div className="lp-auth-divider"><span>New to Unify?</span></div><Link className="lp-btn lp-btn-outline lp-auth-create" to="/register">Create an account</Link>
+    </section>
+  </div></div></main>;
 };
-
 export default LoginPage;

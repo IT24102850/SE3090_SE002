@@ -14,7 +14,7 @@ class TourismDashboardRegistry {
       resourceTermPlural: 'Dive Trips',
       heroActionLabel: 'Choose your dive trip',
       icon: Icons.scuba_diving,
-      themeColor: Color(0xFF0077B6),
+      themeColor: Color(0xFF38BDF8),
       showWeatherBadge: true,
       cardFields: [
         ResourceCardField(key: 'capacity', icon: Icons.groups, labelTemplate: '{value} divers max'),
@@ -40,7 +40,7 @@ class TourismDashboardRegistry {
       resourceTermPlural: 'Safari Drives',
       heroActionLabel: 'Pick a safari drive',
       icon: Icons.directions_car,
-      themeColor: Color(0xFFB5651D),
+      themeColor: Color(0xFFF0A868),
       showWeatherBadge: true,
       cardFields: [
         ResourceCardField(key: 'capacity', icon: Icons.groups, labelTemplate: '{value} seats'),
@@ -66,7 +66,7 @@ class TourismDashboardRegistry {
       resourceTermPlural: 'Boat Trips',
       heroActionLabel: 'Choose a departure time',
       icon: Icons.sailing,
-      themeColor: Color(0xFF03045E),
+      themeColor: Color(0xFF8B5CF6),
       showWeatherBadge: true,
       cardFields: [
         ResourceCardField(key: 'capacity', icon: Icons.groups, labelTemplate: '{value} seats'),
@@ -85,7 +85,7 @@ class TourismDashboardRegistry {
       resourceTermPlural: 'Surf Lessons',
       heroActionLabel: 'Book a lesson',
       icon: Icons.surfing,
-      themeColor: Color(0xFF00B4D8),
+      themeColor: Color(0xFF22D3EE),
       cardFields: [
         ResourceCardField(key: 'instructor', icon: Icons.person, labelTemplate: 'with {value}'),
       ],
@@ -108,7 +108,7 @@ class TourismDashboardRegistry {
       resourceTermPlural: 'Guided Treks',
       heroActionLabel: 'Choose your trek',
       icon: Icons.hiking,
-      themeColor: Color(0xFF386641),
+      themeColor: Color(0xFF4ADE80),
       cardFields: [
         ResourceCardField(key: 'difficulty', icon: Icons.terrain, labelTemplate: '{value} difficulty'),
       ],
@@ -132,7 +132,7 @@ class TourismDashboardRegistry {
       resourceTermPlural: 'Guided Tours',
       heroActionLabel: 'Pick a tour',
       icon: Icons.museum,
-      themeColor: Color(0xFF9C6644),
+      themeColor: Color(0xFFE0A87A),
       cardFields: [
         ResourceCardField(key: 'language', icon: Icons.language, labelTemplate: '{value}'),
       ],
@@ -160,7 +160,7 @@ class TourismDashboardRegistry {
       resourceTermPlural: 'Itineraries',
       heroActionLabel: 'Choose your itinerary',
       icon: Icons.map,
-      themeColor: Color(0xFF6A4C93),
+      themeColor: Color(0xFFA78BFA),
       cardFields: [
         ResourceCardField(key: 'durationDays', icon: Icons.event, labelTemplate: '{value} days'),
       ],
@@ -188,7 +188,7 @@ class TourismDashboardRegistry {
       resourceTermPlural: 'Rooms',
       heroActionLabel: 'Select your room',
       icon: Icons.hotel,
-      themeColor: Color(0xFF7209B7),
+      themeColor: Color(0xFFE040FB),
       cardFields: [
         ResourceCardField(key: 'bedCount', icon: Icons.bed, labelTemplate: '{value} beds'),
       ],
@@ -205,6 +205,32 @@ class TourismDashboardRegistry {
       ],
     ),
 
+    TourismSubType.villaHotel: const SubtypeDashboardConfig(
+      subType: TourismSubType.villaHotel,
+      bookingUnit: BookingUnit.night,
+      resourceTermSingular: 'Room',
+      resourceTermPlural: 'Rooms',
+      heroActionLabel: 'Select your room',
+      icon: Icons.villa,
+      themeColor: Color(0xFFF472B6),
+      cardFields: [
+        ResourceCardField(key: 'bedCount', icon: Icons.bed, labelTemplate: '{value} beds'),
+      ],
+      bookingFormFields: [
+        BookingFormField(key: 'mealPlan', label: 'Include breakfast', type: BookingFieldType.checkbox),
+        BookingFormField(key: 'guestCount', label: 'Number of guests', type: BookingFieldType.numberStepper),
+        BookingFormField(
+          key: 'bedTypePreference',
+          label: 'Bed type preference',
+          type: BookingFieldType.dropdown,
+          options: ['Any', 'Twin', 'Double'],
+        ),
+        BookingFormField(key: 'poolAccess', label: 'Private pool access', type: BookingFieldType.checkbox),
+        BookingFormField(key: 'airportPickupNeeded', label: 'Need airport pickup & drop-off', type: BookingFieldType.checkbox),
+        BookingFormField(key: 'specialRequests', label: 'Special requests (e.g. late check-in, allergies)', type: BookingFieldType.textArea),
+      ],
+    ),
+
     TourismSubType.vehicleRental: const SubtypeDashboardConfig(
       subType: TourismSubType.vehicleRental,
       bookingUnit: BookingUnit.dateRange,
@@ -212,7 +238,7 @@ class TourismDashboardRegistry {
       resourceTermPlural: 'Vehicles',
       heroActionLabel: 'Pick a vehicle',
       icon: Icons.two_wheeler,
-      themeColor: Color(0xFF264653),
+      themeColor: Color(0xFF67E8F9),
       cardFields: [
         ResourceCardField(key: 'transmission', icon: Icons.settings, labelTemplate: '{value}'),
       ],
@@ -230,7 +256,7 @@ class TourismDashboardRegistry {
       resourceTermPlural: 'Treatments',
       heroActionLabel: 'Choose a treatment',
       icon: Icons.spa,
-      themeColor: Color(0xFF588157),
+      themeColor: Color(0xFF86EFAC),
       cardFields: [
         ResourceCardField(key: 'practitioner', icon: Icons.person, labelTemplate: 'with {value}'),
       ],
@@ -258,7 +284,7 @@ class TourismDashboardRegistry {
       resourceTermPlural: 'Cycling Tours',
       heroActionLabel: 'Pick a route',
       icon: Icons.directions_bike,
-      themeColor: Color(0xFF2A9D8F),
+      themeColor: Color(0xFF2DD4BF),
       cardFields: [
         ResourceCardField(key: 'routeDifficulty', icon: Icons.terrain, labelTemplate: '{value}'),
       ],

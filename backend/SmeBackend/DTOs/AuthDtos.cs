@@ -7,18 +7,22 @@ public class RegisterDto
 {
     [Required, EmailAddress]
     public string Email { get; set; } = string.Empty;
-    
+
     [Required, MinLength(6)]
     public string Password { get; set; } = string.Empty;
-    
+
     [Required]
     public string FullName { get; set; } = string.Empty;
-    
+
     public string Phone { get; set; } = string.Empty;
-    
-    [Required]
-    public Guid TenantId { get; set; }
-    
+
+    // Optional: a customer account is global (one sign-in for every
+    // business). Given - e.g. signing up from a business's page in the app -
+    // the account also joins that business immediately and the returned
+    // token is scoped to it. Absent, the token is scoped to the customer
+    // pool and POST /api/auth/join/{tenantId} scopes it later.
+    public Guid? TenantId { get; set; }
+
     public Guid? BranchId { get; set; }
 
     // No Role field: this is the public customer self-registration endpoint
@@ -39,11 +43,22 @@ public class UpdateProfileDto
     public string? ProfilePictureUrl { get; set; }
 }
 
+public class ChangePasswordDto
+{
+    [Required]
+    public string CurrentPassword { get; set; } = string.Empty;
+
+    // Matches RegisterDto's minimum so a changed password is never weaker
+    // than a registered one.
+    [Required, MinLength(6)]
+    public string NewPassword { get; set; } = string.Empty;
+}
+
 public class LoginDto
 {
     [Required, EmailAddress]
     public string Email { get; set; } = string.Empty;
-    
+
     [Required]
     public string Password { get; set; } = string.Empty;
 }

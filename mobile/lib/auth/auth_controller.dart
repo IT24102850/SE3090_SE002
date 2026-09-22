@@ -11,10 +11,20 @@ class AuthController extends ChangeNotifier {
   AuthSession? session;
   bool isRestoring = true;
 
-  Future<void> restore() async {
-    session = await _repository.restoreSession();
-    isRestoring = false;
-    notifyListeners();
+  /// Clears any previous-device session and exposes the login screen.
+  ///
+  /// Mobile devices are often shared in a workplace, so this app deliberately
+  /// asks for credentials on every fresh launch instead of restoring a token.
+  Future<void> startSignedOut() async {
+    try {
+      await _repository.logout();
+    } catch (_) {
+      // Storage cleanup is best-effort: lack of storage must not block login.
+    } finally {
+      session = null;
+      isRestoring = false;
+      notifyListeners();
+    }
   }
 
   Future<void> login(String email, String password) async {

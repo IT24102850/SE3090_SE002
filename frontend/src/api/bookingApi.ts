@@ -1,10 +1,39 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
+import { API_BASE_URL, LOCAL_API_BASE_URL } from './apiBaseUrl';
 import type {
   AgentWorkflow,
   AvailabilityDay,
+  DepartureBoard,
+  DepartureManifest,
+  ExcursionKpis,
+  RescheduleOption,
+  SafetyPanel,
+  Sighting,
+  SightingAnalytics,
+  TicketLine,
+  WeatherObservation,
   AvailabilitySearchResult,
   AvailableSlotsResponse,
   Booking,
+  ClinicAlert,
+  ClinicFlow,
+  ClinicOverview,
+  ClinicOverviewParams,
+  ClinicReminders,
+  GymAttendance,
+  SchoolOverview,
+  SchoolOverviewParams,
+  SchoolGradebook,
+  SchoolStudentDetail,
+  SchoolToday,
+  GymLive,
+  GymOverview,
+  GymOverviewParams,
+  RestaurantInventory,
+  RestaurantLive,
+  RestaurantOverview,
+  RestaurantOverviewParams,
   BookingType,
   Branch,
   ConflictPair,
@@ -19,21 +48,57 @@ import type {
   UpdateTenantProfileBody,
 } from '../features/booking/types';
 
-// VITE_API_URL lets the deployed (Vercel) build point at a real deployed
-// backend instead of the local dev server - see frontend/.env.example.
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5298/api';
+// Where the API is - see api/apiBaseUrl.ts for the rules.
+
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: API_BASE_URL,
+  prepareHeaders: (headers) => {
+    const token = localStorage.getItem('token');
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return headers;
+  },
+});
+const localBackendQuery = fetchBaseQuery({
+  baseUrl: LOCAL_API_BASE_URL,
+  prepareHeaders: (headers) => {
+    const token = localStorage.getItem('token');
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return headers;
+  },
+});
+
+// Access tokens live 2 hours (JwtService.GenerateAccessToken) and there is no
+// refresh endpoint to renew them, so a session simply dies mid-use. Without
+// this wrapper RTK Query swallowed the resulting 401s: every page kept
+// rendering the logged-in shell off the stale `user` object in localStorage
+// while each table showed its "nothing found" empty state, which reads as
+// missing data rather than an expired login. Drop the dead session and bounce
+// to /login - the same thing axiosConfig.ts already does for the axios half
+// of the app.
+const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
+  args,
+  api,
+  extraOptions,
+) => {
+  let result = await rawBaseQuery(args, api, extraOptions);
+  if (result.error?.status === 'PARSING_ERROR' && API_BASE_URL === '/api') {
+    result = await localBackendQuery(args, api, extraOptions);
+  }
+  // Guard on the token still being present so concurrent 401s (this page
+  // fires several queries at once) only redirect once, and so a genuine 401
+  // while already logged out can't loop us back into /login.
+  if (result.error?.status === 401 && localStorage.getItem('token')) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+  }
+  return result;
+};
 
 export const bookingApi = createApi({
   reducerPath: 'bookingApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: API_BASE_URL,
-    prepareHeaders: (headers) => {
-      const token = localStorage.getItem('token');
-      if (token) headers.set('Authorization', `Bearer ${token}`);
-      return headers;
-    },
-  }),
-  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification'],
+  baseQuery: baseQueryWithAuth,
+  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification', 'Departure', 'Sighting', 'Weather', 'Safety', 'RestaurantInventory'],
   endpoints: (builder) => ({
     // ── Branches ──────────────────────────────────────────
     getBranches: builder.query<Branch[], { tenantId: string }>({
@@ -153,7 +218,7 @@ export const bookingApi = createApi({
     >({
       query: (params) => ({ url: '/bookings', params }),
       providesTags: (result) =>
-        result
+        Array.isArray(result?.items)
           ? [...result.items.map((b) => ({ type: 'Booking' as const, id: b.id })), { type: 'Booking', id: 'LIST' }]
           : [{ type: 'Booking', id: 'LIST' }],
     }),
@@ -165,10 +230,20 @@ export const bookingApi = createApi({
       query: (id) => `/bookings/${id}`,
       providesTags: (_r, _e, id) => [{ type: 'Booking', id }],
     }),
-    createBooking: builder.mutation<unknown, Partial<Booking> & {
-      tenantId: string; resourceId: string; bookingTypeId: string; bookedBy: string;
-      startTime: string; endTime: string; priority: string;
-    }>({
+    // ticketBreakdown is asymmetric on purpose: the client POSTs an array
+    // of { type, qty } and the server returns the priced jsonb *string* it
+    // stored, so Booking's own string-typed field is omitted here rather
+    // than widened - only the write side takes an array.
+    createBooking: builder.mutation<
+      { id: string; totalCost?: number | null; capacityWarning?: string | null },
+      Omit<Partial<Booking>, 'ticketBreakdown'> & {
+        tenantId: string; resourceId: string; bookingTypeId: string; bookedBy: string;
+        startTime: string; endTime: string; priority: string;
+        ticketBreakdown?: TicketLine[];
+        departureId?: string;
+        formData?: string;
+      }
+    >({
       query: (body) => ({ url: '/bookings', method: 'POST', body }),
       invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }],
     }),
@@ -237,6 +312,323 @@ export const bookingApi = createApi({
       query: (params) => ({ url: '/bookings/reports/no-shows', params }),
     }),
 
+    // ── Departure operations (fixed-departure excursions) ────────
+    // Only reached by sub-types whose registry config turns the departures
+    // module on; every other tenant never issues these requests.
+    getDepartureBoard: builder.query<DepartureBoard, { from?: string; days?: number }>({
+      query: (params) => ({ url: '/departures/board', params }),
+      providesTags: [{ type: 'Departure', id: 'LIST' }],
+    }),
+    getDepartureManifest: builder.query<DepartureManifest, string>({
+      query: (id) => `/departures/${id}/manifest`,
+      providesTags: (_r, _e, id) => [{ type: 'Departure', id }],
+    }),
+    createDeparture: builder.mutation<
+      { id: string; scheduledDeparture: string },
+      {
+        resourceId: string; bookingTypeId?: string; scheduledDeparture: string;
+        scheduledReturn?: string; captainUserId?: string; crew?: string;
+        licensedCapacity?: number; notes?: string;
+      }
+    >({
+      query: (body) => ({ url: '/departures', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Departure', id: 'LIST' }],
+    }),
+    updateDeparture: builder.mutation<
+      unknown,
+      { id: string; captainUserId?: string; crew?: string; licensedCapacity?: number; notes?: string }
+    >({
+      query: ({ id, ...body }) => ({ url: `/departures/${id}`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Departure', id }, { type: 'Departure', id: 'LIST' }],
+    }),
+    setDepartureStatus: builder.mutation<
+      unknown,
+      { id: string; status: string; reason?: string; overrideSafetyChecklist?: boolean }
+    >({
+      query: ({ id, ...body }) => ({ url: `/departures/${id}/status`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Departure', id }, { type: 'Departure', id: 'LIST' }],
+    }),
+    setSafetyChecklist: builder.mutation<
+      unknown,
+      { id: string; jacketsCounted: boolean; briefingDone: boolean; manifestClosed: boolean; weatherChecked: boolean }
+    >({
+      query: ({ id, ...body }) => ({ url: `/departures/${id}/safety-checklist`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Departure', id }, { type: 'Departure', id: 'LIST' }],
+    }),
+    cancelDepartureForWeather: builder.mutation<
+      {
+        departureId: string; status: string; bookingsCancelled: number;
+        guestsNotified: number; rescheduleOptions: RescheduleOption[];
+      },
+      {
+        id: string; reason?: string;
+        weather?: { windSpeedKnots?: number; waveHeightMetres?: number; visibilityKm?: number; seaStateCode?: number; note?: string };
+      }
+    >({
+      query: ({ id, ...body }) => ({ url: `/departures/${id}/cancel-weather`, method: 'POST', body }),
+      invalidatesTags: [
+        { type: 'Departure', id: 'LIST' }, { type: 'Booking', id: 'LIST' },
+        { type: 'Weather', id: 'LIST' }, { type: 'Notification', id: 'LIST' },
+      ],
+    }),
+    getRescheduleOptions: builder.query<RescheduleOption[], string>({
+      query: (id) => `/departures/${id}/reschedule-options`,
+    }),
+    bulkRescheduleDeparture: builder.mutation<
+      { movedCount: number; skippedCount: number; skipped: { bookingId: string; reason: string }[] },
+      { id: string; targetDepartureId: string; bookingIds: string[] }
+    >({
+      query: ({ id, ...body }) => ({ url: `/departures/${id}/bulk-reschedule`, method: 'POST', body }),
+      invalidatesTags: [{ type: 'Departure', id: 'LIST' }, { type: 'Booking', id: 'LIST' }],
+    }),
+
+    // ── Weather / sea-state console ───────────────────────
+    getWeather: builder.query<
+      { latest?: WeatherObservation | null; items: WeatherObservation[] },
+      { departureId?: string; limit?: number } | void
+    >({
+      query: (params) => ({ url: '/departures/weather', params: params ?? undefined }),
+      providesTags: [{ type: 'Weather', id: 'LIST' }],
+    }),
+    recordWeather: builder.mutation<
+      WeatherObservation,
+      {
+        resourceId?: string; departureId?: string; observedAt?: string;
+        windSpeedKnots?: number; waveHeightMetres?: number; visibilityKm?: number;
+        seaStateCode?: number; note?: string;
+      }
+    >({
+      query: (body) => ({ url: '/departures/weather', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Weather', id: 'LIST' }, { type: 'Departure', id: 'LIST' }],
+    }),
+
+    // ── Safety & compliance ───────────────────────────
+    getSafetyPanel: builder.query<SafetyPanel, { expiringWithinDays?: number } | void>({
+      query: (params) => ({ url: '/departures/safety', params: params ?? undefined }),
+      providesTags: [{ type: 'Safety', id: 'LIST' }],
+    }),
+
+    // ── Sightings ─────────────────────────────────
+    getSightings: builder.query<
+      { items: Sighting[]; total: number },
+      { departureId?: string; resourceId?: string; species?: string; from?: string; to?: string; pageSize?: number }
+    >({
+      query: (params) => ({ url: '/sightings', params }),
+      providesTags: [{ type: 'Sighting', id: 'LIST' }],
+    }),
+    logSighting: builder.mutation<
+      Sighting,
+      {
+        departureId?: string; resourceId?: string; bookingId?: string;
+        departureDateTime?: string; species: string; count?: number;
+        locationLat?: number; locationLng?: number; behaviour?: string;
+        notes?: string; photoUrls?: string;
+      }
+    >({
+      query: (body) => ({ url: '/sightings', method: 'POST', body }),
+      invalidatesTags: [
+        { type: 'Sighting', id: 'LIST' }, { type: 'Sighting', id: 'ANALYTICS' },
+        { type: 'Departure', id: 'LIST' },
+      ],
+    }),
+    deleteSighting: builder.mutation<void, string>({
+      query: (id) => ({ url: `/sightings/${id}`, method: 'DELETE' }),
+      invalidatesTags: [{ type: 'Sighting', id: 'LIST' }, { type: 'Sighting', id: 'ANALYTICS' }],
+    }),
+    getSightingAnalytics: builder.query<
+      SightingAnalytics,
+      { from?: string; to?: string; species?: string } | void
+    >({
+      query: (params) => ({ url: '/sightings/analytics', params: params ?? undefined }),
+      providesTags: [{ type: 'Sighting', id: 'ANALYTICS' }],
+    }),
+    getSightingVocabulary: builder.query<{ species: string[]; behaviours: string[] }, void>({
+      query: () => '/sightings/vocabulary',
+    }),
+
+    // ── Per-ticket-type pricing ─────────────────────────
+    quoteTickets: builder.mutation<
+      {
+        lines: TicketLine[]; totalQuantity: number; total: number; currency: string;
+        seasonLabel?: string | null; isOffPeakRate: boolean;
+        inSeason?: boolean | null; weatherDependent?: boolean | null;
+      },
+      { bookingTypeId: string; startTime: string; ticketBreakdown: TicketLine[] }
+    >({
+      query: (body) => ({ url: '/bookings/quote', method: 'POST', body }),
+    }),
+    setBookingTickets: builder.mutation<
+      { totalCost: number; currency: string; capacityWarning?: string | null },
+      { id: string; ticketBreakdown: TicketLine[] }
+    >({
+      query: ({ id, ticketBreakdown }) => ({ url: `/bookings/${id}/tickets`, method: 'PUT', body: { ticketBreakdown } }),
+      invalidatesTags: (_r, _e, { id }) => [
+        { type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Departure', id: 'LIST' },
+      ],
+    }),
+    setBookingWaiver: builder.mutation<
+      unknown,
+      { id: string; signerName: string; signedAt?: string; minorCount?: number }
+    >({
+      query: ({ id, ...body }) => ({ url: `/bookings/${id}/waiver`, method: 'PUT', body }),
+      invalidatesTags: (_r, _e, { id }) => [
+        { type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Departure', id: 'LIST' },
+      ],
+    }),
+
+    // ── Excursion reports ─────────────────────────────
+    getExcursionKpis: builder.query<ExcursionKpis, { on?: string; forwardDays?: number } | void>({
+      query: (params) => ({ url: '/reports/excursions/kpis', params: params ?? undefined }),
+      providesTags: [{ type: 'Departure', id: 'KPIS' }],
+    }),
+    getRevenueByTicketType: builder.query<
+      {
+        byTicketType: { ticketType: string; quantity: number; revenue: number }[];
+        unbrokenDownRevenue: number; totalRevenue: number; totalTickets: number;
+      },
+      { from?: string; to?: string }
+    >({
+      query: (params) => ({ url: '/reports/excursions/revenue-by-ticket-type', params }),
+    }),
+    getPerDepartureReport: builder.query<
+      {
+        departures: {
+          departureId: string; vesselName: string; scheduledDeparture: string; status: string;
+          capacity: number; pax: number; occupancyPercent: number; revenue: number;
+          revenuePerSeat: number; bookings: number; sightings: number;
+        }[];
+        totalRevenue: number; averageOccupancyPercent: number;
+      },
+      { from?: string; to?: string }
+    >({
+      query: (params) => ({ url: '/reports/excursions/per-departure', params }),
+    }),
+    getWeatherCancellationReport: builder.query<
+      {
+        totalCancelled: number; totalBookingsAffected: number;
+        totalRefundableAmount: number; totalRebooked: number;
+        byMonth: { month: string; label: string; count: number }[];
+        departures: {
+          departureId: string; vesselName: string; scheduledDeparture: string;
+          cancellationReason?: string | null; bookingsAffected: number;
+          refundableAmount: number; paxAffected: number; rebookedCount: number;
+        }[];
+      },
+      { from?: string; to?: string }
+    >({
+      query: (params) => ({ url: '/reports/excursions/weather-cancellations', params }),
+    }),
+    getChannelSplit: builder.query<
+      {
+        byChannel: { channel: string; bookings: number; pax: number; revenue: number }[];
+        byNationality: { nationality: string; bookings: number }[];
+        nationalityCaptured: boolean;
+      },
+      { from?: string; to?: string }
+    >({
+      query: (params) => ({ url: '/reports/excursions/channel-split', params }),
+    }),
+
+    // ── Clinic operations dashboard ─────────────────────
+    // All four carry the Booking LIST tag: a check-in, a status change or
+    // a reminder sent from the flow board invalidates that tag already, so
+    // the waiting room and the alerts refresh without extra wiring.
+    getClinicOverview: builder.query<ClinicOverview, ClinicOverviewParams | void>({
+      query: (params) => ({ url: '/reports/clinic/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getClinicFlow: builder.query<ClinicFlow, { on?: string; branchId?: string; resourceId?: string } | void>({
+      query: (params) => ({ url: '/reports/clinic/flow', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getClinicAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string } | void>({
+      query: (params) => ({ url: '/reports/clinic/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getClinicReminders: builder.query<ClinicReminders, { withinHours?: number; branchId?: string } | void>({
+      query: (params) => ({ url: '/reports/clinic/reminders', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
+    // ── Restaurant operations dashboard ─────────────────
+    // Same tagging as the clinic: Booking LIST so an order moved along the
+    // feed refreshes the KPIs, kitchen board and alerts. Inventory carries
+    // its own tag so logging waste refreshes only the stock panel.
+    getRestaurantOverview: builder.query<RestaurantOverview, RestaurantOverviewParams | void>({
+      query: (params) => ({ url: '/reports/restaurant/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+    getRestaurantLive: builder.query<RestaurantLive, { on?: string; branchId?: string; resourceId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/restaurant/live', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getRestaurantAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/restaurant/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+    getRestaurantInventory: builder.query<RestaurantInventory, { from?: string; to?: string; branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/restaurant/inventory', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+    logInventoryWaste: builder.mutation<unknown, { id: string; quantity: number; reason?: string; notes?: string; reference?: string }>({
+      query: ({ id, ...body }) => ({ url: `/inventory/${id}/waste`, method: 'POST', body }),
+      invalidatesTags: [{ type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+
+    // ── Gym / fitness operations dashboard ──────────────
+    getGymOverview: builder.query<GymOverview, GymOverviewParams | void>({
+      query: (params) => ({ url: '/reports/gym/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getGymLive: builder.query<GymLive, { branchId?: string; resourceId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/gym/live', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getGymAttendance: builder.query<GymAttendance, { from?: string; to?: string; branchId?: string; resourceId?: string; search?: string; method?: string; page?: number; pageSize?: number; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/gym/attendance', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getGymAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/gym/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
+    // ── School / tuition-centre dashboard ───────────────
+    // Marking attendance or entering a grade invalidates Booking LIST, so
+    // the timetable, KPIs and at-risk list refresh together.
+    getSchoolOverview: builder.query<SchoolOverview, SchoolOverviewParams | void>({
+      query: (params) => ({ url: '/reports/school/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    getSchoolToday: builder.query<SchoolToday, { on?: string; branchId?: string; resourceId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/school/today', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    getSchoolStudent: builder.query<SchoolStudentDetail, { id: string; from?: string; to?: string; tz?: number }>({
+      query: ({ id, ...params }) => ({ url: `/reports/school/students/${id}`, params }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getSchoolGradebook: builder.query<SchoolGradebook, { from?: string; to?: string; branchId?: string; bookingTypeId?: string; grade?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/school/gradebook', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getSchoolAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/school/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    markSchoolAttendance: builder.mutation<unknown, { bookingId: string; mark: string; points?: number | null; note?: string | null }>({
+      query: (body) => ({ url: '/reports/school/attendance', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    approveSchoolUser: builder.mutation<unknown, { userId: string; role?: string }>({
+      query: (body) => ({ url: '/reports/school/approve', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    gradeSchoolAssessment: builder.mutation<unknown, { bookingId: string; score: number | null; maxScore?: number | null; feedback?: string | null }>({
+      query: (body) => ({ url: '/reports/school/grade', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
     // ── Resources ─────────────────────────────────────────
     getResources: builder.query<
       PagedResult<Resource>,
@@ -244,7 +636,7 @@ export const bookingApi = createApi({
     >({
       query: (params) => ({ url: '/resources', params }),
       providesTags: (result) =>
-        result
+        Array.isArray(result?.items)
           ? [...result.items.map((r) => ({ type: 'Resource' as const, id: r.id })), { type: 'Resource', id: 'LIST' }]
           : [{ type: 'Resource', id: 'LIST' }],
     }),
@@ -318,6 +710,23 @@ export const bookingApi = createApi({
     }),
 
     // ── Agent workflows (FR-B12: planner propose/approve/apply) ───────────
+    // ── Customer side (mirrors the Flutter customer screens) ──
+    getMyWorkflows: builder.query<AgentWorkflow[], void>({
+      query: () => '/agent/workflow/mine',
+      providesTags: [{ type: 'Workflow', id: 'MINE' }],
+    }),
+    findAndBook: builder.mutation<
+      { workflowId: string; status: string; bookingId?: string | null; message?: string | null },
+      { objective: string; dateFrom?: string; dateTo?: string; extraConstraints?: Record<string, unknown> }
+    >({
+      query: (body) => ({ url: '/agent/find-and-book', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Workflow', id: 'MINE' }, { type: 'Booking', id: 'LIST' }],
+    }),
+    getUnavailableRanges: builder.query<{ startTime: string; endTime: string }[], { resourceId: string; from: string; to: string }>({
+      query: (params) => ({ url: '/bookings/unavailable-ranges', params }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
     getWorkflows: builder.query<AgentWorkflow[], { tenantId: string; status?: string }>({
       query: (params) => ({ url: '/agent/workflow', params }),
       providesTags: (result) =>
@@ -347,6 +756,9 @@ export const bookingApi = createApi({
     reviseWorkflow: builder.mutation<AgentWorkflow, { id: string; plan: { steps: unknown[]; estimatedRevenueImpact: number } }>({
       query: ({ id, plan }) => ({ url: `/agent/workflow/${id}/revise`, method: 'POST', body: { plan } }),
       invalidatesTags: (_r, _e, { id }) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }],
+    }),
+    askWorkspaceAssistant: builder.mutation<{ answer: string; answeredAt: string }, { message: string }>({
+      query: (body) => ({ url: '/workspace-assistant/chat', method: 'POST', body }),
     }),
   }),
 });
@@ -393,6 +805,55 @@ export const {
   useGetConflictsQuery,
   useBulkScheduleMutation,
   useGetNoShowStatsQuery,
+  useGetDepartureBoardQuery,
+  useGetDepartureManifestQuery,
+  useCreateDepartureMutation,
+  useUpdateDepartureMutation,
+  useSetDepartureStatusMutation,
+  useSetSafetyChecklistMutation,
+  useCancelDepartureForWeatherMutation,
+  useGetRescheduleOptionsQuery,
+  useBulkRescheduleDepartureMutation,
+  useGetWeatherQuery,
+  useRecordWeatherMutation,
+  useGetSafetyPanelQuery,
+  useGetSightingsQuery,
+  useLogSightingMutation,
+  useDeleteSightingMutation,
+  useGetSightingAnalyticsQuery,
+  useGetSightingVocabularyQuery,
+  useQuoteTicketsMutation,
+  useSetBookingTicketsMutation,
+  useSetBookingWaiverMutation,
+  useGetExcursionKpisQuery,
+  useGetClinicOverviewQuery,
+  useGetClinicFlowQuery,
+  useGetClinicAlertsQuery,
+  useGetClinicRemindersQuery,
+  useGetRestaurantOverviewQuery,
+  useGetRestaurantLiveQuery,
+  useGetRestaurantAlertsQuery,
+  useGetRestaurantInventoryQuery,
+  useLogInventoryWasteMutation,
+  useGetGymOverviewQuery,
+  useGetGymLiveQuery,
+  useGetGymAttendanceQuery,
+  useGetGymAlertsQuery,
+  useGetSchoolOverviewQuery,
+  useGetSchoolTodayQuery,
+  useGetSchoolStudentQuery,
+  useGetSchoolAlertsQuery,
+  useGetSchoolGradebookQuery,
+  useMarkSchoolAttendanceMutation,
+  useGradeSchoolAssessmentMutation,
+  useApproveSchoolUserMutation,
+  useGetMyWorkflowsQuery,
+  useFindAndBookMutation,
+  useGetUnavailableRangesQuery,
+  useGetRevenueByTicketTypeQuery,
+  useGetPerDepartureReportQuery,
+  useGetWeatherCancellationReportQuery,
+  useGetChannelSplitQuery,
   useGetResourcesQuery,
   useCreateResourceMutation,
   useUpdateResourceMutation,
@@ -412,4 +873,5 @@ export const {
   useApproveWorkflowMutation,
   useRejectWorkflowMutation,
   useApplyWorkflowMutation,
+  useAskWorkspaceAssistantMutation,
 } = bookingApi;

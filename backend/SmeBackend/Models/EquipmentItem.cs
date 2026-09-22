@@ -19,4 +19,11 @@ public class EquipmentItem : BaseEntity, ITenantScoped
     public decimal SellingPrice { get; set; }
     public Guid? SupplierId { get; set; }
     public bool IsActive { get; set; } = true;
+
+    /// Service/certification expiry for date-controlled safety gear - life
+    /// rafts, flares, fire extinguishers, EPIRBs, first-aid kits. Null for
+    /// everything that does not expire (the overwhelming majority of rows,
+    /// and every row that existed before this column), so the safety panel
+    /// treats null as "not expiry-tracked" rather than "expired".
+    public DateTime? ExpiryDate { get; set; }
 }

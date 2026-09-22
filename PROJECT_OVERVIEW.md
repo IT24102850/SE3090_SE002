@@ -30,7 +30,9 @@ docs/                      ADRs, AI usage log, feature-template docs
 
 - **`backend/SmeBackend`** — the only thing that talks to the database. Every tenant's
   data lives in the same tables, isolated by `TenantId` (multi-tenant, shared-schema
-  model). Role-based auth via JWT: `Admin`, `Manager`, `Staff`, `Customer`.
+  model). Role-based auth via JWT: `Admin`, `Manager`, `Staff`, `Customer`, plus
+  a single platform-level `SuperAdmin` (the site owner) that is not a tenant
+  role and only the `/platform` console accepts.
 - **`frontend/` (web)** — **Admin/Manager/Staff only.** Business setup, resource/staff
   management, booking-type configuration, calendar/booking management, reports, agent
   workflow approvals. There is no customer-facing flow in the web app by design.
@@ -38,8 +40,33 @@ docs/                      ADRs, AI usage log, feature-template docs
   businesses, book, manage their own bookings, get notifications. Staff use it for
   their own schedule and QR check-in scanning. Two separate registration flows:
   `RegisterScreen` (business/tenant onboarding, mirrors the web's `RegisterPage`) and
-  `CustomerRegisterScreen` (a patient/customer signing up with a specific tenant they're
-  browsing, forces `Role=Customer` server-side).
+  `CustomerRegisterScreen` (a customer account - global, no business to pick; opened
+  from a business's page it also joins that business; forces `Role=Customer`
+  server-side).
+
+## Customer accounts are global
+
+A customer signs up once (web `RegisterPage` "A customer" mode, or the app's
+"Create a customer account") with no business chosen, and is joined to a
+business automatically the first time they open it. The model that makes this
+work without touching any tenant-side code is in
+`backend/SmeBackend/Services/CustomerAccountService.cs`:
+
+- the sign-in is one **identity** row (`Role=Customer`) in a hidden
+  "Unify Customers" tenant (`BusinessType=CustomerPool`, excluded from the
+  public directory and the platform console);
+- each business they use gets a **membership** row in that tenant - an ordinary
+  per-business Customer user, which is what every dashboard, report and booking
+  already expects - with `User.LinkedAccountId` pointing at the identity;
+- `POST /api/auth/join/{tenantId}` creates the membership on first contact and
+  returns a token scoped to that business (the resource/slot/booking endpoints
+  are scoped by the token's tenant). The app calls it when a customer opens a
+  business whose id differs from the token's (`BusinessDetailScreen`);
+- only identity rows can log in; profile and password changes propagate to
+  every membership; `GET /api/bookings` and ownership checks treat the whole
+  account (identity + memberships) as one person, so "My bookings" spans
+  businesses. Legacy per-business customers keep working unchanged and become
+  the identity of any business they join later.
 
 ## Multi-tenant data model
 
@@ -138,7 +165,7 @@ Tracked against three requirement sets:
 
 | Controller | Responsibility |
 |---|---|
-| `Services/AuthController` | Login, register (customer), `/auth/me` |
+| `Services/AuthController` | Login, register (global customer account), `/auth/join/{tenantId}`, `/auth/me` |
 | `Services/TenantController` | Tenant onboarding (`/tenant/onboard`), business settings, staff list |
 | `TenantPublicController` | Public tenant directory for the mobile "Find a Business" list |
 | `BranchesController` | Branch CRUD |
@@ -147,6 +174,11 @@ Tracked against three requirement sets:
 | `BookingsController` | Available-slots, unavailable-ranges, create/reschedule/cancel/check-in/status, recurring bookings, conflicts report, my-schedule |
 | `NotificationsController` | In-app notifications |
 | `AgentWorkflowController` | AI planner workflows (propose/approve/reject/apply), customer find-and-book |
+| `Controllers/PlatformAuthController`, `Controllers/PlatformController` | Owner-only platform console (`/api/platform/*`): password + TOTP sign-in bound to revocable server sessions, cross-tenant overview/tenants/users/audit, step-up-guarded suspend/deactivate/reset actions. See README "Platform console" |
+| `Controllers/ClinicReportsController` | Clinic operations dashboard: `overview` (KPIs + breakdowns, cross-filterable), `flow` (today's waiting room), `alerts`, `reminders` (see README "Clinic operations dashboard") |
+| `Controllers/RestaurantReportsController` | Restaurant operations dashboard: `overview` (sales / kitchen / labor / waste KPIs + breakdowns, cross-filterable), `live` (order feed, stations, roster), `alerts`, `inventory` (stock + waste log); recipe auto-decrement via `Services/RecipeConsumptionService` (see README "Restaurant operations dashboard") |
+| `Controllers/GymReportsController` | Gym operations dashboard: `overview` (attendance, memberships, revenue vs target, classes, equipment), `live` (occupancy, check-ins, classes today, trainers), `attendance` (searchable log), `alerts`. Memberships are `Subscription` rows (new DbSet + migration) (see README "Gym operations dashboard") |
+| `Controllers/SchoolReportsController` | School dashboard: `overview`, `today` (timetable + registers), `gradebook`, `students/{id}`, `alerts`; actions `attendance`, `grade`, `approve`. Attendance marks and scores live in `Booking.FormData` (see `Shared/SchoolConfig.cs`, README "School dashboard") |
 
 Auth: JWT bearer, roles `Admin | Manager | Staff | Customer`. Multi-tenant isolation
 enforced by `TenantId` scoping in every query (`ITenantScoped` convention).

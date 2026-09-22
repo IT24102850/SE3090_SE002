@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Modal from '../../shared/components/Modal';
+import ConfirmDialog from '../../shared/components/ConfirmDialog';
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
 import { useCreateResourceMutation, useGetStaffUsersQuery, useUpdateResourceMutation } from '../../api/bookingApi';
 import { RESOURCE_CATEGORIES, type Resource, type ResourceCategory } from './types';
@@ -61,10 +62,12 @@ export default function ResourceFormModal({
   tenantId,
   resource,
   onClose,
+  onSaved,
 }: {
   tenantId: string;
   resource?: Resource | null;
   onClose: () => void;
+  onSaved?: (resource: Resource) => void;
 }) {
   const { show } = useToast();
   const [createResource, { isLoading: creating }] = useCreateResourceMutation();
@@ -86,12 +89,18 @@ export default function ResourceFormModal({
   const [includes, setIncludes] = useState(initialAttrs.includes);
   const [otherAttrs, setOtherAttrs] = useState(initialAttrs.rest);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const isLoading = creating || updating;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setConfirmOpen(true);
+  };
+
+  const saveResource = async () => {
+    setConfirmOpen(false);
     let customAttributes: string | undefined;
     try {
       customAttributes = buildCustomAttributes(rating, adultPrice, childPrice, includes, otherAttrs);
@@ -101,7 +110,7 @@ export default function ResourceFormModal({
     }
     try {
       if (resource) {
-        await updateResource({
+        const updated = await updateResource({
           id: resource.id,
           body: {
             name,
@@ -115,8 +124,9 @@ export default function ResourceFormModal({
           },
         }).unwrap();
         show('Resource updated.', 'success');
+        onSaved?.(updated);
       } else {
-        await createResource({
+        const created = await createResource({
           tenantId,
           name,
           code: code || undefined,
@@ -129,6 +139,7 @@ export default function ResourceFormModal({
           customAttributes,
         }).unwrap();
         show('Resource created.', 'success');
+        onSaved?.(created);
       }
       onClose();
     } catch (err) {
@@ -201,9 +212,9 @@ export default function ResourceFormModal({
             <textarea className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
 
-          <div className="field field-full" style={{ borderTop: '1px solid var(--border, #e5e7eb)', paddingTop: 12, marginTop: 4 }}>
-            <label style={{ fontWeight: 600 }}>Additional details</label>
-            <p style={{ fontSize: 12, opacity: 0.7, margin: '2px 0 8px' }}>
+          <div className="field field-full form-section-intro">
+            <label>Additional details</label>
+            <p>
               Optional - rating, per-person pricing, and what's included. Useful for tourism, restaurant, and other
               businesses where a single hourly rate doesn't describe the offer.
             </p>
@@ -242,6 +253,15 @@ export default function ResourceFormModal({
           </div>
         </div>
       </form>
+      {confirmOpen && (
+        <ConfirmDialog
+          title={resource ? 'Save resource changes?' : 'Create this resource?'}
+          message={resource ? `Update "${name}" in the database now?` : `Add "${name}" to your database resources?`}
+          confirmLabel={resource ? 'Save changes' : 'Create resource'}
+          onConfirm={() => { void saveResource(); }}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
     </Modal>
   );
 }
