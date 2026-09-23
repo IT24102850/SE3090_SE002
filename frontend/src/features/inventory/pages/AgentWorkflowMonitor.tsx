@@ -126,12 +126,7 @@ export function AgentWorkflowMonitorPage() {
     }
   }
 
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
-  const [, setTotal] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [actionFilter, setActionFilter] = useState<string | null>(null);
-  const [tenantFilter, setTenantFilter] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const prevIdsRef = useRef<string[]>([]);
@@ -141,8 +136,8 @@ export function AgentWorkflowMonitorPage() {
     setLoading(true);
     try {
       if (!user?.tenantId) throw new Error('Your tenant could not be identified.');
-      const params = new URLSearchParams({ tenantId: tenantFilter || user.tenantId });
-      if (statusFilter) params.set('status', statusFilter === 'pending' ? 'AwaitingApproval' : statusFilter);
+      const params = new URLSearchParams({ tenantId: user.tenantId });
+      if (statusFilter) params.set('status', ({ pending: 'AwaitingApproval', completed: 'Completed', approved: 'Approved', rejected: 'Rejected', blocked: 'Blocked' } as Record<string, string>)[statusFilter] ?? statusFilter);
       const resp = await fetch(`${apiBaseUrl}/agent/workflow?${params.toString()}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
@@ -168,7 +163,6 @@ export function AgentWorkflowMonitorPage() {
         }));
       setLoadError('');
       setItems(data);
-      setTotal(data.length);
       setLastUpdated(new Date());
 
       // detect new ids for entry animation
@@ -179,7 +173,7 @@ export function AgentWorkflowMonitorPage() {
       prevIdsRef.current = nowIds;
     } catch (err) {
       console.error(err);
-      setLoadError('Live workflow data could not be loaded. Check the agent service connection and try again.');
+      setLoadError('Workflow history could not be loaded. Check your connection and access, then try again.');
     } finally {
       setLoading(false);
     }
@@ -190,7 +184,7 @@ export function AgentWorkflowMonitorPage() {
     const id = setInterval(fetchItems, 5000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, statusFilter, actionFilter, tenantFilter, search, token, user?.tenantId]);
+  }, [statusFilter, search, token, user?.tenantId]);
 
   async function approve(id: string) {
     try {
@@ -242,15 +236,15 @@ export function AgentWorkflowMonitorPage() {
         <div className="workflow-hero-copy">
           <p className="eyebrow">AUTOMATION / WORKFLOWS</p>
           <h1>Agent Workflow Monitor</h1>
-          <p className="page-sub">Review AI recommendations, understand the evidence behind each decision, and safely approve the next action.</p>
+          <p className="page-sub">Review customer booking requests and staff schedule proposals saved by the backend. This page shows workflow history; the Gemini agent service runs separately.</p>
           <div className="workflow-hero-tags">
             <span>✦ AI-assisted</span><span>◉ Live updates</span><span>✓ Human controlled</span>
           </div>
         </div>
         <div className="workflow-hero-orbit" aria-hidden="true"><span>✦</span><i /><b /></div>
         <div className="page-actions workflow-filters">
-          <input className="filter-select" placeholder="Search..." value={search} onChange={(e)=>{ setSearch(e.target.value); setPage(1); }} />
-          <select className="filter-select" value={statusFilter ?? ''} onChange={(e)=>{ setStatusFilter(e.target.value || null); setPage(1); }}>
+          <input className="filter-select" placeholder="Search..." value={search} onChange={(e)=>setSearch(e.target.value)} />
+          <select className="filter-select" value={statusFilter ?? ''} onChange={(e)=>setStatusFilter(e.target.value || null)}>
             <option value="">All status</option>
             <option value="pending">pending</option>
             <option value="blocked">blocked</option>
@@ -258,13 +252,6 @@ export function AgentWorkflowMonitorPage() {
             <option value="approved">approved</option>
             <option value="rejected">rejected</option>
           </select>
-          <select className="filter-select" value={actionFilter ?? ''} onChange={(e)=>{ setActionFilter(e.target.value || null); setPage(1); }}>
-            <option value="">All actions</option>
-            <option value="generate_purchase_order">generate_purchase_order</option>
-            <option value="predict_demand">predict_demand</option>
-            <option value="send_notification">send_notification</option>
-          </select>
-          <input className="filter-select" placeholder="Tenant ID" value={tenantFilter ?? ''} onChange={(e)=>{ setTenantFilter(e.target.value || null); setPage(1); }} />
           <button className="btn btn-secondary" onClick={() => fetchItems()}>Refresh</button>
         </div>
       </header>
@@ -307,7 +294,7 @@ export function AgentWorkflowMonitorPage() {
               <div className="workflow-empty-content">
                 <div className="workflow-empty-icon">✦</div>
                 <h3>No workflows match these filters</h3>
-                <p className="hint">{search || statusFilter || actionFilter ? 'Try clearing a filter or refreshing the monitor.' : 'Start with the AI Planner to create a schedule proposal for this workspace.'}</p>
+                <p className="hint">{search || statusFilter ? 'Try clearing a filter or refreshing the monitor.' : 'Start with the AI Planner to create a schedule proposal for this workspace.'}</p>
                 <Link className="btn btn-primary" to="/planner">Open AI Planner</Link>
               </div>
             </div>

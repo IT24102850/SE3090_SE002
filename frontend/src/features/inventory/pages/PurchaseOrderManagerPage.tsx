@@ -360,6 +360,7 @@ function CreatePoModal({
   defaultNumber,
   defaultBranchId,
   initialInventoryItemId,
+  initialQuantity,
   creating,
 }: {
   onClose: () => void;
@@ -375,6 +376,7 @@ function CreatePoModal({
   defaultNumber: string;
   defaultBranchId?: string;
   initialInventoryItemId?: string;
+  initialQuantity?: number;
   creating: boolean;
 }) {
   const [branchId, setBranchId] = useState(defaultBranchId && branches.some((branch) => branch.id === defaultBranchId)
@@ -390,7 +392,7 @@ function CreatePoModal({
     {
       inventoryItemId: initialItem?.id ?? '',
       description: initialItem?.name ?? '',
-      quantity: 1,
+      quantity: initialQuantity && initialQuantity > 0 ? initialQuantity : 1,
       unitPrice: initialItem?.unitCost ?? 0,
     },
   ]);
@@ -667,6 +669,8 @@ export function PurchaseOrderManagerPage() {
   const [page, setPage] = useState(1);
   const reorderItemId = searchParams.get('reorderItemId') ?? undefined;
   const reorderBranchId = searchParams.get('branchId') ?? undefined;
+  const requestedQuantity = Number(searchParams.get('quantity'));
+  const reorderQuantity = Number.isFinite(requestedQuantity) && requestedQuantity > 0 ? requestedQuantity : undefined;
 
   const performer = user?.fullName ?? 'Staff';
 
@@ -1045,6 +1049,7 @@ export function PurchaseOrderManagerPage() {
           defaultNumber={nextPoNumber(orders)}
           defaultBranchId={reorderBranchId ?? user?.branchId}
           initialInventoryItemId={reorderItemId}
+          initialQuantity={reorderQuantity}
           creating={creating}
         />
       )}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { QRCodeSVG } from 'qrcode.react';
 import { RootState } from '../../../store/store';
 import { Badge, type BadgeTone } from '../ui/Badge';
 import { useToast } from '../ui/ToastContext';
@@ -226,6 +227,7 @@ export function InventoryManagerPage() {
   const [status, setStatus] = useState<StatusFilter>(statusFilters[0]);
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; sku: string } | null>(null);
+  const [qrItem, setQrItem] = useState<StockRow | null>(null);
   const [deleteSku, setDeleteSku] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -482,6 +484,7 @@ export function InventoryManagerPage() {
                       <td><Badge tone={statusTone[rowStatus]}>{rowStatus}</Badge></td>
                       <td>
                         <div className="row-actions">
+                          <button type="button" className="row-action" aria-label={`Show QR for ${row.item}`} title="Show item QR" onClick={() => setQrItem(row)}><QRCodeSVG value={row.sku} size={18} level="M" bgColor="#fff" fgColor="#111" /></button>
                           <button type="button" className="row-action" aria-label={`Edit ${row.item}`} onClick={() => setModal({ mode: 'edit', sku: row.sku })}>✎</button>
                           <button type="button" className="row-action row-action-danger" aria-label={`Delete ${row.item}`} onClick={() => setDeleteSku(row.sku)}>🗑</button>
                         </div>
@@ -571,6 +574,41 @@ export function InventoryManagerPage() {
           onSave={handleSave}
           saving={saving}
         />
+      )}
+
+      {qrItem && (
+        <div className="modal-overlay" onClick={() => setQrItem(null)} role="presentation">
+          <div className="modal modal-sm" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="inventory-qr-title">
+            <div className="modal-head">
+              <h2 id="inventory-qr-title">Item QR label</h2>
+              <button type="button" className="modal-close" onClick={() => setQrItem(null)} aria-label="Close">×</button>
+            </div>
+            <div className="modal-body" style={{ textAlign: 'center' }}>
+              <p className="cell-title">{qrItem.item}</p>
+              <div style={{ display: 'inline-block', padding: 16, background: '#fff', borderRadius: 12 }}>
+                <QRCodeSVG value={qrItem.sku} size={240} level="M" title={`QR code for SKU ${qrItem.sku}`} />
+              </div>
+              <p className="cell-title" style={{ marginTop: 12 }}><code>{qrItem.sku}</code></p>
+              <p className="modal-hint">This QR encodes only the item SKU. Scan it from Stock Movements or Physical Stock Count.</p>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setQrItem(null)}>Close</button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (!navigator.clipboard) {
+                      notify('Clipboard access is not available in this browser.', 'warning');
+                      return;
+                    }
+                    void navigator.clipboard.writeText(qrItem.sku)
+                      .then(() => notify('SKU copied.', 'success'))
+                      .catch(() => notify('Could not copy the SKU in this browser.', 'warning'));
+                  }}
+                >Copy SKU</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {deleteSku && (

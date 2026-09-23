@@ -30,20 +30,30 @@
 .inventory-scope .page-banner { margin: -0.5rem 0 1rem; padding: .65rem .85rem; color: var(--color-warning); font-size: .82rem; background: var(--color-warning-soft); border: 1px solid transparent; border-radius: .65rem; }
 
 /* Badges (inventory's own tone set, distinct from tokens.css .badge) */
-.inventory-scope .badge { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .55rem; font-size: .72rem; font-weight: 700; border-radius: 999px; white-space: nowrap; transition: transform .16s ease; }
+.inventory-scope .badge { position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .55rem; font-size: .72rem; font-weight: 700; border-radius: 999px; white-space: nowrap; transition: transform .16s ease, box-shadow .2s ease; animation: inventory-badge-glow 2.4s ease-in-out infinite; isolation: isolate; }
 .inventory-scope .badge::before { content: ''; width: .38rem; height: .38rem; border-radius: 50%; background: currentColor; }
+.inventory-scope .badge::after { content: ''; position: absolute; inset: 0 auto 0 -45%; width: 34%; pointer-events: none; background: linear-gradient(105deg, transparent, rgba(255,255,255,.42), transparent); transform: skewX(-18deg); animation: inventory-badge-shimmer 2.8s ease-in-out infinite; }
+.inventory-scope .badge > * { position: relative; z-index: 1; }
+@keyframes inventory-badge-glow { 0%, 100% { box-shadow: 0 0 0 transparent; } 50% { box-shadow: 0 0 14px color-mix(in srgb, currentColor 28%, transparent); } }
+@keyframes inventory-badge-shimmer { 0%, 35% { left: -45%; } 75%, 100% { left: 125%; } }
+.inventory-scope .badge:hover { transform: translateY(-1px) scale(1.03); }
+@media (prefers-reduced-motion: reduce) {
+  .inventory-scope .badge { animation: none; }
+  .inventory-scope .badge::after { animation: none; }
+}
 .inventory-scope .badge-green { color: var(--color-good); background: var(--color-good-soft); }
 .inventory-scope .badge-amber { color: var(--color-warning); background: var(--color-warning-soft); }
 .inventory-scope .badge-red { color: var(--color-critical); background: var(--color-critical-soft); }
 .inventory-scope .badge-blue { color: var(--color-primary); background: var(--color-primary-soft); }
+.inventory-scope .badge-violet { color: #7c3aed; background: #ede9fe; }
 .inventory-scope .badge-accent { color: var(--color-accent-high); background: var(--color-accent-soft); }
 .inventory-scope .badge-slate { color: var(--color-text-secondary); background: var(--color-neutral-soft); }
 
 /* KPI cards */
 .inventory-scope .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem; }
-.inventory-scope .kpi-card { display: flex; flex-direction: column; gap: .45rem; padding: 1.1rem 1.2rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 1rem; box-shadow: var(--shadow-sm); }
-.inventory-scope .kpi-top { display: flex; gap: .5rem; align-items: center; justify-content: space-between; }
-.inventory-scope .kpi-label { color: var(--color-text-secondary); font-size: .82rem; font-weight: 600; }
+.inventory-scope .kpi-card { display: flex; flex-direction: column; gap: .45rem; padding: 1.1rem 1.2rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 1rem; box-shadow: var(--shadow-sm); overflow: hidden; }
+.inventory-scope .kpi-top { display: flex; gap: .4rem .5rem; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; min-width: 0; }
+.inventory-scope .kpi-label { color: var(--color-text-secondary); font-size: .82rem; font-weight: 600; min-width: 0; flex: 1 1 auto; }
 .inventory-scope .kpi-value { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; }
 .inventory-scope .sparkline { width: 100%; height: 34px; margin-top: auto; }
 .inventory-scope .analytics-kpi { min-height: 112px; }
@@ -509,3 +519,131 @@
 .inventory-scope .toast-region .toast-info { background: linear-gradient(135deg, #1552a0, #2563eb) !important; color: #fff !important; }
 .inventory-scope .toast-region .toast-progress { height: 3px; opacity: .65; }
 @keyframes inventory-toast-enter { from { opacity: 0; transform: translate3d(30px, 10px, 0) scale(.95); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
+
+/* StockSense AI: focused inventory-health workspace */
+.inventory-scope .stocksense-page { display: grid; gap: 1.2rem; }
+.inventory-scope .stocksense-hero {
+  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 2rem;
+  min-height: 218px; margin: 0; padding: clamp(1.5rem, 4vw, 2.6rem); overflow: hidden;
+  color: #fff; border: 1px solid color-mix(in srgb, var(--color-primary) 38%, transparent); border-radius: 1.5rem;
+  background: radial-gradient(circle at 78% 12%, rgba(34,211,238,.32), transparent 28%),
+    radial-gradient(circle at 96% 100%, rgba(129,140,248,.42), transparent 35%), var(--gradient-hero);
+  box-shadow: 0 24px 60px -34px rgba(37,99,235,.65);
+}
+.inventory-scope .stocksense-hero::before { content: ''; position: absolute; right: 9%; top: -82px; width: 290px; height: 290px; border: 1px solid rgba(255,255,255,.12); border-radius: 50%; box-shadow: 0 0 0 34px rgba(255,255,255,.035), 0 0 0 70px rgba(255,255,255,.025); }
+.inventory-scope .stocksense-hero::after { content: ''; position: absolute; right: 15%; bottom: -95px; width: 190px; height: 190px; border-radius: 50%; background: rgba(34,211,238,.14); filter: blur(5px); }
+.inventory-scope .stocksense-hero-copy { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: 1rem; max-width: 720px; }
+.inventory-scope .stocksense-brandmark { display: grid; place-items: center; flex: 0 0 3.55rem; width: 3.55rem; height: 3.55rem; color: #fff; border: 1px solid rgba(255,255,255,.32); border-radius: 1.1rem; background: linear-gradient(145deg, rgba(255,255,255,.2), rgba(255,255,255,.07)); box-shadow: inset 0 1px 0 rgba(255,255,255,.24), 0 9px 24px rgba(3,10,30,.2); backdrop-filter: blur(10px); }
+.inventory-scope .stocksense-brandmark svg { overflow: visible; filter: drop-shadow(0 2px 6px rgba(103,232,249,.45)); }
+.inventory-scope .stocksense-hero .eyebrow { color: #a5f3fc; }
+.inventory-scope .stocksense-hero h1 { margin: .28rem 0 .45rem; color: #fff; background: none; -webkit-text-fill-color: #fff; font-size: clamp(2rem, 4vw, 2.85rem); letter-spacing: -.045em; }
+.inventory-scope .stocksense-hero .page-sub { max-width: 610px; color: rgba(255,255,255,.78); font-size: .98rem; line-height: 1.55; }
+.inventory-scope .stocksense-capabilities { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.1rem; }
+.inventory-scope .stocksense-capabilities span { padding: .36rem .62rem; color: rgba(255,255,255,.92); font-size: .72rem; font-weight: 650; border: 1px solid rgba(255,255,255,.19); border-radius: 999px; background: rgba(255,255,255,.09); backdrop-filter: blur(8px); }
+.inventory-scope .stocksense-hero-actions { position: relative; z-index: 2; display: grid; justify-items: end; flex: 0 0 auto; }
+.inventory-scope .stocksense-hero .live-indicator { color: #14213d; font-size: .76rem; font-weight: 750; background: rgba(255,255,255,.96); border-color: rgba(255,255,255,.76); box-shadow: 0 8px 22px rgba(3,10,30,.18); }
+.inventory-scope .stocksense-hero .live-indicator span { background: #138a4a; box-shadow: 0 0 0 4px rgba(19,138,74,.15); }
+.inventory-scope .stocksense-hero .btn-primary { padding: .8rem 1.05rem; color: #0a1a3a; font-weight: 800; border: 1px solid rgba(255,255,255,.3); border-radius: .8rem; background: linear-gradient(120deg, #a5f3fc, #bfdbfe 58%, #ddd6fe); box-shadow: 0 12px 28px -14px rgba(0,0,0,.7); }
+.inventory-scope .stocksense-hero .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 18px 30px -15px rgba(0,0,0,.8); }
+.inventory-scope .stocksense-hero .btn-secondary { color: #fff; border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.09); }
+.inventory-scope .stocksense-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .9rem; margin: 0; }
+.inventory-scope .stocksense-kpi { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-content: center; gap: .2rem .85rem; min-width: 0; min-height: 116px; padding: 1.1rem 1.15rem; overflow: hidden; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 1.1rem; box-shadow: var(--shadow-sm); transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.inventory-scope .stocksense-kpi:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--color-primary) 34%, var(--color-border)); box-shadow: var(--shadow-md); }
+.inventory-scope .stocksense-kpi::after { content: ''; position: absolute; top: -30px; right: -30px; width: 94px; height: 94px; border-radius: 50%; background: var(--color-primary-soft); }
+.inventory-scope .stocksense-kpi .metric-icon-bubble { grid-row: 1 / 3; align-self: center; width: 2.65rem; height: 2.65rem; margin: 0; border-radius: .85rem; }
+.inventory-scope .stocksense-kpi .stat-value { position: relative; z-index: 1; overflow: hidden; font-size: clamp(1.25rem, 2.2vw, 1.75rem); line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-scope .stocksense-kpi .stat-label { position: relative; z-index: 1; color: var(--color-text-muted); font-size: .72rem; font-weight: 700; line-height: 1.35; }
+.inventory-scope .stocksense-kpi-out::after { background: var(--color-critical-soft); }
+.inventory-scope .stocksense-kpi-reorder::after { background: var(--color-warning-soft); }
+.inventory-scope .stocksense-kpi-value::after { background: var(--color-good-soft); }
+.inventory-scope .stocksense-inventory-panel, .inventory-scope .stocksense-ai-panel { border-radius: 1.25rem; box-shadow: var(--shadow-md); }
+.inventory-scope .stocksense-inventory-panel .panel-head { padding: 1.25rem 1.4rem; }
+.inventory-scope .stocksense-inventory-panel .toolbar { padding: 1rem 1.2rem; }
+.inventory-scope .stocksense-ai-panel { margin-top: .2rem; border-color: color-mix(in srgb, var(--color-primary) 24%, var(--color-border)); background: linear-gradient(145deg, var(--color-surface), color-mix(in srgb, var(--color-primary-soft) 38%, var(--color-surface))); }
+.inventory-scope .stocksense-ai-head { align-items: center; padding: 1.25rem 1.4rem; background: linear-gradient(105deg, var(--color-primary-soft), var(--color-accent-soft) 70%, transparent); }
+.inventory-scope .stocksense-ai-title { display: flex; align-items: center; gap: .9rem; min-width: 0; }
+.inventory-scope .stocksense-ai-title h2 { margin: .18rem 0 .2rem; font-size: 1.25rem; }
+.inventory-scope .stocksense-ai-orb { display: grid; place-items: center; flex: 0 0 3rem; width: 3rem; height: 3rem; color: #fff; font-size: 1.3rem; border-radius: 1rem; background: var(--gradient-brand); box-shadow: 0 8px 20px -10px var(--color-primary); }
+.inventory-scope .stocksense-ai-body { padding: 1.2rem 1.4rem 1.4rem; }
+.inventory-scope .stocksense-ai-body > .cell-sub:first-child { margin-bottom: 1rem; font-size: .82rem; }
+.inventory-scope .stocksense-ai-body .page-notice { margin: .5rem 0; }
+.inventory-scope .stocksense-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin: 1.4rem 0 .8rem; }
+.inventory-scope .stocksense-section-heading h3 { margin: .2rem 0 0; font-size: 1.08rem; }
+.inventory-scope .stocksense-section-heading > span { padding: .35rem .65rem; color: var(--color-primary); font-size: .73rem; font-weight: 750; border-radius: 999px; background: var(--color-primary-soft); }
+.inventory-scope .stocksense-insights-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+.inventory-scope .stocksense-insight-card { position: relative; min-width: 0; padding: 1.05rem 1.1rem 1rem 1.25rem; overflow: hidden; border: 1px solid var(--color-border); border-radius: .95rem; background: linear-gradient(145deg, var(--color-surface), color-mix(in srgb, var(--color-primary-soft) 20%, var(--color-surface))); box-shadow: var(--shadow-sm); transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; animation: stocksense-insight-enter .45s cubic-bezier(.2,.75,.2,1) both; }
+.inventory-scope .stocksense-insight-card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border)); box-shadow: var(--shadow-lg); }
+.inventory-scope .stocksense-insight-top { display: flex; gap: .55rem; align-items: center; margin-bottom: .75rem; }
+.inventory-scope .stocksense-insight-icon { display: grid; place-items: center; width: 2.15rem; height: 2.15rem; color: var(--color-primary); border: 1px solid var(--color-primary-soft); border-radius: .7rem; background: var(--color-primary-soft); transition: transform .22s ease, box-shadow .22s ease; }
+.inventory-scope .stocksense-insight-card:hover .stocksense-insight-icon { transform: rotate(-6deg) scale(1.08); box-shadow: 0 5px 16px var(--color-primary-soft); }
+.inventory-scope .stocksense-insight-data_quality .stocksense-insight-icon { color: var(--color-warning); background: var(--color-warning-soft); border-color: var(--color-warning-soft); }
+.inventory-scope .stocksense-insight-movement .stocksense-insight-icon { color: var(--color-critical); background: var(--color-critical-soft); border-color: var(--color-critical-soft); }
+.inventory-scope .stocksense-insight-coverage .stocksense-insight-icon { color: var(--color-accent-high); background: var(--color-accent-soft); border-color: var(--color-accent-soft); }
+.inventory-scope .stocksense-insight-cost .stocksense-insight-icon { color: var(--color-good); background: var(--color-good-soft); border-color: var(--color-good-soft); }
+.inventory-scope .stocksense-insight-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--color-primary); }
+.inventory-scope .stocksense-insight-data_quality::before { background: var(--color-warning); }
+.inventory-scope .stocksense-insight-movement::before { background: var(--color-critical); }
+.inventory-scope .stocksense-insight-coverage::before { background: var(--color-accent-high); }
+.inventory-scope .stocksense-insight-cost::before { background: var(--color-good); }
+.inventory-scope .stocksense-insight-category { margin: 0; color: var(--color-primary); font-size: .66rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.inventory-scope .stocksense-insight-card h3 { margin: 0 0 .42rem; font-size: .94rem; }
+.inventory-scope .stocksense-insight-card .cell-sub { white-space: normal; line-height: 1.5; }
+.inventory-scope .stocksense-item-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .7rem; }
+.inventory-scope .stocksense-item-chips span { max-width: 100%; overflow: hidden; padding: .27rem .5rem; color: var(--color-text-secondary); font-size: .68rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-surface-muted); }
+@keyframes stocksense-insight-enter { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.inventory-scope .stocksense-ai-body > .table-wrap { margin-top: .25rem; overflow: auto; border: 1px solid var(--color-border); border-radius: .9rem; background: var(--color-surface); }
+.inventory-scope .stocksense-inventory-panel .data-table tbody tr:hover { background: var(--color-primary-soft); }
+.inventory-scope .stocksense-page .ai-disclaimer { margin: 0; padding: .9rem 1rem; border: 1px solid var(--color-border); border-radius: .8rem; background: var(--color-surface); }
+.inventory-scope .stocksense-progress-panel { position: relative; display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 1.15rem; align-items: center; min-height: 150px; padding: 1.35rem 1.5rem 1.55rem; overflow: hidden; border: 1px solid color-mix(in srgb, var(--color-primary) 32%, var(--color-border)); border-radius: 1.15rem; background: radial-gradient(circle at 5% 50%, var(--color-primary-soft), transparent 28%), linear-gradient(115deg, var(--color-surface), color-mix(in srgb, var(--color-accent-soft) 48%, var(--color-surface))); box-shadow: var(--shadow-md); animation: stocksense-progress-enter .35s ease-out both; }
+.inventory-scope .stocksense-progress-orbit { position: relative; display: grid; place-items: center; width: 76px; height: 76px; color: var(--color-primary); border-radius: 50%; background: var(--color-surface); box-shadow: 0 0 0 8px var(--color-primary-soft), 0 8px 24px color-mix(in srgb, var(--color-primary) 18%, transparent); }
+.inventory-scope .stocksense-progress-orbit > svg { position: relative; z-index: 1; filter: drop-shadow(0 3px 8px color-mix(in srgb, var(--color-primary) 28%, transparent)); }
+.inventory-scope .stocksense-progress-ring { position: absolute; inset: -9px; border: 2px solid transparent; border-top-color: var(--color-primary); border-right-color: color-mix(in srgb, var(--color-accent-high) 72%, transparent); border-radius: 50%; animation: stocksense-spin 10s linear infinite; }
+.inventory-scope .stocksense-orbit-dot { position: absolute; top: -9px; right: 10px; width: 10px; height: 10px; border: 2px solid var(--color-surface); border-radius: 50%; background: var(--color-accent-high); box-shadow: 0 0 0 4px var(--color-accent-soft); animation: stocksense-dot-pulse 1.6s ease-in-out infinite; }
+.inventory-scope .stocksense-progress-copy { min-width: 0; }
+.inventory-scope .stocksense-progress-copy h2 { margin: .22rem 0 .3rem; font-size: 1.08rem; letter-spacing: -.02em; }
+.inventory-scope .stocksense-progress-stage { min-height: 1.25rem; margin: 0; color: var(--color-primary); font-size: .88rem; font-weight: 750; animation: stocksense-stage-in .35s ease both; }
+.inventory-scope .stocksense-progress-note { margin: .4rem 0 0; color: var(--color-text-muted); font-size: .74rem; }
+.inventory-scope .stocksense-stage-pips { display: flex; gap: .28rem; margin-top: .6rem; }
+.inventory-scope .stocksense-stage-pips span { width: 1rem; height: .23rem; border-radius: 1rem; background: var(--color-border-strong); transition: width .25s ease, background .25s ease; }
+.inventory-scope .stocksense-stage-pips span.done { background: var(--color-good); }
+.inventory-scope .stocksense-stage-pips span.active { width: 2rem; background: var(--gradient-brand); }
+.inventory-scope .stocksense-progress-meter { position: absolute; right: 0; bottom: 0; left: 0; height: 4px; overflow: hidden; background: var(--color-primary-soft); }
+.inventory-scope .stocksense-progress-meter span { display: block; width: 38%; height: 100%; border-radius: 999px; background: var(--gradient-brand); box-shadow: 0 0 14px var(--color-primary); animation: stocksense-meter 11s ease-in-out infinite; }
+@keyframes stocksense-spin { to { transform: rotate(360deg); } }
+@keyframes stocksense-dot-pulse { 50% { transform: scale(.72); opacity: .68; } }
+@keyframes stocksense-stage-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes stocksense-progress-enter { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes stocksense-meter { 0% { transform: translateX(-110%); } 50% { transform: translateX(125%); } 100% { transform: translateX(290%); } }
+@media (max-width: 980px) {
+  .inventory-scope .stocksense-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-scope .stocksense-hero { align-items: flex-start; }
+}
+@media (max-width: 680px) {
+  .inventory-scope .stocksense-hero { display: grid; gap: 1.4rem; padding: 1.35rem; border-radius: 1.1rem; }
+  .inventory-scope .stocksense-hero-copy { gap: .7rem; }
+  .inventory-scope .stocksense-brandmark { flex-basis: 2.65rem; width: 2.65rem; height: 2.65rem; }
+  .inventory-scope .stocksense-hero-actions { justify-items: stretch; grid-template-columns: 1fr 1fr; }
+  .inventory-scope .stocksense-hero-actions .live-indicator { grid-column: 1 / -1; }
+  .inventory-scope .stocksense-hero-actions .stocksense-analyze-button { grid-column: 1 / -1; }
+  .inventory-scope .stocksense-kpis { gap: .6rem; }
+  .inventory-scope .stocksense-kpi { min-height: 94px; grid-template-columns: 1fr; gap: .4rem; padding: .85rem; }
+  .inventory-scope .stocksense-kpi .metric-icon-bubble { display: none; }
+  .inventory-scope .stocksense-kpi .stat-value { font-size: 1.25rem; }
+  .inventory-scope .stocksense-kpi .stat-label { font-size: .67rem; }
+  .inventory-scope .stocksense-insights-grid { grid-template-columns: 1fr; }
+  .inventory-scope .stocksense-ai-head { align-items: flex-start; flex-direction: column; }
+  .inventory-scope .stocksense-ai-body { padding: 1rem; }
+  .inventory-scope .stocksense-section-heading { align-items: flex-start; }
+  .inventory-scope .stocksense-progress-panel { grid-template-columns: 60px minmax(0, 1fr); gap: .85rem; padding: 1rem 1rem 1.15rem; }
+  .inventory-scope .stocksense-progress-orbit { width: 48px; height: 48px; box-shadow: 0 0 0 5px var(--color-primary-soft), 0 6px 18px color-mix(in srgb, var(--color-primary) 18%, transparent); }
+  .inventory-scope .stocksense-progress-orbit > svg { width: 34px; height: 34px; }
+  .inventory-scope .stocksense-progress-copy h2 { font-size: .95rem; }
+  .inventory-scope .stocksense-progress-note { font-size: .68rem; line-height: 1.4; }
+  .inventory-scope .stocksense-progress-stage { font-size: .78rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inventory-scope .stocksense-kpi, .inventory-scope .stocksense-insight-card, .inventory-scope .stocksense-insight-icon { transition: none; }
+  .inventory-scope .stocksense-insight-card { animation: none; }
+  .inventory-scope .stocksense-progress-panel, .inventory-scope .stocksense-progress-ring, .inventory-scope .stocksense-orbit-dot, .inventory-scope .stocksense-progress-meter span, .inventory-scope .stocksense-progress-stage { animation: none; }
+  .inventory-scope .stocksense-kpi:hover, .inventory-scope .stocksense-insight-card:hover { transform: none; }
+}
