@@ -75,6 +75,7 @@ public class AppDbContext : DbContext
     public DbSet<FormSubmission> FormSubmissions { get; set; } = null!;
     public DbSet<CommissionRule> CommissionRules { get; set; } = null!;
     public DbSet<PaymentGateway> PaymentGateways { get; set; } = null!;
+    public DbSet<InvoiceTemplate> InvoiceTemplates { get; set; } = null!;
 
     private Guid? CurrentTenantId => _tenantContext.CurrentTenantId;
 
@@ -578,6 +579,24 @@ public class AppDbContext : DbContext
             entity.Property(i => i.Currency)
                 .HasMaxLength(3);
 
+            entity.Property(i => i.DiscountCode)
+                .HasMaxLength(50);
+
+            entity.Property(i => i.Notes)
+                .HasMaxLength(2000);
+
+            entity.Property(i => i.ScheduleGroup)
+                .HasMaxLength(50);
+
+            entity.Property(i => i.ScheduleLabel)
+                .HasMaxLength(100);
+
+            entity.HasIndex(i => new { i.TenantId, i.DueDate });
+
+            entity.HasIndex(i => i.SubscriptionId);
+
+            entity.HasIndex(i => i.ScheduleGroup);
+
             entity.HasOne(i => i.Booking)
                 .WithMany()
                 .HasForeignKey(i => i.BookingId)
@@ -629,6 +648,17 @@ public class AppDbContext : DbContext
             entity.Property(p => p.TransactionRef)
                 .HasMaxLength(200);
 
+            entity.Property(p => p.Provider)
+                .HasMaxLength(30);
+
+            entity.Property(p => p.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue(PaymentStatuses.Succeeded)
+                .IsRequired();
+
+            entity.Property(p => p.PayerLabel)
+                .HasMaxLength(100);
+
             entity.HasOne(p => p.Invoice)
                 .WithMany(i => i.Payments)
                 .HasForeignKey(p => p.InvoiceId)
@@ -656,6 +686,12 @@ public class AppDbContext : DbContext
             entity.Property(c => c.PolicyNumber)
                 .HasMaxLength(100)
                 .IsRequired();
+
+            entity.Property(c => c.Notes)
+                .HasMaxLength(2000);
+
+            entity.Property(c => c.DocumentsJson)
+                .HasColumnType("jsonb");
 
             entity.Property(c => c.Status)
                 .HasMaxLength(30);
@@ -730,6 +766,15 @@ public class AppDbContext : DbContext
             entity.Property(c => c.FixedAmount)
                 .HasPrecision(18, 2);
 
+            entity.Property(c => c.MinAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(c => c.MaxAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(c => c.Role)
+                .HasMaxLength(50);
+
             entity.Property(c => c.Description)
                 .HasMaxLength(1000);
         });
@@ -757,6 +802,38 @@ public class AppDbContext : DbContext
 
             entity.Property(p => p.ConfigurationJson)
                 .HasColumnType("jsonb");
+
+            entity.Property(p => p.PublicKey)
+                .HasMaxLength(300);
+
+            entity.Property(p => p.WebhookUrl)
+                .HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<InvoiceTemplate>(entity =>
+        {
+            entity.ToTable("invoice_templates");
+
+            entity.HasIndex(t => new { t.TenantId, t.Name })
+                .IsUnique();
+
+            entity.Property(t => t.Name)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(t => t.LayoutJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+
+            entity.Property(t => t.AccentColor)
+                .HasMaxLength(20)
+                .IsRequired();
+
+            entity.Property(t => t.HeaderText)
+                .HasMaxLength(500);
+
+            entity.Property(t => t.FooterText)
+                .HasMaxLength(1000);
         });
 
     }
