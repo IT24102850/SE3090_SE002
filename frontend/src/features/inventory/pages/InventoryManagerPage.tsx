@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { QRCodeSVG } from 'qrcode.react';
 import { RootState } from '../../../store/store';
@@ -29,8 +29,6 @@ type StockRow = {
 type StockForm = Omit<StockRow, 'sku'>;
 
 const PAGE_SIZE = 5;
-
-type SupplierRow = { id: string; name: string };
 
 const categoryOptions = ['Office essentials', 'Technology', 'Provisions', 'Print & marketing', 'Other items'];
 const categories = ['All categories', ...categoryOptions];
@@ -218,7 +216,6 @@ export function InventoryManagerPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState<StockRow[]>([]);
-  const [supplierRows, setSupplierRows] = useState<SupplierRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -298,13 +295,6 @@ export function InventoryManagerPage() {
         reorder: Number(item.reorderLevel ?? 0),
         owner: item.branch ?? 'Inventory Admin',
       })));
-      const supplierResponse = await fetch('/api/purchase-orders/options', {
-        headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
-      });
-      if (supplierResponse.ok) {
-        const supplierData = await supplierResponse.json();
-        setSupplierRows(supplierData.suppliers ?? []);
-      }
     } catch (error) {
       console.error(error);
       setItems([]);
@@ -413,7 +403,7 @@ export function InventoryManagerPage() {
         <div className="inventory-manager-hero-copy">
           <p className="inventory-manager-eyebrow"><span aria-hidden="true">◆</span> INVENTORY CONTROL CENTER</p>
           <h1>Inventory manager</h1>
-          <p>One clear view of your stock, item health, and supplier network.</p>
+          <p>One clear view of your stock, item health, and inventory value.</p>
           <div className="inventory-manager-health" aria-live="polite">
             <span className="inventory-manager-health-dot" />
             {loading ? 'Updating live inventory…' : `${stats.items} items tracked`}
@@ -430,6 +420,7 @@ export function InventoryManagerPage() {
         <div className="page-actions">
           <button className="btn btn-secondary inventory-manager-refresh" type="button" onClick={() => void handleRefresh()} disabled={loading}><span aria-hidden="true">↻</span> {loading ? 'Refreshing…' : 'Refresh data'}</button>
           <button className="btn btn-secondary" type="button" onClick={() => notify('Import is ready for a CSV file. File selection will be available next.', 'warning')}><span aria-hidden="true">⇧</span> Import</button>
+          <Link className="btn btn-secondary inventory-manager-suppliers-link" to="/suppliers"><span aria-hidden="true">♧</span> Suppliers</Link>
           <button className="btn btn-primary inventory-manager-add" type="button" onClick={() => setModal({ mode: 'add' })}><span aria-hidden="true">＋</span> Add item</button>
         </div>
       </header>
@@ -455,7 +446,7 @@ export function InventoryManagerPage() {
         </div>
       </section>
 
-      <div className="inventory-layout">
+      <div className="inventory-layout inventory-manager-layout">
         <section className="panel inventory-panel inventory-manager-table-panel">
           <div className="inventory-manager-panel-heading">
             <div className="inventory-manager-panel-icon" aria-hidden="true"><Icon name="inventory" size={19} /></div>
@@ -557,29 +548,6 @@ export function InventoryManagerPage() {
           </div>
         </section>
 
-        <aside className="suppliers-panel">
-          <div className="panel-head">
-            <div>
-              <h2>Suppliers</h2>
-              <p>Active partners</p>
-            </div>
-          </div>
-          <ul className="supplier-list">
-            {supplierRows.map((supplier) => (
-              <li className="supplier" key={supplier.name}>
-                <div className="supplier-avatar">{supplier.name.charAt(0)}</div>
-                <div className="supplier-body">
-                  <p className="supplier-name">{supplier.name}</p>
-                  <p className="supplier-category">Active supplier</p>
-                  <div className="supplier-meta">
-                    <span className="supplier-outstanding">Managed in the live database</span>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {supplierRows.length === 0 && <p className="cell-sub">No active suppliers in the database.</p>}
-        </aside>
       </div>
 
       {modal && (

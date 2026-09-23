@@ -94,6 +94,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Inventory',
     items: [
       { path: '/inventory', label: 'Inventory Manager', icon: '📦', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/suppliers', label: 'Suppliers', icon: '🏭', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/stock-movements', label: 'Stock Movements', icon: '🔄', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/purchase-orders', label: 'Purchase Orders', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/low-stock-alerts', label: 'StockSense AI', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
