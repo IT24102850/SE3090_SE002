@@ -263,9 +263,10 @@ export function InventoryManagerPage() {
 
   const stats = useMemo(() => {
     const total = items.reduce((sum, row) => sum + row.qty, 0);
-    const low = items.filter((row) => deriveStatus(row.qty, row.reorder) !== 'In stock').length;
+    const low = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Low stock').length;
+    const out = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Out of stock').length;
     const value = items.reduce((sum, row) => sum + row.qty * row.price, 0);
-    return { items: items.length, total, low, value };
+    return { items: items.length, total, low, out, value };
   }, [items]);
 
   const editingItem = modal?.mode === 'edit' ? items.find((row) => row.sku === modal.sku) : undefined;
@@ -407,17 +408,29 @@ export function InventoryManagerPage() {
   const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
 
   return (
-    <div className="page">
-      <header className="page-head">
-        <div>
-          <p className="eyebrow">OPERATIONS / INVENTORY</p>
+    <div className="page inventory-manager-page">
+      <header className="inventory-manager-hero">
+        <div className="inventory-manager-hero-copy">
+          <p className="inventory-manager-eyebrow"><span aria-hidden="true">◆</span> INVENTORY CONTROL CENTER</p>
           <h1>Inventory manager</h1>
-          <p className="page-sub">Search items, monitor stock levels, and keep suppliers in check.</p>
+          <p>One clear view of your stock, item health, and supplier network.</p>
+          <div className="inventory-manager-health" aria-live="polite">
+            <span className="inventory-manager-health-dot" />
+            {loading ? 'Updating live inventory…' : `${stats.items} items tracked`}
+            <span className="inventory-manager-health-separator">·</span>
+            {stats.low + stats.out === 0 ? 'All stock levels look healthy' : `${stats.low + stats.out} items need attention`}
+          </div>
+        </div>
+        <div className="inventory-manager-hero-art" aria-hidden="true">
+          <span className="inventory-manager-orbit inventory-manager-orbit-one" />
+          <span className="inventory-manager-orbit inventory-manager-orbit-two" />
+          <span className="inventory-manager-cube">▦</span>
+          <span className="inventory-manager-art-label">STOCK<br />VISIBILITY</span>
         </div>
         <div className="page-actions">
-          <button className="btn btn-secondary" type="button" onClick={() => void handleRefresh()} disabled={loading}>Refresh</button>
-          <button className="btn btn-secondary" type="button" onClick={() => notify('Import is ready for a CSV file. File selection will be available next.', 'warning')}>Import</button>
-          <button className="btn btn-primary" type="button" onClick={() => setModal({ mode: 'add' })}>Add item</button>
+          <button className="btn btn-secondary inventory-manager-refresh" type="button" onClick={() => void handleRefresh()} disabled={loading}><span aria-hidden="true">↻</span> {loading ? 'Refreshing…' : 'Refresh data'}</button>
+          <button className="btn btn-secondary" type="button" onClick={() => notify('Import is ready for a CSV file. File selection will be available next.', 'warning')}><span aria-hidden="true">⇧</span> Import</button>
+          <button className="btn btn-primary inventory-manager-add" type="button" onClick={() => setModal({ mode: 'add' })}><span aria-hidden="true">＋</span> Add item</button>
         </div>
       </header>
       {loadError && <p className="page-notice">{loadError}</p>}
@@ -443,7 +456,12 @@ export function InventoryManagerPage() {
       </section>
 
       <div className="inventory-layout">
-        <section className="panel inventory-panel">
+        <section className="panel inventory-panel inventory-manager-table-panel">
+          <div className="inventory-manager-panel-heading">
+            <div className="inventory-manager-panel-icon" aria-hidden="true"><Icon name="inventory" size={19} /></div>
+            <div><h2>Stock catalogue</h2><p>Search, review, and manage individual inventory items.</p></div>
+            <span className="inventory-manager-total-pill">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
+          </div>
           <div className="toolbar">
             <div className="search-field">
               <span className="search-icon" aria-hidden="true">⌕</span>
