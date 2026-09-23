@@ -27,8 +27,15 @@ load_dotenv()
 
 from agents import action_tool_agent, domain_analysis_agent, planner_agent, validation_safety_agent  # noqa: E402
 from gemini_client import AgentSafeFailure  # noqa: E402
-from schemas.contracts import ApproveRejectRequest, PlanRequest, WorkflowTrace  # noqa: E402
+from schemas.contracts import (  # noqa: E402
+    ApproveRejectRequest, InventoryAgentTrace, InventoryPlanRequest,
+    PlanRequest, WorkflowTrace,
+)
 from tools.booking_tools import BookingToolsClient, ToolError  # noqa: E402
+from tools.inventory_tools import InventoryToolsClient  # noqa: E402
+from agents.inventory_agents import (  # noqa: E402
+    analyze_inventory_domain, analyze_inventory_health, plan_inventory, recommend_replenishment,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("agentic-ai-service")
@@ -125,7 +132,6 @@ def plan(request: PlanRequest) -> WorkflowTrace | JSONResponse:
             return JSONResponse(status_code=422, content=trace.model_dump(mode="json"))
     finally:
         client.close()
-
     validation = trace.validation_output
     if not validation.is_allowed:
         trace.status = "Rejected"
@@ -138,6 +144,74 @@ def plan(request: PlanRequest) -> WorkflowTrace | JSONResponse:
     trace.completed_at = datetime.now(timezone.utc)
     _workflows[workflow_id] = trace
     return trace
+
+
+@app.post("/inventory/plan", response_model=InventoryAgentTrace, dependencies=[Depends(_require_internal_token)])
+def plan_inventory_stock(request: InventoryPlanRequest) -> InventoryAgentTrace | JSONResponse:
+    """Analyze inventory with read-only tools; it never creates an order or edits stock."""
+    workflow_id = str(uuid.uuid4())
+    trace = InventoryAgentTrace(
+        workflow_id=workflow_id,
+        objective=request.objective,
+        tenant_id=request.tenant_id,
+        status="Failed",
+        planner_summary="",
+        data_sources=[],
+    )
+    backend_url = os.getenv("BACKEND_API_BASE_URL", "http://localhost:5298/api")
+    try:
+        with InventoryToolsClient(base_url=backend_url, auth_token=request.auth_token) as client:
+            plan_output = plan_inventory(request.objective)
+            trace.planner_summary = plan_output.summary
+            if plan_output.used_fallback:
+                trace.warnings.append(
+                    "Gemini is unavailable; deterministic inventory planning is being used. "
+                    "Recommendations still use authorized stock and movement data, with reorder-level fallback when history is missing."
+                )
+            trace.warnings.append(
+                f"No supplier lead-time data is available; planning assumes "
+                f"{plan_output.lead_time_days} lead-time days plus {plan_output.safety_days} safety-stock days."
+            )
+            domain = analyze_inventory_domain(
+                objective=request.objective,
+                branch_id=request.branch_id,
+                client=client,
+            )
+            trace.data_sources = ["Authorized inventory snapshot", "Recent stock movements"]
+            trace.warnings.extend(domain.warnings)
+            if len(domain.movements) >= 100:
+                trace.warnings.append("The backend returned its 100 most recent movements; older history is not included.")
+            if not domain.items:
+                trace.status = "NoAction"
+                trace.warnings.append("No inventory items were available in the selected branch scope.")
+                return trace
+            recommendations = recommend_replenishment(
+                snapshot=domain, plan=plan_output, objective=request.objective, workflow_id=workflow_id,
+            )
+            trace.insights = analyze_inventory_health(
+                snapshot=domain, plan=plan_output, recommendations=recommendations,
+            )
+            # Deterministic safety review; this route has no write tools.
+            for recommendation in recommendations:
+                try:
+                    uuid.UUID(recommendation.inventory_item_id)
+                    if recommendation.recommended_quantity <= 0:
+                        raise ValueError("quantity must be positive")
+                    if recommendation.estimated_unit_cost is not None and recommendation.estimated_unit_cost < 0:
+                        raise ValueError("unit cost cannot be negative")
+                    trace.recommendations.append(recommendation)
+                except (ValueError, TypeError):
+                    trace.warnings.append(f"A recommendation for {recommendation.item_name} was omitted by the safety review.")
+            trace.status = "NeedsReview" if trace.recommendations else "NoAction"
+            if trace.recommendations:
+                trace.warnings.append("Recommendations are drafts only. Review quantities, supplier, branch and budget before creating a purchase order.")
+            return trace
+    except Exception as exc:
+        logger.exception("Inventory workflow %s failed safely", workflow_id)
+        return JSONResponse(
+            status_code=422,
+            content={**trace.model_dump(mode="json"), "status": "Failed", "warnings": [*trace.warnings, str(exc)]},
+        )
 
 
 @app.get("/workflow/{workflow_id}/trace", response_model=WorkflowTrace, dependencies=[Depends(_require_internal_token)])

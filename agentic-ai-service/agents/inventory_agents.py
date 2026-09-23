@@ -1,0 +1,264 @@
+"""Four-step inventory replenishment workflow: plan, inspect, recommend, validate."""
+from __future__ import annotations
+
+import math
+import os
+from datetime import datetime, timezone
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from llm_client import AgentSafeFailure, generate_structured
+from schemas.contracts import InventoryHealthInsight, InventoryRecommendation
+from tools.inventory_tools import InventoryToolsClient
+
+
+class InventoryPlan(BaseModel):
+    summary: str
+    lead_time_days: int = Field(ge=1, le=90)
+    safety_days: int = Field(ge=0, le=60)
+    used_fallback: bool = False
+
+
+class InventoryPlanSummary(BaseModel):
+    summary: str
+
+
+class DomainSnapshot(BaseModel):
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    movements: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+def plan_inventory(objective: str) -> InventoryPlan:
+    try:
+        generated = generate_structured(
+            system_instruction=(
+                "You coordinate inventory replenishment analysis. Summarize the user's objective in "
+                "one practical sentence. Do not claim to know stock, usage, supplier lead times, prices, "
+                "or business policies. Return only the schema."
+            ),
+            user_content=f"Inventory planning objective: {objective}",
+            response_schema=InventoryPlanSummary,
+            model=os.getenv(
+                "GEMINI_MODEL_INVENTORY",
+                os.getenv("GEMINI_MODEL_PLANNER", os.getenv("GEMINI_MODEL_DEFAULT", "gemini-3.5-flash-lite")),
+            ),
+        )
+        summary = generated.summary
+    except AgentSafeFailure:
+        # Inventory recommendations are calculated from authorized stock and
+        # movement data below; Gemini only phrases the planning summary. Keep
+        # this workflow useful when Gemini credentials, connectivity, quota,
+        # or response generation are unavailable. Surface the fallback in the
+        # trace rather than failing an otherwise usable inventory analysis.
+        summary = f"Inventory replenishment review for: {objective.strip() or 'low-stock items'}."
+        used_fallback = True
+    else:
+        used_fallback = False
+    return InventoryPlan(
+        summary=summary,
+        lead_time_days=int(os.getenv("INVENTORY_DEFAULT_LEAD_TIME_DAYS", "7")),
+        safety_days=int(os.getenv("INVENTORY_DEFAULT_SAFETY_DAYS", "7")),
+        used_fallback=used_fallback,
+    )
+
+
+def analyze_inventory_domain(
+    *, objective: str, branch_id: str | None, client: InventoryToolsClient
+) -> DomainSnapshot:
+    # The analyst reads through the existing API using the caller-scoped
+    # token. Keep records out of the LLM response entirely so it cannot
+    # truncate or alter quantities before the calculation step.
+    inventory_response = client.query_inventory(branch_id)
+    movements = client.query_stock_movements(branch_id)
+    items = inventory_response.get("items")
+    if not isinstance(items, list) or not isinstance(movements, list):
+        raise ValueError("The inventory API returned an unreadable stock snapshot.")
+    return DomainSnapshot(
+        items=items,
+        movements=movements,
+        warnings=["Inventory snapshot is limited to the first 100 items."] if inventory_response.get("totalCount", len(items)) > len(items) else [],
+    )
+
+
+def _recent_outflow(movements: list[dict[str, Any]]) -> dict[str, tuple[float, int, int]]:
+    """Return SKU -> total outflow, age of oldest sample event, event count."""
+    outflow: dict[str, tuple[float, int, int]] = {}
+    now = datetime.now(timezone.utc)
+    for movement in movements:
+        kind = str(movement.get("movementType", "")).strip().lower()
+        if kind not in {"issue", "issued", "sale", "sold", "consume", "consumed", "usage", "outflow", "adjustment"}:
+            continue
+        raw_quantity = float(movement.get("quantity") or 0)
+        if kind == "adjustment" and raw_quantity >= 0:
+            continue
+        try:
+            occurred = datetime.fromisoformat(str(movement.get("occurredAt", "")).replace("Z", "+00:00"))
+            if occurred.tzinfo is None:
+                occurred = occurred.replace(tzinfo=timezone.utc)
+            age_days = (now - occurred).total_seconds() / 86400
+            if age_days < 0 or age_days > 30:
+                continue
+            age = max(1, int(age_days))
+        except (TypeError, ValueError):
+            continue
+        sku = str(movement.get("sku", ""))
+        quantity = abs(raw_quantity)
+        if not sku or quantity <= 0:
+            continue
+        old_quantity, old_age, old_count = outflow.get(sku, (0.0, 0, 0))
+        outflow[sku] = (old_quantity + quantity, max(old_age, age), old_count + 1)
+    return outflow
+
+
+def analyze_inventory_health(
+    *, snapshot: DomainSnapshot, plan: InventoryPlan, recommendations: list[InventoryRecommendation]
+) -> list[InventoryHealthInsight]:
+    """Create transparent portfolio insights from the same read-only snapshot."""
+    items = snapshot.items
+    movements = snapshot.movements
+    outflow = _recent_outflow(movements)
+    item_by_sku = {str(item.get("sku", "")): item for item in items if item.get("sku")}
+    low_items = [item for item in items if float(item.get("quantity") or 0) <= float(item.get("reorderLevel") or 0)]
+    insights: list[InventoryHealthInsight] = [InventoryHealthInsight(
+        category="overview",
+        title="Inventory snapshot",
+        detail=(
+            f"Reviewed {len(items)} active inventory items. {len(low_items)} are at or below their reorder level; "
+            f"{len(recommendations)} items are recommended for replenishment based on current stock and available usage history."
+        ),
+        affected_items=[str(item.get("name", "Inventory item")) for item in low_items[:8]],
+    )]
+
+    no_outflow = [
+        item for item in items
+        if float(item.get("quantity") or 0) > 0 and str(item.get("sku", "")) not in outflow
+    ]
+    if no_outflow:
+        insights.append(InventoryHealthInsight(
+            category="data_quality",
+            title="Items without recorded outflow",
+            detail=(
+                f"{len(no_outflow)} stocked items have no qualifying issue, sale, consumption, or negative-adjustment "
+                "movement in the recent movement sample. Check whether movement history is complete before making demand or excess-stock decisions."
+            ),
+            affected_items=[str(item.get("name", "Inventory item")) for item in no_outflow[:8]],
+        ))
+
+    coverage_rows: list[tuple[float, str, float]] = []
+    for sku, (quantity, oldest_age, _) in outflow.items():
+        item = item_by_sku.get(sku)
+        if not item:
+            continue
+        daily = quantity / min(30, max(7, oldest_age))
+        if daily <= 0:
+            continue
+        on_hand = float(item.get("quantity") or 0)
+        reorder = float(item.get("reorderLevel") or 0)
+        days_to_reorder = max(0.0, (on_hand - reorder) / daily)
+        days_of_stock = on_hand / daily
+        coverage_rows.append((days_to_reorder, str(item.get("name", "Inventory item")), days_of_stock))
+    coverage_rows.sort(key=lambda row: row[0])
+    if coverage_rows:
+        shortest = coverage_rows[:5]
+        descriptions = [f"{name}: about {days:.1f} days of stock" for _, name, days in shortest]
+        insights.append(InventoryHealthInsight(
+            category="coverage",
+            title="Stock coverage from recorded outflow",
+            detail=(
+                "; ".join(descriptions)
+                + f". Compare these estimates with the assumed {plan.lead_time_days}-day lead time and {plan.safety_days}-day safety buffer."
+            ),
+            affected_items=[name for _, name, _ in shortest],
+        ))
+
+    waste_by_sku: dict[str, float] = {}
+    for movement in movements:
+        if str(movement.get("movementType", "")).strip().lower() not in {"waste", "wastage", "writeoff", "write-off"}:
+            continue
+        sku = str(movement.get("sku", ""))
+        if sku:
+            waste_by_sku[sku] = waste_by_sku.get(sku, 0.0) + abs(float(movement.get("quantity") or 0))
+    if waste_by_sku:
+        waste_items = [(item_by_sku[sku].get("name", sku), quantity) for sku, quantity in waste_by_sku.items() if sku in item_by_sku]
+        waste_units = sum(quantity for _, quantity in waste_items)
+        insights.append(InventoryHealthInsight(
+            category="movement",
+            title="Recorded waste movements",
+            detail=f"The recent movement sample contains {waste_units:g} units of waste/write-off across {len(waste_items)} items. Review repeated waste records and handling practices.",
+            affected_items=[str(name) for name, _ in waste_items[:8]],
+        ))
+
+    priced_items = [item for item in items if item.get("unitCost") is not None]
+    if priced_items:
+        estimated_value = sum(float(item.get("quantity") or 0) * float(item.get("unitCost") or 0) for item in priced_items)
+        insights.append(InventoryHealthInsight(
+            category="cost",
+            title="Estimated value of priced stock",
+            detail=f"Current on-hand value is approximately {estimated_value:,.2f} across {len(priced_items)} items with unit costs recorded. Items without unit cost are excluded.",
+        ))
+    return insights
+
+
+def recommend_replenishment(
+    *, snapshot: DomainSnapshot, plan: InventoryPlan, objective: str, workflow_id: str
+) -> list[InventoryRecommendation]:
+    # Use only explicit consumption/issue/sale and negative adjustments as demand.
+    outflow = _recent_outflow(snapshot.movements)
+    daily_outflow = {
+        sku: quantity / min(30, max(7, oldest_age))
+        for sku, (quantity, oldest_age, _) in outflow.items()
+    }
+
+    recommendations: list[InventoryRecommendation] = []
+    for item in snapshot.items:
+        on_hand = float(item.get("quantity") or 0)
+        reorder = float(item.get("reorderLevel") or 0)
+        sku = str(item.get("sku", ""))
+        daily = daily_outflow.get(sku)
+        needs_reorder = on_hand <= reorder
+        days_until_reorder = max(0, (on_hand - reorder) / daily) if daily and daily > 0 else None
+        if not needs_reorder and (days_until_reorder is None or days_until_reorder > plan.lead_time_days):
+            continue
+
+        target = max(reorder, daily * (plan.lead_time_days + plan.safety_days) if daily else reorder)
+        quantity = max(0, math.ceil(target - on_hand))
+        if quantity <= 0:
+            continue
+        price_raw = item.get("unitCost")
+        price = float(price_raw) if price_raw is not None else None
+        notes: list[str] = []
+        if daily is None:
+            notes.append("No recent issue/sale/consumption or negative-adjustment history found; quantity uses the configured reorder level only.")
+            confidence = 0.45
+        else:
+            notes.append("Outflow rate uses recent issue/sale/consumption and negative manual-adjustment movements; waste and positive corrections were excluded.")
+            _, _, event_count = outflow[sku]
+            confidence = 0.75 if event_count >= 5 and len(snapshot.movements) < 100 else 0.55 if event_count >= 2 else 0.4
+        if not item.get("branchId"):
+            notes.append("Item has no assigned branch; choose a branch before creating a purchase order.")
+            confidence = min(confidence, 0.4)
+        reason = (
+            f"On hand is {on_hand:g} against reorder level {reorder:g}. "
+            + (f"Recent recorded outflow averages {daily:.2f} per day; stock is projected to reach the reorder level in {days_until_reorder:.1f} days. " if daily else "No reliable daily usage rate is recorded. ")
+            + f"Suggested quantity {quantity:g} covers the reorder target and {plan.lead_time_days}-day lead time plus {plan.safety_days} safety days."
+        )
+        recommendations.append(InventoryRecommendation(
+            inventory_item_id=str(item.get("id", "")),
+            item_name=str(item.get("name", "Inventory item")),
+            sku=sku,
+            branch_id=str(item["branchId"]) if item.get("branchId") else None,
+            branch_name=item.get("branch"),
+            on_hand=on_hand,
+            reorder_level=reorder,
+            avg_daily_outflow=round(daily, 2) if daily is not None else None,
+            days_until_reorder=round(days_until_reorder, 1) if days_until_reorder is not None else None,
+            recommended_quantity=quantity,
+            estimated_unit_cost=price,
+            estimated_total_cost=round(quantity * price, 2) if price is not None else None,
+            confidence=confidence,
+            reason=reason,
+            validation_notes=notes + ["Read-only recommendation; no stock or purchase order was changed."],
+        ))
+    return sorted(recommendations, key=lambda row: (row.days_until_reorder if row.days_until_reorder is not None else 9999, row.item_name.lower()))

@@ -28,6 +28,8 @@ Flutter app → ASP.NET Core (POST /api/agent/find-and-book)
          POST /bookings)
 ```
 
+The inventory assistant has its own internal endpoint, `POST /inventory/plan`. The Planner interprets the request, Domain Analysis uses caller-authorized inventory and movement tools, Action/Tool computes replenishment suggestions from the returned data, and the deterministic Validation/Safety step rejects invalid suggestions. This flow is read-only: a user reviews a suggested quantity and explicitly creates any purchase order through the existing ASP.NET Core purchase-order screen. It does not edit stock, place an order, or let the model invent the stock values used for its calculations.
+
 `/plan` runs all four agents **synchronously** and returns one complete trace. `/workflow/{id}/trace`, `/approve`, `/reject` operate on an **in-memory** store keyed by that run's `workflow_id` — useful for testing/introspecting this service in isolation, but they are **not** the production approval path. Production approval always goes through ASP.NET Core's own `/api/agent/workflow/{id}/approve` / `/reject` / `/apply` (already built, backed by Postgres) — React and the customer's phone never talk to this service directly.
 
 ## Setup
@@ -43,6 +45,10 @@ Flutter app → ASP.NET Core (POST /api/agent/find-and-book)
 2. `agentic-ai-service` — `uvicorn main:app --port 8001 --reload`
 3. Then a customer request through the Flutter app (or a direct `curl` to `POST /api/agent/find-and-book` on the backend) can exercise the full pipeline.
 
+## Deployment
+
+`render.yaml` deploys only the ASP.NET Core backend. Deploy this Python service separately, then set the backend's `AgentService:BaseUrl` (`AgentService__BaseUrl` on Render) to the service's reachable HTTPS URL. Set the same `AGENT_SERVICE_INTERNAL_TOKEN` value on both services, and configure `BACKEND_API_BASE_URL` on the Python service to the backend API URL. Until the base URL and shared token are configured, customer AI booking requests return a clear configuration error; the rest of the app remains available.
+
 ## Running tests
 
 ```
@@ -53,9 +59,11 @@ All tests run with the real Gemini SDK **mocked out** at the `gemini_client` bou
 
 ## Model IDs
 
-`gemini-2.5-flash` (default, all agents) and `gemini-2.5-pro` (Planner only, via `GEMINI_MODEL_PLANNER`) — both verified current and function-calling-capable as of 2026-08-14. **Both are scheduled to sunset around October 2026** per Google's published deprecation notices — if `/plan` starts failing with a model-not-found error after that, check https://ai.google.dev/gemini-api/docs/models for current IDs and update `.env`.
+The inventory planner defaults to `gemini-3.5-flash-lite` and can be overridden with `GEMINI_MODEL_INVENTORY`. Other agents use `GEMINI_MODEL_DEFAULT` (default `gemini-2.5-flash`); the booking planner can also be overridden with `GEMINI_MODEL_PLANNER`. Choose model IDs supported by the API key's project; Google currently limits access to Gemini 2.5 models for projects that have actively used them. See [the current Gemini model list](https://ai.google.dev/gemini-api/docs/models).
 
 ## Known limitations
+
+- Inventory movement history is capped at the backend's latest 100 records, and the inventory snapshot at 100 items. The forecast counts explicit issue/sale/consumption and negative manual-adjustment movements as outflow; waste and positive corrections are excluded. When no such history is present, it clearly falls back to the item's reorder level and marks confidence lower. Supplier choice, lead time, and budget still need human review before creating a purchase order.
 
 - The underlying `Resource`/`BookingType` schema in the backend was built during earlier clinic-focused work and still has a few clinic-shaped names (`Specialty`'s doc-comment literally says "Doctor/staff specialty"). This service's agents and tools stay generic (driven by `business_type`/`resource_type`/`extra_constraints`), but the DB schema itself wasn't reshaped in this pass.
 - Domain Analysis's ranking quality depends on `Resource.CustomAttributes`/`LocationMetadata` (rating, cuisine, distance, etc.) actually being populated — there's no web UI for editing that JSON blob yet, only the API fields. Demo data needs it set directly via the API for ranking to show real differentiation instead of "first match wins."

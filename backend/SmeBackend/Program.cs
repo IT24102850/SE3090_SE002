@@ -133,6 +133,7 @@ builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<ICustomerAccountService, CustomerAccountService>();
 builder.Services.AddHostedService<SmeBackend.Services.ReminderDispatchService>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPlannerAgentService, SmeBackend.Services.PlannerAgentService>();
+builder.Services.AddHttpClient<SmeBackend.Services.IInventoryAgentService, SmeBackend.Services.InventoryAgentService>();
 builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.StubReminderChannelSender>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPushNotificationSender, SmeBackend.Services.FcmPushNotificationSender>();
 builder.Services.AddScoped<SmeBackend.Services.ICloudinaryImageService, SmeBackend.Services.CloudinaryImageService>();

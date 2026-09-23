@@ -106,3 +106,49 @@ class WorkflowTrace(BaseModel):
 
 class ApproveRejectRequest(BaseModel):
     reason: str | None = None
+
+
+class InventoryPlanRequest(BaseModel):
+    """Internal inventory planning request. The delegated user token is never returned."""
+    objective: str
+    tenant_id: str
+    branch_id: str | None = None
+    auth_token: str = Field(repr=False)
+
+
+class InventoryRecommendation(BaseModel):
+    inventory_item_id: str
+    item_name: str
+    sku: str
+    branch_id: str | None = None
+    branch_name: str | None = None
+    on_hand: float
+    reorder_level: float
+    avg_daily_outflow: float | None = None
+    days_until_reorder: float | None = None
+    recommended_quantity: float
+    estimated_unit_cost: float | None = None
+    estimated_total_cost: float | None = None
+    confidence: float = Field(ge=0.0, le=1.0)
+    reason: str
+    validation_notes: list[str] = Field(default_factory=list)
+
+
+class InventoryHealthInsight(BaseModel):
+    category: Literal["overview", "coverage", "movement", "data_quality", "cost"]
+    title: str
+    detail: str
+    affected_items: list[str] = Field(default_factory=list)
+
+
+class InventoryAgentTrace(BaseModel):
+    workflow_id: str
+    objective: str
+    tenant_id: str
+    status: Literal["Completed", "NeedsReview", "NoAction", "Failed"]
+    planner_summary: str
+    data_sources: list[str]
+    recommendations: list[InventoryRecommendation] = Field(default_factory=list)
+    insights: list[InventoryHealthInsight] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
