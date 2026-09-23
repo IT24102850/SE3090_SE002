@@ -95,6 +95,37 @@ public class PaymentGatewaysController : BillingControllerBase
     }
 }
 
+/// The customer picker for invoices, subscriptions and schedules. Staff
+/// need it, and /api/users is Admin-only (it exposes staff accounts too).
+[ApiController]
+[Route("api/billing/customers")]
+[Authorize(Policy = "StaffPlus")]
+[Produces("application/json")]
+public class BillingCustomersController : BillingControllerBase
+{
+    private readonly AppDbContext _db;
+
+    public BillingCustomersController(AppDbContext db) => _db = db;
+
+    [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Search([FromQuery] string? search = null, [FromQuery] int take = 50, CancellationToken ct = default)
+    {
+        if (Actor is not { } actor) return MissingTenant();
+        var q = _db.Users.IgnoreQueryFilters().AsNoTracking()
+            .Where(u => u.TenantId == actor.TenantId && u.Role == Models.UserRole.Customer && u.IsActive);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            q = q.Where(u => u.FullName.ToLower().Contains(term) || u.Email.ToLower().Contains(term) || u.Phone.Contains(term));
+        }
+        var rows = await q.OrderBy(u => u.FullName).Take(Math.Clamp(take, 1, 200))
+            .Select(u => new { u.Id, u.FullName, u.Email, u.Phone, u.InsuranceProvider, u.InsuranceNumber })
+            .ToListAsync(ct);
+        return Ok(rows);
+    }
+}
+
 /// Provider webhooks and payment confirmation.
 [ApiController]
 [Route("api/payments")]

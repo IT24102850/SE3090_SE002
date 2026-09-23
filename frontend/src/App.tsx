@@ -48,6 +48,17 @@ const AgentWorkflowMonitorPage = lazy(() => import('./features/inventory/pages/A
 const LowStockAlertsPage = lazy(() => import('./features/inventory/pages/LowStockAlertsPage').then((m) => ({ default: m.LowStockAlertsPage })));
 const BranchOverviewPage = lazy(() => import('./features/inventory/pages/BranchOverviewPage').then((m) => ({ default: m.BranchOverviewPage })));
 const AnalyticsDashboardPage = lazy(() => import('./features/inventory/pages/AnalyticsDashboardCharts').then((m) => ({ default: m.AnalyticsDashboardPage })));
+/* Billing & payments (component 3). */
+const BillingDashboardPage = lazy(() => import('./features/billing/pages/BillingDashboardPage'));
+const InvoicesPage = lazy(() => import('./features/billing/pages/InvoicesPage'));
+const SubscriptionManagerPage = lazy(() => import('./features/billing/pages/SubscriptionManagerPage'));
+const InsuranceClaimTrackerPage = lazy(() => import('./features/billing/pages/InsuranceClaimTrackerPage'));
+const CommissionRulesPage = lazy(() => import('./features/billing/pages/CommissionRulesPage'));
+const BillingAgentMonitorPage = lazy(() => import('./features/billing/pages/BillingAgentMonitorPage'));
+const InvoiceDesignerPage = lazy(() => import('./features/billing/pages/InvoiceDesignerPage'));
+const DynamicFormBuilderPage = lazy(() => import('./features/billing/pages/DynamicFormBuilderPage'));
+const PaymentGatewaySettingsPage = lazy(() => import('./features/billing/pages/PaymentGatewaySettingsPage'));
+const MyBillsPage = lazy(() => import('./features/billing/pages/MyBillsPage'));
 const ForbiddenPage = lazy(() => import('./features/inventory/pages/ForbiddenPage').then((m) => ({ default: m.ForbiddenPage })));
 
 /* The platform owner's console. Its own sign-in (password + authenticator
@@ -270,6 +281,88 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
                     <Shell><AdminPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* ── Billing & payments ─────────────────────────────── */}
+              <Route
+                path="/billing"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><BillingDashboardPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/invoices"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><InvoicesPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/subscriptions"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><SubscriptionManagerPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/insurance-claims"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff', 'Customer']}>
+                    <Shell><InsuranceClaimTrackerPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/commission-rules"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><CommissionRulesPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/billing-agent"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><BillingAgentMonitorPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/invoice-designer"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><InvoiceDesignerPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/form-builder"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><DynamicFormBuilderPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/payment-gateways"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin']}>
+                    <Shell><PaymentGatewaySettingsPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/my-bills"
+                element={
+                  <ProtectedRoute allowedRoles={['Customer']}>
+                    <Shell><MyBillsPage /></Shell>
                   </ProtectedRoute>
                 }
               />
