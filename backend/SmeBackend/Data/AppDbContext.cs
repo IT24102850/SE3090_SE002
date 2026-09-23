@@ -395,6 +395,7 @@ public class AppDbContext : DbContext
 
             entity.Property(m => m.Cost).HasPrecision(18, 2);
             entity.Property(m => m.Status).HasMaxLength(20);
+            entity.Property(m => m.PhotoUrls).HasColumnType("jsonb");
 
             entity.HasOne(m => m.EquipmentItem)
                   .WithMany()
