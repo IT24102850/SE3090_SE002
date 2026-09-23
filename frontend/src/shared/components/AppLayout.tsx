@@ -230,7 +230,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     sections.find((section) => section.id === 'inventory')?.items.find((item) => item.path === '/low-stock-alerts'),
   ].filter((item): item is NavItem => Boolean(item));
   const pageName = location.pathname === '/inventory-analytics'
-    ? 'ENTERPRISE ANALYTICS'
+    ? 'INVENTORY ANALYTICS'
     : location.pathname === '/low-stock-alerts'
       ? 'STOCKSENSE AI'
     : location.pathname === '/inventory'
