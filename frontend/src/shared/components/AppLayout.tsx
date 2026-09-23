@@ -231,6 +231,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   ].filter((item): item is NavItem => Boolean(item));
   const pageName = location.pathname === '/inventory-analytics'
     ? 'ENTERPRISE ANALYTICS'
+    : location.pathname === '/low-stock-alerts'
+      ? 'STOCKSENSE AI'
     : location.pathname === '/inventory'
       ? 'STOCK MANAGEMENT'
       : location.pathname.replace('/', '').replace(/-/g, ' ').toUpperCase() || 'OPERATIONS';
