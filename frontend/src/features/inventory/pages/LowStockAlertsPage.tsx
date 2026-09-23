@@ -106,6 +106,7 @@ export function LowStockAlertsPage() {
   }, [notify, token]);
 
   async function analyzeInventory() {
+    setPlan(null);
     setPlanning(true);
     setPlanError('');
     try {
@@ -207,6 +208,34 @@ export function LowStockAlertsPage() {
         <div className="stocksense-progress-meter" aria-label="Analysis in progress"><span /></div>
       </section>}
 
+      {plan && <section className="panel stocksense-ai-panel">
+        <div className="panel-head stocksense-ai-head">
+          <div className="stocksense-ai-title"><div className="stocksense-ai-orb"><span>✦</span></div><div><p className="eyebrow">STOCKSENSE AI REPORT</p><h2>Inventory health analysis</h2><p className="hint">{plan.planner_summary}</p></div></div>
+          <Badge tone={plan.status === 'NeedsReview' ? 'amber' : 'blue'}>{plan.status === 'NeedsReview' ? 'Review recommendations' : plan.insights?.length ? 'Review insights' : 'No action found'}</Badge>
+        </div>
+        <div className="stocksense-ai-body">
+          <p className="cell-sub">Read-only analysis using {plan.data_sources.join(' and ').toLowerCase()}. It has not changed stock or created purchase orders.</p>
+          {plan.warnings.map((warning, index) => <p className="page-notice" key={index}>{warning}</p>)}
+          {plan.insights?.length > 0 && <><div className="stocksense-section-heading"><div><p className="eyebrow">SIGNALS FROM YOUR DATA</p><h3>Inventory health insights</h3></div><span>{plan.insights.length} insights</span></div><div className="stocksense-insights-grid" aria-label="Inventory health insights">{plan.insights.map((insight, index) => <article className={`stocksense-insight-card stocksense-insight-${insight.category}`} key={`${insight.category}-${index}`} style={{ animationDelay: `${Math.min(index * 75, 450)}ms` }}>
+            <div className="stocksense-insight-top"><span className="stocksense-insight-icon"><Icon name={insightIcon(insight.category)} size={19} /></span><p className="stocksense-insight-category">{insight.category.replace('_', ' ')}</p></div><h3>{insight.title}</h3><p className="cell-sub">{insight.detail}</p>
+            {insight.affected_items?.length > 0 && <div className="stocksense-item-chips">{insight.affected_items.map((itemName) => <span key={itemName}>{itemName}</span>)}</div>}
+          </article>)}</div></>}
+          {plan.recommendations.length > 0 && <><div className="stocksense-section-heading"><div><p className="eyebrow">HUMAN REVIEW REQUIRED</p><h3>Replenishment recommendations</h3></div><span>{plan.recommendations.length} to review</span></div><div className="table-wrap"><table className="data-table"><thead><tr><th>Item</th><th>On hand</th><th>Avg. daily outflow</th><th>Suggested reorder</th><th>Est. cost</th><th>Reason</th><th>Review</th></tr></thead><tbody>
+            {plan.recommendations.map((item) => <tr key={item.inventory_item_id}>
+              <td><strong>{item.item_name}</strong><div className="cell-sub">{item.sku} · {item.branch_name ?? 'No branch'}</div></td>
+              <td>{item.on_hand} / {item.reorder_level} reorder level</td>
+              <td>{item.avg_daily_outflow == null ? 'No usage history' : `${item.avg_daily_outflow}/day`}</td>
+              <td><strong>{item.recommended_quantity}</strong><div className="cell-sub">Confidence {Math.round(item.confidence * 100)}%</div></td>
+              <td>{item.estimated_total_cost == null ? 'Unit cost not set' : item.estimated_total_cost.toLocaleString('en-LK', { style: 'currency', currency: 'LKR' })}</td>
+              <td>{item.reason}</td>
+              <td><Link className="link-button" to={`/purchase-orders?reorderItemId=${encodeURIComponent(item.inventory_item_id)}&branchId=${encodeURIComponent(item.branch_id ?? '')}&quantity=${encodeURIComponent(item.recommended_quantity)}`}>Review order</Link></td>
+            </tr>)}
+          </tbody></table></div></>}
+        </div>
+      </section>}
+      {planError && <p className="page-notice" role="alert" style={{ marginTop: 12 }}>{planError}</p>}
+
+
       <section className="stat-strip stocksense-kpis" aria-label="Inventory health summary">
         <div className="stat stocksense-kpi stocksense-kpi-total">
           <div className="metric-icon-bubble metric-cyan"><Icon name="inventory" /></div>
@@ -269,32 +298,6 @@ export function LowStockAlertsPage() {
           </table>
         </div>
       </section>
-      {plan && <section className="panel stocksense-ai-panel">
-        <div className="panel-head stocksense-ai-head">
-          <div className="stocksense-ai-title"><div className="stocksense-ai-orb"><span>✦</span></div><div><p className="eyebrow">STOCKSENSE AI REPORT</p><h2>Inventory health analysis</h2><p className="hint">{plan.planner_summary}</p></div></div>
-          <Badge tone={plan.status === 'NeedsReview' ? 'amber' : 'blue'}>{plan.status === 'NeedsReview' ? 'Review recommendations' : plan.insights?.length ? 'Review insights' : 'No action found'}</Badge>
-        </div>
-        <div className="stocksense-ai-body">
-          <p className="cell-sub">Read-only analysis using {plan.data_sources.join(' and ').toLowerCase()}. It has not changed stock or created purchase orders.</p>
-          {plan.warnings.map((warning, index) => <p className="page-notice" key={index}>{warning}</p>)}
-          {plan.insights?.length > 0 && <><div className="stocksense-section-heading"><div><p className="eyebrow">SIGNALS FROM YOUR DATA</p><h3>Inventory health insights</h3></div><span>{plan.insights.length} insights</span></div><div className="stocksense-insights-grid" aria-label="Inventory health insights">{plan.insights.map((insight, index) => <article className={`stocksense-insight-card stocksense-insight-${insight.category}`} key={`${insight.category}-${index}`} style={{ animationDelay: `${Math.min(index * 75, 450)}ms` }}>
-            <div className="stocksense-insight-top"><span className="stocksense-insight-icon"><Icon name={insightIcon(insight.category)} size={19} /></span><p className="stocksense-insight-category">{insight.category.replace('_', ' ')}</p></div><h3>{insight.title}</h3><p className="cell-sub">{insight.detail}</p>
-            {insight.affected_items?.length > 0 && <div className="stocksense-item-chips">{insight.affected_items.map((itemName) => <span key={itemName}>{itemName}</span>)}</div>}
-          </article>)}</div></>}
-          {plan.recommendations.length > 0 && <><div className="stocksense-section-heading"><div><p className="eyebrow">HUMAN REVIEW REQUIRED</p><h3>Replenishment recommendations</h3></div><span>{plan.recommendations.length} to review</span></div><div className="table-wrap"><table className="data-table"><thead><tr><th>Item</th><th>On hand</th><th>Avg. daily outflow</th><th>Suggested reorder</th><th>Est. cost</th><th>Reason</th><th>Review</th></tr></thead><tbody>
-            {plan.recommendations.map((item) => <tr key={item.inventory_item_id}>
-              <td><strong>{item.item_name}</strong><div className="cell-sub">{item.sku} · {item.branch_name ?? 'No branch'}</div></td>
-              <td>{item.on_hand} / {item.reorder_level} reorder level</td>
-              <td>{item.avg_daily_outflow == null ? 'No usage history' : `${item.avg_daily_outflow}/day`}</td>
-              <td><strong>{item.recommended_quantity}</strong><div className="cell-sub">Confidence {Math.round(item.confidence * 100)}%</div></td>
-              <td>{item.estimated_total_cost == null ? 'Unit cost not set' : item.estimated_total_cost.toLocaleString('en-LK', { style: 'currency', currency: 'LKR' })}</td>
-              <td>{item.reason}</td>
-              <td><Link className="link-button" to={`/purchase-orders?reorderItemId=${encodeURIComponent(item.inventory_item_id)}&branchId=${encodeURIComponent(item.branch_id ?? '')}&quantity=${encodeURIComponent(item.recommended_quantity)}`}>Review order</Link></td>
-            </tr>)}
-          </tbody></table></div></>}
-        </div>
-      </section>}
-      {planError && <p className="page-notice" role="alert" style={{ marginTop: 12 }}>{planError}</p>}
       <p className="ai-disclaimer">Coverage and movement insights use the returned inventory snapshot and recent movement sample. Recommendations use explicit outflow history when available; where history is missing, reorder quantities fall back to reorder levels. Review supplier, lead time and budget before ordering.</p>
     </div>
   );
