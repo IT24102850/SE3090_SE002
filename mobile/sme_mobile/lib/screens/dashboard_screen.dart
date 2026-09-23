@@ -13,6 +13,9 @@ import '../theme/app_text_styles.dart';
 import '../widgets/route_transitions.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/ui/ui.dart';
+import 'billing/insurance_tracker_screen.dart';
+import 'billing/my_bills_screen.dart';
+import 'billing/subscription_screen.dart';
 import 'business_profile_editor_screen.dart';
 import 'clinic/clinic_desk_screen.dart';
 import 'customer/ai_planner_screen.dart';
@@ -288,6 +291,30 @@ class _DashboardDrawer extends ConsumerWidget {
                     },
                   ),
                   _DrawerItem(
+                    icon: Icons.receipt_long_outlined,
+                    label: 'My Bills',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute(const MyBillsScreen()));
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.autorenew_rounded,
+                    label: 'My Subscriptions',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute(const SubscriptionScreen()));
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.health_and_safety_outlined,
+                    label: 'Insurance Claims',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute(const InsuranceTrackerScreen()));
+                    },
+                  ),
+                  _DrawerItem(
                     icon: Icons.auto_awesome,
                     label: 'Ask AI to book for you',
                     iconColor: AppColors.violet,
@@ -423,6 +450,7 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color, {b
         icon: Icons.receipt_long_outlined,
         color: color,
         imageUrl: _quickActionImages['View my bills'],
+        onTap: () => Navigator.of(context).push(slideFadeRoute(const MyBillsScreen())),
       ),
       _QuickActionCard(
         label: 'Cancel / reschedule',

@@ -32,6 +32,7 @@ dependencies:
   # File), matching how this app is actually tested (flutter run -d chrome).
   image_picker: ^1.1.2
   google_fonts: ^6.3.2
+  share_plus: ^12.0.2
 
 dev_dependencies:
   flutter_test:

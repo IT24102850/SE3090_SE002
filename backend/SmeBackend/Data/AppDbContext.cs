@@ -66,6 +66,17 @@ public class AppDbContext : DbContext
     public DbSet<PlatformSession> PlatformSessions { get; set; } = null!;
     public DbSet<PlatformAuditLog> PlatformAuditLogs { get; set; } = null!;
 
+     // Billing engine
+    public DbSet<Invoice> Invoices { get; set; } = null!;
+    public DbSet<InvoiceItem> InvoiceItems { get; set; } = null!;
+    public DbSet<Payment> Payments { get; set; } = null!;
+    public DbSet<InsuranceClaim> InsuranceClaims { get; set; } = null!;
+    public DbSet<DynamicForm> DynamicForms { get; set; } = null!;
+    public DbSet<FormSubmission> FormSubmissions { get; set; } = null!;
+    public DbSet<CommissionRule> CommissionRules { get; set; } = null!;
+    public DbSet<PaymentGateway> PaymentGateways { get; set; } = null!;
+    public DbSet<InvoiceTemplate> InvoiceTemplates { get; set; } = null!;
+
     private Guid? CurrentTenantId => _tenantContext.CurrentTenantId;
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -530,6 +541,301 @@ public class AppDbContext : DbContext
             entity.HasIndex(i => i.PurchaseOrderId);
             entity.HasIndex(i => i.InventoryItemId);
         });
+
+            // ==================== BILLING ENGINE ====================
+
+        modelBuilder.Entity<Invoice>(entity =>
+        {
+            entity.ToTable("invoices");
+
+            entity.HasIndex(i => new { i.TenantId, i.InvoiceNumber })
+                .IsUnique();
+
+            entity.HasIndex(i => new { i.TenantId, i.CustomerId });
+
+            entity.HasIndex(i => new { i.TenantId, i.Status });
+
+            entity.HasIndex(i => i.BookingId);
+
+            entity.Property(i => i.TotalAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(i => i.Discount)
+                .HasPrecision(18, 2);
+
+            entity.Property(i => i.Tax)
+                .HasPrecision(18, 2);
+
+            entity.Property(i => i.FinalAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(i => i.InvoiceNumber)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(i => i.Status)
+                .HasMaxLength(30);
+
+            entity.Property(i => i.Currency)
+                .HasMaxLength(3);
+
+            entity.Property(i => i.DiscountCode)
+                .HasMaxLength(50);
+
+            entity.Property(i => i.Notes)
+                .HasMaxLength(2000);
+
+            entity.Property(i => i.ScheduleGroup)
+                .HasMaxLength(50);
+
+            entity.Property(i => i.ScheduleLabel)
+                .HasMaxLength(100);
+
+            entity.HasIndex(i => new { i.TenantId, i.DueDate });
+
+            entity.HasIndex(i => i.SubscriptionId);
+
+            entity.HasIndex(i => i.ScheduleGroup);
+
+            entity.HasOne(i => i.Booking)
+                .WithMany()
+                .HasForeignKey(i => i.BookingId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+
+        modelBuilder.Entity<InvoiceItem>(entity =>
+        {
+            entity.ToTable("invoice_items");
+
+            entity.HasIndex(i => i.InvoiceId);
+
+            entity.Property(i => i.UnitPrice)
+                .HasPrecision(18, 2);
+
+            entity.Property(i => i.Amount)
+                .HasPrecision(18, 2);
+
+            entity.Property(i => i.Description)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(i => i.Category)
+                .HasMaxLength(100);
+
+            entity.HasOne(i => i.Invoice)
+                .WithMany(i => i.Items)
+                .HasForeignKey(i => i.InvoiceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+
+        modelBuilder.Entity<Payment>(entity =>
+        {
+            entity.ToTable("payments");
+
+            entity.HasIndex(p => p.InvoiceId);
+
+            entity.HasIndex(p => p.TransactionRef);
+
+            entity.Property(p => p.Amount)
+                .HasPrecision(18, 2);
+
+            entity.Property(p => p.Method)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(p => p.TransactionRef)
+                .HasMaxLength(200);
+
+            entity.Property(p => p.Provider)
+                .HasMaxLength(30);
+
+            entity.Property(p => p.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue(PaymentStatuses.Succeeded)
+                .IsRequired();
+
+            entity.Property(p => p.PayerLabel)
+                .HasMaxLength(100);
+
+            entity.HasOne(p => p.Invoice)
+                .WithMany(i => i.Payments)
+                .HasForeignKey(p => p.InvoiceId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+
+        // Subscription is configured once, with the gym memberships above.
+
+        modelBuilder.Entity<InsuranceClaim>(entity =>
+        {
+            entity.ToTable("insurance_claims");
+
+            entity.HasIndex(c => c.InvoiceId);
+
+            entity.HasIndex(c => c.PolicyNumber);
+
+            entity.Property(c => c.ClaimAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(c => c.Provider)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.Property(c => c.PolicyNumber)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(c => c.Notes)
+                .HasMaxLength(2000);
+
+            entity.Property(c => c.DocumentsJson)
+                .HasColumnType("jsonb");
+
+            entity.Property(c => c.Status)
+                .HasMaxLength(30);
+
+            entity.HasOne(c => c.Invoice)
+                .WithMany()
+                .HasForeignKey(c => c.InvoiceId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+
+        modelBuilder.Entity<DynamicForm>(entity =>
+        {
+            entity.ToTable("dynamic_forms");
+
+            entity.HasIndex(f => new { f.TenantId, f.FormType })
+                .IsUnique();
+
+            entity.Property(f => f.FormType)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(f => f.SchemaJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+
+            entity.Property(f => f.UiSchemaJson)
+                .HasColumnType("jsonb");
+
+            entity.Property(f => f.ValidationRulesJson)
+                .HasColumnType("jsonb");
+        });
+
+
+        modelBuilder.Entity<FormSubmission>(entity =>
+        {
+            entity.ToTable("form_submissions");
+
+            entity.HasIndex(f => f.DynamicFormId);
+
+            entity.HasIndex(f => f.EntityId);
+
+            entity.Property(f => f.DataJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+
+            entity.HasOne(f => f.DynamicForm)
+                .WithMany()
+                .HasForeignKey(f => f.DynamicFormId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+        modelBuilder.Entity<CommissionRule>(entity =>
+        {
+            entity.ToTable("commission_rules");
+
+            entity.HasIndex(c => new { c.TenantId, c.Name })
+                .IsUnique();
+
+            entity.HasIndex(c => new { c.TenantId, c.IsActive });
+
+            entity.Property(c => c.Name)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.Property(c => c.RuleType)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(c => c.Rate)
+                .HasPrecision(18, 4);
+
+            entity.Property(c => c.FixedAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(c => c.MinAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(c => c.MaxAmount)
+                .HasPrecision(18, 2);
+
+            entity.Property(c => c.Role)
+                .HasMaxLength(50);
+
+            entity.Property(c => c.Description)
+                .HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<PaymentGateway>(entity =>
+        {
+            entity.ToTable("payment_gateways");
+
+            entity.HasIndex(p => new { p.TenantId, p.Name })
+                .IsUnique();
+
+            entity.HasIndex(p => new { p.TenantId, p.IsActive });
+
+            entity.Property(p => p.Name)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(p => p.Provider)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(p => p.Currency)
+                .HasMaxLength(3)
+                .IsRequired();
+
+            entity.Property(p => p.ConfigurationJson)
+                .HasColumnType("jsonb");
+
+            entity.Property(p => p.PublicKey)
+                .HasMaxLength(300);
+
+            entity.Property(p => p.WebhookUrl)
+                .HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<InvoiceTemplate>(entity =>
+        {
+            entity.ToTable("invoice_templates");
+
+            entity.HasIndex(t => new { t.TenantId, t.Name })
+                .IsUnique();
+
+            entity.Property(t => t.Name)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(t => t.LayoutJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+
+            entity.Property(t => t.AccentColor)
+                .HasMaxLength(20)
+                .IsRequired();
+
+            entity.Property(t => t.HeaderText)
+                .HasMaxLength(500);
+
+            entity.Property(t => t.FooterText)
+                .HasMaxLength(1000);
+        });
+
     }
 
     private void AddDefaultInventoryCatalogs()

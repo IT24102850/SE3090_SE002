@@ -136,6 +136,28 @@ builder.Services.AddHttpClient<SmeBackend.Services.IPlannerAgentService, SmeBack
 builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.StubReminderChannelSender>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPushNotificationSender, SmeBackend.Services.FcmPushNotificationSender>();
 builder.Services.AddScoped<SmeBackend.Services.ICloudinaryImageService, SmeBackend.Services.CloudinaryImageService>();
+// Billing & payments engine (component 3). Integrations (Stripe, PayPal,
+// SendGrid, Twilio) share one named HttpClient; each falls back to an honest
+// "simulated" result when its credentials are not configured.
+builder.Services.AddHttpClient(SmeBackend.Services.Billing.BillingHttp.ClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
+builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingApprovalService, SmeBackend.Services.Billing.BillingApprovalService>();
+builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingMessenger, SmeBackend.Services.Billing.BillingMessenger>();
+builder.Services.AddScoped<IBillingService, BillingService>();
+builder.Services.AddScoped<IDynamicFormService, DynamicFormService>();
+builder.Services.AddScoped<SmeBackend.Services.Billing.BillingSettingsService>();
+builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingSettingsService>(sp =>
+    sp.GetRequiredService<SmeBackend.Services.Billing.BillingSettingsService>());
+builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingReportService, SmeBackend.Services.Billing.BillingReportService>();
+builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingAgentService, SmeBackend.Services.Billing.BillingAgentService>();
+builder.Services.AddScoped<SmeBackend.Services.Billing.IPaymentCheckoutService, SmeBackend.Services.Billing.PaymentCheckoutService>();
+builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.StripePaymentProcessor>();
+builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.PayPalPaymentProcessor>();
+builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.ManualPaymentProcessor>();
+builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessorFactory, SmeBackend.Services.Billing.PaymentProcessorFactory>();
+builder.Services.AddHostedService<SmeBackend.Services.Billing.BillingAutomationService>();
 
 // The public website booking widget is anonymous, so it gets a per-IP
 // budget that no signed-in endpoint needs: enough for a family working

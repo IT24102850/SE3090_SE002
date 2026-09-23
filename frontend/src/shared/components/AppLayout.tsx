@@ -49,6 +49,24 @@ const NAV_SECTIONS: NavSection[] = [
       { path: '/my-bookings', label: 'My bookings', icon: '🎟️', roles: ['Customer'] },
       { path: '/ai-planner', label: 'AI planner', icon: '🤖', roles: ['Customer'] },
       { path: '/business', label: 'About the business', icon: '🏪', roles: ['Customer'] },
+      { path: '/my-bills', label: 'My bills', icon: '💳', roles: ['Customer'] },
+    ],
+  },
+  {
+    // Billing & payments (component 3). Insurance claims is shared: staff
+    // work the pipeline, customers track their own.
+    id: 'billing',
+    label: 'Billing',
+    items: [
+      { path: '/billing', label: 'Billing Dashboard', icon: '💹', roles: ['Admin', 'Manager'] },
+      { path: '/invoices', label: 'Invoices', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/subscriptions', label: 'Subscriptions', icon: '🔁', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/insurance-claims', label: 'Insurance Claims', icon: '🛡️', roles: ['Admin', 'Manager', 'Staff', 'Customer'] },
+      { path: '/commission-rules', label: 'Commission Rules', icon: '🤝', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/billing-agent', label: 'Billing Agent', icon: '🧠', roles: ['Admin', 'Manager'] },
+      { path: '/invoice-designer', label: 'Invoice Designer', icon: '🎨', roles: ['Admin', 'Manager'] },
+      { path: '/form-builder', label: 'Form Builder', icon: '🧩', roles: ['Admin', 'Manager'] },
+      { path: '/payment-gateways', label: 'Payment Gateways', icon: '🔐', roles: ['Admin'] },
     ],
   },
   {
