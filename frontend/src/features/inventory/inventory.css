@@ -658,8 +658,14 @@
 .inventory-scope .inventory-analytics-hero .eyebrow { margin: 0 0 .45rem; color: #93B7FF; }
 .inventory-scope .inventory-analytics-hero h1 { margin: 0; color: #FFF; font-size: clamp(1.8rem, 3vw, 2.45rem); letter-spacing: -.045em; }
 .inventory-scope .inventory-analytics-hero-content p:not(.eyebrow) { max-width: 38rem; margin: .45rem 0 0; color: #C4CEE3; font-size: .9rem; line-height: 1.55; }
-.inventory-scope .inventory-analytics-refresh { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-width: 130px; color: #F3F7FF; border: 1px solid rgba(211, 223, 255, .24); background: rgba(255, 255, 255, .09); }
-.inventory-scope .inventory-analytics-refresh:hover:not(:disabled) { border-color: rgba(156, 231, 255, .56); background: rgba(105, 173, 255, .18); }
+.inventory-scope .inventory-analytics-refresh { display: inline-flex; align-items: center; justify-content: center; gap: .55rem; min-width: 150px; min-height: 44px; padding: 0 1rem; color: #FFF; font-size: .78rem; font-weight: 750; border: 1px solid rgba(190, 215, 255, .48); border-radius: .8rem; background: linear-gradient(125deg, #2785E8, #5B66E8 58%, #8A58D6); box-shadow: 0 9px 22px rgba(39, 101, 218, .28), inset 0 1px rgba(255, 255, 255, .28); transition: transform .18s ease, box-shadow .18s ease, filter .18s ease; }
+.inventory-scope .inventory-analytics-refresh:hover:not(:disabled) { transform: translateY(-2px); border-color: rgba(210, 235, 255, .8); filter: saturate(1.15) brightness(1.06); box-shadow: 0 13px 26px rgba(39, 101, 218, .38), inset 0 1px rgba(255, 255, 255, .32); }
+.inventory-scope .inventory-analytics-refresh:active:not(:disabled) { transform: translateY(0) scale(.98); }
+.inventory-scope .inventory-analytics-refresh:focus-visible { outline: 3px solid #91D9FF; outline-offset: 3px; }
+.inventory-scope .inventory-analytics-refresh:disabled { cursor: progress; opacity: .84; }
+.inventory-scope .inventory-analytics-refresh svg { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .25)); }
+.inventory-scope .inventory-analytics-refresh.is-refreshing svg { animation: inventory-refresh-spin .9s linear infinite; }
+@keyframes inventory-refresh-spin { to { transform: rotate(360deg); } }
 .inventory-scope .inventory-analytics-hero-foot { justify-content: flex-start; flex-wrap: wrap; margin-top: 1.15rem; padding-top: .85rem; color: #AEBBD3; font-size: .7rem; border-top: 1px solid rgba(219, 229, 255, .13); }
 .inventory-scope .inventory-analytics-hero-foot > span { display: inline-flex; align-items: center; gap: .45rem; }
 .inventory-scope .inventory-analytics-hero-foot i { width: .45rem; height: .45rem; border-radius: 50%; background: #43D6A8; box-shadow: 0 0 0 4px rgba(67, 214, 168, .12); }
@@ -724,5 +730,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .inventory-scope .inventory-analytics-metric, .inventory-scope .inventory-analytics-hero-foot i { animation: none; transition: none; }
+  .inventory-scope .inventory-analytics-refresh, .inventory-scope .inventory-analytics-refresh.is-refreshing svg { animation: none; transition: none; }
   .inventory-scope .inventory-analytics-metric:hover { transform: none; }
 }

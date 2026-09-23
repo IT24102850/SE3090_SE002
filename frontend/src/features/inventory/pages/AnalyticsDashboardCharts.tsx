@@ -13,6 +13,7 @@ import { getStoredToken } from '../authToken';
 import { useChartTheme } from '../../../shared/useChartTheme';
 import { Badge, type BadgeTone } from '../ui/Badge';
 import { Icon } from '../ui/Icon';
+import { useToast } from '../ui/ToastContext';
 
 type InventoryUsageItem = {
   inventoryItemId: string;
@@ -94,20 +95,31 @@ function Metric({ label, value, detail, tone, icon }: { label: string; value: st
 export function AnalyticsDashboardPage() {
   const token = getStoredToken();
   const chart = useChartTheme();
+  const { notify } = useToast();
   const axisTick = { fill: chart.tick, fontSize: 12 };
   const [usage, setUsage] = useState<Slot<InventoryUsageReport>>(loading);
   const [lowStock, setLowStock] = useState<Slot<InventoryListResponse>>(loading);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showRefreshMessage = false) => {
     setUsage(loading);
     setLowStock(loading);
     const [movementResult, stockResult] = await Promise.allSettled([
       apiGet<InventoryUsageReport>('/api/reports/inventory-usage', token),
       apiGet<InventoryListResponse>('/api/inventory/low-stock?pageSize=100', token),
     ]);
-    setUsage(settle(movementResult));
-    setLowStock(settle(stockResult));
-  }, [token]);
+    const movementSlot = settle(movementResult);
+    const stockSlot = settle(stockResult);
+    setUsage(movementSlot);
+    setLowStock(stockSlot);
+
+    if (showRefreshMessage) {
+      if (movementSlot.status === 'ready' && stockSlot.status === 'ready') {
+        notify('Inventory analytics refreshed with the latest movement and stock data.', 'success');
+      } else {
+        notify('Some inventory data could not be refreshed. Check the panels for details.', 'warning');
+      }
+    }
+  }, [notify, token]);
 
   useEffect(() => {
     void load();
@@ -148,8 +160,8 @@ export function AnalyticsDashboardPage() {
             <h1>Inventory analytics</h1>
             <p>See what moved, what needs replenishing, and where stock is building up.</p>
           </div>
-          <button type="button" className="btn inventory-analytics-refresh" onClick={() => void load()} disabled={anyLoading}>
-            <Icon name="workflow" size={16} /> {anyLoading ? 'Updating…' : 'Refresh data'}
+          <button type="button" className={`btn inventory-analytics-refresh${anyLoading ? ' is-refreshing' : ''}`} onClick={() => void load(true)} disabled={anyLoading}>
+            <Icon name="workflow" size={17} /> <span>{anyLoading ? 'Updating analytics…' : 'Refresh data'}</span>
           </button>
         </div>
         <div className="inventory-analytics-hero-foot">
