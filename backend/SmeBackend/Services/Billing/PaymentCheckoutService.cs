@@ -86,7 +86,8 @@ public sealed class PaymentCheckoutService : IPaymentCheckoutService
         try
         {
             session = await _processors.Get(provider).CreateCheckoutAsync(credentials,
-                new CheckoutIntent(payment.Id, invoice.Id, invoice.InvoiceNumber, amount, invoice.Currency, payment.Method, request.ReturnUrl), ct);
+                new CheckoutIntent(payment.Id, invoice.Id, invoice.InvoiceNumber, amount, invoice.Currency, payment.Method, request.ReturnUrl,
+                    request.HostedPage), ct);
         }
         catch (Exception ex) when (ex is PaymentProviderException or HttpRequestException)
         {

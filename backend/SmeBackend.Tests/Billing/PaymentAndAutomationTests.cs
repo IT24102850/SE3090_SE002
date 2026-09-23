@@ -135,6 +135,80 @@ public class PaymentAndAutomationTests
         Assert.Throws<WebhookSignatureException>(() => StripePaymentProcessor.VerifySignature(body, header, "s", DateTimeOffset.UtcNow));
     }
 
+    private sealed class StubHandler : HttpMessageHandler
+    {
+        public List<(HttpRequestMessage Request, string Body)> Calls { get; } = new();
+        public Func<HttpRequestMessage, string> Respond { get; set; } = _ => "{}";
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
+            Calls.Add((request, body));
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(Respond(request)) };
+        }
+    }
+
+    private static IHttpClientFactory FactoryFor(StubHandler handler)
+    {
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(() => new HttpClient(handler, disposeHandler: false));
+        return factory.Object;
+    }
+
+    [Fact]
+    public async Task StripeHostedCheckout_CreatesACheckoutSession_AndReturnsItsUrl()
+    {
+        var handler = new StubHandler
+        {
+            Respond = _ => """{"id":"cs_test_123","url":"https://checkout.stripe.com/c/pay/cs_test_123","status":"open","payment_status":"unpaid"}""",
+        };
+        var stripe = new StripePaymentProcessor(FactoryFor(handler));
+        var paymentId = Guid.NewGuid();
+
+        var session = await stripe.CreateCheckoutAsync(
+            new GatewayCredentials("Stripe", "sk_test_x", "pk_test_x", null, true),
+            new CheckoutIntent(paymentId, Guid.NewGuid(), "INV-9", 2500.5m, "LKR", "Card", "https://app.example/my-bills", HostedPage: true));
+
+        Assert.Equal("cs_test_123", session.ExternalId);
+        Assert.Equal("https://checkout.stripe.com/c/pay/cs_test_123", session.RedirectUrl);
+        Assert.Equal("Pending", session.Status);
+        var (request, body) = Assert.Single(handler.Calls);
+        Assert.Equal("https://api.stripe.com/v1/checkout/sessions", request.RequestUri!.ToString());
+        Assert.Equal("Bearer", request.Headers.Authorization!.Scheme);
+        var form = System.Web.HttpUtility.ParseQueryString(body);
+        Assert.Equal("250050", form["line_items[0][price_data][unit_amount]"]);
+        Assert.Equal("lkr", form["line_items[0][price_data][currency]"]);
+        Assert.StartsWith($"https://app.example/my-bills?payment={paymentId}", form["success_url"]);
+    }
+
+    [Theory]
+    [InlineData("complete", "paid", "Succeeded")]
+    [InlineData("open", "unpaid", "Pending")]
+    [InlineData("expired", "unpaid", "Failed")]
+    public void StripeCheckoutSessionStatus_Maps(string status, string paymentStatus, string expected) =>
+        Assert.Equal(expected, StripePaymentProcessor.MapSessionStatus(status, paymentStatus));
+
+    [Fact]
+    public async Task StripeCheckoutSessionCompletedWebhook_SettlesTheHostedPayment()
+    {
+        var f = new BillingTestFixture();
+        var invoice = await f.CreateInvoiceAsync(unitPrice: 800m);
+        const string secret = "whsec_hosted";
+        await f.Settings.UpsertGatewayAsync(f.TenantId, null,
+            new UpsertPaymentGatewayRequest("Stripe", "Stripe", "LKR", true, true, "pk_test_1", "sk_test_1", secret), null);
+        f.Db.Payments.Add(new Payment { InvoiceId = invoice.Id, Amount = 800m, Method = "Card", Provider = "Stripe", Status = "Pending", TransactionRef = "cs_test_abc" });
+        await f.Db.SaveChangesAsync();
+
+        var body = """{"type":"checkout.session.completed","data":{"object":{"id":"cs_test_abc","payment_status":"paid"}}}""";
+        var ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        var headers = new Dictionary<string, string> { ["Stripe-Signature"] = $"t={ts},v1={StripePaymentProcessor.ComputeSignature(ts, body, secret)}" };
+
+        var result = await f.Checkout.HandleWebhookAsync("stripe", f.TenantId, body, headers);
+
+        Assert.Equal("Succeeded", result.Value);
+        Assert.Equal("Paid", (await f.Db.Invoices.SingleAsync()).Status);
+    }
+
     [Theory]
     [InlineData(12.34, "LKR", 1234)]
     [InlineData(1500, "JPY", 1500)]

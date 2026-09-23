@@ -35,7 +35,8 @@ public sealed record CheckoutIntent(
     decimal Amount,
     string Currency,
     string Method,
-    string? ReturnUrl);
+    string? ReturnUrl,
+    bool HostedPage = false);
 
 public sealed record ProcessorCheckout(
     string ExternalId,
@@ -111,6 +112,8 @@ public sealed class StripePaymentProcessor : IPaymentProcessor
 
     public async Task<ProcessorCheckout> CreateCheckoutAsync(GatewayCredentials c, CheckoutIntent intent, CancellationToken ct = default)
     {
+        if (intent.HostedPage) return await CreateHostedSessionAsync(c, intent, ct);
+
         var form = new Dictionary<string, string>
         {
             ["amount"] = ToMinorUnits(intent.Amount, intent.Currency).ToString(CultureInfo.InvariantCulture),
@@ -131,11 +134,55 @@ public sealed class StripePaymentProcessor : IPaymentProcessor
             false);
     }
 
+    /// A Checkout Session: Stripe hosts the card form, the customer comes
+    /// back to ReturnUrl, and checkout.session.completed settles it.
+    private async Task<ProcessorCheckout> CreateHostedSessionAsync(GatewayCredentials c, CheckoutIntent intent, CancellationToken ct)
+    {
+        var returnUrl = intent.ReturnUrl ?? "https://example.invalid/stripe/return";
+        var separator = returnUrl.Contains('?') ? '&' : '?';
+        var form = new Dictionary<string, string>
+        {
+            ["mode"] = "payment",
+            ["success_url"] = $"{returnUrl}{separator}payment={intent.PaymentId}&result=success",
+            ["cancel_url"] = $"{returnUrl}{separator}payment={intent.PaymentId}&result=cancelled",
+            ["client_reference_id"] = intent.PaymentId.ToString(),
+            ["line_items[0][quantity]"] = "1",
+            ["line_items[0][price_data][currency]"] = intent.Currency.ToLowerInvariant(),
+            ["line_items[0][price_data][unit_amount]"] = ToMinorUnits(intent.Amount, intent.Currency).ToString(CultureInfo.InvariantCulture),
+            ["line_items[0][price_data][product_data][name]"] = $"Invoice {intent.InvoiceNumber}",
+            ["metadata[invoice_id]"] = intent.InvoiceId.ToString(),
+            ["metadata[payment_id]"] = intent.PaymentId.ToString(),
+        };
+        using var doc = await SendAsync(c, HttpMethod.Post, "checkout/sessions", form, $"cs-{intent.PaymentId}", ct);
+        var root = doc.RootElement;
+        return new ProcessorCheckout(
+            root.GetProperty("id").GetString()!,
+            PaymentStatuses.Pending,
+            null,
+            root.TryGetProperty("url", out var url) ? url.GetString() : null,
+            root.GetRawText(),
+            false);
+    }
+
     public async Task<string> RefreshStatusAsync(GatewayCredentials c, string externalId, CancellationToken ct = default)
     {
+        if (externalId.StartsWith("cs_", StringComparison.Ordinal))
+        {
+            using var session = await SendAsync(c, HttpMethod.Get, $"checkout/sessions/{Uri.EscapeDataString(externalId)}", null, null, ct);
+            return MapSessionStatus(
+                session.RootElement.TryGetProperty("status", out var st) ? st.GetString() : null,
+                session.RootElement.TryGetProperty("payment_status", out var ps) ? ps.GetString() : null);
+        }
+
         using var doc = await SendAsync(c, HttpMethod.Get, $"payment_intents/{Uri.EscapeDataString(externalId)}", null, null, ct);
         return MapStatus(doc.RootElement.GetProperty("status").GetString());
     }
+
+    /// Checkout Session: status open|complete|expired, payment_status paid|unpaid|no_payment_required.
+    public static string MapSessionStatus(string? status, string? paymentStatus) =>
+        paymentStatus is "paid" or "no_payment_required" ? PaymentStatuses.Succeeded
+        : status == "expired" ? PaymentStatuses.Failed
+        : PaymentStatuses.Pending;
 
     public Task<WebhookEvent?> ParseWebhookAsync(GatewayCredentials c, string body, IReadOnlyDictionary<string, string> headers, CancellationToken ct = default)
     {
@@ -154,6 +201,11 @@ public sealed class StripePaymentProcessor : IPaymentProcessor
             "payment_intent.succeeded" when id is not null => new(id, PaymentStatuses.Succeeded, type),
             "payment_intent.payment_failed" when id is not null => new(id, PaymentStatuses.Failed, type),
             "payment_intent.canceled" when id is not null => new(id, PaymentStatuses.Failed, type),
+            "checkout.session.completed" when id is not null => new(id,
+                MapSessionStatus("complete", obj.TryGetProperty("payment_status", out var ps) ? ps.GetString() : null), type),
+            "checkout.session.async_payment_succeeded" when id is not null => new(id, PaymentStatuses.Succeeded, type),
+            "checkout.session.async_payment_failed" when id is not null => new(id, PaymentStatuses.Failed, type),
+            "checkout.session.expired" when id is not null => new(id, PaymentStatuses.Failed, type),
             _ => null,
         };
         return Task.FromResult(evt);

@@ -300,7 +300,12 @@ public record CheckoutRequest(
     decimal? Amount = null,
 
     [MaxLength(500)]
-    string? ReturnUrl = null
+    string? ReturnUrl = null,
+
+    // Stripe only: pay on Stripe's hosted page (a Checkout Session, opened in
+    // a browser) instead of confirming a PaymentIntent in the app with
+    // Stripe.js. The mobile app uses this; the web app uses Stripe.js.
+    bool HostedPage = false
 );
 
 public record CheckoutResponse(

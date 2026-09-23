@@ -539,7 +539,7 @@ export const billingApi = {
 
   // checkout
   availableProviders: () => api.get<AvailableProviders>('/payment-gateways/available').then((r) => r.data),
-  checkout: (id: string, body: { provider?: string | null; method: string; amount?: number | null; returnUrl?: string | null }) =>
+  checkout: (id: string, body: { provider?: string | null; method: string; amount?: number | null; returnUrl?: string | null; hostedPage?: boolean }) =>
     api.post<CheckoutResponse>(`/invoices/${id}/checkout`, body).then((r) => r.data),
   confirmPayment: (paymentId: string, simulateFailure = false) =>
     api.post<{ payment: Payment; invoice: Invoice }>('/payments/confirm', { paymentId, simulateFailure }).then((r) => r.data),
