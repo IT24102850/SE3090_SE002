@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, type BadgeTone } from '../ui/Badge';
 import { getStoredToken } from '../authToken';
+import { useToast } from '../ui/ToastContext';
+import { Icon } from '../ui/Icon';
 
-type MovementType = 'Receive' | 'Issue' | 'Adjustment';
+type MovementType = 'Receive' | 'Issue' | 'Waste' | 'Adjustment';
 
 type MovementEntry = {
   id: string;
@@ -11,42 +13,27 @@ type MovementEntry = {
   sku: string;
   movementType: MovementType;
   quantity: number;
-  reasonCode: string;
   reasonLabel: string;
   reference?: string;
-  performedBy: string;
   notes?: string;
-  purchaseOrder?: string;
 };
 
 const PAGE_SIZE = 8;
 
-const reasonCodes = [
-  { code: 'REC-001', label: 'Supplier delivery', type: 'Receive' as const },
-  { code: 'REC-002', label: 'Transfer in', type: 'Receive' as const },
-  { code: 'REC-003', label: 'PO receipt', type: 'Receive' as const },
-  { code: 'ISS-001', label: 'Production use', type: 'Issue' as const },
-  { code: 'ISS-002', label: 'Waste / spoilage', type: 'Issue' as const },
-  { code: 'ISS-003', label: 'Transfer out', type: 'Issue' as const },
-  { code: 'ADJ-001', label: 'Cycle count correction', type: 'Adjustment' as const },
-  { code: 'ADJ-002', label: 'Damage write-off', type: 'Adjustment' as const },
-  { code: 'ADJ-003', label: 'Opening balance', type: 'Adjustment' as const },
-];
-
-const movementTypes = ['All types', 'Receive', 'Issue', 'Adjustment'] as const;
+const movementTypes = ['All types', 'Receive', 'Issue', 'Waste', 'Adjustment'] as const;
 type MovementTypeFilter = (typeof movementTypes)[number];
-
-const reasonFilters = ['All reason codes', ...reasonCodes.map((reason) => reason.code)] as const;
-type ReasonFilter = (typeof reasonFilters)[number];
-
-const users = ['All users', 'Kavindu', 'Nadeesha', 'Dinesh', 'Inventory Admin'] as const;
-type UserFilter = (typeof users)[number];
 
 const typeTone: Record<MovementType, BadgeTone> = {
   Receive: 'green',
   Issue: 'red',
+  Waste: 'red',
   Adjustment: 'amber',
 };
+
+function normalizeMovementType(value: unknown): MovementType {
+  if (value === 'Receive' || value === 'Issue' || value === 'Waste' || value === 'Adjustment') return value;
+  return 'Adjustment';
+}
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('en-LK', {
@@ -57,66 +44,57 @@ function formatDateTime(iso: string) {
   });
 }
 
-function UserChip({ name }: { name: string }) {
-  return (
-    <span className="user-chip">
-      <span className="user-chip-avatar" aria-hidden="true">{name.charAt(0)}</span>
-      {name}
-    </span>
-  );
-}
-
 export function StockMovementLogPage() {
   const token = getStoredToken();
+  const { notify } = useToast();
   const [movements, setMovements] = useState<MovementEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState('');
   const [type, setType] = useState<MovementTypeFilter>(movementTypes[0]);
-  const [reason, setReason] = useState<ReasonFilter>(reasonFilters[0]);
-  const [user, setUser] = useState<UserFilter>(users[0]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
 
+  const loadMovements = useCallback(async (activeCheck?: () => boolean) => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const response = await fetch('/api/inventory/movements?pageSize=100', {
+        headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
+      });
+      if (!response.ok) throw new Error(`Movement request failed (${response.status})`);
+      const data = await response.json();
+      if (activeCheck && !activeCheck()) return false;
+      setMovements((Array.isArray(data) ? data : []).map((movement: any): MovementEntry => ({
+        id: String(movement.id),
+        occurredAt: movement.occurredAt,
+        item: movement.item ?? 'Unknown item',
+        sku: movement.sku ?? 'Unknown SKU',
+        movementType: normalizeMovementType(movement.movementType),
+        quantity: Number(movement.quantity ?? 0),
+        reasonLabel: movement.notes ?? movement.reference ?? movement.movementType ?? 'Stock movement',
+        reference: movement.reference ?? undefined,
+        notes: movement.notes ?? undefined,
+      })));
+      return true;
+    } catch (error) {
+      console.error(error);
+      if (!activeCheck || activeCheck()) {
+        setMovements([]);
+        setLoadError(error instanceof Error ? error.message : 'Unable to load movement history.');
+      }
+      return false;
+    } finally {
+      if (!activeCheck || activeCheck()) setLoading(false);
+    }
+  }, [token]);
+
   useEffect(() => {
     let active = true;
-    async function loadMovements() {
-      setLoading(true);
-      setLoadError('');
-      try {
-        const response = await fetch('/api/inventory/movements?pageSize=100', {
-          headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
-        });
-        if (!response.ok) throw new Error(`Movement request failed (${response.status})`);
-        const data = await response.json();
-        if (!active) return;
-        setMovements((data ?? []).map((movement: any): MovementEntry => ({
-          id: movement.id,
-          occurredAt: movement.occurredAt,
-          item: movement.item,
-          sku: movement.sku,
-          movementType: movement.movementType as MovementType,
-          quantity: Number(movement.quantity),
-          reasonCode: movement.movementType === 'Receive' ? 'REC-001' : movement.movementType === 'Adjustment' ? 'ADJ-001' : 'ISS-001',
-          reasonLabel: movement.notes ?? movement.reference ?? movement.movementType,
-          reference: movement.reference ?? undefined,
-          performedBy: 'Inventory operator',
-          notes: movement.notes ?? undefined,
-        })));
-      } catch (error) {
-        console.error(error);
-        if (active) {
-          setMovements([]);
-          setLoadError('Unable to load movement history from the database. Refresh and try again.');
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    void loadMovements();
+    void loadMovements(() => active);
     return () => { active = false; };
-  }, [token]);
+  }, [loadMovements]);
 
   const filtered = useMemo(() => {
     const queryLower = query.trim().toLowerCase();
@@ -130,16 +108,14 @@ export function StockMovementLogPage() {
         row.item.toLowerCase().includes(queryLower) ||
         row.sku.toLowerCase().includes(queryLower) ||
         row.reference?.toLowerCase().includes(queryLower) ||
-        row.purchaseOrder?.toLowerCase().includes(queryLower) ||
-        row.reasonCode.toLowerCase().includes(queryLower);
+        row.reasonLabel.toLowerCase().includes(queryLower) ||
+        row.notes?.toLowerCase().includes(queryLower);
       const matchesType = type === 'All types' || row.movementType === type;
-      const matchesReason = reason === 'All reason codes' || row.reasonCode === reason;
-      const matchesUser = user === 'All users' || row.performedBy === user;
       const matchesFrom = fromMs === null || occurredMs >= fromMs;
       const matchesTo = toMs === null || occurredMs <= toMs;
-      return matchesQuery && matchesType && matchesReason && matchesUser && matchesFrom && matchesTo;
+      return matchesQuery && matchesType && matchesFrom && matchesTo;
     });
-  }, [dateFrom, dateTo, movements, query, reason, type, user]);
+  }, [dateFrom, dateTo, movements, query, type]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -151,42 +127,62 @@ export function StockMovementLogPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [query, type, reason, user, dateFrom, dateTo]);
+  }, [query, type, dateFrom, dateTo]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
   const stats = useMemo(() => {
-    const received = filtered.filter((row) => row.quantity > 0).reduce((sum, row) => sum + row.quantity, 0);
-    const issued = filtered.filter((row) => row.quantity < 0).reduce((sum, row) => sum + Math.abs(row.quantity), 0);
-    return { count: filtered.length, received, issued, net: received - issued };
+    const received = filtered.filter((row) => row.movementType === 'Receive' && row.quantity > 0).reduce((sum, row) => sum + row.quantity, 0);
+    const issued = filtered.filter((row) => (row.movementType === 'Issue' || row.movementType === 'Waste') && row.quantity < 0).reduce((sum, row) => sum + Math.abs(row.quantity), 0);
+    const net = filtered.reduce((sum, row) => sum + row.quantity, 0);
+    return {
+      count: filtered.length,
+      received,
+      issued,
+      net,
+      receives: filtered.filter((row) => row.movementType === 'Receive').length,
+      issues: filtered.filter((row) => row.movementType === 'Issue').length,
+      wastes: filtered.filter((row) => row.movementType === 'Waste').length,
+      adjustments: filtered.filter((row) => row.movementType === 'Adjustment').length,
+    };
   }, [filtered]);
 
   const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
+  const hasActiveFilters = query.trim() !== '' || type !== 'All types' || dateFrom !== '' || dateTo !== '';
+
+  async function handleRefresh() {
+    const refreshed = await loadMovements();
+    if (refreshed) notify('Stock movement history refreshed.', 'success');
+  }
 
   return (
-    <div className="page">
-      <header className="page-head">
-        <div>
-          <p className="eyebrow">OPERATIONS / STOCK</p>
-          <h1>Stock movement log</h1>
-          <p className="page-sub">Filterable history of receives, issues, and adjustments with reason codes and user attribution.</p>
+    <div className="page stock-movement-page">
+      <header className="movement-hero">
+        <div className="movement-hero-copy">
+          <p className="movement-eyebrow"><span aria-hidden="true">↗</span> OPERATIONS / STOCK ACTIVITY</p>
+          <h1>Stock movements</h1>
+          <p>Follow stock coming in, going out, and adjustments across your inventory.</p>
+          <div className="movement-hero-meta"><span className="movement-live-dot" />{loading ? 'Syncing recent activity…' : `${movements.length} latest records loaded`}<span className="movement-meta-separator">·</span>Latest first</div>
         </div>
+        <div className="movement-hero-art" aria-hidden="true"><span className="movement-art-ring movement-art-ring-one" /><span className="movement-art-ring movement-art-ring-two" /><span className="movement-art-icon"><Icon name="movement" size={42} /></span><span className="movement-art-point movement-art-point-one" /><span className="movement-art-point movement-art-point-two" /></div>
+        <div className="movement-hero-actions"><button className="btn movement-refresh" type="button" onClick={() => void handleRefresh()} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh history'}</button></div>
       </header>
       {loadError && <p className="page-notice">{loadError}</p>}
       {loading && <div className="panel p-6">Loading live movement history…</div>}
 
-      <section className="stat-strip" aria-label="Movement summary">
-        <div className="stat"><span className="stat-value">{stats.count}</span><span className="stat-label">Movements</span></div>
-        <div className="stat"><span className="stat-value stat-value-in">+{stats.received}</span><span className="stat-label">Units in</span></div>
-        <div className="stat"><span className="stat-value stat-value-out">−{stats.issued}</span><span className="stat-label">Units out</span></div>
-        <div className="stat"><span className="stat-value">{stats.net >= 0 ? `+${stats.net}` : stats.net}</span><span className="stat-label">Net change</span></div>
+      <section className="stat-strip movement-stat-strip" aria-label="Movement summary">
+        <div className="stat metric-card movement-stat"><div className="metric-icon-bubble metric-purple" aria-hidden="true"><Icon name="movement" size={19} /></div><div className="metric-info"><span className="stat-value metric-value">{stats.count}</span><span className="stat-label metric-label">Matching movements</span></div></div>
+        <div className="stat metric-card movement-stat"><div className="metric-icon-bubble metric-emerald" aria-hidden="true"><span>↓</span></div><div className="metric-info"><span className="stat-value metric-value movement-in-value">+{stats.received.toLocaleString()}</span><span className="stat-label metric-label">Units received</span></div></div>
+        <div className="stat metric-card movement-stat"><div className="metric-icon-bubble metric-amber" aria-hidden="true"><span>↑</span></div><div className="metric-info"><span className="stat-value metric-value movement-out-value">−{stats.issued.toLocaleString()}</span><span className="stat-label metric-label">Units issued / wasted</span></div></div>
+        <div className="stat metric-card movement-stat"><div className="metric-icon-bubble metric-cyan" aria-hidden="true"><Icon name="chart" size={19} /></div><div className="metric-info"><span className="stat-value metric-value">{stats.net >= 0 ? `+${stats.net}` : stats.net}</span><span className="stat-label metric-label">Net quantity change</span></div></div>
       </section>
 
-      <section className="panel">
-        <div className="toolbar toolbar-wrap">
+      <section className="panel movement-log-panel">
+        <div className="movement-panel-head"><div><span className="movement-panel-icon" aria-hidden="true"><Icon name="inventory" size={19} /></span><div><h2>Activity log</h2><p>Filter records by item, movement type, or date.</p></div></div><span className="movement-count-pill">{filtered.length} shown</span></div>
+        <div className="toolbar toolbar-wrap movement-toolbar">
           <div className="search-field">
             <span className="search-icon" aria-hidden="true">⌕</span>
             <input
@@ -200,12 +196,6 @@ export function StockMovementLogPage() {
           <select className="filter-select" value={type} onChange={(event) => setType(event.target.value as MovementTypeFilter)} aria-label="Filter by movement type">
             {movementTypes.map((option) => <option key={option}>{option}</option>)}
           </select>
-          <select className="filter-select" value={reason} onChange={(event) => setReason(event.target.value as ReasonFilter)} aria-label="Filter by reason code">
-            {reasonFilters.map((option) => <option key={option}>{option}</option>)}
-          </select>
-          <select className="filter-select" value={user} onChange={(event) => setUser(event.target.value as UserFilter)} aria-label="Filter by user">
-            {users.map((option) => <option key={option}>{option}</option>)}
-          </select>
           <label className="date-filter">
             <span>From</span>
             <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} aria-label="From date" />
@@ -214,53 +204,42 @@ export function StockMovementLogPage() {
             <span>To</span>
             <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} aria-label="To date" />
           </label>
+          {hasActiveFilters && <button type="button" className="movement-clear-filters" onClick={() => { setQuery(''); setType('All types'); setDateFrom(''); setDateTo(''); }}>Clear filters</button>}
         </div>
 
-        <div className="reason-legend" aria-label="Reason code legend">
-          {reasonCodes.map((entry) => (
-            <span key={entry.code} className="reason-legend-item">
-              <code>{entry.code}</code> {entry.label}
-            </span>
-          ))}
+        <div className="movement-type-summary" aria-label="Movement type counts">
+          <button type="button" className={`movement-type-chip${type === 'All types' ? ' is-active' : ''}`} onClick={() => setType('All types')}>All <strong>{filtered.length}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-receive${type === 'Receive' ? ' is-active' : ''}`} onClick={() => setType(type === 'Receive' ? 'All types' : 'Receive')}><i /> Received <strong>{stats.receives}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-issue${type === 'Issue' ? ' is-active' : ''}`} onClick={() => setType(type === 'Issue' ? 'All types' : 'Issue')}><i /> Issued <strong>{stats.issues}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-waste${type === 'Waste' ? ' is-active' : ''}`} onClick={() => setType(type === 'Waste' ? 'All types' : 'Waste')}><i /> Wasted <strong>{stats.wastes}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-adjust${type === 'Adjustment' ? ' is-active' : ''}`} onClick={() => setType(type === 'Adjustment' ? 'All types' : 'Adjustment')}><i /> Adjusted <strong>{stats.adjustments}</strong></button>
         </div>
 
         <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>When</th>
-                <th>Item</th>
-                <th>Type</th>
-                <th>Qty</th>
-                <th>Reason</th>
-                <th>Reference</th>
-                <th>Performed by</th>
-              </tr>
-            </thead>
+          <table className="data-table movement-table">
+            <thead><tr><th>When</th><th>Item</th><th>Type</th><th>Quantity</th><th>Details</th><th>Reference</th></tr></thead>
             <tbody>
               {paged.map((row) => (
                 <tr key={row.id}>
-                  <td className="cell-sub">{formatDateTime(row.occurredAt)}</td>
+                  <td className="movement-when">{formatDateTime(row.occurredAt)}</td>
                   <td>
                     <p className="cell-title">{row.item}</p>
-                    <p className="cell-sub">{row.sku}{row.purchaseOrder ? ` · ${row.purchaseOrder}` : ''}</p>
+                    <p className="cell-sub">{row.sku}</p>
                   </td>
                   <td><Badge tone={typeTone[row.movementType]}>{row.movementType}</Badge></td>
                   <td>
-                    <span className={row.quantity > 0 ? 'qty qty-in' : row.quantity < 0 ? 'qty qty-out' : 'qty'}>
+                    <span className={`movement-quantity${row.quantity > 0 ? ' is-in' : row.quantity < 0 ? ' is-out' : ''}`}>
                       {row.quantity > 0 ? `+${row.quantity}` : row.quantity}
                     </span>
                   </td>
                   <td>
-                    <span className="reason-code">{row.reasonCode}</span>
-                    <p className="cell-sub">{row.reasonLabel}</p>
+                    <p className="movement-detail-text">{row.reasonLabel}</p>
                   </td>
-                  <td className="cell-sub">{row.reference ?? '—'}{row.notes ? <p className="cell-note">{row.notes}</p> : null}</td>
-                  <td><UserChip name={row.performedBy} /></td>
+                  <td className="movement-reference">{row.reference ?? '—'}</td>
                 </tr>
               ))}
               {paged.length === 0 && (
-                <tr><td colSpan={7} className="empty-state">No movements match your filters.</td></tr>
+                <tr><td colSpan={6} className="empty-state">{movements.length === 0 ? 'No stock movement records are available yet.' : 'No movements match these filters. Try clearing a filter or changing the date range.'}</td></tr>
               )}
             </tbody>
           </table>
