@@ -1575,6 +1575,7 @@ body.modal-open { overflow: hidden; }
 .sidebar-link-icon.inventory-nav-icon { color: var(--inventory-icon-color); background: color-mix(in srgb, var(--inventory-icon-color) 13%, var(--sidebar-hover)); }
 .sidebar-link-icon.inventory-nav-icon svg { width: 19px; height: 19px; }
 .inventory-nav-inventory { --inventory-icon-color: #0891B2; }
+.inventory-nav-supplier { --inventory-icon-color: #DB2777; }
 .inventory-nav-movement { --inventory-icon-color: #059669; }
 .inventory-nav-po { --inventory-icon-color: #7C3AED; }
 .inventory-nav-stocksense { --inventory-icon-color: #6366F1; }

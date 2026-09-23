@@ -25,6 +25,13 @@ export function Icon({ name, className, size: requestedSize = 18 }: { name: stri
           <path d="m3.5 7.5 8.5 4 8.5-4M12 11.5V21" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       );
+    case 'supplier':
+      return (
+        <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M3 10 4.5 4h15L21 10M4 10v10h16V10M3 10a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M9 20v-5h6v5M7 7h.01M12 7h.01M17 7h.01" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
     case 'branch':
       return (
         <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

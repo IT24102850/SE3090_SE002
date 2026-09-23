@@ -125,6 +125,7 @@ export const ALL_NAV_PATHS = NAV_SECTIONS.flatMap((s) => s.items.map((i) => i.pa
 
 const INVENTORY_NAV_ICONS: Record<string, string> = {
   '/inventory': 'inventory',
+  '/suppliers': 'supplier',
   '/stock-movements': 'movement',
   '/purchase-orders': 'po',
   '/low-stock-alerts': 'stocksense',
