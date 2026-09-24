@@ -105,9 +105,18 @@ export function SuppliersPage() {
       {loadError && <div className="page-notice" role="alert">{loadError}</div>}
 
       <section className="suppliers-summary" aria-label="Supplier summary">
-        <article className="suppliers-summary-card"><span className="suppliers-summary-icon suppliers-icon-teal" aria-hidden="true">♧</span><div><strong>{suppliers.length}</strong><span>Suppliers registered</span></div></article>
-        <article className="suppliers-summary-card"><span className="suppliers-summary-icon suppliers-icon-blue" aria-hidden="true">✉</span><div><strong>{contactCount}</strong><span>With contact details</span></div></article>
-        <article className="suppliers-summary-card suppliers-summary-link"><span className="suppliers-summary-icon suppliers-icon-violet" aria-hidden="true">▤</span><div><strong>Purchasing</strong><span>Connect suppliers to orders</span></div><Link to="/purchase-orders" aria-label="Open purchase orders">View orders <span aria-hidden="true">→</span></Link></article>
+        <article className="suppliers-summary-card suppliers-summary-directory">
+          <div className="suppliers-summary-main"><span className="suppliers-summary-icon suppliers-icon-teal" aria-hidden="true">♧</span><div className="suppliers-summary-copy"><span className="suppliers-summary-kicker">PARTNER DIRECTORY</span><strong>{suppliers.length}</strong><span className="suppliers-summary-label">Suppliers registered</span></div><span className="suppliers-summary-index" aria-hidden="true">01</span></div>
+          <div className="suppliers-summary-detail">{contactCount} {contactCount === 1 ? 'supplier has' : 'suppliers have'} contact information</div>
+        </article>
+        <article className="suppliers-summary-card suppliers-summary-contacts">
+          <div className="suppliers-summary-main"><span className="suppliers-summary-icon suppliers-icon-blue" aria-hidden="true">✉</span><div className="suppliers-summary-copy"><span className="suppliers-summary-kicker">CONTACT COVERAGE</span><strong>{contactCount}</strong><span className="suppliers-summary-label">With contact details</span></div><span className="suppliers-summary-index" aria-hidden="true">02</span></div>
+          <div className="suppliers-summary-detail">{suppliers.length - contactCount} {suppliers.length - contactCount === 1 ? 'supplier is' : 'suppliers are'} missing contact information</div>
+        </article>
+        <article className="suppliers-summary-card suppliers-summary-link">
+          <div className="suppliers-summary-main"><span className="suppliers-summary-icon suppliers-icon-violet" aria-hidden="true">▤</span><div className="suppliers-summary-copy"><span className="suppliers-summary-kicker">PURCHASING TOOLS</span><strong>Purchase orders</strong><span className="suppliers-summary-label">Supplier-linked ordering</span></div><span className="suppliers-summary-index" aria-hidden="true">03</span></div>
+          <div className="suppliers-summary-detail"><Link to="/purchase-orders">Open purchase orders <span aria-hidden="true">→</span></Link></div>
+        </article>
       </section>
 
       {showForm && (

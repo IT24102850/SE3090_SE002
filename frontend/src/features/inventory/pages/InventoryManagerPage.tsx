@@ -263,7 +263,8 @@ export function InventoryManagerPage() {
     const low = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Low stock').length;
     const out = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Out of stock').length;
     const value = items.reduce((sum, row) => sum + row.qty * row.price, 0);
-    return { items: items.length, total, low, out, value };
+    const categories = new Set(items.map((row) => row.category).filter(Boolean)).size;
+    return { items: items.length, total, low, out, value, categories };
   }, [items]);
 
   const editingItem = modal?.mode === 'edit' ? items.find((row) => row.sku === modal.sku) : undefined;
@@ -428,22 +429,10 @@ export function InventoryManagerPage() {
       {loading && <div className="panel p-6">Loading live inventory…</div>}
 
       <section className="stat-strip" aria-label="Inventory summary">
-        <div className="stat metric-card">
-          <div className="metric-icon-bubble metric-purple" aria-hidden="true"><Icon name="inventory" size={20} /></div>
-          <div className="metric-info"><span className="stat-value metric-value">{stats.items}</span><span className="stat-label metric-label">Items tracked</span></div>
-        </div>
-        <div className="stat metric-card">
-          <div className="metric-icon-bubble metric-cyan" aria-hidden="true"><Icon name="box" size={20} /></div>
-          <div className="metric-info"><span className="stat-value metric-value">{stats.total.toLocaleString()}</span><span className="stat-label metric-label">Units on hand</span></div>
-        </div>
-        <div className="stat metric-card">
-          <div className="metric-icon-bubble metric-amber" aria-hidden="true"><Icon name="alert" size={20} /></div>
-          <div className="metric-info"><span className="stat-value metric-value">{stats.low}</span><span className="stat-label metric-label">Need attention</span></div>
-        </div>
-        <div className="stat metric-card">
-          <div className="metric-icon-bubble metric-emerald" aria-hidden="true"><Icon name="chart" size={20} /></div>
-          <div className="metric-info"><span className="stat-value metric-value">LKR {stats.value.toLocaleString()}</span><span className="stat-label metric-label">Stock value</span></div>
-        </div>
+        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-items"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="inventory" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">CATALOGUE</span><strong className="inventory-manager-metric-value">{stats.items}</strong><span className="inventory-manager-metric-label">Items tracked</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">01</span></div><div className="inventory-manager-metric-detail">Organized across {stats.categories} {stats.categories === 1 ? 'category' : 'categories'}</div></article>
+        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-units"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="box" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">AVAILABLE STOCK</span><strong className="inventory-manager-metric-value">{stats.total.toLocaleString()}</strong><span className="inventory-manager-metric-label">Units on hand</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">02</span></div><div className="inventory-manager-metric-detail">Current recorded quantity across items</div></article>
+        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-attention"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="alert" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">STOCK HEALTH</span><strong className="inventory-manager-metric-value">{stats.low + stats.out}</strong><span className="inventory-manager-metric-label">Need attention</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">03</span></div><div className="inventory-manager-metric-detail">{stats.out} out of stock · {stats.low} running low</div></article>
+        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-valuation"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="chart" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">VALUATION</span><strong className="inventory-manager-metric-value-number">LKR {stats.value.toLocaleString()}</strong><span className="inventory-manager-metric-label">Stock value</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">04</span></div><div className="inventory-manager-metric-detail">Calculated using recorded unit costs</div></article>
       </section>
 
       <div className="inventory-layout inventory-manager-layout">
