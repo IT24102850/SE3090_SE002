@@ -1126,6 +1126,15 @@
 }
 @media (prefers-reduced-motion: reduce) { .inventory-scope .inventory-manager-page .inventory-manager-metric, .inventory-scope .suppliers-summary-card, .inventory-scope .movement-stat, .inventory-scope .purchase-order-metric { animation: none; transition: none; } }
 
+/* Shine the large StockSense hero only; its metric cards keep the Stock Movements layout. */
+.inventory-scope .stocksense-hero::after { z-index: 1; top: -25%; right: auto; bottom: auto; left: -58%; width: 40%; height: 150%; content: ''; pointer-events: none; border-radius: 0; background: linear-gradient(105deg, transparent 10%, rgba(202,255,248,.025) 35%, rgba(202,255,248,.2) 50%, rgba(202,255,248,.035) 64%, transparent 88%); filter: none; transform: skewX(-18deg); animation: stocksense-hero-sheen 8s ease-in-out infinite; }
+@keyframes stocksense-hero-sheen { 0%, 28% { left: -58%; opacity: 0; } 38% { opacity: .85; } 62%, 100% { left: 120%; opacity: 0; } }
+.inventory-scope .stocksense-kpi .movement-stat-main { min-width: 0; }
+.inventory-scope .stocksense-kpi .metric-info { min-width: 0; }
+.inventory-scope .stocksense-stock-value { max-width: 100%; overflow: hidden; font-size: clamp(.82rem, 1.1vw, 1.12rem); text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 560px) { .inventory-scope .stocksense-stock-value { font-size: .78rem; } }
+@media (prefers-reduced-motion: reduce) { .inventory-scope .stocksense-hero::after { animation: none; } }
+
 @keyframes inventory-card-arrive { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes suppliers-mark-float { 0%, 100% { transform: rotate(20deg) scaleY(1.42) translateY(0); } 50% { transform: rotate(24deg) scaleY(1.42) translateY(-6px); } }
 @keyframes suppliers-orbit-glint { 0%, 100% { opacity: .5; box-shadow: 0 0 7px rgba(118,241,217,.55); } 50% { opacity: 1; box-shadow: 0 0 16px rgba(118,241,217,1); } }
