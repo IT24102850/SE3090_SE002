@@ -241,35 +241,26 @@ export function LowStockAlertsPage() {
       {planError && <p className="page-notice" role="alert" style={{ marginTop: 12 }}>{planError}</p>}
 
 
-      <section className="stat-strip stocksense-kpis" aria-label="Inventory health summary">
-        <div className="stat stocksense-kpi stocksense-kpi-total">
-          <div className="metric-icon-bubble metric-cyan"><Icon name="inventory" /></div>
-          <div>
-            <span className="stat-value">{inventory.length}{inventoryTotalCount > inventory.length ? ` / ${inventoryTotalCount}` : ''}</span>
-            <span className="stat-label">Items loaded</span>
-          </div>
-        </div>
-        <div className="stat stocksense-kpi stocksense-kpi-out">
-          <div className="metric-icon-bubble metric-purple"><Icon name="alert" /></div>
-          <div>
-            <span className="stat-value">{outOfStock}</span>
-            <span className="stat-label">Out of stock</span>
-          </div>
-        </div>
-        <div className="stat stocksense-kpi stocksense-kpi-reorder">
-          <div className="metric-icon-bubble metric-amber"><Icon name="alert" /></div>
-          <div>
-            <span className="stat-value">{belowReorder}</span>
-            <span className="stat-label">Below reorder</span>
-          </div>
-        </div>
-        <div className="stat stocksense-kpi stocksense-kpi-value">
+      <section className="stat-strip movement-stat-strip stocksense-kpis" aria-label="Inventory health summary">
+        <article className="stat metric-card movement-stat movement-stat-activity stocksense-kpi stocksense-kpi-total">
+          <div className="movement-stat-main"><span className="movement-stat-icon"><Icon name="inventory" size={20} /></span><div className="metric-info"><span className="movement-stat-kicker">INVENTORY</span><strong className="movement-stat-value">{inventory.length}{inventoryTotalCount > inventory.length ? ` / ${inventoryTotalCount}` : ''}</strong><span className="movement-stat-label">Items loaded</span></div><span className="movement-stat-index">01</span></div>
+          <div className="movement-stat-detail">{inventoryTotalCount} items in the current snapshot</div>
+        </article>
+        <article className="stat metric-card movement-stat movement-stat-out stocksense-kpi stocksense-kpi-out">
+          <div className="movement-stat-main"><span className="movement-stat-icon"><Icon name="alert" size={20} /></span><div className="metric-info"><span className="movement-stat-kicker">URGENT</span><strong className="movement-stat-value">{outOfStock}</strong><span className="movement-stat-label">Out of stock</span></div><span className="movement-stat-glyph">OUT</span></div>
+          <div className="movement-stat-detail">{outOfStock ? 'Needs immediate replenishment review' : 'No empty stock records'}</div>
+        </article>
+        <article className="stat metric-card movement-stat movement-stat-in stocksense-kpi stocksense-kpi-reorder">
+          <div className="movement-stat-main"><span className="movement-stat-icon"><Icon name="alert" size={20} /></span><div className="metric-info"><span className="movement-stat-kicker">REORDER WATCH</span><strong className="movement-stat-value">{belowReorder}</strong><span className="movement-stat-label">Below reorder level</span></div><span className="movement-stat-glyph">LOW</span></div>
+          <div className="movement-stat-detail">{belowReorder} items need review</div>
+        </article>
+        <article className="stat metric-card movement-stat movement-stat-net stocksense-kpi stocksense-kpi-value">
           <div className="metric-icon-bubble metric-emerald"><Icon name="workflow" /></div>
           <div>
             <span className="stat-value">{pricedItems.length ? estimatedValue.toLocaleString('en-LK', { maximumFractionDigits: 0 }) : '—'}</span>
             <span className="stat-label">Estimated stock value · {healthy} healthy</span>
           </div>
-        </div>
+        </article>
       </section>
 
       <section className="panel stocksense-inventory-panel">
