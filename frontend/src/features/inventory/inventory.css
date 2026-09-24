@@ -249,11 +249,31 @@
 .inventory-scope .movement-art-point-one { top: 30px; left: 55px; }
 .inventory-scope .movement-art-point-two { right: 22px; bottom: 43px; animation-delay: 1.2s; }
 .inventory-scope .movement-stat-strip { gap: .8rem; margin-bottom: 1rem; }
-.inventory-scope .movement-stat { min-height: 92px; border-radius: .9rem; animation: inventory-card-arrive .62s cubic-bezier(.2,.8,.2,1) backwards; }
+.inventory-scope .movement-stat { --movement-stat-accent: #695cf6; display: flex; min-height: 122px; flex-direction: column; align-items: stretch; gap: .72rem; padding: .95rem 1rem .82rem; background: linear-gradient(145deg, var(--color-surface), color-mix(in srgb, var(--movement-stat-accent) 8%, var(--color-surface))); border: 1px solid color-mix(in srgb, var(--movement-stat-accent) 22%, var(--color-border)); border-top: 3px solid var(--movement-stat-accent); border-radius: .95rem; box-shadow: var(--shadow-sm); animation: inventory-card-arrive .62s cubic-bezier(.2,.8,.2,1) backwards; }
+.inventory-scope .movement-stat-activity { --movement-stat-accent: #7668f7; }
+.inventory-scope .movement-stat-in { --movement-stat-accent: #0caa7c; }
+.inventory-scope .movement-stat-out { --movement-stat-accent: #ed9b12; }
+.inventory-scope .movement-stat-net { --movement-stat-accent: #079cbd; }
 .inventory-scope .movement-stat:nth-child(2) { animation-delay: .08s; }
 .inventory-scope .movement-stat:nth-child(3) { animation-delay: .16s; }
 .inventory-scope .movement-stat:nth-child(4) { animation-delay: .24s; }
-.inventory-scope .movement-stat:hover { transform: translateY(-5px); box-shadow: 0 15px 28px color-mix(in srgb, var(--color-primary) 15%, transparent); }
+.inventory-scope .movement-stat:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--movement-stat-accent) 52%, var(--color-border)); box-shadow: 0 13px 26px color-mix(in srgb, var(--movement-stat-accent) 15%, transparent); }
+.inventory-scope .movement-stat-main { display: flex; min-width: 0; gap: .75rem; align-items: center; }
+.inventory-scope .movement-stat-icon { display: grid; width: 43px; height: 43px; flex: none; place-items: center; color: var(--movement-stat-accent); font-size: 1.15rem; font-weight: 800; background: color-mix(in srgb, var(--movement-stat-accent) 13%, var(--color-surface)); border: 1px solid color-mix(in srgb, var(--movement-stat-accent) 20%, transparent); border-radius: 14px; }
+.inventory-scope .movement-stat-icon > span { line-height: 1; }
+.inventory-scope .movement-stat .metric-info { display: grid; gap: .1rem; min-width: 0; }
+.inventory-scope .movement-stat-kicker { color: var(--movement-stat-accent); font-size: .59rem; font-weight: 850; letter-spacing: .13em; }
+.inventory-scope .movement-stat-value { color: var(--color-text); font-size: 1.48rem; font-weight: 850; font-variant-numeric: tabular-nums; line-height: 1.05; letter-spacing: -.035em; }
+.inventory-scope .movement-stat-in .movement-stat-value { color: #07966c; }
+.inventory-scope .movement-stat-out .movement-stat-value { color: #cf7b05; }
+.inventory-scope .movement-stat-label { overflow: hidden; color: var(--color-text-secondary); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-scope .movement-stat-index, .inventory-scope .movement-stat-glyph { margin-left: auto; align-self: flex-start; color: color-mix(in srgb, var(--movement-stat-accent) 58%, var(--color-text-muted)); font-size: .64rem; font-weight: 850; letter-spacing: .08em; }
+.inventory-scope .movement-stat-glyph { display: grid; width: 27px; height: 27px; place-items: center; background: color-mix(in srgb, var(--movement-stat-accent) 10%, transparent); border-radius: 9px; }
+.inventory-scope .movement-stat-detail { display: flex; min-height: 22px; gap: .36rem; align-items: center; padding-top: .45rem; color: var(--color-text-secondary); font-size: .67rem; border-top: 1px solid color-mix(in srgb, var(--movement-stat-accent) 17%, var(--color-border)); }
+.inventory-scope .movement-stat-detail i { width: .4rem; height: .4rem; margin-left: .1rem; border-radius: 50%; }
+.inventory-scope .movement-detail-receive { background: #10b981; }
+.inventory-scope .movement-detail-out { background: #ef4444; }
+.inventory-scope .movement-detail-adjust { background: #f59e0b; }
 .inventory-scope .movement-in-value { color: var(--color-good); }
 .inventory-scope .movement-out-value { color: var(--color-critical); }
 .inventory-scope .movement-log-panel { border-radius: 1.05rem; }
@@ -313,6 +333,9 @@
   .inventory-scope .movement-toolbar .search-field { flex-basis: 100%; }
   .inventory-scope .movement-toolbar .filter-select { flex: 1; }
   .inventory-scope .movement-stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-scope .movement-stat { min-height: 118px; padding: .8rem; }
+  .inventory-scope .movement-stat-icon { width: 38px; height: 38px; }
+  .inventory-scope .movement-stat-detail { font-size: .62rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .inventory-scope .movement-hero::after, .inventory-scope .movement-art-ring, .inventory-scope .movement-art-icon, .inventory-scope .movement-art-point { animation: none; }

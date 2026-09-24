@@ -174,10 +174,22 @@ export function StockMovementLogPage() {
       {loading && <div className="panel p-6">Loading live movement history…</div>}
 
       <section className="stat-strip movement-stat-strip" aria-label="Movement summary">
-        <div className="stat metric-card movement-stat"><div className="metric-icon-bubble metric-purple" aria-hidden="true"><Icon name="movement" size={19} /></div><div className="metric-info"><span className="stat-value metric-value">{stats.count}</span><span className="stat-label metric-label">Matching movements</span></div></div>
-        <div className="stat metric-card movement-stat"><div className="metric-icon-bubble metric-emerald" aria-hidden="true"><span>↓</span></div><div className="metric-info"><span className="stat-value metric-value movement-in-value">+{stats.received.toLocaleString()}</span><span className="stat-label metric-label">Units received</span></div></div>
-        <div className="stat metric-card movement-stat"><div className="metric-icon-bubble metric-amber" aria-hidden="true"><span>↑</span></div><div className="metric-info"><span className="stat-value metric-value movement-out-value">{stats.issued > 0 ? `−${stats.issued.toLocaleString()}` : '0'}</span><span className="stat-label metric-label">Units issued / wasted</span></div></div>
-        <div className="stat metric-card movement-stat"><div className="metric-icon-bubble metric-cyan" aria-hidden="true"><Icon name="chart" size={19} /></div><div className="metric-info"><span className="stat-value metric-value">{stats.net >= 0 ? `+${stats.net}` : stats.net}</span><span className="stat-label metric-label">Net change, includes adjustments</span></div></div>
+        <article className="stat metric-card movement-stat movement-stat-activity">
+          <div className="movement-stat-main"><span className="movement-stat-icon" aria-hidden="true"><Icon name="movement" size={20} /></span><div className="metric-info"><span className="movement-stat-kicker">ACTIVITY</span><strong className="movement-stat-value">{stats.count}</strong><span className="movement-stat-label">Matching movements</span></div><span className="movement-stat-index" aria-hidden="true">01</span></div>
+          <div className="movement-stat-detail"><i className="movement-detail-receive" />{stats.receives} in <i className="movement-detail-out" />{stats.issues + stats.wastes} out <i className="movement-detail-adjust" />{stats.adjustments} adjusted</div>
+        </article>
+        <article className="stat metric-card movement-stat movement-stat-in">
+          <div className="movement-stat-main"><span className="movement-stat-icon" aria-hidden="true"><span>↓</span></span><div className="metric-info"><span className="movement-stat-kicker">STOCK IN</span><strong className="movement-stat-value">+{stats.received.toLocaleString()}</strong><span className="movement-stat-label">Units received</span></div><span className="movement-stat-glyph" aria-hidden="true">IN</span></div>
+          <div className="movement-stat-detail">Across {stats.receives} receive {stats.receives === 1 ? 'record' : 'records'}</div>
+        </article>
+        <article className="stat metric-card movement-stat movement-stat-out">
+          <div className="movement-stat-main"><span className="movement-stat-icon" aria-hidden="true"><span>↑</span></span><div className="metric-info"><span className="movement-stat-kicker">STOCK OUT</span><strong className="movement-stat-value">{stats.issued > 0 ? `−${stats.issued.toLocaleString()}` : '0'}</strong><span className="movement-stat-label">Units issued / wasted</span></div><span className="movement-stat-glyph" aria-hidden="true">OUT</span></div>
+          <div className="movement-stat-detail">Across {stats.issues + stats.wastes} outbound {stats.issues + stats.wastes === 1 ? 'record' : 'records'}</div>
+        </article>
+        <article className="stat metric-card movement-stat movement-stat-net">
+          <div className="movement-stat-main"><span className="movement-stat-icon" aria-hidden="true"><Icon name="chart" size={20} /></span><div className="metric-info"><span className="movement-stat-kicker">NET MOVEMENT</span><strong className="movement-stat-value">{stats.net >= 0 ? `+${stats.net}` : stats.net.toLocaleString()}</strong><span className="movement-stat-label">Quantity change</span></div><span className="movement-stat-glyph" aria-hidden="true">Σ</span></div>
+          <div className="movement-stat-detail">Includes {stats.adjustments} stock {stats.adjustments === 1 ? 'adjustment' : 'adjustments'}</div>
+        </article>
       </section>
 
       <section className="panel movement-log-panel">
