@@ -1309,3 +1309,59 @@
 @media (prefers-reduced-motion: reduce) {
   .inventory-scope .workflow-kpi { animation: none; transition: none; }
 }
+
+/* Make the Analytics hero motion easy to see while keeping its content clear. */
+.inventory-scope .inventory-analytics-hero { min-height: 230px; }
+.inventory-scope .inventory-analytics-hero::after { width: 52%; left: -68%; background: linear-gradient(105deg, transparent 8%, rgba(202,255,248,.035) 34%, rgba(202,255,248,.22) 50%, rgba(202,255,248,.045) 66%, transparent 90%); animation-duration: 6.5s; }
+.inventory-scope .inventory-analytics-orbit { position: absolute; z-index: 0; top: -104px; right: 18%; display: grid; width: 270px; height: 270px; place-items: center; pointer-events: none; border: 1px solid rgba(119,234,217,.24); border-top-color: rgba(145,255,238,.95); border-radius: 50%; box-shadow: 0 0 0 24px rgba(115,244,218,.035), 0 0 0 52px rgba(115,244,218,.025); animation: inventory-analytics-orbit 14s linear infinite; }
+.inventory-scope .inventory-analytics-orbit-inner { position: absolute; inset: 22px; border: 1px solid rgba(119,234,217,.16); border-right-color: rgba(119,234,217,.58); border-radius: 50%; }
+.inventory-scope .inventory-analytics-orbit-dot { position: absolute; top: 22px; left: 50%; width: 11px; height: 11px; border: 2px solid rgba(255,255,255,.65); border-radius: 50%; background: #87f5df; box-shadow: 0 0 0 5px rgba(87,232,208,.13), 0 0 18px rgba(111,249,223,.85); transform: translateX(-50%); }
+.inventory-scope .inventory-analytics-orbit i { display: grid; width: 78px; height: 78px; place-items: center; color: #a3ffeb; background: linear-gradient(145deg, rgba(73,220,198,.24), rgba(73,220,198,.04)); border: 1px solid rgba(131,255,231,.4); border-radius: 22px; box-shadow: inset 0 1px rgba(255,255,255,.2), 0 12px 32px rgba(4,22,32,.2); transform: rotate(-8deg); animation: inventory-analytics-icon-float 3.8s ease-in-out infinite; }
+.inventory-scope .inventory-analytics-hero-top, .inventory-scope .inventory-analytics-hero-content, .inventory-scope .inventory-analytics-hero-foot { z-index: 1; }
+@keyframes inventory-analytics-orbit { to { transform: rotate(360deg); } }
+@keyframes inventory-analytics-icon-float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -6px; } }
+
+/* Clear, inviting StockSense action and a more legible live loading sequence. */
+.inventory-scope .stocksense-hero-actions { gap: .38rem; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button { position: relative; isolation: isolate; display: inline-flex; min-width: 218px; min-height: 48px; gap: .55rem; align-items: center; justify-content: center; overflow: hidden; padding: .72rem 1.05rem; color: #063b38; font-size: .9rem; font-weight: 850; border: 1px solid rgba(202,255,248,.62); border-radius: .9rem; background: linear-gradient(115deg, #7af1d9 0%, #36d8ba 52%, #4ee2c8 100%); box-shadow: 0 10px 24px rgba(21,207,177,.26), inset 0 1px rgba(255,255,255,.65); animation: stocksense-cta-pulse 2.8s ease-in-out infinite; transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button::after { position: absolute; z-index: 0; top: -25%; left: -75%; width: 48%; height: 150%; content: ''; pointer-events: none; background: linear-gradient(105deg, transparent, rgba(255,255,255,.68), transparent); transform: skewX(-20deg); animation: stocksense-cta-sheen 4.2s ease-in-out infinite; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button > span { position: relative; z-index: 1; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button .stocksense-button-spark { font-size: 1.1rem; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button .stocksense-button-arrow { margin-left: .12rem; font-size: 1.12rem; transition: transform .2s ease; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button:hover:not(:disabled) { transform: translateY(-3px); filter: saturate(1.12) brightness(1.04); box-shadow: 0 15px 30px rgba(21,207,177,.36), inset 0 1px rgba(255,255,255,.75); }
+.inventory-scope .stocksense-hero .stocksense-analyze-button:hover:not(:disabled) .stocksense-button-arrow { transform: translateX(3px); }
+.inventory-scope .stocksense-hero .stocksense-analyze-button:focus-visible { outline: 3px solid #d7fff6; outline-offset: 4px; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button:disabled { cursor: progress; animation: none; opacity: .88; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button:disabled::after { animation-duration: 1.6s; }
+.inventory-scope .stocksense-cta-hint { color: rgba(220,255,248,.75); font-size: .65rem; font-weight: 650; text-align: right; }
+@keyframes stocksense-cta-pulse { 0%, 100% { box-shadow: 0 10px 24px rgba(21,207,177,.22), inset 0 1px rgba(255,255,255,.65); } 50% { box-shadow: 0 12px 30px rgba(21,207,177,.38), 0 0 0 4px rgba(87,232,208,.08), inset 0 1px rgba(255,255,255,.72); } }
+@keyframes stocksense-cta-sheen { 0%, 34% { left: -75%; opacity: 0; } 43% { opacity: .9; } 72%, 100% { left: 140%; opacity: 0; } }
+
+.inventory-scope .stocksense-progress-panel { grid-template-columns: 94px minmax(0, 1fr); min-height: 164px; background: radial-gradient(circle at 6% 50%, color-mix(in srgb, #20cbb0 17%, transparent), transparent 30%), linear-gradient(115deg, var(--color-surface), color-mix(in srgb, #20cbb0 7%, var(--color-surface))); }
+.inventory-scope .stocksense-progress-panel::before { position: absolute; top: -92px; right: -42px; width: 240px; height: 240px; content: ''; pointer-events: none; border: 1px solid color-mix(in srgb, #20cbb0 14%, transparent); border-radius: 50%; box-shadow: 0 0 0 22px color-mix(in srgb, #20cbb0 4%, transparent), 0 0 0 48px color-mix(in srgb, #20cbb0 3%, transparent); }
+.inventory-scope .stocksense-progress-orbit, .inventory-scope .stocksense-progress-copy { z-index: 1; }
+.inventory-scope .stocksense-progress-heading { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; }
+.inventory-scope .stocksense-progress-heading .eyebrow { margin: 0; }
+.inventory-scope .stocksense-progress-heading > span { padding: .28rem .55rem; color: color-mix(in srgb, #138b78 82%, var(--color-text)); background: color-mix(in srgb, #20cbb0 12%, var(--color-surface)); border: 1px solid color-mix(in srgb, #20cbb0 22%, var(--color-border)); border-radius: 999px; font-size: .62rem; font-weight: 850; letter-spacing: .08em; }
+.inventory-scope .stocksense-progress-copy h2 { margin-top: .3rem; }
+.inventory-scope .stocksense-stage-pips { gap: .32rem; margin-top: .7rem; }
+.inventory-scope .stocksense-stage-pips span { width: .72rem; height: .3rem; background: color-mix(in srgb, #20cbb0 14%, var(--color-border)); }
+.inventory-scope .stocksense-stage-pips span.done { background: #25b993; }
+.inventory-scope .stocksense-stage-pips span.active { width: 2.2rem; background: linear-gradient(90deg, #20cbb0, #6685f6); box-shadow: 0 0 12px color-mix(in srgb, #20cbb0 42%, transparent); }
+.inventory-scope .stocksense-progress-meter { height: 5px; }
+.inventory-scope .stocksense-progress-meter span { width: 28%; animation-duration: 3.2s; }
+
+@media (max-width: 760px) {
+  .inventory-scope .inventory-analytics-orbit { top: -118px; right: -65px; opacity: .55; transform: scale(.76); transform-origin: top right; }
+  .inventory-scope .inventory-analytics-hero { min-height: 0; }
+  .inventory-scope .stocksense-cta-hint { grid-column: 1 / -1; justify-self: center; text-align: center; }
+}
+@media (max-width: 560px) {
+  .inventory-scope .stocksense-progress-panel { grid-template-columns: 52px minmax(0, 1fr); gap: .75rem; }
+  .inventory-scope .stocksense-progress-heading > span { font-size: .56rem; }
+  .inventory-scope .stocksense-hero-actions .stocksense-analyze-button { min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inventory-scope .inventory-analytics-orbit, .inventory-scope .inventory-analytics-orbit i, .inventory-scope .inventory-analytics-hero::after { animation: none; }
+  .inventory-scope .stocksense-hero .stocksense-analyze-button, .inventory-scope .stocksense-hero .stocksense-analyze-button::after, .inventory-scope .stocksense-progress-panel, .inventory-scope .stocksense-progress-ring, .inventory-scope .stocksense-orbit-dot, .inventory-scope .stocksense-progress-meter span, .inventory-scope .stocksense-progress-stage { animation: none; }
+}

@@ -150,6 +150,7 @@ export function AnalyticsDashboardPage() {
   return (
     <div className="page inventory-analytics-page">
       <header className="inventory-analytics-hero">
+        <div className="inventory-analytics-orbit" aria-hidden="true"><span className="inventory-analytics-orbit-inner" /><span className="inventory-analytics-orbit-dot" /><i><Icon name="chart" size={24} /></i></div>
         <div className="inventory-analytics-hero-top">
           <span className="inventory-analytics-mark"><Icon name="chart" size={23} /></span>
           <span className="inventory-analytics-period">LAST 30 DAYS</span>

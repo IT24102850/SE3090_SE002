@@ -194,7 +194,8 @@ export function LowStockAlertsPage() {
         </div>
         <div className="page-actions stocksense-hero-actions">
           <span className={`live-indicator stocksense-updated${inventoryError ? ' is-stale' : ''}`}><span aria-hidden="true" />{inventoryError ? 'Inventory sync needs attention' : 'Inventory data current'} · Updated {lastUpdated.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</span>
-          <button className="btn btn-primary stocksense-analyze-button" type="button" onClick={analyzeInventory} disabled={planning}>{planning ? 'Analyzing…' : '✦ Analyze inventory'}</button>
+          <button className="btn btn-primary stocksense-analyze-button" type="button" onClick={analyzeInventory} disabled={planning}><span className="stocksense-button-spark" aria-hidden="true">✦</span><span>{planning ? 'Analyzing inventory…' : 'Analyze inventory'}</span><span className="stocksense-button-arrow" aria-hidden="true">→</span></button>
+          <span className="stocksense-cta-hint">Get a clear stock health report</span>
           <button className="btn btn-secondary" type="button" onClick={() => { void loadInventory(true); }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh now'}</button>
         </div>
         <div className="stocksense-hero-orbit" aria-hidden="true"><span /><i /></div>
@@ -205,11 +206,11 @@ export function LowStockAlertsPage() {
       {planning && <section className="stocksense-progress-panel" role="status" aria-live="polite">
         <div className="stocksense-progress-orbit"><div className="stocksense-progress-ring" /><Icon name="stocksense" size={50} /><span className="stocksense-orbit-dot" /></div>
         <div className="stocksense-progress-copy">
-          <p className="eyebrow">LIVE INVENTORY ANALYSIS</p>
-          <h2>StockSense AI is connecting the signals</h2>
+          <div className="stocksense-progress-heading"><p className="eyebrow">LIVE INVENTORY ANALYSIS</p><span>STEP {analysisStep + 1} / {analysisStages.length}</span></div>
+          <h2>Building your stock health report</h2>
           <p key={analysisStep} className="stocksense-progress-stage">{analysisStages[analysisStep]}</p>
           <div className="stocksense-stage-pips" aria-hidden="true">{analysisStages.map((stage, index) => <span key={stage} className={index === analysisStep ? 'active' : index < analysisStep ? 'done' : ''} />)}</div>
-          <p className="stocksense-progress-note">Analyzing stock levels, movement history and coverage. This can take a little while.</p>
+          <p className="stocksense-progress-note">Checking stock levels and available movement history. Your inventory is not changed.</p>
         </div>
         <div className="stocksense-progress-meter" aria-label="Analysis in progress"><span /></div>
       </section>}
