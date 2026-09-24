@@ -95,6 +95,15 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
   return result;
 };
 
+/* Every booking write also leaves a trail in the notification centre - the
+ * customer's confirmation and the desk's tenant-wide copy - so a write that
+ * does not invalidate these leaves the bell showing a stale count until its
+ * next poll. Spread into each booking mutation's invalidatesTags. */
+const NOTIFICATION_TAGS = [
+  { type: 'Notification' as const, id: 'LIST' },
+  { type: 'Notification' as const, id: 'COUNT' },
+];
+
 export const bookingApi = createApi({
   reducerPath: 'bookingApi',
   baseQuery: baseQueryWithAuth,
@@ -245,7 +254,7 @@ export const bookingApi = createApi({
       }
     >({
       query: (body) => ({ url: '/bookings', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     updateBooking: builder.mutation<unknown, { id: string; body: Partial<Booking> }>({
       query: ({ id, body }) => ({ url: `/bookings/${id}`, method: 'PUT', body }),
@@ -257,15 +266,15 @@ export const bookingApi = createApi({
     }),
     rescheduleBooking: builder.mutation<unknown, { id: string; newStartTime: string; newEndTime: string }>({
       query: ({ id, ...body }) => ({ url: `/bookings/${id}/reschedule`, method: 'PUT', body }),
-      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }],
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     cancelBooking: builder.mutation<void, string>({
       query: (id) => ({ url: `/bookings/${id}/cancel`, method: 'PUT' }),
-      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     updateBookingStatus: builder.mutation<unknown, { id: string; status: string }>({
       query: ({ id, status }) => ({ url: `/bookings/${id}/status`, method: 'PUT', body: { status } }),
-      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Booking', id: 'MINE' }],
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Booking', id: 'MINE' }, ...NOTIFICATION_TAGS],
     }),
     sendReminder: builder.mutation<{ message: string }, { id: string; channel: string }>({
       query: ({ id, channel }) => ({ url: `/bookings/${id}/remind`, method: 'POST', body: { channel } }),
@@ -282,7 +291,7 @@ export const bookingApi = createApi({
     }),
     bulkSchedule: builder.mutation<any, { tenantId: string; bookings: any[] }>({
       query: (body) => ({ url: '/bookings/bulk-schedule', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     createRecurringBooking: builder.mutation<
       | { totalRequested: number; created: number; skippedConflicts: number }
@@ -294,7 +303,7 @@ export const bookingApi = createApi({
       }
     >({
       query: (body) => ({ url: '/bookings/recurring', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     // FR-AS8: the logged-in doctor/staff member's own schedule.
     getMySchedule: builder.query<Booking[], { date?: string } | void>({
@@ -303,7 +312,67 @@ export const bookingApi = createApi({
     }),
     checkInBooking: builder.mutation<{ message: string }, string>({
       query: (id) => ({ url: `/bookings/${id}/checkin`, method: 'POST' }),
-      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
+    }),
+    /* Spec 2.5's "revenue per slot": which hour of the day earns, not which
+       resource earns. `tz` is minutes east of UTC so the hours are the
+       operator's own clock, matching the dashboards' convention. */
+    getRevenuePerSlot: builder.query<
+      {
+        totalRevenue: number; totalBookings: number; averagePerBooking: number; forgoneRevenue: number;
+        busiestHour: number | null; richestHour: number | null;
+        slots: { hour: number; label: string; bookings: number; earnedBookings: number; lostBookings: number; guests: number; revenue: number; averageValue: number; forgoneRevenue: number }[];
+      },
+      { tenantId: string; from: string; to: string; branchId?: string; tz?: number }
+    >({
+      query: (params) => ({ url: '/bookings/reports/revenue-per-slot', params }),
+    }),
+    /* Spec 2.3's AvailabilitySlots, made real: a business can now hold its
+       capacity rather than only compute it. */
+    getAvailabilitySlots: builder.query<
+      {
+        total: number; booked: number; free: number; utilisationPercent: number;
+        days: { date: string; total: number; booked: number;
+          slots: { id: string; date: string; startTime: string; endTime: string; isBooked: boolean; bookingId: string | null }[] }[];
+      },
+      { id: string; from: string; to: string; onlyFree?: boolean }
+    >({
+      query: ({ id, ...params }) => ({ url: `/resources/${id}/availability-slots`, params }),
+      providesTags: (_r, _e, { id }) => [{ type: 'ResourceSchedule', id: `slots-${id}` }],
+    }),
+    generateAvailabilitySlots: builder.mutation<
+      { created: number; skipped: number; days: number },
+      { id: string; from: string; to: string; slotMinutes: number }
+    >({
+      query: ({ id, ...body }) => ({ url: `/resources/${id}/availability-slots/generate`, method: 'POST', body }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'ResourceSchedule', id: `slots-${id}` }],
+    }),
+    deleteAvailabilitySlots: builder.mutation<
+      { removed: number; keptBecauseBooked: number },
+      { id: string; from: string; to: string }
+    >({
+      query: ({ id, ...params }) => ({ url: `/resources/${id}/availability-slots`, method: 'DELETE', params }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'ResourceSchedule', id: `slots-${id}` }],
+    }),
+
+    /* Spec 2.3's RecurringPatterns, previously write-only. */
+    getRecurringSeries: builder.query<
+      {
+        items: {
+          patternId: string; anchorBookingId: string; title: string | null;
+          resourceName: string | null; bookingTypeName: string | null; colorHex: string | null;
+          frequency: string; daysOfWeek: number[]; endDate: string; startTime: string;
+          total: number; remaining: number; cancelled: number; isActive: boolean;
+        }[];
+      },
+      { tenantId: string }
+    >({
+      query: (params) => ({ url: '/bookings/series', params }),
+      providesTags: [{ type: 'Booking', id: 'SERIES' }],
+    }),
+    cancelRecurringSeries: builder.mutation<{ cancelled: number }, string>({
+      query: (patternId) => ({ url: `/bookings/series/${patternId}`, method: 'DELETE' }),
+      invalidatesTags: [{ type: 'Booking', id: 'SERIES' }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     getNoShowStats: builder.query<
       { total: number; noShows: number; completed: number; cancelled: number; noShowRate: number; utilizationRate: number },
@@ -720,7 +789,7 @@ export const bookingApi = createApi({
       { objective: string; dateFrom?: string; dateTo?: string; extraConstraints?: Record<string, unknown> }
     >({
       query: (body) => ({ url: '/agent/find-and-book', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Workflow', id: 'MINE' }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Workflow', id: 'MINE' }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     getUnavailableRanges: builder.query<{ startTime: string; endTime: string }[], { resourceId: string; from: string; to: string }>({
       query: (params) => ({ url: '/bookings/unavailable-ranges', params }),
@@ -751,7 +820,7 @@ export const bookingApi = createApi({
     }),
     applyWorkflow: builder.mutation<{ message: string; created: number; skipped: number }, string>({
       query: (id) => ({ url: `/agent/workflow/${id}/apply`, method: 'POST' }),
-      invalidatesTags: (_r, _e, id) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: (_r, _e, id) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     reviseWorkflow: builder.mutation<AgentWorkflow, { id: string; plan: { steps: unknown[]; estimatedRevenueImpact: number } }>({
       query: ({ id, plan }) => ({ url: `/agent/workflow/${id}/revise`, method: 'POST', body: { plan } }),
@@ -804,7 +873,13 @@ export const {
   useLazyGetAvailableSlotsQuery,
   useGetConflictsQuery,
   useBulkScheduleMutation,
+  useGetAvailabilitySlotsQuery,
+  useGenerateAvailabilitySlotsMutation,
+  useDeleteAvailabilitySlotsMutation,
+  useGetRecurringSeriesQuery,
+  useCancelRecurringSeriesMutation,
   useGetNoShowStatsQuery,
+  useGetRevenuePerSlotQuery,
   useGetDepartureBoardQuery,
   useGetDepartureManifestQuery,
   useCreateDepartureMutation,

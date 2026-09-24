@@ -16,14 +16,22 @@ import { BookingCard, CheckInQr, isUpcoming } from './customerShared';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+/* "Next up" and "Notifications" are the two cards that go stale on their
+ * own: the business confirms, moves or cancels a booking from the admin
+ * side and this page knows nothing about it. Both refresh on a timer and
+ * again when the tab is focused, so a customer who leaves the page open is
+ * not looking at yesterday's answer. */
+const LIVE_POLL_MS = 30_000;
+const LIVE_OPTS = { pollingInterval: LIVE_POLL_MS, skipPollingIfUnfocused: true, refetchOnFocus: true, refetchOnReconnect: true } as const;
+
 export default function CustomerHomePage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const { data: tenant } = useGetTenantQuery({ tenantId }, { skip: !tenantId });
   const { data: profile } = useGetTenantProfileQuery({ tenantId }, { skip: !tenantId });
   const today = useMemo(() => new Date(), []);
-  const { data: bookings, isLoading } = useGetBookingsQuery({ tenantId, dateFrom: toISODate(addDays(today, -60)), dateTo: toISODate(addDays(today, 120)), pageSize: 200 }, { skip: !tenantId });
-  const { data: notifications } = useGetNotificationsQuery();
+  const { data: bookings, isLoading } = useGetBookingsQuery({ tenantId, dateFrom: toISODate(addDays(today, -60)), dateTo: toISODate(addDays(today, 120)), pageSize: 200 }, { skip: !tenantId, ...LIVE_OPTS });
+  const { data: notifications } = useGetNotificationsQuery(undefined, LIVE_OPTS);
   const [qrFor, setQrFor] = useState<Booking | null>(null);
 
   const items = bookings?.items ?? [];

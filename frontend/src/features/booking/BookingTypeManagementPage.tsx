@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
 import Modal from '../../shared/components/Modal';
-import { useCreateBookingTypeMutation, useDeleteBookingTypeMutation, useGetBookingTypesQuery, useUpdateBookingTypeMutation } from '../../api/bookingApi';
+import { useCreateBookingTypeMutation, useDeleteBookingTypeMutation, useGetBookingsQuery, useGetBookingTypesQuery, useUpdateBookingTypeMutation } from '../../api/bookingApi';
+import { addDays, toISODate } from '../../shared/dateUtils';
 import { BOOKING_UNITS, type BookingType, type BookingUnit } from './types';
+import './reservations.css';
+import './schedule.css';
 
 // Known config keys with dedicated inputs below; anything else typed into
 // "Other details (JSON)" is preserved alongside them - same pattern as
@@ -76,17 +79,76 @@ function buildConfig(fields: {
 }
 
 // FR-AS5: booking types (Consultation, Follow-up, …) with default duration and price.
+/* Booking Types — the service catalogue (spec 2.5).
+ *
+ * Rebuilt to the Reservations page's language. A booking type is the thing a
+ * customer actually picks, so it is shown as a card carrying its own colour,
+ * duration, capacity and approval rule — not as a row in a generic table
+ * where every service looked identical and the colour it is drawn in on the
+ * calendar was invisible.
+ *
+ * The rail answers the question the old page could not: which of these
+ * services is anyone actually booking? */
+
+const UNIT_LABEL = (unit?: string | null) =>
+  BOOKING_UNITS.find((u) => u.value === (unit ?? 'Slot'))?.label ?? 'Time slot';
+
+const durationLabel = (t: BookingType) => {
+  switch (t.bookingUnit ?? 'Slot') {
+    case 'Night': return 'Per night';
+    case 'DateRange': return 'Per day';
+    case 'Package': return 'Multi-day';
+    default:
+      return t.defaultDurationMinutes >= 60 && t.defaultDurationMinutes % 60 === 0
+        ? `${t.defaultDurationMinutes / 60} hr`
+        : `${t.defaultDurationMinutes} min`;
+  }
+};
+
 export default function BookingTypeManagementPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const { show } = useToast();
 
   const { data: types, isLoading } = useGetBookingTypesQuery({ tenantId }, { skip: !tenantId });
+  /* Thirty days of bookings, purely so the catalogue can say which services
+     earn their place. Without it this page is a list of settings. */
+  const { data: recent } = useGetBookingsQuery(
+    { tenantId, dateFrom: toISODate(addDays(new Date(), -30)), dateTo: toISODate(addDays(new Date(), 1)), pageSize: 1000 },
+    { skip: !tenantId },
+  );
   const [deleteType] = useDeleteBookingTypeMutation();
   const [editing, setEditing] = useState<BookingType | 'new' | null>(null);
+  const [search, setSearch] = useState('');
+  const [onlyLive, setOnlyLive] = useState(false);
+
+  const usage = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const b of recent?.items ?? []) {
+      if (b.status === 'Cancelled' || b.status === 'Rejected') continue;
+      counts.set(b.bookingTypeId, (counts.get(b.bookingTypeId) ?? 0) + 1);
+    }
+    return counts;
+  }, [recent]);
+
+  const all = useMemo(() => types ?? [], [types]);
+  const live = all.filter((t) => t.status === 'Active');
+  const rows = all.filter((t) => {
+    if (onlyLive && t.status !== 'Active') return false;
+    if (!search.trim()) return true;
+    return `${t.name} ${t.description ?? ''}`.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const ranked = [...all].sort((a, b) => (usage.get(b.id) ?? 0) - (usage.get(a.id) ?? 0));
+  const busiest = usage.size === 0 ? 0 : Math.max(...usage.values());
+  const neverBooked = all.filter((t) => t.status === 'Active' && !usage.has(t.id));
+  const totalBooked = [...usage.values()].reduce((a, b) => a + b, 0);
+  const averageMinutes = live.length === 0
+    ? 0
+    : Math.round(live.reduce((sum, t) => sum + t.defaultDurationMinutes, 0) / live.length);
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Archive this booking type?')) return;
+    if (!window.confirm('Archive this booking type? Existing bookings keep their history.')) return;
     try {
       await deleteType(id).unwrap();
       show('Booking type archived.', 'success');
@@ -100,45 +162,185 @@ export default function BookingTypeManagementPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Booking Types</h1>
-          <p className="page-subtitle">The services you offer — consultations, tours, classes, or sessions — with default duration and approval rules.</p>
+          <p className="page-subtitle">The services you offer — consultations, tours, classes or sessions — with their duration, capacity and approval rules.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setEditing('new')}>+ New booking type</button>
       </div>
 
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr><th>Name</th><th>Booking unit</th><th>Duration</th><th>Approval</th><th>Status</th><th></th></tr>
-          </thead>
-          <tbody>
-            {isLoading && <tr><td colSpan={6} className="loading-row"><span className="spinner spinner-dark" /> Loading…</td></tr>}
-            {!isLoading && (!types || types.length === 0) && (
-              <tr><td colSpan={6} className="empty-state">No booking types yet.</td></tr>
-            )}
-            {types?.map((t) => (
-              <tr key={t.id}>
-                <td>
-                  <span className="badge" style={{ background: `${t.colorHex}22`, color: t.colorHex }}>{t.name}</span>
-                </td>
-                <td>{BOOKING_UNITS.find((u) => u.value === (t.bookingUnit ?? 'Slot'))?.label ?? 'Time slot'}</td>
-                <td>
-                  {(t.bookingUnit ?? 'Slot') === 'Slot' ? `${t.defaultDurationMinutes} min`
-                    : t.bookingUnit === 'Night' ? 'Per night'
-                    : t.bookingUnit === 'DateRange' ? 'Per day'
-                    : 'Multi-day'}
-                </td>
-                <td>{t.requiresApproval ? 'Required' : 'Not required'}</td>
-                <td><span className={`badge badge-${t.status === 'Active' ? 'good' : 'neutral'}`}>{t.status}</span></td>
-                <td>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setEditing(t)}>Edit</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(t.id)}>Archive</button>
+      <div className="rsv">
+        <div className="rsv-main">
+          <div className="rsv-kpis">
+            <div className="rsv-kpi rsv-kpi--blue">
+              <div>
+                <div className="rsv-kpi-value">{live.length}</div>
+                <div className="rsv-kpi-label">On sale</div>
+                <div className="rsv-kpi-sub">{all.length - live.length} archived</div>
+              </div>
+              <div className="rsv-kpi-icon" aria-hidden="true">🏷️</div>
+            </div>
+            <div className="rsv-kpi rsv-kpi--green">
+              <div>
+                <div className="rsv-kpi-value">{totalBooked}</div>
+                <div className="rsv-kpi-label">Booked in 30 days</div>
+                <div className="rsv-kpi-sub">across {usage.size} service{usage.size === 1 ? '' : 's'}</div>
+              </div>
+              <div className="rsv-kpi-icon" aria-hidden="true">📈</div>
+            </div>
+            <div className="rsv-kpi rsv-kpi--amber">
+              <div>
+                <div className="rsv-kpi-value">{averageMinutes}</div>
+                <div className="rsv-kpi-label">Average length (min)</div>
+                <div className="rsv-kpi-sub">{live.filter((t) => t.requiresApproval).length} need approving</div>
+              </div>
+              <div className="rsv-kpi-icon" aria-hidden="true">⏱️</div>
+            </div>
+            <div className="rsv-kpi rsv-kpi--pink">
+              <div>
+                <div className="rsv-kpi-value">{neverBooked.length}</div>
+                <div className="rsv-kpi-label">Never booked</div>
+                <div className="rsv-kpi-sub">{neverBooked.length === 0 ? 'Everything sells' : 'On sale, no takers'}</div>
+              </div>
+              <div className="rsv-kpi-icon" aria-hidden="true">💤</div>
+            </div>
+          </div>
+
+          <section className="rsv-card">
+            <div className="rsv-toolbar">
+              <div className="rsv-search">
+                <span aria-hidden="true">⌕</span>
+                <input
+                  className="input"
+                  placeholder="Search services"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <div className="rsv-seg">
+                <button type="button" className={onlyLive ? '' : 'is-on'} onClick={() => setOnlyLive(false)}>All ({all.length})</button>
+                <button type="button" className={onlyLive ? 'is-on' : ''} onClick={() => setOnlyLive(true)}>On sale ({live.length})</button>
+              </div>
+            </div>
+
+            <div style={{ padding: 18 }}>
+              {isLoading ? (
+                <div className="loading-row" style={{ padding: 30 }}><span className="spinner spinner-dark" /> Loading the catalogue…</div>
+              ) : rows.length === 0 ? (
+                <div className="rsv-empty">
+                  <b>{all.length === 0 ? 'Nothing to book yet' : 'No match'}</b>
+                  {all.length === 0
+                    ? 'A booking type is what a customer picks — a class, a table, a consultation. Add the first one.'
+                    : 'Nothing in the catalogue matches that search.'}
+                </div>
+              ) : (
+                <div className="svc-grid">
+                  {rows.map((t) => {
+                    const booked = usage.get(t.id) ?? 0;
+                    return (
+                      <article
+                        key={t.id}
+                        className={`svc${t.status === 'Active' ? '' : ' is-retired'}`}
+                        style={{ ['--svc' as string]: t.colorHex }}
+                      >
+                        <div className="svc-top">
+                          <div className="svc-head">
+                            <div className="svc-badge">{t.name.trim().charAt(0).toUpperCase() || '?'}</div>
+                            <div style={{ minWidth: 0 }}>
+                              <h3 className="svc-name">{t.name}</h3>
+                              <p className="svc-desc">{t.description || UNIT_LABEL(t.bookingUnit)}</p>
+                            </div>
+                          </div>
+                          <div className="svc-flags">
+                            <span className="svc-flag">{UNIT_LABEL(t.bookingUnit)}</span>
+                            <span className={`svc-flag ${t.requiresApproval ? 'is-on' : 'is-good'}`}>
+                              {t.requiresApproval ? 'Needs approval' : 'Books instantly'}
+                            </span>
+                            {(t.bufferMinutesBefore > 0 || t.bufferMinutesAfter > 0) && (
+                              <span className="svc-flag">{t.bufferMinutesBefore}/{t.bufferMinutesAfter} min gap</span>
+                            )}
+                            {t.status !== 'Active' && <span className="svc-flag">Archived</span>}
+                          </div>
+                        </div>
+
+                        <div className="svc-specs">
+                          <div className="svc-spec"><b>{durationLabel(t)}</b><span>Length</span></div>
+                          <div className="svc-spec"><b>{t.maxParticipants ?? '∞'}</b><span>Capacity</span></div>
+                          <div className="svc-spec"><b>{booked}</b><span>30 days</span></div>
+                        </div>
+
+                        <div className="svc-foot">
+                          <span className="svc-usage">
+                            {booked === 0 ? 'Not booked recently' : `${booked} booking${booked === 1 ? '' : 's'} in 30 days`}
+                          </span>
+                          <div className="svc-actions">
+                            <button className="btn btn-ghost btn-sm" onClick={() => setEditing(t)}>Edit</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(t.id)}>Archive</button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <aside className="rsv-rail">
+          <div className="rsv-card">
+            <div className="rsv-card-head">
+              <div>
+                <h3 className="rsv-card-title">What sells</h3>
+                <p className="rsv-card-sub">Bookings in the last 30 days</p>
+              </div>
+            </div>
+            <div className="sch-rank">
+              {ranked.length === 0 ? (
+                <div className="rsv-up-empty">Nothing in the catalogue yet.</div>
+              ) : (
+                ranked.slice(0, 8).map((t) => {
+                  const booked = usage.get(t.id) ?? 0;
+                  return (
+                    <div className="sch-rank-row" key={t.id}>
+                      <div className="sch-rank-head">
+                        <span className="sch-rank-name">{t.name}</span>
+                        <span className="sch-rank-value">{booked}</span>
+                      </div>
+                      <div className="sch-rank-track">
+                        <div
+                          className="sch-rank-fill"
+                          style={{ width: `${busiest === 0 ? 0 : (booked / busiest) * 100}%`, background: t.colorHex }}
+                        />
+                      </div>
+                      <div className="sch-rank-sub">{durationLabel(t)} · {UNIT_LABEL(t.bookingUnit)}</div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {neverBooked.length > 0 && (
+            <div className="rsv-card">
+              <div className="rsv-card-head">
+                <div>
+                  <h3 className="rsv-card-title">Not earning their place</h3>
+                  <p className="rsv-card-sub">On sale, nothing booked in 30 days</p>
+                </div>
+              </div>
+              <div className="sch-rank">
+                {neverBooked.map((t) => (
+                  <div className="sch-rank-row" key={t.id}>
+                    <div className="sch-rank-head">
+                      <span className="sch-rank-name">{t.name}</span>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setEditing(t)}>Review</button>
+                    </div>
+                    <div className="sch-rank-sub">{durationLabel(t)} · {t.requiresApproval ? 'needs approval' : 'books instantly'}</div>
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                ))}
+              </div>
+            </div>
+          )}
+        </aside>
       </div>
 
       {editing && <BookingTypeFormModal tenantId={tenantId} bookingType={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}

@@ -36,7 +36,6 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Overview',
     items: [
       { path: '/dashboard', label: 'Dashboard', icon: '📊', roles: ['Admin', 'Manager', 'Staff', 'Customer'] },
-      { path: '/reports', label: 'Reports', icon: '📈', roles: ['Admin', 'Manager'] },
     ],
   },
   {
@@ -50,6 +49,28 @@ const NAV_SECTIONS: NavSection[] = [
       { path: '/ai-planner', label: 'AI planner', icon: '🤖', roles: ['Customer'] },
       { path: '/business', label: 'About the business', icon: '🏪', roles: ['Customer'] },
       { path: '/my-bills', label: 'My bills', icon: '💳', roles: ['Customer'] },
+    ],
+  },
+  {
+    // The Universal Booking & Resource Engine (spec 2.5). Its screens used
+    // to be scattered across Overview, Resources and Automation, which made
+    // the core engine look like the smallest thing in the product. They are
+    // grouped here because they are one component, not because the section
+    // needed padding: every entry is a screen the spec assigns to it.
+    id: 'scheduling',
+    label: 'Booking & Scheduling',
+    items: [
+      { path: '/calendar', label: 'Calendar', icon: '🗓️', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/bookings', label: 'Booking Manager', icon: '📅', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/multi-branch', label: 'Multi-Branch Schedule', icon: '🗂️', roles: ['Admin', 'Manager'] },
+      { path: '/availability', label: 'Availability Slots', icon: '⏳', roles: ['Admin', 'Manager'] },
+      { path: '/recurring', label: 'Recurring Series', icon: '🔁', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/booking-types', label: 'Booking Types', icon: '🏷️', roles: ['Admin', 'Manager'] },
+      { path: '/resources', label: 'Resource Manager', icon: '🏢', roles: ['Admin', 'Manager'] },
+      { path: '/planner', label: 'AI Planner', icon: '🤖', roles: ['Admin', 'Manager'] },
+      { path: '/agent-workflows', label: 'Agent Workflows', icon: '🛰️', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/reports', label: 'Reports', icon: '📈', roles: ['Admin', 'Manager'] },
+      { path: '/my-schedule', label: 'My Schedule', icon: '🩺', roles: ['Staff'] },
     ],
   },
   {
@@ -70,20 +91,9 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: 'scheduling',
-    label: 'Scheduling',
-    items: [
-      { path: '/bookings', label: 'Booking Manager', icon: '📅', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/my-schedule', label: 'My Schedule', icon: '🩺', roles: ['Staff'] },
-      { path: '/multi-branch', label: 'Multi-Branch Schedule', icon: '🗂️', roles: ['Admin', 'Manager'] },
-      { path: '/booking-types', label: 'Booking Types', icon: '🏷️', roles: ['Admin', 'Manager'] },
-    ],
-  },
-  {
     id: 'resources',
-    label: 'Resources',
+    label: 'People & Places',
     items: [
-      { path: '/resources', label: 'Resource Manager', icon: '🏢', roles: ['Admin', 'Manager'] },
       { path: '/staff', label: 'Staff', icon: '🧑‍💼', roles: ['Admin', 'Manager'] },
       { path: '/branches', label: 'Branches', icon: '📍', roles: ['Admin'] },
     ],
@@ -98,14 +108,6 @@ const NAV_SECTIONS: NavSection[] = [
       { path: '/low-stock-alerts', label: 'Low Stock Alerts', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/branch-overview', label: 'Branch Overview', icon: '🏬', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/inventory-analytics', label: 'Inventory Analytics', icon: '📉', roles: ['Admin', 'Manager'] },
-    ],
-  },
-  {
-    id: 'automation',
-    label: 'Automation',
-    items: [
-      { path: '/planner', label: 'AI Planner', icon: '🤖', roles: ['Admin', 'Manager'] },
-      { path: '/agent-workflows', label: 'Agent Workflows', icon: '🛰️', roles: ['Admin', 'Manager', 'Staff'] },
     ],
   },
   {

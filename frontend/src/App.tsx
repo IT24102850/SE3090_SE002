@@ -28,6 +28,9 @@ const DashboardRouter = lazy(() => import('./features/dashboard/DashboardRouter'
 const BookingManagerPage = lazy(() => import('./features/booking/BookingManagerPage'));
 const ResourceManagerPage = lazy(() => import('./features/booking/ResourceManagerPage'));
 const MultiBranchSchedulePage = lazy(() => import('./features/booking/MultiBranchSchedulePage'));
+const CalendarDashboardPage = lazy(() => import('./features/booking/CalendarDashboardPage'));
+const AvailabilitySlotsPage = lazy(() => import('./features/booking/AvailabilitySlotsPage'));
+const RecurringSeriesPage = lazy(() => import('./features/booking/RecurringSeriesPage'));
 const ReportsPage = lazy(() => import('./features/booking/ReportsPage'));
 const AgentPlannerPage = lazy(() => import('./features/booking/AgentPlannerPage'));
 const BookingTypeManagementPage = lazy(() => import('./features/booking/BookingTypeManagementPage'));
@@ -200,6 +203,35 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
                     <Shell><MultiBranchSchedulePage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Spec 2.5's calendar dashboard. The page existed but was
+                  never routed, so nobody could reach it. */}
+              <Route
+                path="/calendar"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><CalendarDashboardPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/availability"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><AvailabilitySlotsPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/recurring"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><RecurringSeriesPage /></Shell>
                   </ProtectedRoute>
                 }
               />

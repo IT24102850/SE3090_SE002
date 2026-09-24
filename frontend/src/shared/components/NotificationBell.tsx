@@ -9,12 +9,39 @@ function relativeTime(value: string) {
   return `${Math.floor(minutes / 1440)}d ago`;
 }
 
-// In-app centre for booking confirmations, reminders, cancellations and
-// workflow updates. The panel is intentionally loaded only once opened.
+/* In-app centre for booking confirmations, reminders, cancellations and
+ * workflow updates.
+ *
+ * "Live" here is three things, not one. A booking changed from this tab
+ * invalidates the Notification tags and lands immediately; one changed
+ * elsewhere - the customer's phone, another member of staff - arrives on
+ * the poll below; and coming back to a tab that was left open refetches at
+ * once rather than waiting out the remainder of an interval. Polling stops
+ * while the tab is in the background so an unattended dashboard is not
+ * requesting all night.
+ *
+ * The badge polls on its own short interval because it is on screen
+ * constantly; the list is the heavier request and is only fetched once the
+ * panel has been opened. */
+const COUNT_POLL_MS = 15_000;
+const LIST_POLL_MS = 30_000;
+
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const { data: countData } = useGetUnreadNotificationCountQuery(undefined, { pollingInterval: 30000 });
-  const { data, isLoading } = useGetNotificationsQuery(undefined, { pollingInterval: 30000 });
+  const { data: countData } = useGetUnreadNotificationCountQuery(undefined, {
+    pollingInterval: COUNT_POLL_MS,
+    skipPollingIfUnfocused: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  });
+  const { data, isLoading } = useGetNotificationsQuery(undefined, {
+    skip: !open && !countData?.count,
+    pollingInterval: open ? LIST_POLL_MS : 0,
+    skipPollingIfUnfocused: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMountOrArgChange: true,
+  });
   const [markRead] = useMarkNotificationReadMutation();
   const unread = countData?.count ?? 0;
 
