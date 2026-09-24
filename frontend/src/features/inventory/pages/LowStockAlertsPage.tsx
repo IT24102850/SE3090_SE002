@@ -241,26 +241,11 @@ export function LowStockAlertsPage() {
       {planError && <p className="page-notice" role="alert" style={{ marginTop: 12 }}>{planError}</p>}
 
 
-      <section className="stat-strip movement-stat-strip stocksense-kpis" aria-label="Inventory health summary">
-        <article className="stat metric-card movement-stat movement-stat-activity stocksense-kpi stocksense-kpi-total">
-          <div className="movement-stat-main"><span className="movement-stat-icon"><Icon name="inventory" size={20} /></span><div className="metric-info"><span className="movement-stat-kicker">INVENTORY</span><strong className="movement-stat-value">{inventory.length}{inventoryTotalCount > inventory.length ? ` / ${inventoryTotalCount}` : ''}</strong><span className="movement-stat-label">Items loaded</span></div><span className="movement-stat-index">01</span></div>
-          <div className="movement-stat-detail">{inventoryTotalCount} items in the current snapshot</div>
-        </article>
-        <article className="stat metric-card movement-stat movement-stat-out stocksense-kpi stocksense-kpi-out">
-          <div className="movement-stat-main"><span className="movement-stat-icon"><Icon name="alert" size={20} /></span><div className="metric-info"><span className="movement-stat-kicker">URGENT</span><strong className="movement-stat-value">{outOfStock}</strong><span className="movement-stat-label">Out of stock</span></div><span className="movement-stat-glyph">OUT</span></div>
-          <div className="movement-stat-detail">{outOfStock ? 'Needs immediate replenishment review' : 'No empty stock records'}</div>
-        </article>
-        <article className="stat metric-card movement-stat movement-stat-in stocksense-kpi stocksense-kpi-reorder">
-          <div className="movement-stat-main"><span className="movement-stat-icon"><Icon name="alert" size={20} /></span><div className="metric-info"><span className="movement-stat-kicker">REORDER WATCH</span><strong className="movement-stat-value">{belowReorder}</strong><span className="movement-stat-label">Below reorder level</span></div><span className="movement-stat-glyph">LOW</span></div>
-          <div className="movement-stat-detail">{belowReorder} items need review</div>
-        </article>
-        <article className="stat metric-card movement-stat movement-stat-net stocksense-kpi stocksense-kpi-value">
-          <div className="metric-icon-bubble metric-emerald"><Icon name="workflow" /></div>
-          <div>
-            <span className="stat-value">{pricedItems.length ? estimatedValue.toLocaleString('en-LK', { maximumFractionDigits: 0 }) : '—'}</span>
-            <span className="stat-label">Estimated stock value · {healthy} healthy</span>
-          </div>
-        </article>
+      <section className="stat-strip branch-overview-metrics stocksense-kpis" aria-label="Inventory health summary">
+        <article className="branch-overview-metric stocksense-kpi stocksense-kpi-total"><span className="branch-overview-metric-icon"><Icon name="inventory" size={20} /></span><span className="branch-overview-metric-label">INVENTORY</span><strong>{inventory.length}{inventoryTotalCount > inventory.length ? ` / ${inventoryTotalCount}` : ''}</strong><small>Items loaded · current snapshot</small></article>
+        <article className="branch-overview-metric stocksense-kpi stocksense-kpi-out"><span className="branch-overview-metric-icon"><Icon name="alert" size={20} /></span><span className="branch-overview-metric-label">URGENT</span><strong>{outOfStock}</strong><small>{outOfStock ? 'Needs replenishment review' : 'No empty stock records'}</small></article>
+        <article className="branch-overview-metric stocksense-kpi stocksense-kpi-reorder"><span className="branch-overview-metric-icon"><Icon name="alert" size={20} /></span><span className="branch-overview-metric-label">REORDER WATCH</span><strong>{belowReorder}</strong><small>{belowReorder} items need review</small></article>
+        <article className="branch-overview-metric branch-overview-metric-value stocksense-kpi stocksense-kpi-value"><span className="branch-overview-metric-icon"><Icon name="workflow" size={20} /></span><span className="branch-overview-metric-label">STOCK VALUE</span><strong title={pricedItems.length ? `LKR ${estimatedValue.toLocaleString('en-LK')}` : 'No item costs recorded'}>{pricedItems.length ? `LKR ${new Intl.NumberFormat('en-LK', { notation: 'compact', maximumFractionDigits: 1 }).format(estimatedValue)}` : 'Not set'}</strong><small>{healthy} healthy · {pricedItems.length} priced items</small></article>
       </section>
 
       <section className="panel stocksense-inventory-panel">
