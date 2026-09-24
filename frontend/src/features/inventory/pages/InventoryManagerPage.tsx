@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { QRCodeSVG } from 'qrcode.react';
 import { RootState } from '../../../store/store';
 import { Badge, type BadgeTone } from '../ui/Badge';
 import { useToast } from '../ui/ToastContext';
@@ -28,8 +29,6 @@ type StockRow = {
 type StockForm = Omit<StockRow, 'sku'>;
 
 const PAGE_SIZE = 5;
-
-type SupplierRow = { id: string; name: string };
 
 const categoryOptions = ['Office essentials', 'Technology', 'Provisions', 'Print & marketing', 'Other items'];
 const categories = ['All categories', ...categoryOptions];
@@ -217,7 +216,6 @@ export function InventoryManagerPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState<StockRow[]>([]);
-  const [supplierRows, setSupplierRows] = useState<SupplierRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -226,6 +224,7 @@ export function InventoryManagerPage() {
   const [status, setStatus] = useState<StatusFilter>(statusFilters[0]);
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; sku: string } | null>(null);
+  const [qrItem, setQrItem] = useState<StockRow | null>(null);
   const [deleteSku, setDeleteSku] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -261,9 +260,11 @@ export function InventoryManagerPage() {
 
   const stats = useMemo(() => {
     const total = items.reduce((sum, row) => sum + row.qty, 0);
-    const low = items.filter((row) => deriveStatus(row.qty, row.reorder) !== 'In stock').length;
+    const low = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Low stock').length;
+    const out = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Out of stock').length;
     const value = items.reduce((sum, row) => sum + row.qty * row.price, 0);
-    return { items: items.length, total, low, value };
+    const categories = new Set(items.map((row) => row.category).filter(Boolean)).size;
+    return { items: items.length, total, low, out, value, categories };
   }, [items]);
 
   const editingItem = modal?.mode === 'edit' ? items.find((row) => row.sku === modal.sku) : undefined;
@@ -295,13 +296,6 @@ export function InventoryManagerPage() {
         reorder: Number(item.reorderLevel ?? 0),
         owner: item.branch ?? 'Inventory Admin',
       })));
-      const supplierResponse = await fetch('/api/purchase-orders/options', {
-        headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
-      });
-      if (supplierResponse.ok) {
-        const supplierData = await supplierResponse.json();
-        setSupplierRows(supplierData.suppliers ?? []);
-      }
     } catch (error) {
       console.error(error);
       setItems([]);
@@ -405,43 +399,49 @@ export function InventoryManagerPage() {
   const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
 
   return (
-    <div className="page">
-      <header className="page-head">
-        <div>
-          <p className="eyebrow">OPERATIONS / INVENTORY</p>
+    <div className="page inventory-manager-page">
+      <header className="inventory-manager-hero">
+        <div className="inventory-manager-hero-copy">
+          <p className="inventory-manager-eyebrow"><span aria-hidden="true">◆</span> INVENTORY CONTROL CENTER</p>
           <h1>Inventory manager</h1>
-          <p className="page-sub">Search items, monitor stock levels, and keep suppliers in check.</p>
+          <p>One clear view of your stock, item health, and inventory value.</p>
+          <div className="inventory-manager-health" aria-live="polite">
+            <span className={`inventory-manager-health-dot${loading ? ' is-loading' : ''}`} aria-hidden="true" />
+            {loading ? 'Updating live inventory…' : `${stats.items} items tracked`}
+            <span className="inventory-manager-health-separator">·</span>
+            {stats.low + stats.out === 0 ? 'All stock levels look healthy' : `${stats.low + stats.out} items need attention`}
+          </div>
+        </div>
+        <div className="inventory-manager-hero-art" aria-hidden="true">
+          <span className="inventory-manager-orbit inventory-manager-orbit-one" />
+          <span className="inventory-manager-orbit inventory-manager-orbit-two" />
+          <span className="inventory-manager-cube">▦</span>
+          <span className="inventory-manager-art-label">STOCK<br />VISIBILITY</span>
         </div>
         <div className="page-actions">
-          <button className="btn btn-secondary" type="button" onClick={() => void handleRefresh()} disabled={loading}>Refresh</button>
-          <button className="btn btn-secondary" type="button" onClick={() => notify('Import is ready for a CSV file. File selection will be available next.', 'warning')}>Import</button>
-          <button className="btn btn-primary" type="button" onClick={() => setModal({ mode: 'add' })}>Add item</button>
+          <button className="btn btn-secondary inventory-manager-refresh" type="button" onClick={() => void handleRefresh()} disabled={loading}><span aria-hidden="true">↻</span> {loading ? 'Refreshing…' : 'Refresh data'}</button>
+          <button className="btn btn-secondary" type="button" onClick={() => notify('Import is ready for a CSV file. File selection will be available next.', 'warning')}><span aria-hidden="true">⇧</span> Import</button>
+          <Link className="btn btn-secondary inventory-manager-suppliers-link" to="/suppliers"><span aria-hidden="true">♧</span> Suppliers</Link>
+          <button className="btn btn-primary inventory-manager-add" type="button" onClick={() => setModal({ mode: 'add' })}><span aria-hidden="true">＋</span> Add item</button>
         </div>
       </header>
       {loadError && <p className="page-notice">{loadError}</p>}
       {loading && <div className="panel p-6">Loading live inventory…</div>}
 
       <section className="stat-strip" aria-label="Inventory summary">
-        <div className="stat metric-card">
-          <div className="metric-icon-bubble metric-purple" aria-hidden="true"><Icon name="inventory" size={20} /></div>
-          <div className="metric-info"><span className="stat-value metric-value">{stats.items}</span><span className="stat-label metric-label">Items tracked</span></div>
-        </div>
-        <div className="stat metric-card">
-          <div className="metric-icon-bubble metric-cyan" aria-hidden="true"><Icon name="box" size={20} /></div>
-          <div className="metric-info"><span className="stat-value metric-value">{stats.total.toLocaleString()}</span><span className="stat-label metric-label">Units on hand</span></div>
-        </div>
-        <div className="stat metric-card">
-          <div className="metric-icon-bubble metric-amber" aria-hidden="true"><Icon name="alert" size={20} /></div>
-          <div className="metric-info"><span className="stat-value metric-value">{stats.low}</span><span className="stat-label metric-label">Need attention</span></div>
-        </div>
-        <div className="stat metric-card">
-          <div className="metric-icon-bubble metric-emerald" aria-hidden="true"><Icon name="chart" size={20} /></div>
-          <div className="metric-info"><span className="stat-value metric-value">LKR {stats.value.toLocaleString()}</span><span className="stat-label metric-label">Stock value</span></div>
-        </div>
+        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-items"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="inventory" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">CATALOGUE</span><strong className="inventory-manager-metric-value">{stats.items}</strong><span className="inventory-manager-metric-label">Items tracked</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">01</span></div><div className="inventory-manager-metric-detail">Organized across {stats.categories} {stats.categories === 1 ? 'category' : 'categories'}</div></article>
+        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-units"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="box" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">AVAILABLE STOCK</span><strong className="inventory-manager-metric-value">{stats.total.toLocaleString()}</strong><span className="inventory-manager-metric-label">Units on hand</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">02</span></div><div className="inventory-manager-metric-detail">Current recorded quantity across items</div></article>
+        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-attention"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="alert" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">STOCK HEALTH</span><strong className="inventory-manager-metric-value">{stats.low + stats.out}</strong><span className="inventory-manager-metric-label">Need attention</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">03</span></div><div className="inventory-manager-metric-detail">{stats.out} out of stock · {stats.low} running low</div></article>
+        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-valuation"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="chart" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">VALUATION</span><strong className="inventory-manager-metric-value-number">LKR {stats.value.toLocaleString()}</strong><span className="inventory-manager-metric-label">Stock value</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">04</span></div><div className="inventory-manager-metric-detail">Calculated using recorded unit costs</div></article>
       </section>
 
-      <div className="inventory-layout">
-        <section className="panel inventory-panel">
+      <div className="inventory-layout inventory-manager-layout">
+        <section className="panel inventory-panel inventory-manager-table-panel">
+          <div className="inventory-manager-panel-heading">
+            <div className="inventory-manager-panel-icon" aria-hidden="true"><Icon name="inventory" size={19} /></div>
+            <div><h2>Stock catalogue</h2><p>Search, review, and manage individual inventory items.</p></div>
+            <span className="inventory-manager-total-pill">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
+          </div>
           <div className="toolbar">
             <div className="search-field">
               <span className="search-icon" aria-hidden="true">⌕</span>
@@ -482,6 +482,7 @@ export function InventoryManagerPage() {
                       <td><Badge tone={statusTone[rowStatus]}>{rowStatus}</Badge></td>
                       <td>
                         <div className="row-actions">
+                          <button type="button" className="row-action" aria-label={`Show QR for ${row.item}`} title="Show item QR" onClick={() => setQrItem(row)}><QRCodeSVG value={row.sku} size={18} level="M" bgColor="#fff" fgColor="#111" /></button>
                           <button type="button" className="row-action" aria-label={`Edit ${row.item}`} onClick={() => setModal({ mode: 'edit', sku: row.sku })}>✎</button>
                           <button type="button" className="row-action row-action-danger" aria-label={`Delete ${row.item}`} onClick={() => setDeleteSku(row.sku)}>🗑</button>
                         </div>
@@ -536,29 +537,6 @@ export function InventoryManagerPage() {
           </div>
         </section>
 
-        <aside className="suppliers-panel">
-          <div className="panel-head">
-            <div>
-              <h2>Suppliers</h2>
-              <p>Active partners</p>
-            </div>
-          </div>
-          <ul className="supplier-list">
-            {supplierRows.map((supplier) => (
-              <li className="supplier" key={supplier.name}>
-                <div className="supplier-avatar">{supplier.name.charAt(0)}</div>
-                <div className="supplier-body">
-                  <p className="supplier-name">{supplier.name}</p>
-                  <p className="supplier-category">Active supplier</p>
-                  <div className="supplier-meta">
-                    <span className="supplier-outstanding">Managed in the live database</span>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {supplierRows.length === 0 && <p className="cell-sub">No active suppliers in the database.</p>}
-        </aside>
       </div>
 
       {modal && (
@@ -571,6 +549,41 @@ export function InventoryManagerPage() {
           onSave={handleSave}
           saving={saving}
         />
+      )}
+
+      {qrItem && (
+        <div className="modal-overlay" onClick={() => setQrItem(null)} role="presentation">
+          <div className="modal modal-sm" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="inventory-qr-title">
+            <div className="modal-head">
+              <h2 id="inventory-qr-title">Item QR label</h2>
+              <button type="button" className="modal-close" onClick={() => setQrItem(null)} aria-label="Close">×</button>
+            </div>
+            <div className="modal-body" style={{ textAlign: 'center' }}>
+              <p className="cell-title">{qrItem.item}</p>
+              <div style={{ display: 'inline-block', padding: 16, background: '#fff', borderRadius: 12 }}>
+                <QRCodeSVG value={qrItem.sku} size={240} level="M" title={`QR code for SKU ${qrItem.sku}`} />
+              </div>
+              <p className="cell-title" style={{ marginTop: 12 }}><code>{qrItem.sku}</code></p>
+              <p className="modal-hint">This QR encodes only the item SKU. Scan it from Stock Movements or Physical Stock Count.</p>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setQrItem(null)}>Close</button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (!navigator.clipboard) {
+                      notify('Clipboard access is not available in this browser.', 'warning');
+                      return;
+                    }
+                    void navigator.clipboard.writeText(qrItem.sku)
+                      .then(() => notify('SKU copied.', 'success'))
+                      .catch(() => notify('Could not copy the SKU in this browser.', 'warning'));
+                  }}
+                >Copy SKU</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {deleteSku && (

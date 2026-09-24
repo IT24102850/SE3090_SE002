@@ -11,6 +11,7 @@ import { useToast } from './Toast';
 import WorkspaceAssistant from './WorkspaceAssistant';
 import UserAvatar from './UserAvatar';
 import BusinessAvatar from './BusinessAvatar';
+import { Icon as InventoryIcon } from '../../features/inventory/ui/Icon';
 
 interface NavItem {
   path: string;
@@ -103,9 +104,10 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Inventory',
     items: [
       { path: '/inventory', label: 'Inventory Manager', icon: '📦', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/suppliers', label: 'Suppliers', icon: '🏭', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/stock-movements', label: 'Stock Movements', icon: '🔄', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/purchase-orders', label: 'Purchase Orders', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/low-stock-alerts', label: 'Low Stock Alerts', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/low-stock-alerts', label: 'StockSense AI', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/branch-overview', label: 'Branch Overview', icon: '🏬', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/inventory-analytics', label: 'Inventory Analytics', icon: '📉', roles: ['Admin', 'Manager'] },
     ],
@@ -122,6 +124,27 @@ const NAV_SECTIONS: NavSection[] = [
 
 /** Every nav path, in sidebar order. Exported for the parity test. */
 export const ALL_NAV_PATHS = NAV_SECTIONS.flatMap((s) => s.items.map((i) => i.path));
+
+const INVENTORY_NAV_ICONS: Record<string, string> = {
+  '/inventory': 'inventory',
+  '/suppliers': 'supplier',
+  '/stock-movements': 'movement',
+  '/purchase-orders': 'po',
+  '/low-stock-alerts': 'stocksense',
+  '/branch-overview': 'branch',
+  '/inventory-analytics': 'chart',
+};
+
+function NavigationIcon({ item, size = 18 }: { item: NavItem; size?: number }) {
+  const iconName = INVENTORY_NAV_ICONS[item.path];
+  if (iconName) return <InventoryIcon name={iconName} size={size} />;
+  return <>{item.icon}</>;
+}
+
+function inventoryIconClass(item: NavItem) {
+  const iconName = INVENTORY_NAV_ICONS[item.path];
+  return iconName ? `inventory-nav-icon inventory-nav-${iconName}` : undefined;
+}
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -148,6 +171,21 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     try { localStorage.setItem('unify-sidebar-tip-widget', '1'); } catch { /* private mode */ }
   };
   const { show } = useToast();
+
+  useEffect(() => {
+    if (!user) return;
+
+    const welcomeKey = `unify-welcome-shown:${user.id}`;
+    try {
+      if (sessionStorage.getItem(welcomeKey) === '1') return;
+      sessionStorage.setItem(welcomeKey, '1');
+    } catch {
+      // Private browsing can deny session storage; the greeting is still useful.
+    }
+
+    const name = user.fullName?.trim() || user.email.split('@')[0] || 'there';
+    show(`Welcome back, ${name}!`, 'success');
+  }, [show, user]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -193,9 +231,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     sections.flatMap((section) => section.items).find((item) => item.path === '/dashboard'),
     sections.find((section) => section.id === 'scheduling')?.items[0],
     sections.find((section) => section.id === 'inventory')?.items[0],
+    sections.find((section) => section.id === 'inventory')?.items.find((item) => item.path === '/low-stock-alerts'),
   ].filter((item): item is NavItem => Boolean(item));
   const pageName = location.pathname === '/inventory-analytics'
-    ? 'ENTERPRISE ANALYTICS'
+    ? 'INVENTORY ANALYTICS'
+    : location.pathname === '/low-stock-alerts'
+      ? 'STOCKSENSE AI'
     : location.pathname === '/inventory'
       ? 'STOCK MANAGEMENT'
       : location.pathname.replace('/', '').replace(/-/g, ' ').toUpperCase() || 'OPERATIONS';
@@ -227,6 +268,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   };
 
   const handleLogout = () => {
+    if (user) {
+      try {
+        sessionStorage.removeItem(`unify-welcome-shown:${user.id}`);
+      } catch {
+        // Ignore storage restrictions while logging out.
+      }
+    }
     dispatch(logout());
     // Both caches are keyed to the tenant that just logged out. RTK Query
     // keeps its store across a logout, and the sub-type is memoised in a
@@ -291,7 +339,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                         className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
                         onClick={() => setMobileNavOpen(false)}
                       >
-                        <span className="sidebar-link-icon" aria-hidden="true">{item.icon}</span>
+                        <span className={`sidebar-link-icon${inventoryIconClass(item) ? ` ${inventoryIconClass(item)}` : ''}`} aria-hidden="true"><NavigationIcon item={item} /></span>
                         <span>{item.label}</span>
                       </NavLink>
                     ))}
@@ -389,8 +437,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 to={item.path}
                 className={({ isActive }) => `mobile-quick-link${isActive ? ' active' : ''}`}
               >
-                <span aria-hidden="true">{item.icon}</span>
-                <small>{item.label.replace(' Manager', '')}</small>
+                <span className={inventoryIconClass(item)} aria-hidden="true"><NavigationIcon item={item} size={20} /></span>
+                <small>{item.label.replace(' Manager', '').replace('StockSense AI', 'StockSense')}</small>
               </NavLink>
             ))}
             <button type="button" className="mobile-quick-link mobile-quick-more" onClick={() => setMobileNavOpen(true)}>

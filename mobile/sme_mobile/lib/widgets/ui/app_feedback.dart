@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../inventory/app_notifications.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import 'ghost_button.dart';
@@ -9,39 +10,38 @@ import 'ghost_button.dart';
 class AppSnackBar {
   const AppSnackBar._();
 
-  static void success(BuildContext context, String message) =>
-      _show(context, message, Icons.check_circle_outline_rounded, AppColors.cyan);
-
-  static void error(BuildContext context, String message) =>
-      _show(context, message, Icons.error_outline_rounded, AppColors.magenta);
-
-  static void info(BuildContext context, String message) =>
-      _show(context, message, Icons.info_outline_rounded, AppColors.textSecondary);
-
-  static void _show(BuildContext context, String message, IconData icon, Color accent) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          backgroundColor: AppColors.inputFill,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          content: Row(
-            children: [
-              Icon(icon, color: accent, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  message,
-                  style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
-                ),
-              ),
-            ],
-          ),
-        ),
+  static void success(BuildContext context, String message) => _show(
+        context,
+        message,
+        'Success',
+        Icons.check_circle_outline_rounded,
+        const Color(0xFF34D399),
       );
+
+  static void error(BuildContext context, String message) => _show(
+        context,
+        message,
+        'Attention required',
+        Icons.error_outline_rounded,
+        const Color(0xFFFB7185),
+      );
+
+  static void info(BuildContext context, String message) => _show(
+        context,
+        message,
+        'Quick update',
+        Icons.info_outline_rounded,
+        AppColors.cyan,
+      );
+
+  static void _show(BuildContext context, String message, String title,
+      IconData icon, Color accent) {
+    final tone = accent == const Color(0xFF34D399)
+        ? AppNotificationTone.success
+        : accent == const Color(0xFFFB7185)
+            ? AppNotificationTone.error
+            : AppNotificationTone.info;
+    showAppNotification(message, tone: tone, title: title);
   }
 }
 
@@ -78,7 +78,8 @@ class InlineErrorBanner extends StatelessWidget {
           ),
           if (onDismiss != null)
             IconButton(
-              icon: const Icon(Icons.close, size: 18, color: AppColors.iconSecondary),
+              icon: const Icon(Icons.close,
+                  size: 18, color: AppColors.iconSecondary),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               onPressed: onDismiss,
@@ -122,13 +123,16 @@ class EmptyState extends StatelessWidget {
             Icon(icon, size: 64, color: AppColors.iconGhost),
             const SizedBox(height: 18),
             if (title != null) ...[
-              Text(title!, style: AppTextStyles.title, textAlign: TextAlign.center),
+              Text(title!,
+                  style: AppTextStyles.title, textAlign: TextAlign.center),
               const SizedBox(height: 8),
             ],
-            Text(message, style: AppTextStyles.bodyMuted, textAlign: TextAlign.center),
+            Text(message,
+                style: AppTextStyles.bodyMuted, textAlign: TextAlign.center),
             if (actionLabel != null && onAction != null) ...[
               const SizedBox(height: 22),
-              GhostButton(label: actionLabel!, onPressed: onAction, expand: false),
+              GhostButton(
+                  label: actionLabel!, onPressed: onAction, expand: false),
             ],
           ],
         ),
@@ -140,7 +144,8 @@ class EmptyState extends StatelessWidget {
 /// The app's only spinner, so loading never falls back to the Material default
 /// blue.
 class AppLoader extends StatelessWidget {
-  const AppLoader({super.key, this.size = 28, this.strokeWidth = 2.6, this.message});
+  const AppLoader(
+      {super.key, this.size = 28, this.strokeWidth = 2.6, this.message});
 
   final double size;
   final double strokeWidth;
@@ -164,7 +169,8 @@ class AppLoader extends StatelessWidget {
           ),
           if (message != null) ...[
             const SizedBox(height: 14),
-            Text(message!, style: AppTextStyles.bodyMuted, textAlign: TextAlign.center),
+            Text(message!,
+                style: AppTextStyles.bodyMuted, textAlign: TextAlign.center),
           ],
         ],
       ),

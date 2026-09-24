@@ -6,6 +6,7 @@ using SmeBackend.Authorization;
 using SmeBackend.Data;
 using SmeBackend.Models;
 using SmeBackend.Shared;
+using SmeBackend.Services;
 
 namespace SmeBackend.Controllers;
 
@@ -15,9 +16,40 @@ namespace SmeBackend.Controllers;
 [Produces("application/json")]
 public sealed class InventoryController(
     AppDbContext db,
-    IAuthorizationService authorizationService) : ControllerBase
+    IAuthorizationService authorizationService,
+    IInventoryAgentService inventoryAgentService,
+    IJwtService jwtService) : ControllerBase
 {
     private const int MaxPageSize = 100;
+
+    [HttpPost("agent/plan")]
+    public async Task<IActionResult> PlanInventory(
+        [FromBody] InventoryAgentPlanRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+        if (string.IsNullOrWhiteSpace(request.Objective))
+            return BadRequest(new { message = "Describe what you want the inventory assistant to check." });
+
+        var branchId = ResolveBranchScope(request.BranchId);
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService, InventoryAuthorizationPolicies.InventoryRead, tenantId, branchId))
+            return Forbid();
+
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdClaim, out var userId)) return Unauthorized();
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == userId, cancellationToken);
+        if (user is null || user.TenantId != tenantId) return Unauthorized();
+
+        var response = await inventoryAgentService.PlanAsync(new InventoryAgentRequest(
+            request.Objective.Trim(), tenantId, branchId, jwtService.GenerateAccessToken(user)), cancellationToken);
+        return new ContentResult
+        {
+            StatusCode = response.StatusCode,
+            Content = response.Body,
+            ContentType = response.ContentType,
+        };
+    }
 
     [HttpGet]
     [ProducesResponseType(typeof(InventoryListResponse), StatusCodes.Status200OK)]
@@ -291,9 +323,9 @@ public sealed class InventoryController(
         item.Name = name;
         item.Sku = sku;
         item.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
-        item.CategoryId = request.CategoryId;
-        item.UnitId = request.UnitId;
-        item.BranchId = request.BranchId;
+        item.CategoryId = request.CategoryId ?? item.CategoryId;
+        item.UnitId = request.UnitId ?? item.UnitId;
+        item.BranchId = request.BranchId ?? item.BranchId;
         item.ReorderLevel = request.ReorderLevel;
         item.UnitCost = request.UnitCost;
         item.UpdatedAt = DateTime.UtcNow;
@@ -637,9 +669,23 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
-        if (request.BranchId.HasValue &&
-            !await db.Branches.AnyAsync(
-                branch => branch.Id == request.BranchId.Value, cancellationToken))
+        var branchId = request.BranchId;
+        if (!branchId.HasValue)
+        {
+            if (Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var userBranchId))
+            {
+                branchId = userBranchId;
+            }
+            else
+            {
+                branchId = await db.Branches
+                    .Where(branch => branch.TenantId == tenantId)
+                    .Select(branch => (Guid?)branch.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+        }
+        else if (!await db.Branches.AnyAsync(
+            branch => branch.Id == branchId.Value, cancellationToken))
         {
             ModelState.AddModelError("branchId", "The branch does not exist for this tenant.");
             return ValidationProblem(ModelState);
@@ -652,7 +698,7 @@ public sealed class InventoryController(
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             CategoryId = request.CategoryId,
             UnitId = request.UnitId,
-            BranchId = request.BranchId,
+            BranchId = branchId,
             Quantity = request.Quantity,
             ReorderLevel = request.ReorderLevel,
             UnitCost = request.UnitCost,
@@ -806,6 +852,8 @@ public sealed record WasteInventoryRequest(
     string? Reason = null,
     string? Reference = null,
     string? Notes = null);
+
+public sealed record InventoryAgentPlanRequest(string Objective, Guid? BranchId = null);
 
 public sealed record ReceiveInventoryRequest(
     decimal Quantity,
