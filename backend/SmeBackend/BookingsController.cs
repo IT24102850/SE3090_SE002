@@ -218,12 +218,24 @@ public class BookingsController : ControllerBase
         _db.Bookings.Add(booking);
 
         var resourceName = (await _db.Resources.FindAsync(dto.ResourceId))?.Name;
-        var confirmationMessage = $"Your booking for {resourceName} on {startTime:MMM d, h:mm tt} is confirmed.";
+        // A new booking is Pending, so saying "confirmed" here contradicts
+        // the status the guest sees on the same screen - and contradicts the
+        // BookingConfirmed notification that a member of staff sends later.
+        var confirmationTitle = bookingType?.RequiresApproval == true ? "Booking requested" : "Booking received";
+        var confirmationMessage = bookingType?.RequiresApproval == true
+            ? $"Your request for {resourceName} on {startTime:MMM d, h:mm tt} is with the business for approval."
+            : $"Your booking for {resourceName} on {startTime:MMM d, h:mm tt} is in - we'll confirm it shortly.";
         NotificationHelper.Queue(_db, dto.TenantId, bookedBy, "BookingConfirmation",
-            "Booking confirmed", confirmationMessage);
+            confirmationTitle, confirmationMessage);
+        NotifyDesk(dto.TenantId, "BookingCreated", "New booking",
+            $"{await GuestNameAsync(dto.BookedFor, bookedBy)} booked {resourceName} for {startTime:MMM d, h:mm tt}.");
+
+        // If this resource sells materialised slots (spec 2.3), take the
+        // ones this booking covers. A resource with none is unaffected.
+        await AvailabilitySlotService.MarkBookedAsync(_db, booking);
 
         await _db.SaveChangesAsync();
-        await _pushSender.SendAsync(dto.TenantId, bookedBy, "Booking confirmed", confirmationMessage);
+        await _pushSender.SendAsync(dto.TenantId, bookedBy, confirmationTitle, confirmationMessage);
 
         return CreatedAtAction(nameof(GetById), new { id = booking.Id }, new
         {
@@ -281,9 +293,15 @@ public class BookingsController : ControllerBase
         booking.EndTime = newEnd;
         booking.UpdatedAt = DateTime.UtcNow;
 
+        // Moving a booking frees where it was and takes where it went.
+        await AvailabilitySlotService.ReleaseAsync(_db, booking.Id);
+        await AvailabilitySlotService.MarkBookedAsync(_db, booking);
+
         var rescheduleMessage = $"Your booking was moved to {newStart:MMM d, h:mm tt}.";
         NotificationHelper.Queue(_db, booking.TenantId, booking.BookedBy, "BookingRescheduled",
             "Booking rescheduled", rescheduleMessage);
+        NotifyDesk(booking.TenantId, "BookingRescheduled", "Booking moved",
+            $"{await GuestNameAsync(booking.BookedFor, booking.BookedBy)} was moved to {newStart:MMM d, h:mm tt}.");
 
         await _db.SaveChangesAsync();
         await _pushSender.SendAsync(booking.TenantId, booking.BookedBy, "Booking rescheduled", rescheduleMessage);
@@ -312,11 +330,32 @@ public class BookingsController : ControllerBase
         var cancelMessage = $"Your booking for {booking.StartTime:MMM d, h:mm tt} was cancelled.";
         NotificationHelper.Queue(_db, booking.TenantId, booking.BookedBy, "BookingCancelled",
             "Booking cancelled", cancelMessage);
+        // The slots go back on sale the moment the booking is off.
+        await AvailabilitySlotService.ReleaseAsync(_db, booking.Id);
+
+        NotifyDesk(booking.TenantId, "BookingCancelled", "Booking cancelled",
+            $"{await GuestNameAsync(booking.BookedFor, booking.BookedBy)} cancelled the {booking.StartTime:MMM d, h:mm tt} slot.");
 
         await _db.SaveChangesAsync();
         await _pushSender.SendAsync(booking.TenantId, booking.BookedBy, "Booking cancelled", cancelMessage);
         return Ok(new { message = "Booking cancelled." });
     }
+
+    // The desk's own copy of a booking update. The customer's notification is
+    // addressed to them personally, so without this the workspace bell above
+    // the dashboard stays empty while bookings are made, moved and dropped.
+    // UserId == null is the tenant-wide row NotificationsController surfaces
+    // to Admin/Manager.
+    private void NotifyDesk(Guid tenantId, string type, string title, string message) =>
+        NotificationHelper.Queue(_db, tenantId, null, type, title, message);
+
+    // Whose booking it is, for the desk's copy: the person it was booked for,
+    // else whoever made it.
+    private async Task<string> GuestNameAsync(Guid? bookedFor, Guid bookedBy) =>
+        await _db.Users.AsNoTracking()
+            .Where(u => u.Id == (bookedFor ?? bookedBy))
+            .Select(u => u.FullName)
+            .FirstOrDefaultAsync() ?? "A guest";
 
     // Resolves the caller's id/role from the JWT. Returns (null, null) when unauthenticated.
     private (Guid? Id, string? Role) CallerIdentity()
@@ -451,6 +490,8 @@ public class BookingsController : ControllerBase
         // A restaurant order checked in from the QR scanner is in the
         // kitchen too, so its recipe (if any) comes off stock the same way.
         await RecipeConsumptionService.ApplyAsync(_db, booking);
+        NotificationHelper.Queue(_db, booking.TenantId, booking.BookedBy, "BookingCheckedIn",
+            "Checked in", $"You're checked in for your {booking.StartTime:MMM d, h:mm tt} booking.");
         await _db.SaveChangesAsync();
 
         return Ok(new { message = "Patient checked in.", booking.Status });
@@ -633,6 +674,22 @@ public class BookingsController : ControllerBase
                 break;
         }
         booking.UpdatedAt = now;
+
+        // The guest only learns of a status change if we tell them, and the
+        // five below are the ones that change what they should do next.
+        var statusNews = dto.Status switch
+        {
+            Models.BookingStatus.Confirmed => ("Booking confirmed", $"Your {booking.StartTime:MMM d, h:mm tt} booking is confirmed."),
+            Models.BookingStatus.Rejected => ("Booking declined", $"Your {booking.StartTime:MMM d, h:mm tt} request could not be accepted."),
+            Models.BookingStatus.Cancelled => ("Booking cancelled", $"Your {booking.StartTime:MMM d, h:mm tt} booking was cancelled."),
+            Models.BookingStatus.Completed => ("Visit complete", $"Thanks for coming in on {booking.StartTime:MMM d}."),
+            Models.BookingStatus.NoShow => ("Marked as a no-show", $"You were marked absent for {booking.StartTime:MMM d, h:mm tt}."),
+            _ => default
+        };
+        if (statusNews != default)
+            NotificationHelper.Queue(_db, booking.TenantId, booking.BookedBy,
+                $"Booking{dto.Status}", statusNews.Item1, statusNews.Item2);
+
         await _db.SaveChangesAsync();
         return Ok(booking);
     }
@@ -724,6 +781,291 @@ public class BookingsController : ControllerBase
             cancelled,
             noShowRate = total > 0 ? (noShows / (double)total * 100) : 0,
             utilizationRate = total > 0 ? (completed / (double)total * 100) : 0
+        });
+    }
+
+    // ── Recurring series (spec 2.3: RecurringPatterns) ──────────
+    //
+    // The pattern row has always been written when a series is created, but
+    // nothing could read it back, so a weekly class was twelve unrelated
+    // bookings the moment it was made. These two endpoints make a series a
+    // thing you can look at and call off.
+
+    /// <summary>Every recurring series this tenant runs, newest first.</summary>
+    [HttpGet("series")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    public async Task<IActionResult> GetAllSeries([FromQuery] Guid tenantId, CancellationToken ct)
+    {
+        var patterns = await _db.RecurringPatterns.AsNoTracking()
+            .OrderByDescending(p => p.CreatedAt)
+            .Take(200)
+            .ToListAsync(ct);
+        if (patterns.Count == 0) return Ok(new { items = Array.Empty<object>() });
+
+        var anchorIds = patterns.Where(p => p.BookingId != null).Select(p => p.BookingId!.Value).ToList();
+        var anchors = await _db.Bookings.AsNoTracking()
+            .Where(b => anchorIds.Contains(b.Id) && b.TenantId == tenantId)
+            .Include(b => b.Resource)
+            .Include(b => b.BookingType)
+            .ToListAsync(ct);
+        var anchorById = anchors.ToDictionary(b => b.Id);
+
+        var now = DateTime.UtcNow;
+        var items = new List<object>();
+
+        foreach (var pattern in patterns)
+        {
+            if (pattern.BookingId == null || !anchorById.TryGetValue(pattern.BookingId.Value, out var anchor)) continue;
+
+            // Occurrences share the anchor's resource, type, customer and
+            // time of day — the same shape GetSeries resolves by.
+            var timeOfDay = anchor.StartTime.TimeOfDay;
+            var siblings = await _db.Bookings.AsNoTracking()
+                .Where(b => b.ResourceId == anchor.ResourceId
+                    && b.BookingTypeId == anchor.BookingTypeId
+                    && b.BookedBy == anchor.BookedBy
+                    && b.DeletedAt == null
+                    && b.StartTime >= anchor.StartTime
+                    && b.StartTime <= pattern.EndDate.AddDays(1))
+                .Select(b => new { b.StartTime, b.Status })
+                .ToListAsync(ct);
+            var mine = siblings.Where(s => s.StartTime.TimeOfDay == timeOfDay).ToList();
+
+            items.Add(new
+            {
+                patternId = pattern.Id,
+                anchorBookingId = anchor.Id,
+                title = anchor.Title,
+                resourceName = anchor.Resource?.Name,
+                bookingTypeName = anchor.BookingType?.Name,
+                colorHex = anchor.BookingType?.ColorHex,
+                pattern.Frequency,
+                pattern.DaysOfWeek,
+                pattern.EndDate,
+                startTime = anchor.StartTime,
+                total = mine.Count,
+                remaining = mine.Count(s => s.StartTime > now
+                    && s.Status != BookingStatus.Cancelled && s.Status != BookingStatus.Rejected),
+                cancelled = mine.Count(s => s.Status == BookingStatus.Cancelled || s.Status == BookingStatus.Rejected),
+                // A series whose end date has passed is history, not a live
+                // commitment, and the page sorts on that.
+                isActive = pattern.EndDate > now,
+            });
+        }
+
+        return Ok(new { items });
+    }
+
+    /// <summary>The recurring pattern behind a booking, with every occurrence in the series.</summary>
+    [HttpGet("{id:guid}/series")]
+    public async Task<IActionResult> GetSeries(Guid id, CancellationToken ct)
+    {
+        var booking = await _db.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id && b.DeletedAt == null, ct);
+        if (booking == null) return NotFound();
+
+        var ownership = await CheckOwnershipAsync(booking);
+        if (ownership != null) return ownership;
+
+        // The pattern is stored against the first occurrence, so a booking
+        // anywhere in the series has to find it by the series' shape rather
+        // than by its own id.
+        var pattern = await _db.RecurringPatterns.AsNoTracking()
+            .Where(p => p.BookingId == id)
+            .FirstOrDefaultAsync(ct);
+
+        if (pattern == null)
+        {
+            var siblingIds = await _db.Bookings.AsNoTracking()
+                .Where(b => b.ResourceId == booking.ResourceId
+                    && b.BookingTypeId == booking.BookingTypeId
+                    && b.BookedBy == booking.BookedBy
+                    && b.DeletedAt == null)
+                .Select(b => b.Id)
+                .ToListAsync(ct);
+            pattern = await _db.RecurringPatterns.AsNoTracking()
+                .Where(p => p.BookingId != null && siblingIds.Contains(p.BookingId.Value))
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (pattern == null)
+            return Ok(new { isRecurring = false, bookingId = id });
+
+        var anchor = await _db.Bookings.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == pattern.BookingId, ct);
+        if (anchor == null) return Ok(new { isRecurring = false, bookingId = id });
+
+        // Occurrences are the bookings the series produced: same resource,
+        // type and customer, same time of day, up to the pattern's end.
+        var timeOfDay = anchor.StartTime.TimeOfDay;
+        var occurrences = await _db.Bookings.AsNoTracking()
+            .Where(b => b.ResourceId == anchor.ResourceId
+                && b.BookingTypeId == anchor.BookingTypeId
+                && b.BookedBy == anchor.BookedBy
+                && b.DeletedAt == null
+                && b.StartTime >= anchor.StartTime
+                && b.StartTime <= pattern.EndDate.AddDays(1))
+            .OrderBy(b => b.StartTime)
+            .Select(b => new { b.Id, b.StartTime, b.EndTime, b.Status, b.Title })
+            .ToListAsync(ct);
+
+        var inSeries = occurrences.Where(o => o.StartTime.TimeOfDay == timeOfDay).ToList();
+        var live = inSeries.Where(o => o.Status != BookingStatus.Cancelled && o.Status != BookingStatus.Rejected).ToList();
+
+        return Ok(new
+        {
+            isRecurring = true,
+            patternId = pattern.Id,
+            anchorBookingId = anchor.Id,
+            pattern.Frequency,
+            pattern.EndDate,
+            pattern.DaysOfWeek,
+            total = inSeries.Count,
+            remaining = live.Count(o => o.StartTime > DateTime.UtcNow),
+            cancelled = inSeries.Count - live.Count,
+            occurrences = inSeries,
+        });
+    }
+
+    /// <summary>Cancels every future occurrence of a recurring series. Past ones keep their history.</summary>
+    [HttpDelete("series/{patternId:guid}")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    public async Task<IActionResult> CancelSeries(Guid patternId, CancellationToken ct)
+    {
+        var pattern = await _db.RecurringPatterns.FirstOrDefaultAsync(p => p.Id == patternId, ct);
+        if (pattern == null) return NotFound();
+
+        var anchor = await _db.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.Id == pattern.BookingId, ct);
+        if (anchor == null) return NotFound();
+
+        var timeOfDay = anchor.StartTime.TimeOfDay;
+        var now = DateTime.UtcNow;
+
+        var future = await _db.Bookings
+            .Where(b => b.ResourceId == anchor.ResourceId
+                && b.BookingTypeId == anchor.BookingTypeId
+                && b.BookedBy == anchor.BookedBy
+                && b.DeletedAt == null
+                && b.StartTime > now
+                && b.StartTime <= pattern.EndDate.AddDays(1)
+                && b.Status != BookingStatus.Cancelled
+                && b.Status != BookingStatus.Rejected)
+            .ToListAsync(ct);
+
+        // Only the occurrences that actually belong to this series: another
+        // one-off booking on the same resource is not ours to cancel.
+        var mine = future.Where(b => b.StartTime.TimeOfDay == timeOfDay).ToList();
+
+        foreach (var booking in mine)
+        {
+            booking.Status = BookingStatus.Cancelled;
+            booking.UpdatedAt = now;
+            await AvailabilitySlotService.ReleaseAsync(_db, booking.Id, ct);
+            NotificationHelper.Queue(_db, booking.TenantId, booking.BookedBy, "BookingCancelled",
+                "Series cancelled", $"Your recurring booking on {booking.StartTime:MMM d, h:mm tt} was cancelled.");
+        }
+
+        if (mine.Count > 0)
+        {
+            NotifyDesk(anchor.TenantId, "BookingCancelled", "Series cancelled",
+                $"{mine.Count} future occurrence{(mine.Count == 1 ? "" : "s")} of a recurring booking were cancelled.");
+        }
+
+        // Past occurrences are left alone; the pattern stops here.
+        pattern.EndDate = now;
+        pattern.UpdatedAt = now;
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new { cancelled = mine.Count, keptPast = future.Count - mine.Count });
+    }
+
+    // ── Revenue per slot (spec 2.5) ─────────────────────────────
+    // "Revenue per resource" already existed and answers a different
+    // question: which room earns most. This answers which *hour of the day*
+    // earns most, which is the one an operator prices and staffs against —
+    // a 9am that bills half of what 6pm bills is a pricing decision, not a
+    // resource decision.
+    /// <summary>Revenue, bookings and average value grouped by hour of the day, over a date range.</summary>
+    [HttpGet("reports/revenue-per-slot")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> GetRevenuePerSlot(
+        [FromQuery] Guid tenantId,
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        [FromQuery] Guid? branchId = null,
+        // Minutes east of UTC. An hour-of-day report read in UTC would put a
+        // Colombo evening booking in the small hours, so the caller says
+        // which clock it means - the same convention the dashboards use.
+        [FromQuery] int tz = 0)
+    {
+        from = DateTimeUtil.AsUtc(from);
+        to = DateTimeUtil.AsUtc(to);
+        if (to < from) return BadRequest(new { message = "`to` must not be before `from`." });
+
+        var query = _db.Bookings.AsNoTracking()
+            .Where(b => b.TenantId == tenantId && b.StartTime >= from && b.StartTime <= to && b.DeletedAt == null);
+        if (branchId.HasValue)
+        {
+            var branchResources = _db.Resources.AsNoTracking()
+                .Where(r => r.TenantId == tenantId && r.BranchId == branchId.Value)
+                .Select(r => r.Id);
+            query = query.Where(b => branchResources.Contains(b.ResourceId));
+        }
+
+        var bookings = await query
+            .Select(b => new { b.StartTime, b.EndTime, b.Status, b.TotalCost, b.AttendeeCount })
+            .ToListAsync();
+
+        // Money only counts once it is honoured. A cancelled or no-show
+        // booking still occupied the slot, so it is counted separately
+        // rather than dropped - that gap is the point of the report.
+        static bool Earned(Models.BookingStatus status) =>
+            status is Models.BookingStatus.Completed or Models.BookingStatus.CheckedIn or Models.BookingStatus.InProgress
+                or Models.BookingStatus.Confirmed;
+
+        var offset = TimeSpan.FromMinutes(tz);
+        var slots = Enumerable.Range(0, 24).Select(hour =>
+        {
+            var inHour = bookings.Where(b => (b.StartTime + offset).Hour == hour).ToList();
+            var earned = inHour.Where(b => Earned(b.Status)).ToList();
+            var lost = inHour.Where(b => b.Status is Models.BookingStatus.Cancelled or Models.BookingStatus.NoShow
+                or Models.BookingStatus.Rejected or Models.BookingStatus.WeatherCancelled).ToList();
+            var revenue = earned.Sum(b => b.TotalCost ?? 0m);
+
+            return new
+            {
+                hour,
+                label = $"{(hour % 12 == 0 ? 12 : hour % 12)}{(hour < 12 ? "am" : "pm")}",
+                bookings = inHour.Count,
+                earnedBookings = earned.Count,
+                lostBookings = lost.Count,
+                guests = inHour.Sum(b => b.AttendeeCount ?? 1),
+                revenue,
+                averageValue = earned.Count > 0 ? Math.Round(revenue / earned.Count, 2) : 0m,
+                // What the slot would have taken had nothing fallen through,
+                // valued at this slot's own average rather than the day's.
+                forgoneRevenue = earned.Count > 0 ? Math.Round(revenue / earned.Count * lost.Count, 2) : 0m,
+            };
+        }).ToList();
+
+        var used = slots.Where(s => s.bookings > 0).ToList();
+        var total = slots.Sum(s => s.revenue);
+
+        return Ok(new
+        {
+            from,
+            to,
+            tz,
+            totalRevenue = total,
+            totalBookings = slots.Sum(s => s.bookings),
+            busiestHour = used.Count == 0 ? (int?)null : used.OrderByDescending(s => s.bookings).First().hour,
+            richestHour = used.Count == 0 ? (int?)null : used.OrderByDescending(s => s.revenue).First().hour,
+            averagePerBooking = slots.Sum(s => s.earnedBookings) > 0
+                ? Math.Round(total / slots.Sum(s => s.earnedBookings), 2)
+                : 0m,
+            forgoneRevenue = slots.Sum(s => s.forgoneRevenue),
+            // Every hour, including the empty ones: a gap in the trading day
+            // is a finding, and dropping it would hide it.
+            slots,
         });
     }
 

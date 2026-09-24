@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.DTOs;
 using SmeBackend.Models;
+using SmeBackend.Services;
 using SmeBackend.Shared;
 
 namespace SmeBackend.Controllers;
@@ -390,6 +391,136 @@ public class ResourcesController : ControllerBase
 
         return Ok(new { date = date.Date, results });
     }
+
+    // ── Materialised availability slots (spec 2.3: AvailabilitySlots) ────
+    //
+    // Availability has always been computed on the fly. These three
+    // endpoints let a business *hold* it instead: generate the inventory,
+    // read it back with its booked/free state, and withdraw a range it does
+    // not want to sell. A resource with no materialised slots keeps
+    // behaving exactly as before, so this is additive.
+
+    /// <summary>Materialises availability slots for a resource over a date range, from its weekly schedule.</summary>
+    [HttpPost("{id:guid}/availability-slots/generate")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
+    public async Task<IActionResult> GenerateAvailabilitySlots(Guid id, [FromBody] GenerateSlotsDto dto, CancellationToken ct)
+    {
+        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+        var resource = await _db.Resources.FirstOrDefaultAsync(r => r.Id == id && r.TenantId == tenantId, ct);
+        if (resource == null) return NotFound();
+
+        var from = DateTimeUtil.AsUtc(dto.From).Date;
+        var to = DateTimeUtil.AsUtc(dto.To).Date;
+        if (to < from) return BadRequest(new { message = "`to` must not be before `from`." });
+
+        var days = (to - from).Days + 1;
+        if (days > AvailabilitySlotService.MaxDaysPerGeneration)
+            return BadRequest(new { message = $"Generate at most {AvailabilitySlotService.MaxDaysPerGeneration} days at a time (asked for {days})." });
+
+        var slotMinutes = Math.Clamp(dto.SlotMinutes, 5, 480);
+        var result = await AvailabilitySlotService.GenerateAsync(_db, resource, from, to, slotMinutes, ct);
+
+        return Ok(new
+        {
+            resourceId = id,
+            result.From,
+            result.To,
+            result.Days,
+            result.Created,
+            // Already-generated slots are reported, not re-created: running
+            // this twice over the same week is safe by design.
+            result.Skipped,
+            slotMinutes,
+        });
+    }
+
+    /// <summary>The materialised availability slots for a resource, with their booked state.</summary>
+    [HttpGet("{id:guid}/availability-slots")]
+    public async Task<IActionResult> GetAvailabilitySlots(
+        Guid id,
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        [FromQuery] bool onlyFree = false,
+        CancellationToken ct = default)
+    {
+        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+        if (!await _db.Resources.AnyAsync(r => r.Id == id && r.TenantId == tenantId, ct)) return NotFound();
+
+        from = DateTimeUtil.AsUtc(from).Date;
+        to = DateTimeUtil.AsUtc(to).Date;
+
+        var query = _db.AvailabilitySlots.AsNoTracking()
+            .Where(s => s.ResourceId == id && s.Date >= from && s.Date <= to);
+        if (onlyFree) query = query.Where(s => !s.IsBooked);
+
+        var slots = await query
+            .OrderBy(s => s.Date).ThenBy(s => s.StartTime)
+            .Select(s => new
+            {
+                s.Id,
+                s.Date,
+                s.StartTime,
+                s.EndTime,
+                s.IsBooked,
+                s.BookingId,
+            })
+            .ToListAsync(ct);
+
+        var total = slots.Count;
+        var booked = slots.Count(s => s.IsBooked);
+
+        return Ok(new
+        {
+            resourceId = id,
+            from,
+            to,
+            total,
+            booked,
+            free = total - booked,
+            // The number this whole feature exists to produce: how much of
+            // the capacity a business published has actually sold.
+            utilisationPercent = total == 0 ? 0 : Math.Round(booked / (double)total * 100, 1),
+            days = slots.GroupBy(s => s.Date).Select(g => new
+            {
+                date = g.Key,
+                total = g.Count(),
+                booked = g.Count(s => s.IsBooked),
+                slots = g.OrderBy(s => s.StartTime),
+            }),
+        });
+    }
+
+    /// <summary>Withdraws unbooked availability slots in a range. Booked slots are never removed.</summary>
+    [HttpDelete("{id:guid}/availability-slots")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
+    public async Task<IActionResult> DeleteAvailabilitySlots(
+        Guid id,
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        CancellationToken ct = default)
+    {
+        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+        if (!await _db.Resources.AnyAsync(r => r.Id == id && r.TenantId == tenantId, ct)) return NotFound();
+
+        from = DateTimeUtil.AsUtc(from).Date;
+        to = DateTimeUtil.AsUtc(to).Date;
+
+        var inRange = await _db.AvailabilitySlots
+            .Where(s => s.ResourceId == id && s.Date >= from && s.Date <= to)
+            .ToListAsync(ct);
+
+        // Deleting a slot somebody has booked would quietly orphan their
+        // reservation, so those are kept and reported instead.
+        var removable = inRange.Where(s => !s.IsBooked).ToList();
+        var kept = inRange.Count - removable.Count;
+
+        _db.AvailabilitySlots.RemoveRange(removable);
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new { removed = removable.Count, keptBecauseBooked = kept });
+    }
 }
 
 public record AddScheduleExceptionDto(DateTime Date, string? Reason);
+
+public record GenerateSlotsDto(DateTime From, DateTime To, int SlotMinutes = 60);
