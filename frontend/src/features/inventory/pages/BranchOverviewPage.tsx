@@ -142,7 +142,7 @@ export function BranchOverviewPage() {
           <p className="branch-overview-eyebrow"><span aria-hidden="true">✣</span> INVENTORY / NETWORK</p>
           <h1>Branch overview</h1>
           <p>Compare stock health, inventory value, and replenishment needs across your locations.</p>
-          <div className="branch-overview-live"><span className={loading ? 'is-loading' : ''} />{loading ? 'Syncing branch inventory…' : `${summary.branches} locations · ${inventory.length} items tracked`}{lastUpdated && !loading && <small>Updated {lastUpdated.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</small>}</div>
+          <div className="branch-overview-live"><span className={loading ? 'is-loading' : error ? 'is-error' : ''} />{loading ? 'Syncing branch inventory…' : error ? 'Branch inventory sync needs attention' : `${summary.branches} locations · ${inventory.length} items tracked`}{lastUpdated && !loading && <small>Updated {lastUpdated.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</small>}</div>
         </div>
         <div className="branch-overview-art" aria-hidden="true"><span className="branch-overview-orbit" /><span className="branch-overview-art-icon">⌖</span><i /><i /><i /></div>
         <button type="button" className="btn branch-overview-refresh" onClick={() => void loadInventory(true)} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh data'}</button>

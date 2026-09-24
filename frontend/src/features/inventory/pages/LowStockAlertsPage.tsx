@@ -64,6 +64,7 @@ export function LowStockAlertsPage() {
   const [healthFilter, setHealthFilter] = useState<(typeof healthFilters)[number]>(healthFilters[0]);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [loading, setLoading] = useState(true);
+  const [inventoryError, setInventoryError] = useState('');
   const [planning, setPlanning] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [plan, setPlan] = useState<InventoryPlan | null>(null);
@@ -95,10 +96,12 @@ export function LowStockAlertsPage() {
         };
       }));
       setLastUpdated(new Date());
+      setInventoryError('');
       if (showSuccess) notify('Inventory refreshed successfully. The stock health summary is up to date.', 'success');
     } catch {
       setInventory([]);
       setInventoryTotalCount(0);
+      setInventoryError('Inventory data could not be synchronized.');
       notify('Unable to load inventory health from the database.', 'error');
     } finally {
       setLoading(false);
@@ -190,11 +193,13 @@ export function LowStockAlertsPage() {
           </div>
         </div>
         <div className="page-actions stocksense-hero-actions">
-          <span className="live-indicator stocksense-updated"><span aria-hidden="true" /> Updated {lastUpdated.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</span>
+          <span className={`live-indicator stocksense-updated${inventoryError ? ' is-stale' : ''}`}><span aria-hidden="true" />{inventoryError ? 'Inventory sync needs attention' : 'Inventory data current'} · Updated {lastUpdated.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</span>
           <button className="btn btn-primary stocksense-analyze-button" type="button" onClick={analyzeInventory} disabled={planning}>{planning ? 'Analyzing…' : '✦ Analyze inventory'}</button>
           <button className="btn btn-secondary" type="button" onClick={() => { void loadInventory(true); }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh now'}</button>
         </div>
       </header>
+
+      {inventoryError && <p className="page-notice stocksense-sync-notice" role="alert">{inventoryError} The timestamp above shows the last successful snapshot.</p>}
 
       {planning && <section className="stocksense-progress-panel" role="status" aria-live="polite">
         <div className="stocksense-progress-orbit"><div className="stocksense-progress-ring" /><Icon name="stocksense" size={50} /><span className="stocksense-orbit-dot" /></div>
