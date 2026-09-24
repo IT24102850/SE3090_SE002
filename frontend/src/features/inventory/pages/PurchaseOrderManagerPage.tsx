@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../../../api/apiBaseUrl';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
@@ -216,7 +216,6 @@ async function apiGet<T>(path: string, token: string | null): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
-  if (!response.ok) throw new Error(`Request failed: ${path}`);
   if (!response.ok) throw new Error(await apiErrorMessage(response, path));
   return response.json() as Promise<T>;
 }
@@ -230,7 +229,6 @@ async function apiPut<T>(path: string, token: string | null, body: unknown): Pro
     },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error(`Request failed: ${path}`);
   if (!response.ok) throw new Error(await apiErrorMessage(response, path));
   return response.json() as Promise<T>;
 }
@@ -241,7 +239,6 @@ async function apiPost<T>(path: string, token: string | null, body: unknown): Pr
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error(`Request failed: ${path}`);
   if (!response.ok) throw new Error(await apiErrorMessage(response, path));
   return response.json() as Promise<T>;
 }
@@ -663,10 +660,11 @@ export function PurchaseOrderManagerPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(statusFilters[0]);
-  const [supplierFilter, setSupplierFilter] = useState('All suppliers');
+  const [supplierFilter, setSupplierFilter] = useState(() => searchParams.get('supplier') ?? 'All suppliers');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [page, setPage] = useState(1);
+  const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
   const reorderItemId = searchParams.get('reorderItemId') ?? undefined;
   const reorderBranchId = searchParams.get('branchId') ?? undefined;
   const requestedQuantity = Number(searchParams.get('quantity'));
@@ -674,34 +672,39 @@ export function PurchaseOrderManagerPage() {
 
   const performer = user?.fullName ?? 'Staff';
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      try {
-        const response = await apiGet<PurchaseOrderListResponse>('/purchase-orders?pageSize=100', token);
-        // An older deployed API can still provide orders while awaiting restart
-        // for the options endpoint. Never hide live orders in that window.
-        const referenceData = await apiGet<PurchaseOrderOptionsResponse>('/purchase-orders/options', token)
-          .catch(() => ({ branches: [], suppliers: [], items: [] }));
-        if (cancelled) return;
-        setOrders(response.items.map((item) => responseToOrder(item)));
-        setOptions(referenceData);
-            if (reorderItemId && referenceData.items?.some((item) => item.id === reorderItemId)) {
-              setShowCreate(true);
-            }
-        setLoadError(null);
-      } catch {
-        if (!cancelled) setLoadError('Purchase orders could not be loaded from the live database. Check the API connection and sign in again.');
-      } finally {
-        if (!cancelled) setLoading(false);
+  const loadOrders = useCallback(async (isActive: () => boolean = () => true) => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const response = await apiGet<PurchaseOrderListResponse>('/purchase-orders?pageSize=100', token);
+      const referenceData = await apiGet<PurchaseOrderOptionsResponse>('/purchase-orders/options', token)
+        .catch(() => ({ branches: [], suppliers: [], items: [] }));
+      if (!isActive()) return false;
+      const loadedOrders = Array.isArray(response.items) ? response.items.map((item) => responseToOrder(item)) : [];
+      setOrders(loadedOrders);
+      setOptions(referenceData);
+      setSelectedId((current) => current && loadedOrders.some((order) => order.id === current) ? current : loadedOrders[0]?.id ?? null);
+      if (reorderItemId && referenceData.items?.some((item) => item.id === reorderItemId)) setShowCreate(true);
+      if (!referenceData.branches.length || !referenceData.suppliers.length) {
+        setLoadError('Orders loaded, but branches or suppliers are unavailable. Refresh the data or add the missing records before creating an order.');
       }
+      return true;
+    } catch (error) {
+      if (!isActive()) return false;
+      const message = error instanceof Error ? error.message : 'Purchase orders could not be loaded.';
+      setLoadError(message);
+      notify(message, 'error');
+      return false;
+    } finally {
+      if (isActive()) setLoading(false);
     }
+  }, [notify, reorderItemId, token]);
 
-    load();
-    return () => { cancelled = true; };
-  }, [reorderItemId, token]);
+  useEffect(() => {
+    let active = true;
+    void loadOrders(() => active);
+    return () => { active = false; };
+  }, [loadOrders]);
 
   const filtered = useMemo(() => {
     const queryLower = query.trim().toLowerCase();
@@ -710,12 +713,14 @@ export function PurchaseOrderManagerPage() {
       const matchesQuery =
         queryLower === '' ||
         order.number.toLowerCase().includes(queryLower) ||
-        order.supplier.toLowerCase().includes(queryLower);
+        order.supplier.toLowerCase().includes(queryLower) ||
+        order.branch?.toLowerCase().includes(queryLower);
       const matchesStatus = apiStatus === null || order.status === apiStatus;
       const matchesSupplier = supplierFilter === 'All suppliers' || order.supplier === supplierFilter;
       return matchesQuery && matchesStatus && matchesSupplier;
     });
   }, [orders, query, statusFilter, supplierFilter]);
+  const hasActiveFilters = query.trim() !== '' || statusFilter !== 'All statuses' || supplierFilter !== 'All suppliers';
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -745,10 +750,12 @@ export function PurchaseOrderManagerPage() {
     total: orders.length,
     open: orders.filter((order) => order.status !== 'Received' && order.status !== 'Cancelled').length,
     inTransit: orders.filter((order) => order.status === 'InTransit').length,
-    value: orders.filter((order) => order.status !== 'Cancelled').reduce((sum, order) => sum + order.amount, 0),
+    received: orders.filter((order) => order.status === 'Received').length,
+    value: orders.filter((order) => order.status !== 'Received' && order.status !== 'Cancelled').reduce((sum, order) => sum + order.amount, 0),
   }), [orders]);
 
   async function advanceStatus(order: PurchaseOrder) {
+    if (statusSavingId) return;
     const next = nextStatus(order.status);
     if (!next) return;
 
@@ -762,18 +769,21 @@ export function PurchaseOrderManagerPage() {
     )));
 
     try {
+      setStatusSavingId(order.id);
       const updated = await apiPut<PurchaseOrderResponse>(`/purchase-orders/${order.id}/status`, token, { status: next });
       setOrders((prev) => prev.map((candidate) => candidate.id === order.id ? responseToOrder(updated, candidate) : candidate));
     } catch {
       setOrders((prev) => prev.map((candidate) => candidate.id === order.id ? order : candidate));
       notify(`Could not sync ${order.number}; no change was saved.`, 'error');
       return;
+    } finally {
+      setStatusSavingId(null);
     }
-    notify(`${order.number} moved to ${statusLabels[next]}.`);
+    notify(`${order.number} moved to ${statusLabels[next]}.`, 'success');
   }
 
   async function cancelOrder(order: PurchaseOrder) {
-    if (order.status === 'Received' || order.status === 'Cancelled') return;
+    if (statusSavingId || order.status === 'Received' || order.status === 'Cancelled') return;
     const now = new Date().toISOString();
     const timelineEvent: TimelineEvent = { status: 'Cancelled', at: now, by: performer, note: 'Cancelled by user' };
     setOrders((prev) => prev.map((candidate) => (
@@ -782,12 +792,15 @@ export function PurchaseOrderManagerPage() {
         : candidate
     )));
     try {
+      setStatusSavingId(order.id);
       const updated = await apiPut<PurchaseOrderResponse>(`/purchase-orders/${order.id}/status`, token, { status: 'Cancelled' });
       setOrders((prev) => prev.map((candidate) => candidate.id === order.id ? responseToOrder(updated, candidate) : candidate));
     } catch {
       setOrders((prev) => prev.map((candidate) => candidate.id === order.id ? order : candidate));
       notify(`Could not cancel ${order.number}; no change was saved.`, 'error');
       return;
+    } finally {
+      setStatusSavingId(null);
     }
     notify(`${order.number} was cancelled.`, 'info');
   }
@@ -856,15 +869,18 @@ export function PurchaseOrderManagerPage() {
   const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
 
   return (
-    <div className="page">
-      <header className="page-head">
-        <div>
-          <p className="eyebrow">OPERATIONS / PROCUREMENT</p>
-          <h1>Purchase order manager</h1>
-          <p className="page-sub">Track PO lifecycle from draft through receipt, with status history and user attribution.</p>
+    <div className="page purchase-orders-page">
+      <header className="purchase-orders-hero">
+        <div className="purchase-orders-hero-copy">
+          <p className="purchase-orders-eyebrow"><span aria-hidden="true">↗</span> INVENTORY / PROCUREMENT</p>
+          <h1>Purchase orders</h1>
+          <p>Coordinate suppliers, branches, and incoming stock from one order workspace.</p>
+          <div className="purchase-orders-live"><span />{loading ? 'Syncing purchase orders…' : `${stats.open} open orders · ${stats.received} received`}</div>
         </div>
-        <div className="page-actions">
-          <button className="btn btn-primary" type="button" onClick={() => setShowCreate(true)}>Create PO</button>
+        <div className="purchase-orders-hero-art" aria-hidden="true"><span className="purchase-orders-art-ring" /><span className="purchase-orders-art-icon">▤</span><i /><i /><i /></div>
+        <div className="purchase-orders-hero-actions">
+          <button className="btn purchase-orders-refresh" type="button" onClick={() => { void loadOrders().then((ok) => { if (ok) notify('Purchase order data refreshed.', 'success'); }); }} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh data'}</button>
+          <button className="btn purchase-orders-create" type="button" onClick={() => setShowCreate(true)} disabled={!options.branches.length || !options.suppliers.length}>＋ Create order</button>
         </div>
       </header>
 
@@ -872,15 +888,16 @@ export function PurchaseOrderManagerPage() {
         <p className="page-banner">{loadError}</p>
       )}
 
-      <section className="stat-strip" aria-label="Purchase order summary">
-        <div className="stat"><span className="stat-value">{stats.total}</span><span className="stat-label">Total POs</span></div>
-        <div className="stat"><span className="stat-value">{stats.open}</span><span className="stat-label">Open orders</span></div>
-        <div className="stat"><span className="stat-value">{stats.inTransit}</span><span className="stat-label">In transit</span></div>
-        <div className="stat"><span className="stat-value">{formatPrice(stats.value)}</span><span className="stat-label">Pipeline value</span></div>
+      <section className="stat-strip purchase-orders-stat-strip" aria-label="Purchase order summary">
+        <article className="stat metric-card purchase-order-metric purchase-order-metric-total"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">▤</span><div><span className="purchase-order-kicker">ORDER BOOK</span><strong>{stats.total}</strong><small>Total purchase orders</small></div></div><div className="purchase-order-metric-detail">{stats.received} completed and received</div></article>
+        <article className="stat metric-card purchase-order-metric purchase-order-metric-open"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">◷</span><div><span className="purchase-order-kicker">IN PROGRESS</span><strong>{stats.open}</strong><small>Open orders</small></div></div><div className="purchase-order-metric-detail">Draft through in transit</div></article>
+        <article className="stat metric-card purchase-order-metric purchase-order-metric-transit"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">⇢</span><div><span className="purchase-order-kicker">ON THE WAY</span><strong>{stats.inTransit}</strong><small>In transit</small></div></div><div className="purchase-order-metric-detail">Awaiting branch receipt</div></article>
+        <article className="stat metric-card purchase-order-metric purchase-order-metric-value"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">LKR</span><div><span className="purchase-order-kicker">OPEN COMMITMENT</span><strong className="purchase-order-value">{formatPrice(stats.value)}</strong><small>Open order value</small></div></div><div className="purchase-order-metric-detail">Excludes received and cancelled orders</div></article>
       </section>
 
-      <div className="po-layout">
+      <div className="po-layout purchase-orders-layout">
         <section className="panel po-list-panel">
+          <div className="purchase-orders-panel-head"><div><span className="purchase-orders-panel-icon" aria-hidden="true">▤</span><div><h2>Order register</h2><p>Search orders, filter status, and select one to see its details.</p></div></div><span className="purchase-orders-count">{filtered.length} shown</span></div>
           <div className="toolbar toolbar-wrap">
             <div className="search-field">
               <span className="search-icon" aria-hidden="true">⌕</span>
@@ -899,6 +916,7 @@ export function PurchaseOrderManagerPage() {
               <option>All suppliers</option>
               {options.suppliers.map((option) => <option key={option.id}>{option.name}</option>)}
             </select>
+            {hasActiveFilters && <button className="btn purchase-orders-clear" type="button" onClick={() => { setQuery(''); setStatusFilter('All statuses'); setSupplierFilter('All suppliers'); }}>Clear filters</button>}
           </div>
 
           <div className="table-wrap">
@@ -912,6 +930,9 @@ export function PurchaseOrderManagerPage() {
                     key={order.id}
                     className={order.id === selectedId ? 'row-selected' : undefined}
                     onClick={() => setSelectedId(order.id)}
+                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(order.id); } }}
+                    tabIndex={0}
+                    aria-selected={order.id === selectedId}
                   >
                     <td>
                       <p className="po-number">{order.number}</p>
@@ -926,7 +947,8 @@ export function PurchaseOrderManagerPage() {
                     <td><LifecycleTracker status={order.status} compact /></td>
                   </tr>
                 ))}
-                {paged.length === 0 && (
+                {loading && orders.length === 0 && <tr><td colSpan={5} className="empty-state">Loading purchase orders…</td></tr>}
+                {paged.length === 0 && !loading && (
                   <tr><td colSpan={5} className="empty-state">No purchase orders match your filters.</td></tr>
                 )}
               </tbody>
@@ -982,12 +1004,12 @@ export function PurchaseOrderManagerPage() {
 
                 <div className="po-actions">
                   {nextStatus(selected.status) && (
-                    <button type="button" className="btn btn-primary" onClick={() => advanceStatus(selected)}>
-                      Advance to {statusLabels[nextStatus(selected.status)!]}
+                    <button type="button" className="btn btn-primary" onClick={() => advanceStatus(selected)} disabled={statusSavingId !== null}>
+                      {statusSavingId === selected.id ? 'Saving…' : `Advance to ${statusLabels[nextStatus(selected.status)!]}`}
                     </button>
                   )}
                   {selected.status !== 'Received' && selected.status !== 'Cancelled' && (
-                    <button type="button" className="btn btn-secondary" onClick={() => cancelOrder(selected)}>Cancel PO</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => cancelOrder(selected)} disabled={statusSavingId !== null}>{statusSavingId === selected.id ? 'Saving…' : 'Cancel PO'}</button>
                   )}
                 </div>
 
