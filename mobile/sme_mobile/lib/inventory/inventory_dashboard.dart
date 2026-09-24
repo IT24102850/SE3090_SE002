@@ -557,9 +557,55 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                             .copyWith(color: AppColors.textBody)),
                   ])),
               const SizedBox(width: 5),
-              TextButton(
-                onPressed: _inventoryAiLoading ? null : _analyzeInventory,
-                child: Text(_inventoryAiLoading ? 'Analyzing…' : 'Analyze'),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _inventoryAiLoading ? null : _analyzeInventory,
+                  borderRadius: BorderRadius.circular(13),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    decoration: BoxDecoration(
+                      gradient:
+                          _inventoryAiLoading ? null : AppColors.buttonGradient,
+                      color: _inventoryAiLoading ? AppColors.glassFill : null,
+                      borderRadius: BorderRadius.circular(13),
+                      border: Border.all(
+                        color: AppColors.cyan.withValues(alpha: 0.45),
+                      ),
+                      boxShadow: _inventoryAiLoading
+                          ? null
+                          : [
+                              BoxShadow(
+                                color: AppColors.cyan.withValues(alpha: 0.24),
+                                blurRadius: 14,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _inventoryAiLoading
+                              ? Icons.hourglass_top_rounded
+                              : Icons.auto_awesome_rounded,
+                          size: 15,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          _inventoryAiLoading ? 'Analyzing' : 'Analyze',
+                          style: AppTextStyles.caption.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ]),
           ),
@@ -1592,56 +1638,97 @@ class _CyberStatCard extends StatelessWidget {
     return GlassCard(
       padding: const EdgeInsets.all(14),
       borderColor: accentColor.withValues(alpha: 0.25),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.label.copyWith(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                    color: AppColors.textMuted,
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              height: 2,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [accentColor, accentColor.withValues(alpha: 0.05)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: accentColor.withValues(alpha: 0.32),
+                    blurRadius: 8,
                   ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            right: -24,
+            bottom: -30,
+            child: Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: accentColor.withValues(alpha: 0.055),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.label.copyWith(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: accentColor.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: accentColor.withValues(alpha: 0.18),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
+                    child: Icon(icon, size: 15, color: accentColor),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.headlineSmall.copyWith(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
+              const SizedBox(height: 2),
+              Text(
+                subLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption.copyWith(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
                 ),
-                child: Icon(icon, size: 15, color: accentColor),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.headlineSmall.copyWith(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subLabel,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.caption.copyWith(
-              fontSize: 11,
-              color: AppColors.textSecondary,
-            ),
           ),
         ],
       ),

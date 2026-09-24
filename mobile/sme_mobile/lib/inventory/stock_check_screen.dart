@@ -461,7 +461,13 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: !isCheckIn ? const Color(0xFFE11D48) : null,
+                  gradient: !isCheckIn
+                      ? const LinearGradient(
+                          colors: [Color(0xFFFB7185), Color(0xFFE11D48)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: !isCheckIn
                       ? [
@@ -517,6 +523,13 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
           border:
               Border.all(color: activeColor.withValues(alpha: 0.5), width: 1.5),
           borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: activeColor.withValues(alpha: 0.16),
+              blurRadius: 22,
+              spreadRadius: 1,
+            ),
+          ],
         ),
         child: Stack(
           fit: StackFit.expand,

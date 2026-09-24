@@ -471,6 +471,13 @@ class _EquipmentMaintenanceScreenState
         ),
         border: Border.all(
             color: const Color(0xFFF59E0B).withValues(alpha: 0.35), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
