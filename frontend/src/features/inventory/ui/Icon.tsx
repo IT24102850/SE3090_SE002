@@ -25,6 +25,14 @@ export function Icon({ name, className, size: requestedSize = 18 }: { name: stri
           <path d="m3.5 7.5 8.5 4 8.5-4M12 11.5V21" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       );
+    case 'box':
+      return (
+        <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="m12 3 8.5 4.5v9L12 21l-8.5-4.5v-9L12 3Z" stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" />
+          <path d="m3.8 7.7 8.2 4.4 8.2-4.4M12 12.1V21" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+          <path d="m8.1 5 8.5 4.5v3" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
     case 'supplier':
       return (
         <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

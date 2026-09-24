@@ -829,6 +829,8 @@
 .inventory-scope .inventory-manager-page { --manager-accent: #17c6ae; }
 .inventory-scope .inventory-manager-hero { position: relative; isolation: isolate; display: flex; min-height: 212px; gap: 1.5rem; align-items: flex-end; justify-content: space-between; margin-bottom: 1.2rem; padding: 1.65rem 1.8rem; overflow: hidden; color: #f7fffe; background: radial-gradient(ellipse at 75% 15%, rgba(23,198,174,.26), transparent 38%), linear-gradient(120deg, #102c3a 0%, #153b4d 48%, #14364c 100%); border: 1px solid rgba(82,224,201,.28); border-radius: 1.25rem; box-shadow: 0 18px 40px rgba(10,45,57,.2); }
 .inventory-scope .inventory-manager-hero::before { position: absolute; z-index: -1; inset: 0; content: ''; opacity: .2; background-image: linear-gradient(rgba(255,255,255,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.09) 1px, transparent 1px); background-size: 32px 32px; mask-image: linear-gradient(90deg, transparent, #000); }
+.inventory-scope .inventory-manager-hero::after, .inventory-scope .suppliers-hero::after { position: absolute; z-index: 0; top: -25%; left: -58%; width: 40%; height: 150%; content: ''; pointer-events: none; background: linear-gradient(105deg, transparent 10%, rgba(202,255,248,.025) 35%, rgba(202,255,248,.16) 50%, rgba(202,255,248,.035) 64%, transparent 88%); transform: skewX(-18deg); animation: inventory-hero-shine 8s ease-in-out infinite; }
+@keyframes inventory-hero-shine { 0%, 28% { left: -58%; opacity: 0; } 38% { opacity: .8; } 62%, 100% { left: 120%; opacity: 0; } }
 .inventory-scope .inventory-manager-hero-copy { position: relative; z-index: 2; max-width: 560px; }
 .inventory-scope .inventory-manager-eyebrow { display: flex; gap: .5rem; align-items: center; margin: 0 0 .55rem; color: #77ead9; font-size: .68rem; font-weight: 850; letter-spacing: .15em; }
 .inventory-scope .inventory-manager-eyebrow span { color: #a6fff0; font-size: .72rem; }
@@ -913,6 +915,7 @@
 .inventory-scope .suppliers-refresh span { display: inline-block; font-size: 1.05rem; }
 .inventory-scope .suppliers-refresh:disabled span { animation: inventory-manager-spin 1s linear infinite; }
 .inventory-scope .suppliers-hero-mark { position: absolute; top: 50%; right: 22%; display: grid; width: 140px; height: 140px; place-items: center; pointer-events: none; border: 1px solid rgba(115,244,218,.2); border-radius: 50%; transform: translateY(-50%) rotate(-20deg) scaleY(.7); }
+.inventory-scope .suppliers-hero-mark { z-index: 1; }
 .inventory-scope .suppliers-hero-mark span { display: grid; width: 68px; height: 68px; place-items: center; color: #a3ffeb; font-size: 2.7rem; background: linear-gradient(145deg, rgba(73,220,198,.24), rgba(73,220,198,.04)); border: 1px solid rgba(131,255,231,.32); border-radius: 20px; box-shadow: 0 15px 44px rgba(4,22,32,.18); transform: rotate(20deg) scaleY(1.42); animation: suppliers-mark-float 4.5s ease-in-out infinite; }
 .inventory-scope .suppliers-hero-mark i { position: absolute; right: -2px; width: 9px; height: 9px; background: #76f1d9; border-radius: 50%; box-shadow: 0 0 12px rgba(118,241,217,.8); animation: suppliers-orbit-glint 2.8s ease-in-out infinite; }
 .inventory-scope .suppliers-hero-mark i:nth-of-type(1) { top: 14px; }
@@ -1003,6 +1006,7 @@
   .inventory-scope .suppliers-search { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .inventory-scope .inventory-manager-hero::after, .inventory-scope .suppliers-hero::after { animation: none; }
   .inventory-scope .inventory-manager-refresh:disabled span { animation: none; }
 }
 @media (max-width: 980px) {
