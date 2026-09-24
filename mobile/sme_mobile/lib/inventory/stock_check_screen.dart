@@ -8,6 +8,7 @@ import '../theme/app_text_styles.dart';
 import '../widgets/ui/ui.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
+import 'inventory_panel.dart';
 import 'inventory_models.dart';
 
 enum StockOperation { checkIn, checkOut }
@@ -235,7 +236,7 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
               ],
 
               // Input & Control Panel
-              GlassCard(
+              InventoryPanel(
                 padding: const EdgeInsets.all(20),
                 borderColor: activeColor.withValues(alpha: 0.35),
                 child: Column(
@@ -409,17 +410,8 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  gradient: isCheckIn ? AppColors.buttonGradient : null,
+                  color: isCheckIn ? AppColors.cyan : null,
                   borderRadius: BorderRadius.circular(12),
-                  boxShadow: isCheckIn
-                      ? [
-                          BoxShadow(
-                            color: AppColors.cyan.withValues(alpha: 0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 3),
-                          ),
-                        ]
-                      : null,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -461,24 +453,8 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  gradient: !isCheckIn
-                      ? const LinearGradient(
-                          colors: [Color(0xFFFB7185), Color(0xFFE11D48)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        )
-                      : null,
+                  color: !isCheckIn ? const Color(0xFFE11D48) : null,
                   borderRadius: BorderRadius.circular(12),
-                  boxShadow: !isCheckIn
-                      ? [
-                          BoxShadow(
-                            color:
-                                const Color(0xFFE11D48).withValues(alpha: 0.35),
-                            blurRadius: 12,
-                            offset: const Offset(0, 3),
-                          ),
-                        ]
-                      : null,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -523,13 +499,6 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
           border:
               Border.all(color: activeColor.withValues(alpha: 0.5), width: 1.5),
           borderRadius: BorderRadius.circular(22),
-          boxShadow: [
-            BoxShadow(
-              color: activeColor.withValues(alpha: 0.16),
-              blurRadius: 22,
-              spreadRadius: 1,
-            ),
-          ],
         ),
         child: Stack(
           fit: StackFit.expand,

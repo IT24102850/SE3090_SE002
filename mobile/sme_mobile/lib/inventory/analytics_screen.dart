@@ -8,6 +8,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/ui/ui.dart';
 import 'authenticated_api_client.dart';
+import 'inventory_panel.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA MODELS
@@ -208,7 +209,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
   @override
   Widget build(BuildContext context) {
     return AppBackgroundScaffold(
-      showParticles: true,
+      showParticles: false,
       extendBodyBehindAppBar: false,
       appBar: GlassAppBar(
         title: 'Analytics',
@@ -321,87 +322,74 @@ class _InsightsScreenState extends State<InsightsScreen> {
   // HERO BANNER
   // ──────────────────────────────────────────────────────────────
   Widget _buildHeroBanner() {
-    return GlassCard(
-      borderColor: AppColors.violet.withValues(alpha: 0.5),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    final sourceColor = _usedFallback ? AppColors.warning : AppColors.success;
+    return InventoryPanel(
+      fill: const Color(0xFF142235),
+      borderColor: const Color(0xFF2A4058),
+      padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          // Icon badge
           Container(
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7A4DFF), Color(0xFF4C6FFF)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                    color: AppColors.violet.withValues(alpha: 0.45),
-                    blurRadius: 14,
-                    spreadRadius: 1),
-              ],
+              color: AppColors.cyan.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(13),
             ),
-            child: const Icon(Icons.analytics_rounded,
-                color: Colors.white, size: 24),
+            child: const Icon(Icons.insights_rounded,
+                color: AppColors.cyan, size: 22),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Analytics Dashboard',
-                    style: AppTextStyles.title
-                        .copyWith(fontWeight: FontWeight.w900, fontSize: 17)),
-                const SizedBox(height: 1),
+                Text('INVENTORY REPORTS',
+                    style: AppTextStyles.label.copyWith(
+                      color: AppColors.cyan,
+                      fontSize: 9,
+                      letterSpacing: 1,
+                    )),
+                const SizedBox(height: 3),
+                Text('Analytics',
+                    style: AppTextStyles.title.copyWith(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 20,
+                    )),
                 Text(
-                  'Revenue trends · Stock pressure · Category breakdown',
+                  'Sales, stock movement and reorder trends',
                   style: AppTextStyles.caption
-                      .copyWith(color: AppColors.textMuted, fontSize: 10.5),
-                  maxLines: 2,
+                      .copyWith(color: AppColors.textSecondary, fontSize: 11),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          // Live/Demo badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
-              color: (_usedFallback ? const Color(0xFFF59E0B) : AppColors.cyan)
-                  .withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color:
-                    (_usedFallback ? const Color(0xFFF59E0B) : AppColors.cyan)
-                        .withValues(alpha: 0.4),
-              ),
+              color: sourceColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(9),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 6,
-                  height: 6,
+                  width: 7,
+                  height: 7,
                   decoration: BoxDecoration(
-                    color: _usedFallback
-                        ? const Color(0xFFF59E0B)
-                        : AppColors.cyan,
+                    color: sourceColor,
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 5),
                 Text(
-                  _usedFallback ? 'Demo' : 'Live',
+                  _usedFallback ? 'Sample' : 'Live',
                   style: AppTextStyles.caption.copyWith(
-                    color: _usedFallback
-                        ? const Color(0xFFFBBF24)
-                        : AppColors.cyan,
+                    color: sourceColor,
                     fontWeight: FontWeight.w800,
-                    fontSize: 10,
+                    fontSize: 9,
                   ),
                 ),
               ],
@@ -416,55 +404,25 @@ class _InsightsScreenState extends State<InsightsScreen> {
   // TIMEFRAME ROW
   // ──────────────────────────────────────────────────────────────
   Widget _buildTimeframeRow() {
-    return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      borderColor: AppColors.violet.withValues(alpha: 0.28),
+    return InventoryPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: AppColors.violet.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: AppColors.violet.withValues(alpha: 0.35),
-              ),
-            ),
-            child: const Icon(
-              Icons.date_range_rounded,
-              color: AppColors.violet,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 10),
+          const Icon(Icons.date_range_rounded,
+              color: AppColors.textSecondary, size: 18),
+          const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Reporting window',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _selectedTimeframe == 0
-                      ? 'A focused view of the last 7 days'
-                      : 'A broader view of the last 30 days',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textMuted,
-                    fontSize: 10.5,
-                  ),
-                ),
-              ],
-            ),
+            child: Text('Period',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                )),
           ),
-          _buildTimeframePill('7D', 0),
+          _buildTimeframePill('7 days', 0),
           const SizedBox(width: 6),
-          _buildTimeframePill('30D', 1),
+          _buildTimeframePill('30 days', 1),
         ],
       ),
     );
@@ -478,31 +436,16 @@ class _InsightsScreenState extends State<InsightsScreen> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
         decoration: BoxDecoration(
-          gradient: selected
-              ? const LinearGradient(
-                  colors: [Color(0xFF7A4DFF), Color(0xFF4C6FFF)],
-                )
-              : null,
-          color: selected ? null : AppColors.glassFill,
-          borderRadius: BorderRadius.circular(24),
+          color: selected ? AppColors.cyan : const Color(0xFF182538),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected
-                ? AppColors.violet.withValues(alpha: 0.6)
-                : AppColors.glassBorder,
+            color: selected ? AppColors.cyan : const Color(0xFF29394D),
           ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                      color: AppColors.violet.withValues(alpha: 0.35),
-                      blurRadius: 10,
-                      spreadRadius: 0),
-                ]
-              : null,
         ),
         child: Text(
           label,
           style: AppTextStyles.label.copyWith(
-            color: selected ? Colors.white : AppColors.textSecondary,
+            color: selected ? AppColors.onPrimary : AppColors.textSecondary,
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -520,7 +463,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
         return GridView.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: wide ? 4 : 2,
-            mainAxisExtent: wide ? 132 : 162,
+            mainAxisExtent: wide ? 132 : 146,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
           ),
@@ -571,8 +514,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
   // REVENUE CHART
   // ──────────────────────────────────────────────────────────────
   Widget _buildRevenueChart() {
-    return GlassCard(
-      borderColor: AppColors.violet.withValues(alpha: 0.35),
+    return InventoryPanel(
+      borderColor: const Color(0xFF29394D),
       padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -632,8 +575,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
   // MOVEMENT CHART
   // ──────────────────────────────────────────────────────────────
   Widget _buildMovementChart() {
-    return GlassCard(
-      borderColor: AppColors.cyan.withValues(alpha: 0.3),
+    return InventoryPanel(
+      borderColor: const Color(0xFF29394D),
       padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -683,8 +626,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
   // DONUT SECTION
   // ──────────────────────────────────────────────────────────────
   Widget _buildDonutSection() {
-    return GlassCard(
-      borderColor: const Color(0xFF10B981).withValues(alpha: 0.3),
+    return InventoryPanel(
+      borderColor: const Color(0xFF29394D),
       padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -763,7 +706,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
   // ──────────────────────────────────────────────────────────────
   Widget _buildLowStockList() {
     if (_lowStock.isEmpty) {
-      return GlassCard(
+      return InventoryPanel(
         padding: const EdgeInsets.all(28),
         child: Column(
           children: [
@@ -782,8 +725,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
       );
     }
 
-    return GlassCard(
-      borderColor: AppColors.danger.withValues(alpha: 0.3),
+    return InventoryPanel(
+      borderColor: const Color(0xFF29394D),
       padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1432,9 +1375,9 @@ class _KpiMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
+    return InventoryPanel(
       padding: EdgeInsets.zero,
-      borderColor: color.withValues(alpha: 0.36),
+      borderColor: const Color(0xFF29394D),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadii.card),
         child: Stack(
@@ -1445,17 +1388,7 @@ class _KpiMetricCard extends StatelessWidget {
               right: 0,
               child: Container(
                 height: 3,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [color, color.withValues(alpha: 0.15)],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.45),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.7)),
               ),
             ),
             Padding(
@@ -1486,12 +1419,6 @@ class _KpiMetricCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                           border:
                               Border.all(color: color.withValues(alpha: 0.35)),
-                          boxShadow: [
-                            BoxShadow(
-                                color: color.withValues(alpha: 0.3),
-                                blurRadius: 8,
-                                spreadRadius: 0),
-                          ],
                         ),
                         child: Icon(icon, color: color, size: 16),
                       ),

@@ -8,6 +8,7 @@ import '../theme/app_text_styles.dart';
 import '../widgets/ui/ui.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
+import 'inventory_panel.dart';
 import 'notification_ws.dart';
 
 class PurchaseOrderApprovalScreen extends StatefulWidget {
@@ -251,22 +252,13 @@ class _PurchaseOrderApprovalScreenState
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF1E1B4B),
-            Color(0xFF311042),
-            Color(0xFF0F172A),
-          ],
-        ),
-        border: Border.all(
-            color: const Color(0xFFF59E0B).withValues(alpha: 0.4), width: 1.2),
-        boxShadow: [
+        color: const Color(0xFF142235),
+        border: Border.all(color: const Color(0xFF2A4058)),
+        boxShadow: const [
           BoxShadow(
-            color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+            color: Color(0x26000000),
+            blurRadius: 16,
+            offset: Offset(0, 7),
           ),
         ],
       ),
@@ -388,7 +380,7 @@ class _PurchaseOrderApprovalScreenState
   Widget _buildOrderCard(_PurchaseOrder order) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
-      child: GlassCard(
+      child: InventoryPanel(
         padding: const EdgeInsets.all(18),
         borderColor: const Color(0xFFF59E0B).withValues(alpha: 0.35),
         child: Column(

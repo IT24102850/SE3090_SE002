@@ -12,6 +12,7 @@ import '../theme/app_text_styles.dart';
 import '../widgets/ui/ui.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
+import 'inventory_panel.dart';
 
 /// Offline-first physical stock audit screen.
 class StockCountScreen extends StatefulWidget {
@@ -467,19 +468,11 @@ class _StockCountScreenState extends State<StockCountScreen>
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0F172A),
-            Color(0xFF1E1B4B),
-            Color(0xFF064E3B),
-          ],
-        ),
+        color: const Color(0xFF142235),
         border: Border.all(
           color: (_isOnline ? const Color(0xFF10B981) : const Color(0xFFF59E0B))
               .withValues(alpha: 0.4),
-          width: 1.2,
+          width: 1,
         ),
       ),
       child: Row(
@@ -761,7 +754,7 @@ class _StockCountScreenState extends State<StockCountScreen>
     final hasVariance = matchedItem != null && physicalQty != null;
     final variance = hasVariance ? physicalQty - matchedItem.quantity : 0.0;
 
-    return GlassCard(
+    return InventoryPanel(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -897,7 +890,7 @@ class _StockCountScreenState extends State<StockCountScreen>
   Widget _buildPendingCard(_PendingCount entry) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      child: GlassCard(
+      child: InventoryPanel(
         padding: const EdgeInsets.all(14),
         borderColor: const Color(0xFFF59E0B).withValues(alpha: 0.3),
         child: Row(
@@ -992,108 +985,60 @@ class _AuditStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
+    return InventoryPanel(
       padding: const EdgeInsets.all(14),
-      borderColor: accentColor.withValues(alpha: 0.25),
-      child: Stack(
+      borderColor: const Color(0xFF29394D),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 2,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [accentColor, accentColor.withValues(alpha: 0.05)],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: accentColor.withValues(alpha: 0.32),
-                    blurRadius: 8,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            right: -22,
-            bottom: -28,
-            child: Container(
-              width: 82,
-              height: 82,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: accentColor.withValues(alpha: 0.055),
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.label.copyWith(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: accentColor.withValues(alpha: 0.18),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                    child: Icon(icon, size: 15, color: accentColor),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 280),
-                transitionBuilder: (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.25),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  ),
-                ),
+              Expanded(
                 child: Text(
-                  value,
-                  key: ValueKey(value),
-                  style: AppTextStyles.headlineSmall.copyWith(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.label.copyWith(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: AppColors.textMuted,
                   ),
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                subLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.caption
-                    .copyWith(fontSize: 11, color: AppColors.textSecondary),
-              ),
+              Icon(icon, size: 17, color: accentColor),
             ],
+          ),
+          const SizedBox(height: 6),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 280),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.25),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            ),
+            child: Text(
+              value,
+              key: ValueKey(value),
+              style: AppTextStyles.headlineSmall.copyWith(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.caption
+                .copyWith(fontSize: 11, color: AppColors.textSecondary),
           ),
         ],
       ),

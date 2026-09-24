@@ -12,6 +12,7 @@ import '../widgets/ui/ui.dart';
 import 'analytics_screen.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
+import 'inventory_panel.dart';
 import 'equipment_maintenance_screen.dart';
 import 'inventory_models.dart';
 import 'purchase_order_approval_screen.dart';
@@ -145,7 +146,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Material(
                 type: MaterialType.transparency,
-                child: GlassCard(
+                child: InventoryPanel(
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -349,7 +350,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   @override
   Widget build(BuildContext context) {
     return AppBackgroundScaffold(
-      showParticles: true,
+      showParticles: false,
       appBar: GlassAppBar(
         title: 'Inventory Operations',
         actions: [
@@ -505,24 +506,18 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
 
   Widget _buildInventoryAiCard() {
     final recommendations = _inventoryAiPlan?['recommendations'];
-    return GlassCard(
+    return InventoryPanel(
       padding: const EdgeInsets.all(18),
-      borderColor: AppColors.cyan.withValues(alpha: 0.42),
+      borderColor: const Color(0xFF2A4058),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(13),
             decoration: BoxDecoration(
-              gradient: AppColors.heroGradient,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.glassBorder),
-              boxShadow: [
-                BoxShadow(
-                    color: AppColors.violet.withValues(alpha: 0.16),
-                    blurRadius: 18,
-                    offset: const Offset(0, 7))
-              ],
+              color: const Color(0xFF19283A),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF2A4058)),
             ),
             child: Row(children: [
               Container(
@@ -567,22 +562,13 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                     decoration: BoxDecoration(
-                      gradient:
-                          _inventoryAiLoading ? null : AppColors.buttonGradient,
-                      color: _inventoryAiLoading ? AppColors.glassFill : null,
+                      color: _inventoryAiLoading
+                          ? const Color(0xFF243247)
+                          : AppColors.cyan,
                       borderRadius: BorderRadius.circular(13),
                       border: Border.all(
                         color: AppColors.cyan.withValues(alpha: 0.45),
                       ),
-                      boxShadow: _inventoryAiLoading
-                          ? null
-                          : [
-                              BoxShadow(
-                                color: AppColors.cyan.withValues(alpha: 0.24),
-                                blurRadius: 14,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -592,7 +578,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                               ? Icons.hourglass_top_rounded
                               : Icons.auto_awesome_rounded,
                           size: 15,
-                          color: Colors.white,
+                          color: AppColors.onPrimary,
                         ),
                         const SizedBox(width: 5),
                         Text(
@@ -619,7 +605,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
             Container(
               padding: const EdgeInsets.all(13),
               decoration: BoxDecoration(
-                gradient: AppColors.heroGradient,
+                color: const Color(0xFF19283A),
                 borderRadius: BorderRadius.circular(15),
                 border:
                     Border.all(color: AppColors.cyan.withValues(alpha: 0.35)),
@@ -849,126 +835,69 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   }
 
   Widget _buildHeroBanner() {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF1E1B4B),
-            Color(0xFF0F172A),
-            Color(0xFF064E3B),
-          ],
-        ),
-        border: Border.all(
-            color: AppColors.cyan.withValues(alpha: 0.35), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.cyan.withValues(alpha: 0.15),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Stack(
+    return InventoryPanel(
+      padding: const EdgeInsets.all(18),
+      fill: const Color(0xFF142235),
+      borderColor: const Color(0xFF2A4058),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            right: -25,
-            top: -25,
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppColors.cyan.withValues(alpha: 0.25),
-                    Colors.transparent
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.cyan.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(Icons.inventory_2_rounded,
+                    color: AppColors.cyan, size: 23),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('INVENTORY OVERVIEW',
+                        style: AppTextStyles.label.copyWith(
+                          color: AppColors.cyan,
+                          fontSize: 10,
+                          letterSpacing: 1,
+                        )),
+                    const SizedBox(height: 3),
+                    Text('Inventory Command',
+                        style: AppTextStyles.title.copyWith(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                        )),
                   ],
                 ),
               ),
-            ),
+              if (widget.canApprove)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('MANAGER',
+                      style: AppTextStyles.label.copyWith(
+                        color: AppColors.success,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      )),
+                ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.cyan.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                            color: AppColors.cyan.withValues(alpha: 0.4)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: AppColors.cyan,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'LIVE TELEMETRY',
-                            style: AppTextStyles.label.copyWith(
-                              color: AppColors.cyan,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (widget.canApprove)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color:
-                              const Color(0xFF10B981).withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'MANAGER MODE',
-                          style: AppTextStyles.caption.copyWith(
-                            color: const Color(0xFF10B981),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Inventory Command',
-                  style: AppTextStyles.headlineSmall.copyWith(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Unified stock levels, physical counts, PO pipelines & asset maintenance.',
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                    height: 1.35,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 14),
+          Text(
+            'Stock, counts, purchase orders and equipment in one place.',
+            style: AppTextStyles.body.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              height: 1.4,
             ),
           ),
         ],
@@ -1350,7 +1279,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: GlassCard(
+      child: InventoryPanel(
         padding: const EdgeInsets.all(16),
         borderColor: statusColor.withValues(alpha: 0.3),
         child: Column(
@@ -1635,100 +1564,52 @@ class _CyberStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
+    return InventoryPanel(
       padding: const EdgeInsets.all(14),
-      borderColor: accentColor.withValues(alpha: 0.25),
-      child: Stack(
+      borderColor: const Color(0xFF29394D),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 2,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [accentColor, accentColor.withValues(alpha: 0.05)],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: accentColor.withValues(alpha: 0.32),
-                    blurRadius: 8,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            right: -24,
-            bottom: -30,
-            child: Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: accentColor.withValues(alpha: 0.055),
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.label.copyWith(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.label.copyWith(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: AppColors.textMuted,
                   ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: accentColor.withValues(alpha: 0.18),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                    child: Icon(icon, size: 15, color: accentColor),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.headlineSmall.copyWith(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                subLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.caption.copyWith(
-                  fontSize: 11,
-                  color: AppColors.textSecondary,
-                ),
-              ),
+              const SizedBox(width: 6),
+              Icon(icon, size: 17, color: accentColor),
             ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.headlineSmall.copyWith(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.caption.copyWith(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -1753,9 +1634,9 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
+    return InventoryPanel(
       padding: const EdgeInsets.all(14),
-      borderColor: color.withValues(alpha: 0.3),
+      borderColor: const Color(0xFF29394D),
       onTap: onTap,
       child: Row(
         children: [
@@ -1763,9 +1644,8 @@ class _ActionTile extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
+              color: color.withValues(alpha: 0.11),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: color.withValues(alpha: 0.4)),
             ),
             child: Icon(icon, color: color, size: 22),
           ),
@@ -1796,7 +1676,7 @@ class _ActionTile extends StatelessWidget {
             ),
           ),
           const Icon(Icons.arrow_forward_ios_rounded,
-              size: 13, color: AppColors.textMuted),
+              size: 12, color: AppColors.textMuted),
         ],
       ),
     );
