@@ -263,18 +263,22 @@ export function AgentWorkflowMonitorPage() {
       </div>
 
       <div className="workflow-kpi-grid">
-        <div className="kpi-card workflow-kpi workflow-kpi-total">
-          <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="workflow" /><div className="kpi-label">Total Workflows</div></div><div className="kpi-value">{totalCount}</div></div>
-        </div>
-        <div className="kpi-card workflow-kpi workflow-kpi-review">
-          <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="predict" /><div className="kpi-label">Needs review</div></div><div className="kpi-value">{pendingCount}</div></div>
-        </div>
-        <div className="kpi-card workflow-kpi workflow-kpi-approved">
-          <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="approve" /><div className="kpi-label">Approved</div></div><div className="kpi-value">{approvedCount}</div></div>
-        </div>
-        <div className="kpi-card workflow-kpi workflow-kpi-confidence">
-          <div className="kpi-top"><div style={{display:'flex', gap:8, alignItems:'center'}}><Icon name="chart" /><div className="kpi-label">Avg Confidence</div></div><div className="kpi-value">{formatConfidence(avgConfidence)}</div></div>
-        </div>
+        <article className="kpi-card workflow-kpi workflow-kpi-total">
+          <div className="workflow-kpi-main"><span className="workflow-kpi-icon"><Icon name="workflow" /></span><div><span className="workflow-kpi-label">ACTIVITY</span><strong>{totalCount}</strong><small>Total workflows</small></div><span className="workflow-kpi-glyph">01</span></div>
+          <div className="workflow-kpi-detail">Recorded recommendations and decisions</div>
+        </article>
+        <article className="kpi-card workflow-kpi workflow-kpi-review">
+          <div className="workflow-kpi-main"><span className="workflow-kpi-icon"><Icon name="predict" /></span><div><span className="workflow-kpi-label">REVIEW QUEUE</span><strong>{pendingCount}</strong><small>Needs review</small></div><span className="workflow-kpi-glyph">OPEN</span></div>
+          <div className="workflow-kpi-detail">Awaiting a human decision</div>
+        </article>
+        <article className="kpi-card workflow-kpi workflow-kpi-approved">
+          <div className="workflow-kpi-main"><span className="workflow-kpi-icon"><Icon name="approve" /></span><div><span className="workflow-kpi-label">APPROVED</span><strong>{approvedCount}</strong><small>Approved workflows</small></div><span className="workflow-kpi-glyph">OK</span></div>
+          <div className="workflow-kpi-detail">Reviewed and approved</div>
+        </article>
+        <article className="kpi-card workflow-kpi workflow-kpi-confidence">
+          <div className="workflow-kpi-main"><span className="workflow-kpi-icon"><Icon name="chart" /></span><div><span className="workflow-kpi-label">CONFIDENCE</span><strong>{formatConfidence(avgConfidence)}</strong><small>Average confidence</small></div><span className="workflow-kpi-glyph">AI</span></div>
+          <div className="workflow-kpi-detail">Across the loaded workflows</div>
+        </article>
       </div>
 
       {loading && <div className="workflow-loading" role="status"><span className="spinner spinner-dark" /> Syncing workflow activity…</div>}
