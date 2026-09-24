@@ -135,12 +135,7 @@ void _showMessengerNotification(
               decoration: BoxDecoration(
                 color: const Color(0xFF142235),
                 borderRadius: BorderRadius.circular(16),
-                border: Border(
-                  left: BorderSide(color: accent, width: 4),
-                  top: const BorderSide(color: Color(0xFF34465C)),
-                  right: const BorderSide(color: Color(0xFF34465C)),
-                  bottom: const BorderSide(color: Color(0xFF34465C)),
-                ),
+                border: Border.all(color: const Color(0xFF34465C)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.24),
@@ -376,12 +371,7 @@ class _OverlayNotificationCardState extends State<_OverlayNotificationCard>
                   decoration: BoxDecoration(
                     color: const Color(0xFF142235),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border(
-                      left: BorderSide(color: widget.accent, width: 4),
-                      top: const BorderSide(color: Color(0xFF34465C)),
-                      right: const BorderSide(color: Color(0xFF34465C)),
-                      bottom: const BorderSide(color: Color(0xFF34465C)),
-                    ),
+                    border: Border.all(color: const Color(0xFF34465C)),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.24),
