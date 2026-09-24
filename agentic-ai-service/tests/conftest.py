@@ -49,7 +49,7 @@ def mock_planner(monkeypatch):
             {"order": 3, "action": "Validate", "assigned_agent": "ValidationSafetyAgent", "description": "..."},
         ],
         assigned_agents=["DomainAnalysisAgent", "ActionToolAgent", "ValidationSafetyAgent"],
-        confidence=0.9,
+        confidence_score=0.9,
     )
     mock = MagicMock(return_value=output)
     monkeypatch.setattr(planner_agent, "run", mock)

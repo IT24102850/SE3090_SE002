@@ -35,10 +35,23 @@ class PlanStep(BaseModel):
     description: str
 
 
+class PredictedConflict(BaseModel):
+    """A clash the planner expects the later agents to hit. Predicted, not
+    detected: it is the planner reasoning from the objective and the
+    constraints before any tool has looked at real availability, which is
+    what makes it worth surfacing early."""
+
+    kind: Literal["resource_double_booked", "outside_working_hours", "capacity_exceeded", "insufficient_gap", "other"]
+    description: str
+    resource_id: str | None = None
+    likelihood: float = Field(ge=0.0, le=1.0)
+
+
 class PlannerOutput(BaseModel):
     plan: list[PlanStep]
     assigned_agents: list[str]
-    confidence: float = Field(ge=0.0, le=1.0)
+    predicted_conflicts: list[PredictedConflict] = Field(default_factory=list)
+    confidence_score: float = Field(ge=0.0, le=1.0)
 
 
 # ── Agent 2: Domain Analysis ────────────────────────────────────────────

@@ -22,7 +22,7 @@ def test_gemini_non_json_response_handled_prose_wrapped_json(monkeypatch):
     told not to — this must still parse successfully."""
     wrapped = (
         "Sure! Here is the plan you asked for:\n\n```json\n"
-        '{"plan": [], "assigned_agents": [], "confidence": 0.5}\n'
+        '{"plan": [], "assigned_agents": [], "confidence_score": 0.5}\n'
         "```\nLet me know if you need anything else!"
     )
     monkeypatch.setattr(gemini_client, "_get_client", lambda: _mock_client_returning(wrapped))
@@ -32,7 +32,7 @@ def test_gemini_non_json_response_handled_prose_wrapped_json(monkeypatch):
     )
 
     assert isinstance(result, PlannerOutput)
-    assert result.confidence == 0.5
+    assert result.confidence_score == 0.5
 
 
 def test_gemini_non_json_response_handled_no_json_at_all(monkeypatch):

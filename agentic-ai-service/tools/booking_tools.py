@@ -111,8 +111,10 @@ class BookingToolsClient:
     def predict_no_show_probability(self) -> dict[str, Any]:
         """A real historical-rate heuristic (this customer's own past
         completed-vs-no-show ratio), not a trained ML model. Called directly
-        by validation_safety_agent.py, never exposed as an LLM-visible tool —
-        informational only, never a reason to deny a booking."""
+        by validation_safety_agent.py and also exposed to the Action/Tool
+        agent as an allow-listed tool, so a proposal can take a customer's
+        history into account. Informational either way: a high rate may
+        change which slot is proposed, and never denies a booking."""
         return self._get("/bookings/my-no-show-rate")
 
     # ── Validation/Safety Agent's own direct call (never a Gemini tool) ─

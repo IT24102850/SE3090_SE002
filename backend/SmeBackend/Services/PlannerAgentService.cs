@@ -114,7 +114,14 @@ public record AgentPlanRequest(
 );
 
 public record PlanStepDto(int Order, string Action, string AssignedAgent, string Description);
-public record PlannerOutputDto(List<PlanStepDto> Plan, List<string> AssignedAgents, double Confidence);
+/// Mirrors the spec's planner output contract:
+/// { plan, assignedAgents, predictedConflicts, confidenceScore }.
+public record PredictedConflictDto(string Kind, string Description, string? ResourceId, double Likelihood);
+public record PlannerOutputDto(
+    List<PlanStepDto> Plan,
+    List<string> AssignedAgents,
+    List<PredictedConflictDto> PredictedConflicts,
+    double ConfidenceScore);
 
 public record RankedCandidateDto(string ResourceId, string ResourceName, double Score, string Reasoning);
 public record DomainAnalysisOutputDto(List<RankedCandidateDto> RankedCandidates, List<string> RankingCriteriaUsed);
