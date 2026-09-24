@@ -875,7 +875,7 @@ export function PurchaseOrderManagerPage() {
           <p className="purchase-orders-eyebrow"><span aria-hidden="true">↗</span> INVENTORY / PROCUREMENT</p>
           <h1>Purchase orders</h1>
           <p>Coordinate suppliers, branches, and incoming stock from one order workspace.</p>
-          <div className="purchase-orders-live"><span />{loading ? 'Syncing purchase orders…' : `${stats.open} open orders · ${stats.received} received`}</div>
+          <div className="purchase-orders-live"><span className={loading ? 'is-loading' : ''} aria-hidden="true" />{loading ? 'Syncing purchase orders…' : `${stats.open} open orders · ${stats.received} received`}</div>
         </div>
         <div className="purchase-orders-hero-art" aria-hidden="true"><span className="purchase-orders-art-ring" /><span className="purchase-orders-art-icon">▤</span><i /><i /><i /></div>
         <div className="purchase-orders-hero-actions">

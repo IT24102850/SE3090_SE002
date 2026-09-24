@@ -165,7 +165,7 @@ export function StockMovementLogPage() {
           <p className="movement-eyebrow"><span aria-hidden="true">↗</span> OPERATIONS / STOCK ACTIVITY</p>
           <h1>Stock movements</h1>
           <p>Follow stock coming in, going out, and adjustments across your inventory.</p>
-          <div className="movement-hero-meta"><span className="movement-live-dot" />{loading ? 'Syncing recent activity…' : `${movements.length} latest records loaded`}<span className="movement-meta-separator">·</span>Latest first</div>
+          <div className="movement-hero-meta"><span className={`movement-live-dot${loading ? ' is-loading' : ''}`} aria-hidden="true" />{loading ? 'Syncing recent activity…' : `${movements.length} latest records loaded`}<span className="movement-meta-separator">·</span>Latest first</div>
         </div>
         <div className="movement-hero-art" aria-hidden="true"><span className="movement-art-ring movement-art-ring-one" /><span className="movement-art-ring movement-art-ring-two" /><span className="movement-art-icon"><Icon name="movement" size={42} /></span><span className="movement-art-point movement-art-point-one" /><span className="movement-art-point movement-art-point-two" /></div>
         <div className="movement-hero-actions"><button className="btn movement-refresh" type="button" onClick={() => void handleRefresh()} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh history'}</button></div>

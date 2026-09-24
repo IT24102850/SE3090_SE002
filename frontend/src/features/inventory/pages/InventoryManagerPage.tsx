@@ -406,7 +406,7 @@ export function InventoryManagerPage() {
           <h1>Inventory manager</h1>
           <p>One clear view of your stock, item health, and inventory value.</p>
           <div className="inventory-manager-health" aria-live="polite">
-            <span className="inventory-manager-health-dot" />
+            <span className={`inventory-manager-health-dot${loading ? ' is-loading' : ''}`} aria-hidden="true" />
             {loading ? 'Updating live inventory…' : `${stats.items} items tracked`}
             <span className="inventory-manager-health-separator">·</span>
             {stats.low + stats.out === 0 ? 'All stock levels look healthy' : `${stats.low + stats.out} items need attention`}

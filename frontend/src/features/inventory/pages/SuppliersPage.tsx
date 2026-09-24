@@ -91,7 +91,7 @@ export function SuppliersPage() {
           <p className="suppliers-eyebrow"><span aria-hidden="true">◈</span> INVENTORY PARTNERS</p>
           <h1>Supplier directory</h1>
           <p>Keep supplier contacts together and make purchasing easier to coordinate.</p>
-          <div className="suppliers-hero-meta"><span className="suppliers-live-dot" />{loading ? 'Syncing supplier records…' : `${suppliers.length} supplier${suppliers.length === 1 ? '' : 's'} in your directory`}</div>
+          <div className="suppliers-hero-meta"><span className={`suppliers-live-dot${loading ? ' is-loading' : ''}`} aria-hidden="true" />{loading ? 'Syncing supplier records…' : `${suppliers.length} supplier${suppliers.length === 1 ? '' : 's'} in your directory`}</div>
         </div>
         <div className="suppliers-hero-actions">
           <button type="button" className="btn suppliers-refresh" onClick={() => { void loadSuppliers().then((ok) => { if (ok) notify('Supplier list refreshed.', 'success'); }); }} disabled={loading}>

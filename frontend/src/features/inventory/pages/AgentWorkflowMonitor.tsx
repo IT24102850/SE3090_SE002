@@ -258,7 +258,7 @@ export function AgentWorkflowMonitorPage() {
       {loadError && <p className="page-notice" role="alert">⚠ {loadError}</p>}
 
       <div className="workflow-live-strip">
-        <div className="live-indicator"><span /> Live monitoring{lastUpdated && <small>Updated {lastUpdated.toLocaleTimeString()}</small>}</div>
+        <div className="live-indicator"><span className={loading ? 'is-loading' : ''} aria-hidden="true" /> Live monitoring{lastUpdated && <small>Updated {lastUpdated.toLocaleTimeString()}</small>}</div>
         <p>Workflow activity refreshes automatically every 5 seconds.</p>
       </div>
 

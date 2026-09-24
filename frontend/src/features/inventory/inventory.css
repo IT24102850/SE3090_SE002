@@ -1365,3 +1365,47 @@
   .inventory-scope .inventory-analytics-orbit, .inventory-scope .inventory-analytics-orbit i, .inventory-scope .inventory-analytics-hero::after { animation: none; }
   .inventory-scope .stocksense-hero .stocksense-analyze-button, .inventory-scope .stocksense-hero .stocksense-analyze-button::after, .inventory-scope .stocksense-progress-panel, .inventory-scope .stocksense-progress-ring, .inventory-scope .stocksense-orbit-dot, .inventory-scope .stocksense-progress-meter span, .inventory-scope .stocksense-progress-stage { animation: none; }
 }
+
+/* Keep live/status dots visible and consistent across inventory pages. */
+.inventory-scope .inventory-manager-health-dot,
+.inventory-scope .suppliers-live-dot,
+.inventory-scope .movement-live-dot,
+.inventory-scope .purchase-orders-live > span,
+.inventory-scope .branch-overview-live > span,
+.inventory-scope .live-indicator > span,
+.inventory-scope .inventory-analytics-hero-foot i,
+.inventory-scope .branch-health-pulse {
+  display: block;
+  flex: 0 0 auto;
+  animation: inventory-status-glow 2.2s ease-in-out infinite;
+}
+
+.inventory-scope .inventory-manager-health-dot.is-loading,
+.inventory-scope .suppliers-live-dot.is-loading,
+.inventory-scope .movement-live-dot.is-loading,
+.inventory-scope .purchase-orders-live > span.is-loading,
+.inventory-scope .live-indicator > span.is-loading,
+.inventory-scope .branch-overview-live > span.is-loading {
+  background: #75caff;
+  box-shadow: 0 0 0 3px rgba(117,202,255,.16), 0 0 13px rgba(117,202,255,.62);
+  animation: inventory-status-loading 1.15s ease-in-out infinite;
+}
+
+.inventory-scope .branch-overview-live > span.is-error {
+  background: #f16a6a;
+  box-shadow: 0 0 0 3px rgba(241,106,106,.16), 0 0 12px rgba(241,106,106,.65);
+  animation: inventory-status-error 1.8s ease-in-out infinite;
+}
+
+@keyframes inventory-status-loading { 0%, 100% { transform: scale(.84); opacity: .65; } 50% { transform: scale(1.16); opacity: 1; } }
+@keyframes inventory-status-error { 0%, 100% { transform: scale(.96); box-shadow: 0 0 0 3px rgba(241,106,106,.13), 0 0 8px rgba(241,106,106,.38); } 50% { transform: scale(1.08); box-shadow: 0 0 0 5px rgba(241,106,106,.2), 0 0 15px rgba(241,106,106,.78); } }
+@media (prefers-reduced-motion: reduce) {
+  .inventory-scope .inventory-manager-health-dot,
+  .inventory-scope .suppliers-live-dot,
+  .inventory-scope .movement-live-dot,
+  .inventory-scope .purchase-orders-live > span,
+  .inventory-scope .branch-overview-live > span,
+  .inventory-scope .live-indicator > span,
+  .inventory-scope .inventory-analytics-hero-foot i,
+  .inventory-scope .branch-health-pulse { animation: none; }
+}
