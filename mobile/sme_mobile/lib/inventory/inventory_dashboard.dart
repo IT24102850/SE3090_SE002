@@ -46,6 +46,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   int _inventoryAiStep = 0;
   Timer? _inventoryAiStepTimer;
   bool _loading = true;
+  bool _requestInFlight = false;
   String _searchQuery = '';
   String _selectedFilter = 'All'; // 'All', 'Low Stock', 'Out of Stock'
 
@@ -62,6 +63,8 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   }
 
   Future<void> _load({bool showSuccess = false}) async {
+    if (_requestInFlight) return;
+    _requestInFlight = true;
     setState(() {
       _loading = true;
       _error = null;
@@ -90,6 +93,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
     } catch (error) {
       _fail('Unable to load inventory data: $error');
     } finally {
+      _requestInFlight = false;
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -351,8 +355,17 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded, color: AppColors.cyan),
-            onPressed: () => _load(showSuccess: true),
+            icon: _requestInFlight
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.cyan,
+                    ),
+                  )
+                : const Icon(Icons.refresh_rounded, color: AppColors.cyan),
+            onPressed: _requestInFlight ? null : () => _load(showSuccess: true),
           ),
         ],
       ),
@@ -434,25 +447,32 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
       _inventoryAiStep = 0;
     });
     _inventoryAiStepTimer?.cancel();
-    _inventoryAiStepTimer = Timer.periodic(const Duration(milliseconds: 2300), (_) {
-      if (mounted) setState(() => _inventoryAiStep = (_inventoryAiStep + 1) % 5);
+    _inventoryAiStepTimer =
+        Timer.periodic(const Duration(milliseconds: 2300), (_) {
+      if (mounted) {
+        setState(() => _inventoryAiStep = (_inventoryAiStep + 1) % 5);
+      }
     });
     try {
       final response = await widget.client.post(
         '/api/inventory/agent/plan',
         body: {
-          'objective': 'Review overall inventory health, not only low stock. Identify stock coverage risks from recorded issue/sale/consumption, summarize items without recorded outflow and recent waste movements, and explain uncertainty. Do not infer demand from missing history.',
+          'objective':
+              'Review overall inventory health, not only low stock. Identify stock coverage risks from recorded issue/sale/consumption, summarize items without recorded outflow and recent waste movements, and explain uncertainty. Do not infer demand from missing history.',
         },
       );
       if (response.body.trim().isEmpty) {
         if (response.statusCode == 401) {
-          throw Exception('Your session has expired. Sign in again and retry inventory analysis.');
+          throw Exception(
+              'Your session has expired. Sign in again and retry inventory analysis.');
         }
         if (response.statusCode == 403) {
-          throw Exception('Your account does not have permission to read inventory for this branch.');
+          throw Exception(
+              'Your account does not have permission to read inventory for this branch.');
         }
         if (response.statusCode == 404) {
-          throw Exception('The backend does not have the inventory AI endpoint yet. Restart the ASP.NET backend and retry.');
+          throw Exception(
+              'The backend does not have the inventory AI endpoint yet. Restart the ASP.NET backend and retry.');
         }
         throw Exception(
           'Inventory AI API returned an empty response (${response.statusCode}). Check the backend endpoint and agent service configuration.',
@@ -462,12 +482,20 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final body = decoded is Map ? decoded : const <String, dynamic>{};
         final warnings = body['warnings'];
-        throw Exception(body['message'] ?? (warnings is List && warnings.isNotEmpty ? warnings.first : 'Inventory AI could not complete the analysis.'));
+        throw Exception(body['message'] ??
+            (warnings is List && warnings.isNotEmpty
+                ? warnings.first
+                : 'Inventory AI could not complete the analysis.'));
       }
-      if (decoded is! Map<String, dynamic>) throw const FormatException('Unexpected inventory plan response.');
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Unexpected inventory plan response.');
+      }
       if (mounted) setState(() => _inventoryAiPlan = decoded);
     } catch (error) {
-      if (mounted) setState(() => _inventoryAiError = error.toString().replaceFirst('Exception: ', ''));
+      if (mounted) {
+        setState(() => _inventoryAiError =
+            error.toString().replaceFirst('Exception: ', ''));
+      }
     } finally {
       _inventoryAiStepTimer?.cancel();
       _inventoryAiStepTimer = null;
@@ -489,24 +517,45 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
               gradient: AppColors.heroGradient,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.glassBorder),
-              boxShadow: [BoxShadow(color: AppColors.violet.withValues(alpha: 0.16), blurRadius: 18, offset: const Offset(0, 7))],
+              boxShadow: [
+                BoxShadow(
+                    color: AppColors.violet.withValues(alpha: 0.16),
+                    blurRadius: 18,
+                    offset: const Offset(0, 7))
+              ],
             ),
             child: Row(children: [
               Container(
                 width: 42,
                 height: 42,
-                decoration: BoxDecoration(color: AppColors.glassFill, borderRadius: BorderRadius.circular(13), border: Border.all(color: AppColors.glassBorder)),
+                decoration: BoxDecoration(
+                    color: AppColors.glassFill,
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: AppColors.glassBorder)),
                 child: Stack(alignment: Alignment.center, children: [
-                  const Icon(Icons.inventory_2_rounded, color: AppColors.cyan, size: 23),
-                  Positioned(right: 3, top: 3, child: Icon(Icons.auto_awesome_rounded, color: AppColors.magenta.withValues(alpha: 0.95), size: 12)),
+                  const Icon(Icons.inventory_2_rounded,
+                      color: AppColors.cyan, size: 23),
+                  Positioned(
+                      right: 3,
+                      top: 3,
+                      child: Icon(Icons.auto_awesome_rounded,
+                          color: AppColors.magenta.withValues(alpha: 0.95),
+                          size: 12)),
                 ]),
               ),
               const SizedBox(width: 11),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('STOCKSENSE AI', style: AppTextStyles.label.copyWith(color: AppColors.cyan)),
-                const SizedBox(height: 3),
-                Text('Inventory health assistant', style: AppTextStyles.caption.copyWith(color: AppColors.textBody)),
-              ])),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text('STOCKSENSE AI',
+                        style: AppTextStyles.label
+                            .copyWith(color: AppColors.cyan)),
+                    const SizedBox(height: 3),
+                    Text('Inventory health assistant',
+                        style: AppTextStyles.caption
+                            .copyWith(color: AppColors.textBody)),
+                  ])),
               const SizedBox(width: 5),
               TextButton(
                 onPressed: _inventoryAiLoading ? null : _analyzeInventory,
@@ -526,53 +575,88 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
               decoration: BoxDecoration(
                 gradient: AppColors.heroGradient,
                 borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: AppColors.cyan.withValues(alpha: 0.35)),
+                border:
+                    Border.all(color: AppColors.cyan.withValues(alpha: 0.35)),
               ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  const SizedBox(width: 34, height: 34, child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.cyan, backgroundColor: AppColors.glassBorder)),
-                  const SizedBox(width: 11),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('STOCKSENSE IS THINKING', style: AppTextStyles.label.copyWith(color: AppColors.cyan, fontSize: 10)),
-                    const SizedBox(height: 4),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 450),
-                      transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: SlideTransition(position: Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero).animate(animation), child: child)),
-                      child: Text(
-                        const [
-                          'Reading your stock snapshot…',
-                          'Matching issues, sales and usage…',
-                          'Calculating stock coverage…',
-                          'Reviewing waste and movement gaps…',
-                          'Preparing findings for your review…',
-                        ][_inventoryAiStep],
-                        key: ValueKey(_inventoryAiStep),
-                        style: AppTextStyles.body.copyWith(fontSize: 12),
-                      ),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: AppColors.cyan,
+                              backgroundColor: AppColors.glassBorder)),
+                      const SizedBox(width: 11),
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            Text('STOCKSENSE IS THINKING',
+                                style: AppTextStyles.label.copyWith(
+                                    color: AppColors.cyan, fontSize: 10)),
+                            const SizedBox(height: 4),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 450),
+                              transitionBuilder: (child, animation) =>
+                                  FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                          position: Tween<Offset>(
+                                                  begin: const Offset(0, 0.18),
+                                                  end: Offset.zero)
+                                              .animate(animation),
+                                          child: child)),
+                              child: Text(
+                                const [
+                                  'Reading your stock snapshot…',
+                                  'Matching issues, sales and usage…',
+                                  'Calculating stock coverage…',
+                                  'Reviewing waste and movement gaps…',
+                                  'Preparing findings for your review…',
+                                ][_inventoryAiStep],
+                                key: ValueKey(_inventoryAiStep),
+                                style:
+                                    AppTextStyles.body.copyWith(fontSize: 12),
+                              ),
+                            ),
+                          ])),
+                      Text('${_inventoryAiStep + 1}/5',
+                          style: AppTextStyles.caption
+                              .copyWith(color: AppColors.textMuted)),
+                    ]),
+                    const SizedBox(height: 11),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(99),
+                      child: const LinearProgressIndicator(
+                          minHeight: 4,
+                          color: AppColors.cyan,
+                          backgroundColor: AppColors.glassBorder),
                     ),
-                  ])),
-                  Text('${_inventoryAiStep + 1}/5', style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
-                ]),
-                const SizedBox(height: 11),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(99),
-                  child: const LinearProgressIndicator(minHeight: 4, color: AppColors.cyan, backgroundColor: AppColors.glassBorder),
-                ),
-                const SizedBox(height: 6),
-                Text('Analysis can take a little while. Your stock remains unchanged.', style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
-              ]),
+                    const SizedBox(height: 6),
+                    Text(
+                        'Analysis can take a little while. Your stock remains unchanged.',
+                        style: AppTextStyles.caption
+                            .copyWith(color: AppColors.textMuted)),
+                  ]),
             ),
           ],
           if (_inventoryAiError != null) ...[
             const SizedBox(height: 10),
-            Text(_inventoryAiError!, style: AppTextStyles.body.copyWith(color: AppColors.danger)),
+            Text(_inventoryAiError!,
+                style: AppTextStyles.body.copyWith(color: AppColors.danger)),
           ],
           if (_inventoryAiPlan != null) ...[
             const SizedBox(height: 12),
-            Text('${_inventoryAiPlan!['planner_summary'] ?? ''}', style: AppTextStyles.body),
-            if (_inventoryAiPlan!['insights'] is List && (_inventoryAiPlan!['insights'] as List).isNotEmpty) ...[
+            Text('${_inventoryAiPlan!['planner_summary'] ?? ''}',
+                style: AppTextStyles.body),
+            if (_inventoryAiPlan!['insights'] is List &&
+                (_inventoryAiPlan!['insights'] as List).isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text('INVENTORY HEALTH INSIGHTS', style: AppTextStyles.label.copyWith(color: AppColors.cyan)),
+              Text('INVENTORY HEALTH INSIGHTS',
+                  style: AppTextStyles.label.copyWith(color: AppColors.cyan)),
               ...(_inventoryAiPlan!['insights'] as List).map((entry) {
                 if (entry is! Map) return const SizedBox.shrink();
                 final insight = Map<String, dynamic>.from(entry);
@@ -600,27 +684,63 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                     decoration: BoxDecoration(
                       color: AppColors.inputFill,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: insightColor.withValues(alpha: 0.38)),
+                      border: Border.all(
+                          color: insightColor.withValues(alpha: 0.38)),
                     ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        Container(width: 32, height: 32, decoration: BoxDecoration(color: insightColor.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)), child: Icon(insightIcon, size: 18, color: insightColor)),
-                        const SizedBox(width: 9),
-                        Expanded(child: Text(category.replaceAll('_', ' ').toUpperCase(), style: AppTextStyles.label.copyWith(color: insightColor, fontSize: 10))),
-                      ]),
-                      const SizedBox(height: 8),
-                      Text('${insight['title'] ?? 'Inventory insight'}', style: AppTextStyles.subtitle),
-                      const SizedBox(height: 4),
-                      Text('${insight['detail'] ?? ''}', style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
-                      if (affected is List && affected.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Wrap(spacing: 6, runSpacing: 6, children: affected.take(5).map((name) => Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: insightColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: insightColor.withValues(alpha: 0.22))),
-                          child: Text('$name', style: AppTextStyles.caption.copyWith(color: AppColors.textBody)),
-                        )).toList()),
-                      ],
-                    ]),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                    color: insightColor.withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(10)),
+                                child: Icon(insightIcon,
+                                    size: 18, color: insightColor)),
+                            const SizedBox(width: 9),
+                            Expanded(
+                                child: Text(
+                                    category.replaceAll('_', ' ').toUpperCase(),
+                                    style: AppTextStyles.label.copyWith(
+                                        color: insightColor, fontSize: 10))),
+                          ]),
+                          const SizedBox(height: 8),
+                          Text('${insight['title'] ?? 'Inventory insight'}',
+                              style: AppTextStyles.subtitle),
+                          const SizedBox(height: 4),
+                          Text('${insight['detail'] ?? ''}',
+                              style: AppTextStyles.bodyMuted
+                                  .copyWith(fontSize: 12)),
+                          if (affected is List && affected.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: affected
+                                    .take(5)
+                                    .map((name) => Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                              color: insightColor.withValues(
+                                                  alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                              border: Border.all(
+                                                  color:
+                                                      insightColor.withValues(
+                                                          alpha: 0.22))),
+                                          child: Text('$name',
+                                              style: AppTextStyles.caption
+                                                  .copyWith(
+                                                      color:
+                                                          AppColors.textBody)),
+                                        ))
+                                    .toList()),
+                          ],
+                        ]),
                   ),
                 );
               }),
@@ -628,11 +748,14 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
             if (recommendations is List && recommendations.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('No replenishment recommendations from the available stock data.', style: AppTextStyles.bodyMuted),
+                child: Text(
+                    'No replenishment recommendations from the available stock data.',
+                    style: AppTextStyles.bodyMuted),
               ),
             if (recommendations is List && recommendations.isNotEmpty) ...[
               const SizedBox(height: 14),
-              Text('REPLENISHMENT RECOMMENDATIONS', style: AppTextStyles.label.copyWith(color: AppColors.cyan)),
+              Text('REPLENISHMENT RECOMMENDATIONS',
+                  style: AppTextStyles.label.copyWith(color: AppColors.cyan)),
               ...recommendations.map((entry) {
                 if (entry is! Map) return const SizedBox.shrink();
                 final item = Map<String, dynamic>.from(entry);
@@ -646,22 +769,33 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: AppColors.glassBorder),
                     ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('${item['item_name']}  ·  Reorder ${item['recommended_quantity']}', style: AppTextStyles.subtitle),
-                      const SizedBox(height: 4),
-                      Text('On hand ${item['on_hand']} / reorder at ${item['reorder_level']}  ·  ${daily == null ? 'No usage history' : '$daily per day'}', style: AppTextStyles.caption),
-                      const SizedBox(height: 4),
-                      Text('${item['reason']}', style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
-                    ]),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                              '${item['item_name']}  ·  Reorder ${item['recommended_quantity']}',
+                              style: AppTextStyles.subtitle),
+                          const SizedBox(height: 4),
+                          Text(
+                              'On hand ${item['on_hand']} / reorder at ${item['reorder_level']}  ·  ${daily == null ? 'No usage history' : '$daily per day'}',
+                              style: AppTextStyles.caption),
+                          const SizedBox(height: 4),
+                          Text('${item['reason']}',
+                              style: AppTextStyles.bodyMuted
+                                  .copyWith(fontSize: 12)),
+                        ]),
                   ),
                 );
               }),
             ],
             if (_inventoryAiPlan!['warnings'] is List)
-              ...(_inventoryAiPlan!['warnings'] as List).map((warning) => Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text('$warning', style: AppTextStyles.caption.copyWith(color: AppColors.warning)),
-              )),
+              ...(_inventoryAiPlan!['warnings'] as List)
+                  .map((warning) => Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text('$warning',
+                            style: AppTextStyles.caption
+                                .copyWith(color: AppColors.warning)),
+                      )),
           ],
         ],
       ),
@@ -1464,15 +1598,20 @@ class _CyberStatCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                label,
-                style: AppTextStyles.label.copyWith(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: AppColors.textMuted,
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.label.copyWith(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ),
+              const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
@@ -1486,6 +1625,8 @@ class _CyberStatCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: AppTextStyles.headlineSmall.copyWith(
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -1495,6 +1636,8 @@ class _CyberStatCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             subLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: AppTextStyles.caption.copyWith(
               fontSize: 11,
               color: AppColors.textSecondary,

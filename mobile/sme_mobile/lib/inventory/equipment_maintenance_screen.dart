@@ -478,15 +478,20 @@ class _EquipmentMaintenanceScreenState
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'ASSET CARE & PREVENTIVE LOGS',
-                style: AppTextStyles.label.copyWith(
-                  color: const Color(0xFFFBBF24),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.1,
+              Flexible(
+                child: Text(
+                  'ASSET CARE & PREVENTIVE LOGS',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.label.copyWith(
+                    color: const Color(0xFFFBBF24),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -534,12 +539,16 @@ class _EquipmentMaintenanceScreenState
                       const Icon(Icons.pending_actions_rounded,
                           size: 18, color: Color(0xFFFBBF24)),
                       const SizedBox(width: 8),
-                      Text(
-                        '$pending Due Now',
-                        style: AppTextStyles.subtitle.copyWith(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFFFBBF24),
+                      Flexible(
+                        child: Text(
+                          '$pending Due Now',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.subtitle.copyWith(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFFFBBF24),
+                          ),
                         ),
                       ),
                     ],
@@ -562,12 +571,16 @@ class _EquipmentMaintenanceScreenState
                       const Icon(Icons.check_circle_rounded,
                           size: 18, color: Color(0xFF10B981)),
                       const SizedBox(width: 8),
-                      Text(
-                        '$completed Completed',
-                        style: AppTextStyles.subtitle.copyWith(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF10B981),
+                      Flexible(
+                        child: Text(
+                          '$completed Completed',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.subtitle.copyWith(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF10B981),
+                          ),
                         ),
                       ),
                     ],
@@ -698,6 +711,8 @@ class _EquipmentMaintenanceScreenState
                 children: [
                   Text(
                     task.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.subtitle.copyWith(
                       fontWeight: FontWeight.w700,
                       decoration:
@@ -710,26 +725,32 @@ class _EquipmentMaintenanceScreenState
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Text(
-                        task.dueLabel,
-                        style: AppTextStyles.caption.copyWith(
-                          color: task.completed
-                              ? AppColors.textMuted
-                              : AppColors.cyan,
-                          fontWeight: FontWeight.w600,
+                      Flexible(
+                        child: Text(
+                          task.dueLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.caption.copyWith(
+                            color: task.completed
+                                ? AppColors.textMuted
+                                : AppColors.cyan,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       if (task.photoUrls.isNotEmpty) ...[
-                        Text(' • ',
-                            style: AppTextStyles.caption
-                                .copyWith(color: AppColors.textMuted)),
+                        const SizedBox(width: 6),
                         const Icon(Icons.photo_camera_rounded,
                             size: 12, color: AppColors.textSecondary),
                         const SizedBox(width: 3),
-                        Text(
-                          '${task.photoUrls.length} photo${task.photoUrls.length == 1 ? '' : 's'}',
-                          style: AppTextStyles.caption
-                              .copyWith(color: AppColors.textSecondary),
+                        Flexible(
+                          child: Text(
+                            '${task.photoUrls.length} photo${task.photoUrls.length == 1 ? '' : 's'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.caption
+                                .copyWith(color: AppColors.textSecondary),
+                          ),
                         ),
                       ],
                     ],

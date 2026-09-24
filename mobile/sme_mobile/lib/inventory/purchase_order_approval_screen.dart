@@ -337,24 +337,30 @@ class _PurchaseOrderApprovalScreenState
           ),
           const SizedBox(height: 14),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('TOTAL QUEUE COMMITMENT', style: AppTextStyles.label),
-                  const SizedBox(height: 2),
-                  Text(
-                    'LKR ${_totalQueueAmount.toStringAsFixed(2)}',
-                    style: AppTextStyles.headline.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: -0.5,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('TOTAL QUEUE COMMITMENT', style: AppTextStyles.label),
+                    const SizedBox(height: 2),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'LKR ${_totalQueueAmount.toStringAsFixed(2)}',
+                        style: AppTextStyles.headline.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 10),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -364,6 +370,8 @@ class _PurchaseOrderApprovalScreenState
                 ),
                 child: Text(
                   '${_orders.length} Orders Pending',
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
                   style: AppTextStyles.caption.copyWith(
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
@@ -409,6 +417,8 @@ class _PurchaseOrderApprovalScreenState
                     children: [
                       Text(
                         order.number,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.title.copyWith(
                           fontSize: 17,
                           fontWeight: FontWeight.w800,
@@ -417,6 +427,8 @@ class _PurchaseOrderApprovalScreenState
                       const SizedBox(height: 2),
                       Text(
                         'Created for ${order.supplier ?? 'External Supplier'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.caption
                             .copyWith(color: AppColors.textSecondary),
                       ),
@@ -468,42 +480,61 @@ class _PurchaseOrderApprovalScreenState
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.glassBorder),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final location = Row(
                     children: [
                       const Icon(Icons.storefront_rounded,
                           size: 16, color: AppColors.cyan),
                       const SizedBox(width: 6),
-                      Text(
-                        order.branch ?? 'Main branch',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w600,
+                      Expanded(
+                        child: Text(
+                          order.branch ?? 'Main branch',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Text('•',
-                          style: AppTextStyles.caption
-                              .copyWith(color: AppColors.textMuted)),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Text(
                         '${order.lineItems} item${order.lineItems == 1 ? '' : 's'}',
                         style: AppTextStyles.caption
                             .copyWith(color: AppColors.textSecondary),
                       ),
                     ],
-                  ),
-                  Text(
+                  );
+                  final amount = Text(
                     'LKR ${order.amount.toStringAsFixed(2)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.title.copyWith(
                       color: const Color(0xFF10B981),
                       fontWeight: FontWeight.w800,
                       fontSize: 16,
                     ),
-                  ),
-                ],
+                  );
+
+                  if (constraints.maxWidth < 380) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        location,
+                        const SizedBox(height: 8),
+                        Align(alignment: Alignment.centerRight, child: amount),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: location),
+                      const SizedBox(width: 12),
+                      Flexible(child: amount),
+                    ],
+                  );
+                },
               ),
             ),
             const SizedBox(height: 16),

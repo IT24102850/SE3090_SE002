@@ -430,14 +430,19 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
                       color: isCheckIn ? Colors.white : AppColors.textMuted,
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      'Check-in (Receive)',
-                      style: AppTextStyles.subtitle.copyWith(
-                        color:
-                            isCheckIn ? Colors.white : AppColors.textSecondary,
-                        fontWeight:
-                            isCheckIn ? FontWeight.w700 : FontWeight.w500,
-                        fontSize: 13,
+                    Flexible(
+                      child: Text(
+                        'Check-in (Receive)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.subtitle.copyWith(
+                          color: isCheckIn
+                              ? Colors.white
+                              : AppColors.textSecondary,
+                          fontWeight:
+                              isCheckIn ? FontWeight.w700 : FontWeight.w500,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ],
@@ -478,14 +483,19 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
                       color: !isCheckIn ? Colors.white : AppColors.textMuted,
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      'Check-out (Issue)',
-                      style: AppTextStyles.subtitle.copyWith(
-                        color:
-                            !isCheckIn ? Colors.white : AppColors.textSecondary,
-                        fontWeight:
-                            !isCheckIn ? FontWeight.w700 : FontWeight.w500,
-                        fontSize: 13,
+                    Flexible(
+                      child: Text(
+                        'Check-out (Issue)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.subtitle.copyWith(
+                          color: !isCheckIn
+                              ? Colors.white
+                              : AppColors.textSecondary,
+                          fontWeight:
+                              !isCheckIn ? FontWeight.w700 : FontWeight.w500,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ],

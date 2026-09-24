@@ -827,17 +827,25 @@ class _StockCountScreenState extends State<StockCountScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(matchedItem.name,
-                          style: AppTextStyles.subtitle.copyWith(fontSize: 13)),
-                      Text(
-                        'System Record: ${matchedItem.quantity.toInt()} ${matchedItem.unit}',
-                        style: AppTextStyles.caption
-                            .copyWith(color: AppColors.textMuted),
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          matchedItem.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.subtitle.copyWith(fontSize: 13),
+                        ),
+                        Text(
+                          'System Record: ${matchedItem.quantity.toInt()} ${matchedItem.unit}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.caption
+                              .copyWith(color: AppColors.textMuted),
+                        ),
+                      ],
+                    ),
                   ),
                   if (hasVariance)
                     Container(
@@ -910,17 +918,23 @@ class _StockCountScreenState extends State<StockCountScreen>
                 children: [
                   Text(
                     entry.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.subtitle
                         .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
                   ),
                   Text(
                     'SKU: ${entry.sku} • Counted: ${entry.quantity.toInt()} units',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.caption
                         .copyWith(color: AppColors.textSecondary),
                   ),
                   if (entry.lastError != null)
                     Text(
                       entry.lastError!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.caption.copyWith(
                           color: const Color(0xFFF43F5E), fontSize: 11),
                     ),
