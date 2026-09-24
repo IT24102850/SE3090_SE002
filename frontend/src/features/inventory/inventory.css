@@ -1068,6 +1068,23 @@
 .inventory-scope .inventory-analytics-hero-foot i.is-ready { animation: inventory-status-glow 2.1s ease-in-out infinite; }.inventory-scope .inventory-analytics-hero-foot i.is-warning { animation: inventory-status-warn 1.8s ease-in-out infinite; }
 .inventory-scope .stocksense-sync-notice { margin: -.4rem 0 0; border-left: 3px solid #f3b548; }
 @media (prefers-reduced-motion: reduce) { .inventory-scope .stocksense-updated > span, .inventory-scope .stocksense-updated.is-stale > span, .inventory-scope .branch-overview-live > span, .inventory-scope .branch-overview-live > span.is-loading, .inventory-scope .branch-overview-live > span.is-error, .inventory-scope .inventory-analytics-hero-foot i.is-ready, .inventory-scope .inventory-analytics-hero-foot i.is-warning { animation: none; } }
+
+/* Slow, visible glass glint that sweeps across each summary card. */
+@keyframes inventory-card-shine { 0%, 12% { background-position: -140% 0; } 48%, 100% { background-position: 160% 0; } }
+.inventory-scope .stocksense-kpi::before,
+.inventory-scope .stocksense-insight-card::after,
+.inventory-scope .branch-overview-metric::before,
+.inventory-scope .branch-card::after,
+.inventory-scope .inventory-analytics-metric::before { position: absolute; z-index: 1; inset: 0; content: ''; pointer-events: none; background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.23) 47%, rgba(255,255,255,.38) 50%, rgba(255,255,255,.16) 53%, transparent 70%); background-size: 240% 100%; background-position: -140% 0; animation: inventory-card-shine 6.4s ease-in-out infinite; }
+.inventory-scope .stocksense-kpi::before, .inventory-scope .branch-overview-metric::before, .inventory-scope .branch-card::after, .inventory-scope .inventory-analytics-metric::before { border-radius: inherit; }
+.inventory-scope .stocksense-kpi::after, .inventory-scope .branch-overview-metric::after { z-index: 0; }
+.inventory-scope .stocksense-kpi > *, .inventory-scope .stocksense-insight-card > *, .inventory-scope .branch-overview-metric > *, .inventory-scope .branch-card > *, .inventory-scope .inventory-analytics-metric > * { position: relative; z-index: 2; }
+.inventory-scope .stocksense-insight-card::before { z-index: 3; }
+.inventory-scope .branch-card::before { z-index: 3; }
+.inventory-scope .stocksense-kpi:nth-child(2)::before, .inventory-scope .stocksense-insight-card:nth-child(2)::after, .inventory-scope .branch-overview-metric:nth-child(2)::before, .inventory-scope .branch-card:nth-child(2)::after, .inventory-scope .inventory-analytics-metric:nth-child(2)::before { animation-delay: .9s; }
+.inventory-scope .stocksense-kpi:nth-child(3)::before, .inventory-scope .stocksense-insight-card:nth-child(3)::after, .inventory-scope .branch-overview-metric:nth-child(3)::before, .inventory-scope .branch-card:nth-child(3)::after, .inventory-scope .inventory-analytics-metric:nth-child(3)::before { animation-delay: 1.8s; }
+.inventory-scope .stocksense-kpi:nth-child(4)::before, .inventory-scope .stocksense-insight-card:nth-child(4)::after, .inventory-scope .branch-overview-metric:nth-child(4)::before, .inventory-scope .branch-card:nth-child(4)::after, .inventory-scope .inventory-analytics-metric:nth-child(4)::before { animation-delay: 2.7s; }
+@media (prefers-reduced-motion: reduce) { .inventory-scope .stocksense-kpi::before, .inventory-scope .stocksense-insight-card::after, .inventory-scope .branch-overview-metric::before, .inventory-scope .branch-card::after, .inventory-scope .inventory-analytics-metric::before { animation: none; } }
 @keyframes inventory-card-arrive { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes suppliers-mark-float { 0%, 100% { transform: rotate(20deg) scaleY(1.42) translateY(0); } 50% { transform: rotate(24deg) scaleY(1.42) translateY(-6px); } }
 @keyframes suppliers-orbit-glint { 0%, 100% { opacity: .5; box-shadow: 0 0 7px rgba(118,241,217,.55); } 50% { opacity: 1; box-shadow: 0 0 16px rgba(118,241,217,1); } }
