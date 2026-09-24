@@ -445,6 +445,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
     setState(() {
       _inventoryAiLoading = true;
       _inventoryAiError = null;
+      _inventoryAiPlan = null;
       _inventoryAiStep = 0;
     });
     _inventoryAiStepTimer?.cancel();
@@ -507,98 +508,115 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   Widget _buildInventoryAiCard() {
     final recommendations = _inventoryAiPlan?['recommendations'];
     return InventoryPanel(
-      padding: const EdgeInsets.all(18),
-      borderColor: const Color(0xFF2A4058),
+      padding: const EdgeInsets.all(16),
+      fill: const Color(0xFF13283A),
+      borderColor: const Color(0xFF2F5265),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(13),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF19283A),
+              color: const Color(0xFF192B3A),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: const Color(0xFF2A4058)),
             ),
-            child: Row(children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                    color: AppColors.glassFill,
-                    borderRadius: BorderRadius.circular(13),
-                    border: Border.all(color: AppColors.glassBorder)),
-                child: Stack(alignment: Alignment.center, children: [
-                  const Icon(Icons.inventory_2_rounded,
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.cyan.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.auto_awesome_rounded,
                       color: AppColors.cyan, size: 23),
-                  Positioned(
-                      right: 3,
-                      top: 3,
-                      child: Icon(Icons.auto_awesome_rounded,
-                          color: AppColors.magenta.withValues(alpha: 0.95),
-                          size: 12)),
-                ]),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
+                ),
+                const SizedBox(width: 11),
+                Expanded(
                   child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text('STOCKSENSE AI',
-                        style: AppTextStyles.label
-                            .copyWith(color: AppColors.cyan)),
-                    const SizedBox(height: 3),
-                    Text('Inventory health assistant',
-                        style: AppTextStyles.caption
-                            .copyWith(color: AppColors.textBody)),
-                  ])),
-              const SizedBox(width: 5),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: _inventoryAiLoading ? null : _analyzeInventory,
-                  borderRadius: BorderRadius.circular(13),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 220),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                    decoration: BoxDecoration(
-                      color: _inventoryAiLoading
-                          ? const Color(0xFF243247)
-                          : AppColors.cyan,
-                      borderRadius: BorderRadius.circular(13),
-                      border: Border.all(
-                        color: AppColors.cyan.withValues(alpha: 0.45),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _inventoryAiLoading
-                              ? Icons.hourglass_top_rounded
-                              : Icons.auto_awesome_rounded,
-                          size: 15,
-                          color: AppColors.onPrimary,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          _inventoryAiLoading ? 'Analyzing' : 'Analyze',
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('STOCKSENSE AI',
+                          style: AppTextStyles.label.copyWith(
+                            color: AppColors.cyan,
+                            letterSpacing: 1,
+                          )),
+                      const SizedBox(height: 3),
+                      Text('Your inventory co-pilot',
                           style: AppTextStyles.caption.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          )),
+                    ],
                   ),
                 ),
-              ),
-            ]),
+                if (_inventoryAiPlan != null)
+                  IconButton(
+                    tooltip: 'Run analysis again',
+                    onPressed: _inventoryAiLoading ? null : _analyzeInventory,
+                    icon: const Icon(Icons.refresh_rounded,
+                        color: AppColors.textSecondary),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Find stock risks before they interrupt work.',
+            style: AppTextStyles.subtitle.copyWith(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'Review coverage, recent usage and waste. Your stock stays unchanged.',
+            style: AppTextStyles.bodyMuted.copyWith(fontSize: 12, height: 1.4),
           ),
           const SizedBox(height: 12),
-          Text(
-            'Your inventory health assistant: reviews stock coverage, recent usage, and waste signals, then flags replenishment risks. It does not change stock or place orders.',
-            style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
+          const Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              _AiFocusTag(icon: Icons.inventory_2_outlined, label: 'Coverage'),
+              _AiFocusTag(icon: Icons.swap_vert_rounded, label: 'Usage'),
+              _AiFocusTag(icon: Icons.delete_sweep_outlined, label: 'Waste'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: FilledButton.icon(
+              onPressed: _inventoryAiLoading ? null : _analyzeInventory,
+              icon: _inventoryAiLoading
+                  ? const SizedBox(
+                      width: 17,
+                      height: 17,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.onPrimary,
+                      ),
+                    )
+                  : const Icon(Icons.auto_awesome_rounded, size: 19),
+              label: Text(
+                _inventoryAiLoading
+                    ? 'Reviewing inventory…'
+                    : 'Analyze inventory',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.cyan,
+                foregroundColor: AppColors.onPrimary,
+                disabledBackgroundColor: const Color(0xFF355061),
+                disabledForegroundColor: AppColors.textSecondary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13),
+                ),
+              ),
+            ),
           ),
           if (_inventoryAiLoading) ...[
             const SizedBox(height: 12),
@@ -716,8 +734,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                     decoration: BoxDecoration(
                       color: AppColors.inputFill,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: insightColor.withValues(alpha: 0.38)),
+                      border: Border.all(color: const Color(0xFF2A4058)),
                     ),
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -762,8 +779,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                                                   BorderRadius.circular(20),
                                               border: Border.all(
                                                   color:
-                                                      insightColor.withValues(
-                                                          alpha: 0.22))),
+                                                      const Color(0xFF2A4058))),
                                           child: Text('$name',
                                               style: AppTextStyles.caption
                                                   .copyWith(
@@ -1196,7 +1212,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppColors.onPrimary,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: QrImageView(
@@ -1543,6 +1559,39 @@ class _InventoryStatusBadgeState extends State<_InventoryStatusBadge>
           ),
         );
       },
+    );
+  }
+}
+
+class _AiFocusTag extends StatelessWidget {
+  const _AiFocusTag({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF192B3A),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFF2A4058)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: AppColors.cyan, size: 14),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

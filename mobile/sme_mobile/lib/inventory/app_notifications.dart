@@ -13,7 +13,7 @@ enum AppNotificationTone { success, error, warning, info }
 
 final appMessengerKey = PushNotificationService.messengerKey;
 
-/// Displays an ultra-stylish floating glassmorphic notification toast.
+/// Displays a concise floating notification with a tone-matched accent.
 void showAppNotification(
   String message, {
   AppNotificationTone tone = AppNotificationTone.info,
@@ -133,18 +133,23 @@ void _showMessengerNotification(
             child: Container(
               padding: const EdgeInsets.fromLTRB(16, 15, 14, 15),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF111B42), Color(0xFF251653)],
+                color: const Color(0xFF142235),
+                borderRadius: BorderRadius.circular(16),
+                border: Border(
+                  left: BorderSide(color: accent, width: 4),
+                  top: const BorderSide(color: Color(0xFF34465C)),
+                  right: const BorderSide(color: Color(0xFF34465C)),
+                  bottom: const BorderSide(color: Color(0xFF34465C)),
                 ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: accent.withValues(alpha: 0.9), width: 1.8),
                 boxShadow: [
                   BoxShadow(
-                    color: glowColor.withValues(alpha: 0.9),
-                    blurRadius: 28,
+                    color: Colors.black.withValues(alpha: 0.24),
+                    blurRadius: 16,
                     offset: const Offset(0, 6),
-                    spreadRadius: 1,
+                  ),
+                  BoxShadow(
+                    color: glowColor.withValues(alpha: 0.08),
+                    blurRadius: 12,
                   ),
                 ],
               ),
@@ -152,20 +157,13 @@ void _showMessengerNotification(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Container(
-                    width: 48,
-                    height: 48,
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          accent.withValues(alpha: 0.35),
-                          accent.withValues(alpha: 0.1),
-                        ],
-                      ),
-                      border: Border.all(
-                          color: accent.withValues(alpha: 0.5), width: 1),
+                      color: accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(icon, color: Colors.white, size: 25),
+                    child: Icon(icon, color: accent, size: 22),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -353,7 +351,7 @@ class _OverlayNotificationCardState extends State<_OverlayNotificationCard>
   Widget build(BuildContext context) {
     final curved = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutBack,
+      curve: Curves.easeOutCubic,
     );
     return Positioned(
       top: MediaQuery.paddingOf(context).top + 10,
@@ -374,58 +372,39 @@ class _OverlayNotificationCardState extends State<_OverlayNotificationCard>
               child: BackdropFilter(
                 filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                 child: Container(
-                  padding: const EdgeInsets.fromLTRB(18, 18, 12, 18),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [
-                        Color(0xFF07142F),
-                        Color(0xF2162450),
-                        Color(0xFF160F36),
-                      ],
-                      stops: [0, 0.58, 1],
-                    ),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: widget.accent.withValues(alpha: 0.95),
-                      width: 1.8,
+                    color: const Color(0xFF142235),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border(
+                      left: BorderSide(color: widget.accent, width: 4),
+                      top: const BorderSide(color: Color(0xFF34465C)),
+                      right: const BorderSide(color: Color(0xFF34465C)),
+                      bottom: const BorderSide(color: Color(0xFF34465C)),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: widget.glow.withValues(alpha: 0.9),
-                        blurRadius: 34,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 10),
+                        color: Colors.black.withValues(alpha: 0.24),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                      BoxShadow(
+                        color: widget.glow.withValues(alpha: 0.08),
+                        blurRadius: 14,
                       ),
                     ],
                   ),
                   child: Row(
                     children: [
                       Container(
-                        width: 56,
-                        height: 56,
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              widget.accent.withValues(alpha: 0.5),
-                              widget.accent.withValues(alpha: 0.12),
-                            ],
-                          ),
-                          border: Border.all(
-                            color: widget.accent,
-                            width: 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: widget.glow,
-                              blurRadius: 16,
-                              spreadRadius: 1,
-                            ),
-                          ],
+                          color: widget.accent.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Icon(widget.icon, color: Colors.white, size: 30),
+                        child:
+                            Icon(widget.icon, color: widget.accent, size: 23),
                       ),
                       const SizedBox(width: 15),
                       Expanded(
