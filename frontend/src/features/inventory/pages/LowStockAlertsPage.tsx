@@ -197,6 +197,7 @@ export function LowStockAlertsPage() {
           <button className="btn btn-primary stocksense-analyze-button" type="button" onClick={analyzeInventory} disabled={planning}>{planning ? 'Analyzing…' : '✦ Analyze inventory'}</button>
           <button className="btn btn-secondary" type="button" onClick={() => { void loadInventory(true); }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh now'}</button>
         </div>
+        <div className="stocksense-hero-orbit" aria-hidden="true"><span /><i /></div>
       </header>
 
       {inventoryError && <p className="page-notice stocksense-sync-notice" role="alert">{inventoryError} The timestamp above shows the last successful snapshot.</p>}

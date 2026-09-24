@@ -1096,6 +1096,36 @@
 @media (max-width: 560px) { .inventory-scope .stocksense-kpis { grid-template-columns: repeat(2, minmax(0,1fr)); }.inventory-scope .stocksense-kpis .stocksense-kpi { min-height: 116px; padding: .8rem; }.inventory-scope .stocksense-kpi .movement-stat-main { gap: .5rem; }.inventory-scope .stocksense-kpi .movement-stat-icon { width: 36px; height: 36px; }.inventory-scope .stocksense-kpi .movement-stat-value { font-size: 1.2rem; }.inventory-scope .stocksense-kpi .movement-stat-detail { font-size: .61rem; }.inventory-scope .branch-overview-metric { min-height: 112px; padding: .75rem; }.inventory-scope .branch-overview-metric-value strong { font-size: .88rem; }.inventory-scope .inventory-analytics-metric { min-height: 112px; padding: .75rem; }.inventory-scope .inventory-analytics-metric-icon { width: 36px; height: 36px; }.inventory-scope .inventory-analytics-metric strong { font-size: 1.2rem; } }
 @media (prefers-reduced-motion: reduce) { .inventory-scope .stocksense-ai-orb, .inventory-scope .stocksense-brandmark, .inventory-scope .stocksense-hero::before, .inventory-scope .stocksense-progress-ring, .inventory-scope .stocksense-progress-orbit > svg, .inventory-scope .stocksense-ai-panel, .inventory-scope .stocksense-ai-head, .inventory-scope .stocksense-kpis .stocksense-kpi { animation: none; } }
 
+/* Make StockSense's hero motion visible like the other inventory section headers. */
+.inventory-scope .stocksense-hero-orbit { position: absolute; z-index: 0; top: -96px; right: 15%; width: 285px; height: 285px; pointer-events: none; border: 1px solid rgba(119,234,217,.18); border-top-color: rgba(145,255,238,.88); border-radius: 50%; animation: stocksense-visible-orbit 12s linear infinite; }
+.inventory-scope .stocksense-hero-orbit span { position: absolute; inset: 23px; border: 1px solid rgba(119,234,217,.13); border-right-color: rgba(119,234,217,.5); border-radius: 50%; }
+.inventory-scope .stocksense-hero-orbit i { position: absolute; top: 21px; left: 50%; width: 10px; height: 10px; background: #87f5df; border: 2px solid rgba(255,255,255,.55); border-radius: 50%; box-shadow: 0 0 0 5px rgba(87,232,208,.12), 0 0 16px rgba(111,249,223,.8); transform: translateX(-50%); }
+@keyframes stocksense-visible-orbit { to { transform: rotate(360deg); } }
+.inventory-scope .stocksense-hero-copy, .inventory-scope .stocksense-hero-actions { z-index: 2; }
+.inventory-scope .stocksense-ai-panel { animation-duration: .8s; }.inventory-scope .stocksense-ai-panel .stocksense-section-heading { animation: stocksense-report-head .6s ease-out both; }.inventory-scope .stocksense-ai-panel .stocksense-insight-card { animation-duration: .65s; }
+@media (max-width: 760px) { .inventory-scope .stocksense-hero-orbit { top: -132px; right: -70px; opacity: .62; transform: scale(.78); transform-origin: top right; }.inventory-scope .stocksense-hero-copy { max-width: 92%; } }
+@media (prefers-reduced-motion: reduce) { .inventory-scope .stocksense-hero-orbit { animation: none; } }
+
+/* Stable, overflow-safe summary cards at desktop and phone widths. */
+.inventory-scope .stat-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.inventory-scope .inventory-manager-page .inventory-manager-metric, .inventory-scope .suppliers-summary-card, .inventory-scope .movement-stat, .inventory-scope .purchase-order-metric { min-width: 0; min-height: 122px; }
+.inventory-scope .inventory-manager-metric-main, .inventory-scope .suppliers-summary-main, .inventory-scope .movement-stat-main, .inventory-scope .purchase-order-metric-main { min-width: 0; }
+.inventory-scope .inventory-manager-metric-value-number, .inventory-scope .purchase-order-metric .purchase-order-value { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.inventory-scope .purchase-order-metric .purchase-order-value { font-size: clamp(.78rem, 1vw, 1.12rem); }
+.inventory-scope .suppliers-summary-card .suppliers-summary-copy, .inventory-scope .purchase-order-metric-main > div { min-width: 0; }
+@media (max-width: 980px) {
+  .inventory-scope .inventory-manager-page .stat-strip, .inventory-scope .suppliers-summary, .inventory-scope .movement-stat-strip, .inventory-scope .purchase-orders-stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .inventory-scope .inventory-manager-page .inventory-manager-metric, .inventory-scope .suppliers-summary-card, .inventory-scope .movement-stat, .inventory-scope .purchase-order-metric { min-height: 116px; padding: .78rem; }
+  .inventory-scope .inventory-manager-metric-main, .inventory-scope .suppliers-summary-main, .inventory-scope .movement-stat-main, .inventory-scope .purchase-order-metric-main { gap: .5rem; }
+  .inventory-scope .inventory-manager-metric-icon, .inventory-scope .suppliers-summary-icon, .inventory-scope .movement-stat-icon, .inventory-scope .purchase-order-metric-icon { width: 36px; height: 36px; border-radius: 11px; }
+  .inventory-scope .inventory-manager-metric-value, .inventory-scope .movement-stat-value, .inventory-scope .purchase-order-metric strong { font-size: 1.15rem; }
+  .inventory-scope .inventory-manager-metric-value-number, .inventory-scope .purchase-order-metric .purchase-order-value { font-size: .78rem; }
+  .inventory-scope .inventory-manager-metric-detail, .inventory-scope .suppliers-summary-detail, .inventory-scope .movement-stat-detail, .inventory-scope .purchase-order-metric-detail { font-size: .6rem; }
+}
+@media (prefers-reduced-motion: reduce) { .inventory-scope .inventory-manager-page .inventory-manager-metric, .inventory-scope .suppliers-summary-card, .inventory-scope .movement-stat, .inventory-scope .purchase-order-metric { animation: none; transition: none; } }
+
 @keyframes inventory-card-arrive { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes suppliers-mark-float { 0%, 100% { transform: rotate(20deg) scaleY(1.42) translateY(0); } 50% { transform: rotate(24deg) scaleY(1.42) translateY(-6px); } }
 @keyframes suppliers-orbit-glint { 0%, 100% { opacity: .5; box-shadow: 0 0 7px rgba(118,241,217,.55); } 50% { opacity: 1; box-shadow: 0 0 16px rgba(118,241,217,1); } }
