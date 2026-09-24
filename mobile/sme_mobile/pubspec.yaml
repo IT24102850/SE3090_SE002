@@ -33,6 +33,15 @@ dependencies:
   image_picker: ^1.1.2
   google_fonts: ^6.3.2
   share_plus: ^12.0.2
+  # Inventory (feat/inventory-agentic-updates). The branch shipped code
+  # importing these three but never declared them, so the app would not
+  # analyse or build after the merge.
+  # Live stock/notification feed: lib/inventory/notification_ws.dart
+  web_socket_channel: ^3.0.1
+  # Offline stock counting needs to know when the device is back online, and
+  # to keep a partial count across a restart: lib/inventory/stock_count_screen.dart
+  connectivity_plus: ^6.1.0
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:

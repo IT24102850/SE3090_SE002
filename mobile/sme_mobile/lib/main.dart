@@ -55,6 +55,7 @@ class _MyAppState extends ConsumerState<MyApp> {
       title: 'Unify',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: PushNotificationService.messengerKey,
+      navigatorKey: PushNotificationService.navigatorKey,
       theme: AppTheme.dark(),
       // Dark-only by design: there is no light counterpart to fall back to,
       // so the system setting must not be able to switch it.

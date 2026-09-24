@@ -615,11 +615,10 @@ Future<bool> showAppConfirmation({
       final curvedValue = Curves.easeOutBack.transform(anim1.value) - 1.0;
       return Transform(
         transform: Matrix4.translationValues(0.0, curvedValue * -20, 0.0)
-          ..scaleByDouble(
+          ..scale(
             0.92 + (anim1.value * 0.08),
             0.92 + (anim1.value * 0.08),
             0.92 + (anim1.value * 0.08),
-            1.0,
           ),
         child: Opacity(opacity: anim1.value, child: child),
       );

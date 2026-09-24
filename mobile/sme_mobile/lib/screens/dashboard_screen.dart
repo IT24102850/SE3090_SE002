@@ -24,6 +24,13 @@ import 'customer/book_business_list_screen.dart';
 import 'customer/my_bookings_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
+import 'owner/automation/agent_workflows_screen.dart';
+import 'owner/owner_home_screen.dart';
+import 'owner/reports/reports_screen.dart';
+import 'owner/resources/branches_screen.dart';
+import 'owner/resources/staff_screen.dart';
+import 'owner/scheduling/booking_manager_screen.dart';
+import 'owner/scheduling/multi_branch_schedule_screen.dart';
 import 'staff/check_in_scanner_screen.dart';
 import 'staff/my_schedule_screen.dart';
 import '../inventory/authenticated_api_client.dart';
@@ -413,12 +420,20 @@ class _DashboardDrawer extends ConsumerWidget {
                         .push(slideFadeRoute(const ProfileScreen()));
                   },
                 ),
+                // These three used to close the drawer and go nowhere, which
+                // left "Admin Panel" as a dead end on the one screen an owner
+                // is most likely to look for it from. They open the workspace
+                // (screens/owner) that carries the same destinations as the
+                // web sidebar.
                 if (user.role == 'Admin' || user.role == 'Manager')
                   _DrawerItem(
                     icon: Icons.calendar_today_outlined,
                     label: 'Bookings',
                     accent: AppColors.cyan,
-                    onTap: () => Navigator.pop(context),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute(const BookingManagerScreen()));
+                    },
                   ),
                 if (user.role == 'Admin' ||
                     user.role == 'Manager' ||
@@ -427,15 +442,25 @@ class _DashboardDrawer extends ConsumerWidget {
                     icon: Icons.schedule_outlined,
                     label: 'Schedule',
                     accent: AppColors.violet,
-                    onTap: () => Navigator.pop(context),
+                    onTap: () {
+                      Navigator.pop(context);
+                      // Staff get their own day; Admin and Manager get the
+                      // schedule across branches.
+                      Navigator.of(context).push(user.role == 'Staff'
+                          ? slideFadeRoute<void>(const MyScheduleScreen())
+                          : slideFadeRoute<void>(const MultiBranchScheduleScreen()));
+                    },
                   ),
-                if (user.role == 'Admin')
+                if (user.role == 'Admin' || user.role == 'Manager' || user.role == 'Staff')
                   _DrawerItem(
                     icon: Icons.admin_panel_settings,
-                    label: 'Admin Panel',
+                    label: user.role == 'Admin' ? 'Admin Panel' : 'Workspace',
                     accent: role.color,
                     iconColor: role.color,
-                    onTap: () => Navigator.pop(context),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute<void>(const OwnerHomeScreen()));
+                    },
                   ),
                 if (user.role != 'Customer')
                   _DrawerItem(
@@ -737,11 +762,14 @@ const _quickActionImages = <String, String>{
       'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=400&q=60',
 };
 
-/// Builds the quick-action tiles for a role. Customer actions are wired to
-/// real screens. Admin/Manager tiles stay as "coming soon" stubs — that
-/// management tooling lives in the web app — except Staff's "Mark
-/// attendance"/"Process walk-ins", which FR-B7/FR-B8 require on mobile
-/// specifically (QR check-in scanning, doctor's own schedule).
+/// Builds the quick-action tiles for a role. Every tile opens a real screen.
+///
+/// The management tiles used to be "coming soon" stubs on the grounds that
+/// the tooling lived in the web app. It no longer does: the workspace under
+/// screens/owner covers the same destinations as the web sidebar, and this
+/// dashboard is itself reachable from it ("Business Dashboard"), so a tile
+/// that does nothing is a dead end in the middle of the app. Each one now
+/// opens the workspace screen that does the job it names.
 List<Widget> _quickActionsFor(BuildContext context, String role, Color color,
     {bool clinic = false}) {
   if (role == 'Customer') {
@@ -795,16 +823,29 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color,
     'Process walk-ins': Icons.directions_walk_outlined,
   };
 
-  // Most Admin/Manager tiles stay as "coming soon" stubs — that management
-  // tooling lives in the web app — except the ones with a real mobile
-  // screen wired below (Staff's FR-B7/FR-B8 tasks, and Business Profile,
-  // which was explicitly asked for on mobile too).
+  // Every tile's destination. The role that owns a tile is always allowed
+  // into the screen behind it (see the roles on each OwnerDestination in
+  // owner/owner_nav.dart), so no tile can drop someone onto a screen their
+  // role cannot use.
   final wiredTaps = <String, Widget Function()>{
+    // Staff, on mobile specifically (FR-B7/FR-B8).
     'Mark attendance': () => const MyScheduleScreen(),
     'Process walk-ins': () => const CheckInScannerScreen(),
+    // Admin.
     'Business Profile': () => const BusinessProfileEditorScreen(),
-    // For a clinic the analytics / reports / bookings tiles have a real
-    // screen behind them: the clinic desk's Reports and Today tabs.
+    'Manage all branches': () => const BranchesScreen(),
+    'Assign managers & staff': () => const StaffScreen(),
+    'View system analytics': () => const ReportsScreen(),
+    // The approval queue: what the AI agents have proposed and is waiting
+    // on a decision.
+    'Approve high-impact actions': () => const AgentWorkflowsScreen(),
+    // Manager and Staff.
+    'Manage branch bookings': () => const BookingManagerScreen(),
+    'Approve schedules': () => const BookingManagerScreen(),
+    'View branch reports': () => const ReportsScreen(),
+    'Create / view bookings': () => const BookingManagerScreen(),
+    // A clinic's desk is the better answer for the day-to-day tiles, so it
+    // wins over the generic screens above.
     if (clinic) ...{
       'View system analytics': () => const ClinicDeskScreen(initialTab: 1),
       'View branch reports': () => const ClinicDeskScreen(initialTab: 1),
