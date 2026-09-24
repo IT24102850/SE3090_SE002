@@ -294,15 +294,11 @@
 .inventory-scope .movement-hero { z-index: 0; }
 .inventory-scope .movement-hero::after { position: absolute; z-index: 0; top: -25%; left: -58%; width: 40%; height: 150%; content: ''; pointer-events: none; background: linear-gradient(105deg, transparent 10%, rgba(202,255,248,.025) 35%, rgba(202,255,248,.15) 50%, rgba(202,255,248,.035) 64%, transparent 88%); transform: skewX(-18deg); animation: movement-hero-shine 8s ease-in-out infinite; }
 .inventory-scope .movement-stat { position: relative; }
-.inventory-scope .movement-stat::before { position: absolute; z-index: 0; inset: 0; content: ''; pointer-events: none; background: linear-gradient(112deg, transparent 18%, rgba(255,255,255,.035) 42%, rgba(255,255,255,.38) 50%, rgba(255,255,255,.035) 58%, transparent 82%); background-size: 250% 100%; background-position: 130% 0; animation: movement-card-shine 7.5s ease-in-out infinite; }
-.inventory-scope .movement-stat:nth-child(2)::before { animation-delay: 1s; }
-.inventory-scope .movement-stat:nth-child(3)::before { animation-delay: 2s; }
-.inventory-scope .movement-stat:nth-child(4)::before { animation-delay: 3s; }
+.inventory-scope .movement-stat::before, .inventory-scope .movement-stat::after { display: none; }
 .inventory-scope .movement-stat > * { position: relative; z-index: 1; }
 .inventory-scope .movement-type-chip { position: relative; overflow: hidden; }
 .inventory-scope .movement-type-chip.is-active { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 9%, transparent); }
 @keyframes movement-hero-shine { 0%, 28% { left: -58%; opacity: 0; } 38% { opacity: .75; } 62%, 100% { left: 120%; opacity: 0; } }
-@keyframes movement-card-shine { 0%, 14% { background-position: 130% 0; } 42%, 100% { background-position: -140% 0; } }
 @keyframes movement-orbit { to { transform: rotate(330deg) scaleY(.62); } }
 @keyframes movement-orbit-reverse { to { transform: rotate(-325deg) scaleY(.6); } }
 @keyframes movement-icon-float { 0%, 100% { transform: rotate(-8deg) translateY(0); } 50% { transform: rotate(-3deg) translateY(-7px); } }
@@ -319,7 +315,7 @@
   .inventory-scope .movement-stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .inventory-scope .movement-hero::after, .inventory-scope .movement-stat::before, .inventory-scope .movement-art-ring, .inventory-scope .movement-art-icon, .inventory-scope .movement-art-point { animation: none; }
+  .inventory-scope .movement-hero::after, .inventory-scope .movement-art-ring, .inventory-scope .movement-art-icon, .inventory-scope .movement-art-point { animation: none; }
 }
 .inventory-scope .reason-code { display: inline-block; padding: .15rem .4rem; color: var(--color-text-secondary); font-size: .72rem; font-weight: 700; background: var(--color-border); border-radius: .35rem; }
 .inventory-scope .qty-in { color: var(--color-good); }
