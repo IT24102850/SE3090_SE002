@@ -153,6 +153,10 @@ builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingSettingsService>(
     sp.GetRequiredService<SmeBackend.Services.Billing.BillingSettingsService>());
 builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingReportService, SmeBackend.Services.Billing.BillingReportService>();
 builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingAgentService, SmeBackend.Services.Billing.BillingAgentService>();
+// The billing copilot's two model edges (POST /billing/plan, /billing/narrate
+// on the agent service). The deterministic /analyze path does not depend on
+// it, so a missing agent service degrades the copilot alone.
+builder.Services.AddHttpClient<SmeBackend.Services.Billing.IBillingPlannerService, SmeBackend.Services.Billing.BillingPlannerService>();
 builder.Services.AddScoped<SmeBackend.Services.Billing.IPaymentCheckoutService, SmeBackend.Services.Billing.PaymentCheckoutService>();
 builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.StripePaymentProcessor>();
 builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.PayPalPaymentProcessor>();

@@ -243,3 +243,86 @@ operational overhead of managing multiple databases or schemas.
 - Trade-off: Relies entirely on correct enforcement of the global query filter in every query 
   path — a missed filter could leak cross-tenant data, so we treat this as a security-critical 
   code-review checkpoint on every pull request touching a tenant-scoped entity.
+---
+
+## ADR-007: Where the Language Model Sits in the Billing Agent
+
+**Status:** Accepted
+
+**Context:**
+Billing's Domain Analysis Agent (component 3.7) detects financial anomalies: discounts over the
+cap, tax outside its range, duplicate invoices, overpayments, totals that disagree with their own
+line items, price outliers, and insurance claims that exceed the invoice they are made against.
+
+Two facts about this problem shaped the decision:
+
+1. **Its golden cases are absolute.** Spec 3.9 requires that *"an invoice with a 50% discount on a
+   $10 item MUST flag for review"* and *"a valid insurance claim MUST pass"*. MUST means on every
+   run. A sampled language model cannot promise that, and a fraud check that flags differently on
+   Tuesday is worse than no fraud check — a business would stop trusting the whole feature after
+   one inconsistency it could not explain.
+2. **The form was the bottleneck, not the reasoning.** The agent already worked, but a caller had
+   to know to send `analysisType: "anomalies"`, a `DataRange` and a `ThresholdConfig`. The manager
+   who actually suspects discount abuse does not think in those fields. And once the agent had
+   returned forty anomalies, reading the pattern *across* them was still a human job.
+
+Booking and Inventory both call Gemini, so "why does billing not?" was a fair question to have an
+answer to.
+
+**Options Considered:**
+1. **Keep the agent fully deterministic, add nothing.** Defensible: §9.1's definition of a distinct
+   agent is responsibility, contracts, tool permissions, visible participation and deterministic
+   validation — a language model is not on that list, and the booking Validation/Safety agent is
+   deliberately model-free for the same reason. Rejected only because options existed that cost the
+   golden cases nothing.
+2. **Replace the rules engine with a model that reads invoices and judges them.** Rejected outright.
+   It trades a reproducible, auditable flag for a plausible-sounding one, and every §3.9 golden case
+   becomes a coin toss.
+3. **Model in the middle, rules as a second check.** Rejected: two sources of truth for "is this an
+   anomaly", and the interesting cases are exactly where they disagree.
+4. **Model at the two edges, rules untouched in the middle (chosen).** A planner turns the
+   manager's sentence into the request the agent already accepts; a narrator reads the pattern back
+   across the findings. Neither touches the detection.
+
+**Decision:**
+The detection stays deterministic C# permanently. `BillingRules.ValidateInvoice`, the discount-cap
+comparison, the excess calculation and the approval thresholds are unchanged and unreachable from
+model output. Gemini is added at the input and output edges only, as
+`agentic-ai-service/agents/billing_planner.py` (`POST /billing/plan`, `POST /billing/narrate`),
+reached through `POST /api/billing-agent/plan-analysis`.
+
+The planner may only **narrow** a run: pick one of the six existing analysis types, shorten the
+window, and *tighten* the discount cap. It cannot invent an analysis type or tool (both are closed
+vocabularies, so an invented one fails schema validation), exceed the one-year data cap, name a tool
+the chosen analysis type does not run, loosen any threshold, or approve anything. The two approval
+amounts have no field in the intent contract or on the wire at all, which is a stronger guarantee
+than a prompt rule: the model cannot ask for what it cannot address.
+
+That rule is enforced **twice** — `_sanitise` in Python, and `BillingPlanGuard` in ASP.NET Core on
+arrival. This is deliberate duplication, not an oversight: the two live in different processes
+across an HTTP boundary, and the guarantee has to survive the agent service being misconfigured,
+rolled back or replaced. Corrections are reported to the manager in `plannerWarnings`, never applied
+silently. The narrator is held to the matching rule at the other edge: a theme citing an anomaly id
+that was not passed in is dropped, so a narrative can only ever re-read the detector's own output.
+
+Both edges degrade rather than fail. With every model in the fallback chain down, a keyword planner
+produces the same contract marked `used_fallback`, and the narrator groups findings by type. The
+deterministic `POST /api/billing-agent/analyze` path has no dependency on the agent service at all,
+so a billing demo never depends on a third-party model being up — free-tier Gemini quota runs out
+daily, and it ran out mid-session while this was being built.
+
+**Consequences:**
+- Positive: both §3.9 golden cases are now asserted to survive *hostile* planner output.
+  `BillingCopilotTests` hands the guard a plan from a model that was successfully talked into setting
+  the cap to 100% and approving everything, and then asserts the 50%-discount invoice still flags and
+  nothing is approved. "The model cannot break the rules" is a test, not a claim.
+- Positive: the three components are now architecturally consistent (each has a planner with a
+  deterministic fallback, a contract, an allow-list and an approval gate) without billing giving up
+  the reproducibility its domain needs.
+- Positive: the stored `AgentWorkflow` row keeps the manager's own words, the plan, the corrections
+  the guard made and the narrative, so the audit trail records what was asked for as well as what ran.
+- Trade-off: one more network hop and one more failure mode on the copilot path. Mitigated by the
+  deterministic fallbacks and by keeping the direct `/analyze` path fully independent.
+- Trade-off: the same narrowing rule is now written in two places and must be changed in both. The
+  tests on either side pin it, and the duplication is the point — a single copy would sit on the
+  wrong side of a process boundary.

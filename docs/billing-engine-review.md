@@ -17,7 +17,8 @@ priority order.
 | API endpoints (3.4) | ✅ Complete | All 15 spec endpoints, plus ~35 supporting endpoints |
 | React screens (3.5) | ✅ Complete | 7 spec screens, plus Invoices, Commission Rules, customer "My bills" |
 | Flutter screens (3.6) | ✅ Complete | 6 spec screens, plus bill detail |
-| Domain Analysis Agent (3.7) | ✅ Complete | Rule-based, 5 allow-listed tools, approval gates, audit trail |
+| Domain Analysis Agent (3.7) | ✅ Complete | Rule-based detection, 5 allow-listed tools, approval gates, audit trail |
+| Billing Copilot (3.7, added) | ✅ Complete | Gemini planner + narrator at the agent's two edges; detection unchanged and unreachable from model output (ADR-007) |
 | Integrations (3.8) | 🟡 Mostly | Stripe, PayPal, SendGrid, Twilio done; **MessageBird not done** |
 | Testing (3.9) | ✅ Complete | 123 backend + 38 web + 26 mobile tests, all passing |
 
@@ -45,6 +46,11 @@ priority order.
   - `BillingReportService`: daily revenue, outstanding aging, dashboard.
   - `BillingSettingsService`: gateways (encrypted secrets), commission rules, invoice templates.
   - `BillingAgentService` + `BillingDomainAnalysisAgent`: the analysis agent.
+  - `BillingPlannerService` + `BillingPlanGuard`: the copilot's edges. The service calls the agent service's
+    `POST /billing/plan` and `/billing/narrate`; the guard re-clamps everything the model returned before it
+    reaches the agent, because that is a separate process over HTTP. A planner may narrow a run (shorter
+    window, stricter discount cap) and may never widen one; the two approval amounts have no field it can
+    address. Corrections come back to the manager in `plannerWarnings`, never applied silently.
   - `BillingApprovalService`: approval requests, approve/reject/apply, audit rows.
   - `BillingAutomationService`: hourly job that marks invoices overdue, renews or expires subscriptions, and sends reminders.
   - `ReceiptPdfBuilder`: dependency-free PDF that follows the tenant's invoice template.
@@ -88,7 +94,10 @@ payment methods (`flutter_secure_storage`, per user, never card numbers).
 | `InvoicesControllerTests` (Moq) | 14 | Auth, tenant check, status-code mapping, PDF file result |
 | `PaymentAndAutomationTests` | 30+ | Sandbox checkout, Stripe webhooks and signatures, hosted sessions, renewals, reports |
 | `BillingDatabaseIntegrationTests` | 5 | Real PostgreSQL: migrations, unique constraint, cascade, rollback, every query translates |
-| Vitest (web) | 38 | Invoice form validation, payment flow, dynamic form rendering |
+| `BillingCopilotTests` | 33 | The guard clamping hostile planner output, then both golden cases still firing; safe failure, audit trail, tenant check |
+| `BillingCopilotWireTests` | 5 | Cross-language contract: a real agent-service response deserializes field for field, and the request serializes to the field names Pydantic expects |
+| `test_billing_copilot.py` (pytest) | 42 | Planner narrowing only, prompt injection with the model complying, tool allow-list, approval gate, one-year cap, model outage, narrator invention |
+| Vitest (web) | 47 | Invoice form validation, payment flow, dynamic form rendering, the copilot tab |
 | flutter_test (mobile) | 26 | Payment screen, receipt viewer, secure storage, My Bills |
 
 ---

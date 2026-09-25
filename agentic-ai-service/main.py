@@ -36,7 +36,10 @@ from schemas.contracts import (  # noqa: E402
 from tools.booking_tools import BookingToolsClient, ToolError  # noqa: E402
 from tools.inventory_tools import InventoryToolsClient  # noqa: E402
 from tools.schedule_tools import ScheduleToolsClient  # noqa: E402
-from agents import schedule_copilot  # noqa: E402
+from agents import billing_planner, schedule_copilot  # noqa: E402
+from schemas.billing_contracts import (  # noqa: E402
+    BillingNarrateRequest, BillingNarrateTrace, BillingPlanRequest, BillingPlanTrace,
+)
 from schemas.schedule_contracts import SchedulePlanRequest, ScheduleTrace  # noqa: E402
 from agents.inventory_agents import (  # noqa: E402
     analyze_inventory_domain, analyze_inventory_health, plan_inventory, recommend_replenishment,
@@ -283,6 +286,85 @@ def plan_schedule(request: SchedulePlanRequest) -> ScheduleTrace:
     logger.info("Schedule Copilot %s finished: %s (%d proposal(s), %d tool call(s))",
                 trace.workflow_id, trace.status,
                 len(trace.action.proposals) if trace.action else 0, len(trace.tool_calls))
+    return trace
+
+
+@app.post("/billing/plan", response_model=BillingPlanTrace, dependencies=[Depends(_require_internal_token)])
+def plan_billing_analysis(request: BillingPlanRequest) -> BillingPlanTrace:
+    """Billing Copilot: turn a manager's objective into a billing analysis request.
+
+    Reads no data at all - no tool client is constructed here, because the
+    planner reasons over the objective text and the tenant's configured
+    thresholds and nothing else. The detection that follows is deterministic
+    C#, which is where the golden cases live and where they stay.
+
+    Always 200 with a full trace: a model outage produces the deterministic
+    plan (`planner.used_fallback`), not an error, because the analysis behind
+    it works either way. Only a malformed request is an HTTP error (422 from
+    FastAPI).
+    """
+    gemini_client.reset_call_log()
+    trace = BillingPlanTrace(
+        workflow_id=str(uuid.uuid4()),
+        objective=request.objective,
+        tenant_id=request.tenant_id,
+        business_type=request.business_type,
+        thresholds=request.thresholds,
+    )
+
+    started = time.monotonic()
+    try:
+        trace.planner = billing_planner.plan(request)
+        ok, error = True, None
+    except Exception as e:  # noqa: BLE001 - recorded, then returned as a safe failure
+        logger.exception("Billing planner %s failed", trace.workflow_id)
+        ok, error = False, str(e)[:200]
+        trace.status = "Failed"
+        trace.error = error
+
+    trace.agent_steps.append(AgentStepRecord(
+        agent="BillingPlannerAgent", duration_ms=int((time.monotonic() - started) * 1000), ok=ok, error=error))
+
+    planner = trace.planner
+    if planner is not None:
+        if planner.used_fallback:
+            trace.warnings.append(
+                "The language model was unavailable, so the deterministic planner read the objective from "
+                "keywords. Detection, thresholds and approvals are unaffected - only the interpretation of the "
+                "sentence is simpler.")
+        if planner.intent.tighten_discount_cap_to is not None:
+            trace.warnings.append(
+                f"The objective asks for a stricter review, so the discount cap is tightened to "
+                f"{planner.intent.tighten_discount_cap_to:g}% for this run "
+                f"(configured cap: {request.thresholds.max_discount_percent:g}%).")
+
+    trace.llm_calls = [LlmCallRecord(**c) for c in gemini_client.drain_call_log()]
+    logger.info("Billing plan %s: %s over %d day(s), fallback=%s",
+                trace.workflow_id,
+                planner.intent.analysis_type if planner else "n/a",
+                planner.intent.days_back if planner else 0,
+                planner.used_fallback if planner else "n/a")
+    return trace
+
+
+@app.post("/billing/narrate", response_model=BillingNarrateTrace, dependencies=[Depends(_require_internal_token)])
+def narrate_billing_findings(request: BillingNarrateRequest) -> BillingNarrateTrace:
+    """The output edge: read the pattern across findings the C# agent already
+    produced. It receives findings, never raw billing data, and cannot change
+    a number or add a finding of its own - a theme citing an unknown anomaly
+    id is dropped."""
+    gemini_client.reset_call_log()
+    trace = BillingNarrateTrace(tenant_id=request.tenant_id)
+    try:
+        trace.narrative = billing_planner.narrate(request)
+        if trace.narrative.used_fallback and request.anomalies:
+            trace.warnings.append(
+                "The language model was unavailable; findings are grouped by type deterministically instead.")
+    except Exception as e:  # noqa: BLE001 - narration is advisory; never fail the analysis over it
+        logger.exception("Billing narration failed")
+        trace.status = "Failed"
+        trace.error = str(e)[:200]
+    trace.llm_calls = [LlmCallRecord(**c) for c in gemini_client.drain_call_log()]
     return trace
 
 

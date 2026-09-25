@@ -30,6 +30,12 @@ public sealed class BillingTestFixture
     public BillingAgentService Agent { get; }
     public PaymentCheckoutService Checkout { get; }
 
+    /// The billing copilot's two model edges, faked. `Copilot` is the same
+    /// agent service with the planner wired in, so a test can compare the
+    /// copilot path against the direct /analyze path it delegates to.
+    public Mock<IBillingPlannerService> Planner { get; } = new();
+    public BillingAgentService Copilot { get; }
+
     public BillingTestFixture()
     {
         Db = TestHelpers.NewInMemoryDb(TenantId);
@@ -66,6 +72,11 @@ public sealed class BillingTestFixture
         Settings = new BillingSettingsService(Db, new PlatformSecretProtector(config), processors);
         Reports = new BillingReportService(Db);
         Agent = new BillingAgentService(Db, Approvals);
+        Copilot = new BillingAgentService(Db, Approvals, Planner.Object);
+        // Narration is advisory, so the default is the honest "the model was
+        // not available" answer. Tests that care override it.
+        Planner.Setup(p => p.NarrateAsync(It.IsAny<BillingNarrateServiceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BillingNarrativeResult.Failed("No narrator in tests."));
         Checkout = new PaymentCheckoutService(Db, processors, Settings, Billing, NullLogger<PaymentCheckoutService>.Instance);
     }
 
