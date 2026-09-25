@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <title>Spice Garden Restaurant</title>
+  <rect width="120" height="120" rx="24" fill="#B91C1C"/>
+  <path d="M60 22c-14 12-22 24-22 38a22 22 0 0 0 44 0c0-14-8-26-22-38z" fill="#F59E0B"/>
+  <path d="M60 36c-8 8-13 16-13 25a13 13 0 0 0 26 0c0-9-5-17-13-25z" fill="#FDE68A"/>
+  <text x="60" y="104" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="800" fill="#fff" letter-spacing="1">SPICE GARDEN</text>
+</svg>

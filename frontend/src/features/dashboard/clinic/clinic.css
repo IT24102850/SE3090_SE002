@@ -1,0 +1,168 @@
+/* Clinic operations dashboard.
+   Colour and type come from shared/style/tokens.css; this file only lays
+   the panels out and defines the two chart series colours, which are read
+   by JS (recharts wants literal strings) and validated with the dataviz
+   palette checker for both surfaces: #3366E8/#15803D on white, and
+   #3B82F6/#16A34A on the dark raised surface. */
+
+:root {
+  --clinic-chart-a: #3366E8;
+  --clinic-chart-b: #15803D;
+}
+:root[data-theme="dark"] {
+  --clinic-chart-a: #3B82F6;
+  --clinic-chart-b: #16A34A;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --clinic-chart-a: #3B82F6;
+    --clinic-chart-b: #16A34A;
+  }
+}
+
+.clinic-dashboard { display: grid; gap: 18px; }
+
+/* ── Hero ────────────────────────────────────────────────────────────── */
+.clinic-hero-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; justify-content: flex-end; }
+.clinic-hero-actions .btn { min-height: 38px; }
+.clinic-hero-actions .btn-secondary { background: rgba(255,255,255,.16); color: #fff; border-color: rgba(255,255,255,.35); backdrop-filter: blur(10px); }
+.clinic-hero-actions .btn-secondary:hover { background: rgba(255,255,255,.26); }
+.clinic-hero-live { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; color: rgba(255,255,255,.82); font-size: .74rem; }
+.clinic-hero-live i { width: 8px; height: 8px; border-radius: 50%; background: #4ADE80; box-shadow: 0 0 0 4px rgba(74,222,128,.25); animation: clinic-pulse 1.8s ease-in-out infinite; }
+@keyframes clinic-pulse { 0%, 100% { box-shadow: 0 0 0 3px rgba(74,222,128,.28); } 50% { box-shadow: 0 0 0 7px rgba(74,222,128,.08); } }
+
+/* ── Alerts ─────────────────────────────────────────────────────────── */
+.clinic-alerts { display: grid; gap: 10px; }
+.clinic-alert { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center; padding: 12px 16px; border: 1px solid var(--color-border); border-left-width: 4px; border-radius: 14px; background: var(--color-surface); text-decoration: none; color: inherit; transition: transform .16s ease, box-shadow .16s ease; }
+.clinic-alert:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.clinic-alert-critical { border-left-color: var(--color-critical); }
+.clinic-alert-warning { border-left-color: var(--color-warning); }
+.clinic-alert-info { border-left-color: var(--color-primary); }
+.clinic-alert-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; font-size: 1rem; font-weight: 900; }
+.clinic-alert-critical .clinic-alert-icon { color: var(--color-critical); background: var(--color-critical-soft); }
+.clinic-alert-warning .clinic-alert-icon { color: var(--color-warning); background: var(--color-warning-soft); }
+.clinic-alert-info .clinic-alert-icon { color: var(--color-primary); background: var(--color-primary-soft); }
+.clinic-alert-title { margin: 0; font-size: .9rem; font-weight: 700; color: var(--color-text); }
+.clinic-alert-detail { margin: 2px 0 0; font-size: .78rem; color: var(--color-text-secondary); }
+.clinic-alert-count { font-size: 1.3rem; font-weight: 800; letter-spacing: -.03em; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.clinic-alerts-clear { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 1px dashed var(--color-border-strong); border-radius: 14px; color: var(--color-text-secondary); font-size: .82rem; }
+.clinic-alerts-clear b { color: var(--color-good); }
+
+/* ── Filter bar ─────────────────────────────────────────────────────── */
+.clinic-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.clinic-filters .input { min-height: 38px; max-width: 200px; font-size: .82rem; }
+.clinic-presets { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--color-border); border-radius: 11px; background: var(--color-surface); }
+.clinic-presets button { min-height: 30px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: var(--color-text-secondary); font: 700 .74rem/1 inherit; cursor: pointer; }
+.clinic-presets button.active { color: var(--color-primary-contrast); background: var(--color-primary); }
+.clinic-presets button:hover:not(.active) { background: var(--color-primary-soft); color: var(--color-text); }
+.clinic-filter-label { font-size: .66rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-muted); }
+.clinic-filters-spacer { flex: 1 1 auto; }
+.clinic-active-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.clinic-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border: 1px solid var(--color-border-strong); border-radius: 999px; background: var(--color-primary-soft); color: var(--color-text); font-size: .74rem; font-weight: 600; }
+.clinic-chip button { display: grid; place-items: center; width: 18px; height: 18px; border: 0; border-radius: 50%; background: transparent; color: var(--color-text-muted); font-size: .9rem; line-height: 1; cursor: pointer; }
+.clinic-chip button:hover { background: var(--color-critical-soft); color: var(--color-critical); }
+
+/* ── Widget grid ────────────────────────────────────────────────────── */
+.clinic-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.clinic-widget { min-width: 0; }
+.clinic-widget-wide { grid-column: 1 / -1; }
+.clinic-widget-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.clinic-widget-head .chart-title { margin-bottom: 2px; }
+.clinic-widget-head .chart-subtitle { margin-bottom: 0; }
+.clinic-widget-tools { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+/* Clickable bars cross-filter the rest of the dashboard. */
+.clinic-bars { display: grid; gap: 10px; }
+.clinic-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; border-radius: 6px; }
+.clinic-bar[disabled] { cursor: default; }
+.clinic-bar-label { font-size: .8rem; font-weight: 600; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clinic-bar-value { font-size: .8rem; font-weight: 700; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.clinic-bar-track { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--color-neutral-soft); overflow: hidden; }
+.clinic-bar-fill { height: 100%; border-radius: 4px; background: var(--clinic-chart-a); transition: width .3s ease; }
+.clinic-bar.is-active .clinic-bar-label { color: var(--color-primary); }
+.clinic-bar.is-active .clinic-bar-fill { background: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary-soft); }
+.clinic-bar:hover:not([disabled]) .clinic-bar-label { color: var(--color-text); }
+.clinic-bar:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.clinic-bar-hint { margin: 10px 0 0; font-size: .72rem; color: var(--color-text-muted); }
+
+/* ── Patient flow ───────────────────────────────────────────────────── */
+.clinic-stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.clinic-stage { padding: 12px 14px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface-muted); }
+.clinic-stage-label { display: flex; align-items: center; gap: 6px; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-muted); }
+.clinic-stage-label i { width: 8px; height: 8px; border-radius: 50%; }
+.clinic-stage-value { margin-top: 6px; font-size: 1.5rem; font-weight: 800; letter-spacing: -.04em; line-height: 1; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.clinic-stage-sub { margin-top: 4px; font-size: .72rem; color: var(--color-text-secondary); }
+.clinic-stage-alert { border-color: rgba(185, 28, 28, .35); background: var(--color-critical-soft); }
+.clinic-stage-alert .clinic-stage-value { color: var(--color-critical); }
+
+.clinic-flow-meta { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; font-size: .78rem; color: var(--color-text-secondary); }
+.clinic-flow-meta b { color: var(--color-text); }
+
+.clinic-queue-table td, .clinic-queue-table th { vertical-align: middle; }
+.clinic-queue-patient { display: flex; flex-direction: column; gap: 1px; }
+.clinic-queue-patient strong { font-size: .86rem; color: var(--color-text); }
+.clinic-queue-patient span { font-size: .72rem; color: var(--color-text-muted); }
+.clinic-queue-treatment { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; }
+.clinic-queue-treatment i { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.clinic-queue-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.clinic-queue-actions .btn { min-height: 30px; padding: 0 10px; font-size: .72rem; }
+.clinic-wait { font-variant-numeric: tabular-nums; font-weight: 700; }
+.clinic-wait-long { color: var(--color-critical); }
+.clinic-overdue { color: var(--color-warning); font-weight: 700; font-size: .72rem; }
+.clinic-queue-row-done td { opacity: .65; }
+.clinic-queue-filter { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); }
+.clinic-queue-filter button { min-height: 28px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--color-text-secondary); font: 700 .72rem/1 inherit; cursor: pointer; }
+.clinic-queue-filter button.active { background: var(--color-primary-soft); color: var(--color-primary); }
+
+/* ── Doctor table ───────────────────────────────────────────────────── */
+.clinic-doctor-row { cursor: pointer; }
+.clinic-doctor-row.is-active td { background: var(--color-primary-soft); }
+.clinic-doctor-name { font-weight: 700; color: var(--color-text); }
+.clinic-doctor-sub { display: block; font-size: .72rem; color: var(--color-text-muted); }
+.clinic-mini-track { display: inline-block; width: 70px; height: 6px; margin-right: 8px; border-radius: 3px; background: var(--color-neutral-soft); vertical-align: middle; overflow: hidden; }
+.clinic-mini-fill { height: 100%; border-radius: 3px; background: var(--clinic-chart-b); }
+
+/* ── Reminders ──────────────────────────────────────────────────────── */
+.clinic-reminders { display: grid; grid-template-columns: 3fr 2fr; gap: 18px; }
+.clinic-reminder-list, .clinic-followup-list { display: grid; gap: 8px; }
+.clinic-reminder { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface-muted); }
+.clinic-reminder-main { min-width: 0; }
+.clinic-reminder-main strong { display: block; font-size: .84rem; color: var(--color-text); }
+.clinic-reminder-main span { display: block; font-size: .72rem; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clinic-reminder-side { display: flex; align-items: center; gap: 8px; }
+.clinic-reminder .btn { min-height: 30px; padding: 0 10px; font-size: .72rem; }
+.clinic-subhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 10px; font-size: .78rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted); }
+
+/* ── Customise panel ────────────────────────────────────────────────── */
+.clinic-customise { position: relative; }
+.clinic-customise-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: min(340px, calc(100vw - 32px)); padding: 12px; border: 1px solid var(--color-border-strong); border-radius: 16px; background: var(--color-surface-raised); box-shadow: var(--shadow-lg); color: var(--color-text); }
+.clinic-customise-panel h4 { margin: 4px 6px 10px; font-size: .8rem; }
+.clinic-customise-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 6px; border-radius: 10px; }
+.clinic-customise-row:hover { background: var(--color-primary-soft); }
+.clinic-customise-row label { font-size: .8rem; font-weight: 600; cursor: pointer; }
+.clinic-customise-row small { display: block; font-size: .68rem; font-weight: 500; color: var(--color-text-muted); }
+.clinic-customise-row .clinic-reorder { display: flex; gap: 2px; }
+.clinic-reorder button { width: 26px; height: 26px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-surface); color: var(--color-text-secondary); cursor: pointer; font-size: .7rem; }
+.clinic-reorder button:disabled { opacity: .35; cursor: default; }
+.clinic-customise-foot { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border); }
+.clinic-scrim { position: fixed; inset: 0; z-index: 59; border: 0; background: transparent; cursor: default; }
+
+.clinic-empty { padding: 26px 16px; text-align: center; color: var(--color-text-muted); font-size: .82rem; }
+.clinic-note { margin: 8px 0 0; font-size: .72rem; color: var(--color-text-muted); }
+
+/* Chart legend chips - text in text tokens, swatch carries the identity. */
+.clinic-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+.clinic-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; color: var(--color-text-secondary); }
+.clinic-legend i { width: 10px; height: 3px; border-radius: 2px; }
+
+@media (max-width: 1080px) {
+  .clinic-grid { grid-template-columns: 1fr; }
+  .clinic-reminders { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .clinic-filters .input { max-width: none; flex: 1 1 140px; }
+  .clinic-queue-actions { justify-content: flex-start; }
+}
+
+/* Visually hidden severity word so a screen reader hears it before the title. */
+.clinic-dashboard .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

@@ -1,0 +1,57 @@
+# Render Blueprint - deploys the ASP.NET Core backend and Python agent service.
+# Postgres is already hosted on Supabase (see backend user-secrets), so no
+# Render-managed database is declared here.
+#
+# One-time manual step (Render's CLI can't create new services, only manage
+# existing ones): Render Dashboard -> New + -> Blueprint -> connect this
+# repo -> it detects this file -> fill in the `sync: false` values below ->
+# Deploy.
+services:
+  - type: web
+    name: sme-backend
+    runtime: docker
+    rootDir: backend/SmeBackend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ConnectionStrings__DefaultConnection
+        sync: false
+      - key: Jwt__Key
+        sync: false
+      - key: Jwt__Issuer
+        value: SmeBackend
+      - key: Jwt__Audience
+        value: SmeBackendUsers
+      - key: AgentService__BaseUrl
+        sync: false
+      - key: AgentService__InternalToken
+        sync: false
+      - key: Cloudinary__CloudName
+        sync: false
+      - key: Cloudinary__ApiKey
+        sync: false
+      - key: Cloudinary__ApiSecret
+        sync: false
+
+  - type: web
+    name: sme-agent-service
+    runtime: python
+    rootDir: agentic-ai-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AGENT_SERVICE_INTERNAL_TOKEN
+        sync: false
+      - key: BACKEND_API_BASE_URL
+        sync: false
+      - key: GEMINI_MODEL_DEFAULT
+        value: gemini-flash-latest
+      - key: GEMINI_MODEL_PLANNER
+        value: gemini-flash-latest
+      - key: LLM_PROVIDER
+        value: gemini
