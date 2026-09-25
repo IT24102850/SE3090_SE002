@@ -32,7 +32,7 @@ const CalendarDashboardPage = lazy(() => import('./features/booking/CalendarDash
 const AvailabilitySlotsPage = lazy(() => import('./features/booking/AvailabilitySlotsPage'));
 const RecurringSeriesPage = lazy(() => import('./features/booking/RecurringSeriesPage'));
 const ReportsPage = lazy(() => import('./features/booking/ReportsPage'));
-const AgentPlannerPage = lazy(() => import('./features/booking/AgentPlannerPage'));
+const ScheduleCopilotPage = lazy(() => import('./features/booking/copilot/ScheduleCopilotPage'));
 const BookingTypeManagementPage = lazy(() => import('./features/booking/BookingTypeManagementPage'));
 const MySchedulePage = lazy(() => import('./features/staff/MySchedulePage'));
 const StaffManagementPage = lazy(() => import('./features/staff/StaffManagementPage'));
@@ -250,7 +250,7 @@ function App() {
                 path="/planner"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
-                    <Shell><AgentPlannerPage /></Shell>
+                    <Shell><ScheduleCopilotPage /></Shell>
                   </ProtectedRoute>
                 }
               />

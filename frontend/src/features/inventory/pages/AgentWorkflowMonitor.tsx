@@ -298,8 +298,8 @@ export function AgentWorkflowMonitorPage() {
               <div className="workflow-empty-content">
                 <div className="workflow-empty-icon">✦</div>
                 <h3>No workflows match these filters</h3>
-                <p className="hint">{search || statusFilter ? 'Try clearing a filter or refreshing the monitor.' : 'Start with the AI Planner to create a schedule proposal for this workspace.'}</p>
-                <Link className="btn btn-primary" to="/planner">Open AI Planner</Link>
+                <p className="hint">{search || statusFilter ? 'Try clearing a filter or refreshing the monitor.' : 'Start with Schedule Copilot to create a schedule proposal for this workspace.'}</p>
+                <Link className="btn btn-primary" to="/planner">Open Schedule Copilot</Link>
               </div>
             </div>
           ) : (

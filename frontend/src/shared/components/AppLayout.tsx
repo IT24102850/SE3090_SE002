@@ -68,7 +68,7 @@ const NAV_SECTIONS: NavSection[] = [
       { path: '/recurring', label: 'Recurring Series', icon: '🔁', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/booking-types', label: 'Booking Types', icon: '🏷️', roles: ['Admin', 'Manager'] },
       { path: '/resources', label: 'Resource Manager', icon: '🏢', roles: ['Admin', 'Manager'] },
-      { path: '/planner', label: 'AI Planner', icon: '🤖', roles: ['Admin', 'Manager'] },
+      { path: '/planner', label: 'Schedule Copilot', icon: '✦', roles: ['Admin', 'Manager'] },
       { path: '/agent-workflows', label: 'Agent Workflows', icon: '🛰️', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/reports', label: 'Reports', icon: '📈', roles: ['Admin', 'Manager'] },
       { path: '/my-schedule', label: 'My Schedule', icon: '🩺', roles: ['Staff'] },

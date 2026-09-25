@@ -452,11 +452,59 @@ export interface WorkflowStep {
   parameters: Record<string, unknown>;
 }
 
+/* The auditable execution trace the agent service returns and ASP.NET Core
+ * stores on the workflow. Serialized as JSON strings on the entity, so the
+ * shapes below describe what parsing them yields. */
+export interface AgentStepRecord {
+  agent: string;
+  durationMs: number;
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface ToolCallRecord {
+  tool: string;
+  agent: string;
+  durationMs: number;
+  success: boolean;
+  error?: string | null;
+}
+
+/* One attempt against one model. Several entries for a single step is the
+ * retry/fallback layer working, not a fault — which is why the attempt
+ * number is kept rather than collapsed. */
+export interface LlmCallRecord {
+  model: string;
+  attempt: number;
+  durationMs: number;
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface ExecutionTrace {
+  agentSteps?: AgentStepRecord[];
+  toolCalls?: ToolCallRecord[];
+  llmCalls?: LlmCallRecord[];
+  plannerConfidence?: number | null;
+  predictedConflicts?: { kind: string; description: string; likelihood: number }[];
+  rankingCriteria?: string[];
+  error?: string | null;
+}
+
+export interface ValidationResultsSummary {
+  isAllowed?: boolean | null;
+  requiresHumanApproval?: boolean | null;
+  rejectionReason?: string | null;
+  notes?: string[];
+}
+
 export interface AgentWorkflow {
   id: string;
   tenantId: string;
   objective: string;
   planJson?: string | null;
+  toolResultsJson?: string | null;
+  validationResults?: string | null;
   status: string;
   approvalStatus: string;
   approvedBy?: string | null;

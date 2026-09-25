@@ -132,7 +132,7 @@ const List<OwnerSection> ownerSections = [
         label: 'Inventory Analytics', icon: Icons.stacked_line_chart_outlined, roles: _adminManager, build: InventoryAnalyticsScreen.new),
   ]),
   OwnerSection(label: 'Automation', items: [
-    OwnerDestination(label: 'AI Planner', icon: Icons.auto_awesome_outlined, roles: _adminManager, build: AiPlannerAdminScreen.new),
+    OwnerDestination(label: 'Schedule Copilot', icon: Icons.auto_awesome_outlined, roles: _adminManager, build: AiPlannerAdminScreen.new),
     OwnerDestination(
         label: 'Agent Workflows', icon: Icons.satellite_alt_outlined, roles: _staffUp, build: AgentWorkflowsScreen.new),
   ]),

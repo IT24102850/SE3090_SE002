@@ -34,7 +34,7 @@ void main() {
     'Low Stock Alerts': ['Admin', 'Manager', 'Staff'],
     'Branch Overview': ['Admin', 'Manager', 'Staff'],
     'Inventory Analytics': ['Admin', 'Manager'],
-    'AI Planner': ['Admin', 'Manager'],
+    'Schedule Copilot': ['Admin', 'Manager'],
     'Agent Workflows': ['Admin', 'Manager', 'Staff'],
     'Business Profile': ['Admin', 'Manager'],
     'Business Settings': ['Admin'],

@@ -810,6 +810,25 @@ export const bookingApi = createApi({
       query: (body) => ({ url: '/agent/workflow/propose', method: 'POST', body }),
       invalidatesTags: [{ type: 'Workflow', id: 'LIST' }],
     }),
+    // Schedule Copilot (spec 2.7): runs the four-agent workflow and returns
+    // the stored workflow together with the agents' full trace.
+    planSchedule: builder.mutation<
+      { workflow: AgentWorkflow; trace: unknown },
+      {
+        tenantId: string;
+        objective: string;
+        bookingTypeId: string;
+        dateFrom: string;
+        dateTo: string;
+        targetCount: number;
+        resourceIds?: string[];
+        priorityRules?: string[];
+        branchId?: string;
+      }
+    >({
+      query: (body) => ({ url: '/agent/workflow/plan-schedule', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Workflow', id: 'LIST' }, ...NOTIFICATION_TAGS],
+    }),
     approveWorkflow: builder.mutation<{ message: string }, string>({
       query: (id) => ({ url: `/agent/workflow/${id}/approve`, method: 'POST' }),
       invalidatesTags: (_r, _e, id) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }],
@@ -945,6 +964,7 @@ export const {
   useGetStaffUsersQuery,
   useGetWorkflowsQuery,
   useProposeScheduleMutation,
+  usePlanScheduleMutation,
   useApproveWorkflowMutation,
   useRejectWorkflowMutation,
   useApplyWorkflowMutation,

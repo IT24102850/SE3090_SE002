@@ -9,7 +9,15 @@
 - **Backend:** ASP.NET Core 8 Web API, Entity Framework Core, PostgreSQL
 - **Frontend:** React 19, Vite, Redux Toolkit, Tailwind CSS
 - **Mobile:** Flutter, Dart, Riverpod
-- **Agentic AI:** LangGraph (Python), FastAPI, Ollama (llama3)
+- **Agentic AI:** FastAPI (Python) with a custom four-agent orchestration
+  (Planner -> Domain Analysis -> Action/Tool -> Validation/Safety). Gemini is
+  the default model provider, with an Ollama provider behind `LLM_PROVIDER`.
+  Not LangGraph: the pipeline is a fixed, auditable sequence with a
+  deterministic (non-LLM) safety gate, so a graph runtime would add a
+  dependency without adding control. See `agentic-ai-service/README.md`.
+  Two assessed workflows run on it: **Schedule Copilot** (staff objective → plan →
+  validated proposal → manager approval → apply; React and Flutter) and customer
+  **find-and-book** (Flutter request → agents → approval in React → status back to Flutter).
 - **Database:** PostgreSQL (Supabase/Railway)
 - **Deployment:** Railway (API + DB), Vercel (React), Local APK (Flutter)
 
