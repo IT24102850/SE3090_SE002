@@ -15,8 +15,7 @@ class ApiService {
   static String get baseUrl {
     const fromEnv = String.fromEnvironment('API_BASE_URL');
     if (fromEnv.isNotEmpty) return fromEnv;
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5298/api';
-    return 'http://localhost:5298/api';
+    return 'https://sef-project-production.up.railway.app/api';
   }
 
   static final Dio _dio = Dio(
