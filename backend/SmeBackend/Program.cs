@@ -73,9 +73,24 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// Open-Meteo: no API key, so the forecast works from a clean clone. A short
+// timeout keeps an advisory call from holding up the screen that asked for it.
+builder.Services.AddHttpClient(SmeBackend.Services.OpenMeteoForecastService.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(8));
+builder.Services.AddScoped<SmeBackend.Services.IWeatherForecastService,
+    SmeBackend.Services.OpenMeteoForecastService>();
+
+// Live notifications. The stream is a singleton because connections outlive
+// any one request; the interceptor publishes a Notification row the moment its
+// transaction commits, so every site that raises one is covered without having
+// to remember to announce it.
+builder.Services.AddSingleton<SmeBackend.Services.INotificationStream, SmeBackend.Services.NotificationStream>();
+builder.Services.AddSingleton<SmeBackend.Services.NotificationPublishInterceptor>();
+
 // PostgreSQL
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+           .AddInterceptors(sp.GetRequiredService<SmeBackend.Services.NotificationPublishInterceptor>()));
 
 // JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

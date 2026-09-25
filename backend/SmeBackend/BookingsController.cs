@@ -1214,22 +1214,37 @@ public class BookingsController : ControllerBase
 
         var channel = string.IsNullOrWhiteSpace(dto?.Channel) ? "Email" : dto!.Channel!;
 
-        await _reminderSender.SendAsync(booking, channel);
+        var result = await _reminderSender.SendAsync(booking, channel);
 
         var reminder = new BookingReminder
         {
             BookingId = id,
             Channel = channel,
-            Status = "Sent",
-            SentAt = DateTime.UtcNow
+            Status = result.Status,
+            SentAt = result.Status == "Sent" ? DateTime.UtcNow : null
         };
 
         _db.BookingReminders.Add(reminder);
-        booking.ReminderSent = true;
-        booking.UpdatedAt = DateTime.UtcNow;
+        if (result.DeliveredOrSimulated)
+        {
+            booking.ReminderSent = true;
+            booking.UpdatedAt = DateTime.UtcNow;
+        }
         await _db.SaveChangesAsync();
 
-        return Ok(new { message = $"Reminder sent via {channel}.", reminder.Id, reminder.SentAt });
+        // Say what really happened. "Sent" when nothing left the server is the
+        // one answer that makes the whole reminder feature untrustworthy.
+        var message = result.Status switch
+        {
+            "Sent" => $"Reminder sent via {channel}.",
+            "Simulated" => $"{channel} is not configured on this server, so the reminder was logged, not sent.",
+            "Skipped" => result.Detail ?? "There was nobody to send this reminder to.",
+            _ => result.Detail ?? $"The {channel} reminder could not be sent.",
+        };
+
+        return result.Status is "Sent" or "Simulated"
+            ? Ok(new { message, reminder.Id, reminder.Status, reminder.SentAt })
+            : StatusCode(StatusCodes.Status502BadGateway, new { message, reminder.Id, reminder.Status });
     }
 
     // ── POST /api/bookings/bulk-schedule ───────────────────────
