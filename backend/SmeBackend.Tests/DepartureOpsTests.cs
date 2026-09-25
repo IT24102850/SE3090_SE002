@@ -29,7 +29,12 @@ public class DepartureOpsTests
     /// A tenant with one 120-seat vessel and one scheduled departure.
     private static Fixture NewFixture(int capacity = 120, DateTime? departsAt = null)
     {
-        var db = TestHelpers.NewInMemoryDb();
+        // Populate the ambient tenant exactly as TenantMiddleware does in
+        // production. Resource, BookingType and User all carry AppDbContext's
+        // TenantId == CurrentTenantId query filter, so a context built without
+        // it is a state the running app never has: Include(d => d.Resource)
+        // silently drops the row and the controller answers NotFound.
+        var db = TestHelpers.NewInMemoryDb(TenantId);
 
         db.Tenants.Add(new Tenant
         {

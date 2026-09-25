@@ -162,8 +162,13 @@ public class DeparturesController : ControllerBase
     {
         if (!TryTenant(out var tenantId)) return Unauthorized();
 
-        var resource = await _db.Resources.AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == dto.ResourceId && r.TenantId == tenantId);
+        // Resource carries AppDbContext's ambient-tenant query filter, but this
+        // controller belongs to the half of the schema that scopes off the JWT's
+        // tenantId claim directly (see Departure's doc-comment). Relying on the
+        // ambient filter here silently returns nothing whenever TenantContext was
+        // never populated, so the scope is stated explicitly instead.
+        var resource = await _db.Resources.AsNoTracking().IgnoreQueryFilters()
+            .FirstOrDefaultAsync(r => r.Id == dto.ResourceId && r.TenantId == tenantId && r.DeletedAt == null);
         if (resource == null) return NotFound(new { message = "Vessel not found." });
 
         var scheduled = DateTimeUtil.AsUtc(dto.ScheduledDeparture);
@@ -533,8 +538,13 @@ public class DeparturesController : ControllerBase
         expiringWithinDays = Math.Clamp(expiringWithinDays, 1, 365);
         var horizon = DateTime.UtcNow.Date.AddDays(expiringWithinDays);
 
-        var vessels = await _db.Resources.AsNoTracking()
-            .Where(r => r.TenantId == tenantId && r.Category == ResourceCategory.Vehicle)
+        // Resource carries AppDbContext's ambient-tenant query filter, but this
+        // controller belongs to the half of the schema that scopes off the JWT's
+        // tenantId claim directly (see Departure's doc-comment). Relying on the
+        // ambient filter here silently returns nothing whenever TenantContext was
+        // never populated, so the scope is stated explicitly instead.
+        var vessels = await _db.Resources.AsNoTracking().IgnoreQueryFilters()
+            .Where(r => r.TenantId == tenantId && r.Category == ResourceCategory.Vehicle && r.DeletedAt == null)
             .ToListAsync();
 
         // Equipment is tenant-wide, not per-vessel (EquipmentItem has no

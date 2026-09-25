@@ -153,7 +153,7 @@ export default function WhaleWatchingDashboard({
                     the rest of the strip is deliberately about today. */}
                 <div className="hero-figure">
                   {kpisLoading || boardLoading ? '…'
-                    : horizon > 1 ? (board?.today.length ?? 0) + (board?.upcoming.length ?? 0)
+                    : horizon > 1 ? (board?.today?.length ?? 0) + (board?.upcoming?.length ?? 0)
                     : (kpis?.departuresToday ?? 0)}
                 </div>
                 <p className="hero-sub">
