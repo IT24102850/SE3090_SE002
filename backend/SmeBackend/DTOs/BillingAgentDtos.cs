@@ -54,6 +54,22 @@ public record BillingAnalysisRequest(
     decimal? DealAmount = null
 );
 
+/// Billing Copilot input: a plain-English objective instead of a filled-in
+/// form. The planner turns it into the BillingAnalysisRequest above; the
+/// thresholds stay the caller's to set, because a model is never allowed to.
+public record PlanAnalysisRequest(
+    [Required]
+    [MinLength(3)]
+    [MaxLength(500)]
+    string Objective,
+
+    // Must match the caller's token when given - as with a direct analysis,
+    // the agent never reads across tenants.
+    Guid? TenantId = null,
+
+    ThresholdConfig? Thresholds = null
+);
+
 public record Anomaly(
     string Id,
     // excessive_discount | tax_out_of_range | duplicate_invoice |

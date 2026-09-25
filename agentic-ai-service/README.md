@@ -28,6 +28,8 @@ Flutter app → ASP.NET Core (POST /api/agent/find-and-book)
          POST /bookings)
 ```
 
+The billing copilot has two internal endpoints, `POST /billing/plan` and `POST /billing/narrate`. Unlike the other flows, the agent they serve does not live here: billing's Domain Analysis Agent is deterministic C#, deliberately, because its golden cases must hold on every run. These two routes are the language-model **edges** around it — one turning a manager's sentence into the analysis request, one reading the pattern back across the findings — and neither reads billing data or can move a threshold. See the Billing Copilot section below.
+
 The inventory assistant has its own internal endpoint, `POST /inventory/plan`. The Planner interprets the request, Domain Analysis uses caller-authorized inventory and movement tools, Action/Tool computes replenishment suggestions from the returned data, and the deterministic Validation/Safety step rejects invalid suggestions. This flow is read-only: a user reviews a suggested quantity and explicitly creates any purchase order through the existing ASP.NET Core purchase-order screen. It does not edit stock, place an order, or let the model invent the stock values used for its calculations.
 
 `/plan` runs all four agents **synchronously** and returns one complete trace. `/workflow/{id}/trace`, `/approve`, `/reject` operate on an **in-memory** store keyed by that run's `workflow_id` — useful for testing/introspecting this service in isolation, but they are **not** the production approval path. Production approval always goes through ASP.NET Core's own `/api/agent/workflow/{id}/approve` / `/reject` / `/apply` (already built, backed by Postgres) — React and the customer's phone never talk to this service directly.
@@ -81,7 +83,7 @@ All tests run with the real Gemini SDK **mocked out** at the `gemini_client` bou
 
 ## Model IDs
 
-The inventory planner defaults to `gemini-3.5-flash-lite` and can be overridden with `GEMINI_MODEL_INVENTORY`. Other agents use `GEMINI_MODEL_DEFAULT` (default `gemini-3.5-flash`); the booking planner can also be overridden with `GEMINI_MODEL_PLANNER`.
+The inventory planner defaults to `gemini-3.5-flash-lite` and can be overridden with `GEMINI_MODEL_INVENTORY`. Other agents use `GEMINI_MODEL_DEFAULT` (default `gemini-3.5-flash`); the booking planner can also be overridden with `GEMINI_MODEL_PLANNER`, and the billing copilot's two edges with `GEMINI_MODEL_BILLING_PLANNER` and `GEMINI_MODEL_BILLING_NARRATOR`.
 
 **Model availability is per-key and changes.** Measured against a key issued 2026-09-24:
 
@@ -138,6 +140,79 @@ that failed, cannot be applied.
 (`tests/schedule_fakes.py`): both spec golden cases, approval by count and by revenue, currency conversion, the
 daily cap, lunch, time-of-day and weekday intent, load balancing, no-show avoidance, a slot stolen mid-workflow,
 prompt injection, invalid model plans, model outage, tool permissions, backend outage and endpoint security.
+
+## Billing Copilot (`POST /billing/plan`, `POST /billing/narrate`) — the two model edges
+
+Assignment component 3.7's Domain Analysis Agent is **not** here. It is deterministic C#
+(`BillingDomainAnalysisAgent.cs`), and it stays that way: its golden case is *"invoice with a 50% discount
+on a $10 item MUST flag for review"*, and MUST means every run, forever. Subtotal arithmetic, the
+discount-cap comparison and the excess calculation never go near a model — a fraud check that flags
+differently on Tuesday is worse than no fraud check.
+
+What this service adds is a model at each **edge** of that agent:
+
+| Route | Module | Job | Fallback |
+| --- | --- | --- | --- |
+| `POST /billing/plan` | `agents/billing_planner.py` → `plan()` | Turns *"check last quarter for discount abuse"* into `{ analysis_type, days_back, thresholds }` — the request `/api/billing-agent/analyze` already takes — plus a delegated plan and predicted findings | Keyword planner, same contract, `used_fallback: true`, confidence 0.6 |
+| `POST /billing/narrate` | same module → `narrate()` | Reads the pattern *across* the anomalies the C# agent raised ("three breaches, one staff member, one week") | Grouping by anomaly type |
+
+Called only by ASP.NET Core (`POST /api/billing-agent/plan-analysis`, ManagerPlus), used by the React
+**Billing agent → Ask the copilot** tab. Contract: `schemas/billing_contracts.py`.
+
+**The planner can only narrow.** It may pick one of the six existing analysis types, shorten the window, and
+**tighten** the discount cap. It cannot invent an analysis type or a tool (both are `Literal`s, so an invented
+one fails schema validation), exceed the 366-day data cap, name a tool the chosen analysis type does not run,
+**loosen any threshold**, or approve anything. The two approval amounts are not reachable at all: there is no
+field for them in `BillingIntent` or on the wire, which is a stronger guarantee than a prompt rule.
+Every plan ends with a step assigned to `BillingApprovalGate`, appended if the model left it out.
+
+**The rule is enforced twice, on purpose.** `_sanitise` clamps the model's output here, and
+`BillingPlanGuard` in ASP.NET Core clamps it again on arrival, because that is a separate process reached
+over HTTP: "no model output can loosen a billing threshold" has to hold even if this service is
+misconfigured, rolled back, or swapped out. Everything the guard had to correct is returned to the manager
+in `plannerWarnings` rather than silently fixed.
+
+**The narrator cannot invent a finding.** A theme is dropped unless the anomaly ids it cites were passed in,
+so the narrative can only ever be a re-reading of the detector's own output. It receives findings, never raw
+billing data, and with zero anomalies it does not call the model at all.
+
+**Re-capturing the wire fixture.** `SmeBackend.Tests/Billing/BillingCopilotWireTests.cs` holds a real response
+from each route, so a rename on either side of the HTTP boundary fails a test instead of quietly deserializing
+to null. **If you change `schemas/billing_contracts.py`, re-capture it:**
+
+```bash
+# from agentic-ai-service/, no API key needed - the model is forced unavailable
+python - <<'EOF'
+import json, os
+os.environ.setdefault("AGENT_SERVICE_INTERNAL_TOKEN", "test-internal-token")
+os.environ.setdefault("GEMINI_API_KEY", "unused")
+from fastapi.testclient import TestClient
+from gemini_client import AgentSafeFailure
+from agents import billing_planner
+import main
+billing_planner.generate_structured = lambda **kw: (_ for _ in ()).throw(AgentSafeFailure("captured offline"))
+c, h = TestClient(main.app), {"Authorization": "Bearer test-internal-token"}
+body = c.post("/billing/plan", headers=h, json={
+    "objective": "Tighten the discount limit to 10% and check last quarter for abuse",
+    "tenant_id": "11111111-1111-1111-1111-111111111111", "business_type": "Clinic", "currency": "LKR",
+    "auth_token": "manager-jwt"}).json()
+# Pin the values that would otherwise churn on every capture.
+body["workflow_id"] = "9c9d5f7a-0000-4000-8000-000000000001"
+body["created_at"] = "2026-09-25T10:00:00Z"
+body["agent_steps"][0]["duration_ms"] = 4
+print(json.dumps(body, indent=2))
+EOF
+```
+
+Paste the result over the `PlanResponse` literal in that test (and the `/billing/narrate` equivalent over
+`NarrateResponse`), then run `dotnet test --filter BillingCopilotWireTests`.
+
+**Tests.** `tests/test_billing_copilot.py`: both spec golden cases held against hostile planner output,
+threshold protection (including a tenant on a stricter cap than the default), prompt injection with the model
+complying and with it switched off, the tool allow-list, the approval gate, the one-year range cap,
+plain-English period mapping, model outage, narrator invention, and endpoint security. The C# half is
+`SmeBackend.Tests/Billing/BillingCopilotTests.cs`, which asserts the golden cases still fire *after* the guard
+has been handed output from a model that was successfully talked into misbehaving.
 
 ## Resilience
 

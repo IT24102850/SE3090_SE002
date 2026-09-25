@@ -9,6 +9,13 @@ namespace SmeBackend.Services.Billing;
 public interface IBillingAgentService
 {
     Task<BillingResult<BillingAnalysisResponse>> AnalyzeAsync(BillingActor actor, BillingAnalysisRequest request, CancellationToken ct = default);
+
+    /// Billing Copilot: plan an analysis from a plain-English objective, run
+    /// it, then read the pattern back over the findings. `callerToken` is the
+    /// manager's own JWT, forwarded to the agent service for symmetry with the
+    /// other two workflows.
+    Task<BillingResult<BillingPlannedAnalysisResponse>> PlanAnalysisAsync(
+        BillingActor actor, PlanAnalysisRequest request, string callerToken, CancellationToken ct = default);
     InvoiceValidationResult ValidateInvoiceDraft(CreateInvoiceRequest draft, ThresholdConfig? thresholds = null);
     Task<IReadOnlyList<BillingWorkflowResponse>> GetWorkflowsAsync(Guid tenantId, string? kind, string? status, int take, CancellationToken ct = default);
     Task<BillingResult<BillingWorkflowResponse>> GetWorkflowAsync(Guid tenantId, Guid id, CancellationToken ct = default);
@@ -30,12 +37,17 @@ public sealed class BillingAgentService : IBillingAgentService
 
     private readonly AppDbContext _db;
     private readonly IBillingApprovalService _approvals;
+    private readonly IBillingPlannerService? _planner;
     private readonly BillingDomainAnalysisAgent _agent = new();
 
-    public BillingAgentService(AppDbContext db, IBillingApprovalService approvals)
+    public BillingAgentService(AppDbContext db, IBillingApprovalService approvals, IBillingPlannerService? planner = null)
     {
         _db = db;
         _approvals = approvals;
+        // Optional: the direct /analyze path is the component's core and must
+        // keep working with no agent service running at all. Only the copilot
+        // needs it.
+        _planner = planner;
     }
 
     public async Task<BillingResult<BillingAnalysisResponse>> AnalyzeAsync(BillingActor actor, BillingAnalysisRequest request, CancellationToken ct = default)
@@ -120,6 +132,129 @@ public sealed class BillingAgentService : IBillingAgentService
         return BillingResult<BillingAnalysisResponse>.Ok(new BillingAnalysisResponse(workflow.Id, type, range,
             result.Anomalies, result.Insights, result.RecommendedActions, result.ConfidenceScore, result.ToolCalls, approvalIds));
     }
+
+    public async Task<BillingResult<BillingPlannedAnalysisResponse>> PlanAnalysisAsync(
+        BillingActor actor, PlanAnalysisRequest request, string callerToken, CancellationToken ct = default)
+    {
+        if (_planner is null)
+            return BillingResult<BillingPlannedAnalysisResponse>.Unavailable("The billing copilot is not configured on this server.");
+        if (request.TenantId is { } requested && requested != actor.TenantId)
+            return BillingResult<BillingPlannedAnalysisResponse>.Forbidden("The agent can only analyse your own business.");
+
+        var objective = (request.Objective ?? "").Trim();
+        if (objective.Length is < 3 or > 500)
+            return BillingResult<BillingPlannedAnalysisResponse>.BadRequest("Describe what to look at in 3 to 500 characters.");
+
+        var configured = request.Thresholds ?? ThresholdConfig.Default;
+        var businessType = await _db.Tenants.AsNoTracking()
+            .Where(t => t.Id == actor.TenantId).Select(t => t.BusinessType).FirstOrDefaultAsync(ct) ?? "General";
+        var currency = await _db.Invoices.AsNoTracking()
+            .Where(i => i.TenantId == actor.TenantId).OrderByDescending(i => i.CreatedAt)
+            .Select(i => i.Currency).FirstOrDefaultAsync(ct) ?? "USD";
+
+        var planned = await _planner.PlanAsync(new BillingPlanServiceRequest(
+            objective, actor.TenantId.ToString(), businessType, currency,
+            BillingThresholdsDto.From(configured), callerToken), ct);
+
+        if (!planned.Success)
+        {
+            // A safe, recorded failure: the attempt stays in the audit trail
+            // with its reason rather than disappearing with the request.
+            await RecordFailedPlanAsync(actor, objective, planned.ErrorMessage, ct);
+            return BillingResult<BillingPlannedAnalysisResponse>.Unavailable(planned.ErrorMessage!);
+        }
+
+        var raw = planned.Trace!.Planner!;
+        var notes = new List<string>(planned.Trace.Warnings ?? new List<string>());
+
+        // A commission split needs a deal amount, and the planner can only
+        // read one out of the objective when the manager wrote one down.
+        if (raw.Intent?.AnalysisType == BillingAnalysisTypes.Commission && raw.Intent.DealAmount is not > 0m)
+        {
+            notes.Add("The objective asked about commission but did not say what the deal is worth, so a full review was run instead.");
+            raw = raw with { Intent = raw.Intent with { AnalysisType = BillingAnalysisTypes.Full } };
+        }
+
+        // Defence in depth: the Python planner already clamped this, and it is
+        // clamped again here because that is a separate process over HTTP.
+        var (planner, guardNotes) = BillingPlanGuard.Clamp(raw, configured);
+        notes.AddRange(guardNotes);
+
+        var effective = BillingPlanGuard.Effective(configured, planner);
+        var range = BillingPlanGuard.RangeFor(planner, DateTime.UtcNow);
+
+        var analysis = await AnalyzeAsync(actor, new BillingAnalysisRequest(
+            planner.Intent.AnalysisType, range, actor.TenantId, effective, planner.Intent.DealAmount), ct);
+        if (!analysis.Success || analysis.Value is null)
+            return new BillingResult<BillingPlannedAnalysisResponse>(false, analysis.StatusCode, analysis.Error, null);
+
+        var result = analysis.Value;
+
+        // The output edge. Advisory: a narrator that is down must never
+        // invalidate findings that are already computed and stored.
+        BillingNarrativeDto? narrative = null;
+        string? narrativeError = null;
+        var narrated = await _planner.NarrateAsync(new BillingNarrateServiceRequest(
+            objective, result.AnalysisType, actor.TenantId.ToString(), currency,
+            result.Anomalies.Select(a => new AnomalyDigestDto(a.Id, a.Type, a.Severity, a.EntityLabel, a.Description, a.Amount)).ToList(),
+            result.Insights.Select(i => $"{i.Title}: {i.Detail}").ToList(),
+            result.RecommendedActions.Select(a => a.Description).ToList(),
+            result.ConfidenceScore, callerToken), ct);
+        if (narrated.Success) narrative = narrated.Narrative;
+        else narrativeError = narrated.ErrorMessage;
+
+        await AttachPlannerToWorkflowAsync(result.WorkflowId, objective, planner, notes, narrative, ct);
+
+        return BillingResult<BillingPlannedAnalysisResponse>.Ok(new BillingPlannedAnalysisResponse(
+            objective, planner, notes, effective, result, narrative, narrativeError));
+    }
+
+    /// Fold the copilot's plan into the analysis row AnalyzeAsync already
+    /// wrote, so one workflow records both what was asked for and what ran.
+    private async Task AttachPlannerToWorkflowAsync(Guid workflowId, string objective, BillingPlannerOutputDto planner,
+        List<string> notes, BillingNarrativeDto? narrative, CancellationToken ct)
+    {
+        var row = await _db.AgentWorkflows.FirstOrDefaultAsync(w => w.Id == workflowId, ct);
+        if (row is null) return;
+        var plan = BillingWorkflowPlan.TryParse(row.PlanJson);
+        if (plan is null) return;
+
+        plan.PlannerObjective = objective;
+        plan.Planner = planner;
+        plan.PlannerWarnings = notes.Count > 0 ? notes : null;
+        plan.Narrative = narrative;
+        row.PlanJson = plan.Serialize();
+        row.Objective = $"{BillingWorkflowPlan.ObjectivePrefix}Copilot: {Shorten(objective, 120)}";
+        if (narrative is { Headline.Length: > 0 })
+            row.FinalOutcome = $"{narrative.Headline} ({row.FinalOutcome})";
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task RecordFailedPlanAsync(BillingActor actor, string objective, string? error, CancellationToken ct)
+    {
+        var plan = new BillingWorkflowPlan
+        {
+            Kind = "analysis",
+            Source = "agent",
+            RequestedBy = actor.UserId,
+            PlannerObjective = objective,
+        };
+        _db.AgentWorkflows.Add(new AgentWorkflow
+        {
+            TenantId = actor.TenantId,
+            Objective = $"{BillingWorkflowPlan.ObjectivePrefix}Copilot: {Shorten(objective, 120)}",
+            PlanJson = plan.Serialize(),
+            Status = "Failed",
+            ApprovalStatus = "NotRequired",
+            ErrorLog = error,
+            FinalOutcome = "The billing copilot could not plan this analysis.",
+            CompletedAt = DateTime.UtcNow,
+            RequestedByUserId = actor.UserId,
+        });
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private static string Shorten(string value, int max) => value.Length <= max ? value : value[..max] + "…";
 
     public InvoiceValidationResult ValidateInvoiceDraft(CreateInvoiceRequest draft, ThresholdConfig? thresholds = null)
     {
