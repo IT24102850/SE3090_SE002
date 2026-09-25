@@ -19,7 +19,8 @@ class NotificationService {
     if (kIsWeb) return;
     if (_channel != null || _reconnectTimer != null) return;
 
-    const defaultUrl = 'ws://10.0.2.2:8000/ws/workflows';
+    const wsFromEnv = String.fromEnvironment('WS_BASE_URL');
+    final defaultUrl = wsFromEnv.isNotEmpty ? wsFromEnv : 'ws://10.0.2.2:8000/ws/workflows';
     final url = wsUrl ?? defaultUrl;
     Uri? uri;
     try {

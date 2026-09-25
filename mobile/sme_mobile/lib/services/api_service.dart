@@ -12,8 +12,9 @@ class ApiService {
   // device on the same network as a manually-set host) keeps using
   // localhost as before.
   // - Physical device:   http://<your-lan-ip>:5298/api
-  // - Deployed:          https://your-api.railway.app/api
   static String get baseUrl {
+    const fromEnv = String.fromEnvironment('API_BASE_URL');
+    if (fromEnv.isNotEmpty) return fromEnv;
     if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5298/api';
     return 'http://localhost:5298/api';
   }
