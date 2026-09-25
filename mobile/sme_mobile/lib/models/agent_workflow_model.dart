@@ -1,7 +1,9 @@
 import 'dart:convert';
 
+import 'copilot_trace.dart';
+
 /// A scheduling agent workflow (GET /agent/workflow) — what the web app's
-/// AI Planner and Agent Workflows screens propose, approve, revise and
+/// Schedule Copilot and Agent Workflows screens propose, approve, revise and
 /// apply. The plan itself arrives as a JSON *string*, so it is decoded here
 /// once rather than in every widget that wants to read a step off it.
 class AgentWorkflow {
@@ -16,6 +18,9 @@ class AgentWorkflow {
   final DateTime? completedAt;
   final Map<String, dynamic> plan;
 
+  /// Set only for workflows the Schedule Copilot produced.
+  final CopilotTrace? copilot;
+
   const AgentWorkflow({
     required this.id,
     required this.objective,
@@ -27,17 +32,36 @@ class AgentWorkflow {
     this.createdAt,
     this.completedAt,
     required this.plan,
+    this.copilot,
   });
 
   bool get awaitingApproval => status == 'AwaitingApproval' || (approvalStatus ?? '') == 'Pending';
   bool get isTerminal => const {'Completed', 'Failed', 'Rejected', 'Cancelled'}.contains(status);
 
-  /// The proposed bookings, when the plan carries a `steps` array.
-  List<Map<String, dynamic>> get steps =>
-      ((plan['steps'] as List<dynamic>?) ?? const []).whereType<Map<String, dynamic>>().toList();
+  /// The proposed bookings, flattened for display.
+  ///
+  /// ASP.NET Core serialises the plan with default (PascalCase) names -
+  /// `Steps`, `Action`, `Parameters` - while plans written by other paths use
+  /// camelCase. Reading only `steps` made every scheduling plan show "0 steps"
+  /// on the phone, so both spellings are accepted and each step's nested
+  /// parameters are lifted up beside its action.
+  List<Map<String, dynamic>> get steps {
+    final raw = (plan['steps'] ?? plan['Steps']) as List<dynamic>? ?? const [];
+    return [
+      for (final step in raw.whereType<Map<String, dynamic>>())
+        {
+          for (final e in step.entries)
+            if (e.key.toLowerCase() != 'parameters') _camel(e.key): e.value,
+          for (final e in ((step['parameters'] ?? step['Parameters']) as Map<String, dynamic>? ?? const {}).entries)
+            _camel(e.key): e.value,
+        },
+    ];
+  }
+
+  static String _camel(String key) => key.isEmpty ? key : key[0].toLowerCase() + key.substring(1);
 
   double get estimatedRevenueImpact {
-    final v = plan['estimatedRevenueImpact'];
+    final v = plan['estimatedRevenueImpact'] ?? plan['EstimatedRevenueImpact'];
     return v is num ? v.toDouble() : 0;
   }
 
@@ -70,5 +94,6 @@ class AgentWorkflow {
         createdAt: DateTime.tryParse((j['createdAt'] ?? '').toString())?.toLocal(),
         completedAt: DateTime.tryParse((j['completedAt'] ?? '').toString())?.toLocal(),
         plan: _decodePlan(j['planJson'] ?? j['plan']),
+        copilot: CopilotTrace.tryParse(j['toolResultsJson']),
       );
 }

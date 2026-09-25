@@ -101,6 +101,29 @@ class ToolCallRecord(BaseModel):
     error: str | None = None
 
 
+class LlmCallRecord(BaseModel):
+    """One attempt against one model. Several of these for a single logical
+    step is the retry/fallback layer working, not a bug - which is why the
+    attempt number and the model are both kept rather than collapsed."""
+
+    model: str
+    attempt: int
+    duration_ms: int
+    ok: bool
+    error: str | None = None
+
+
+class AgentStepRecord(BaseModel):
+    """Wall-clock cost of one agent in the pipeline, recorded whether or not
+    it succeeded, so a slow or failing stage is attributable to an agent
+    rather than to the workflow as a whole."""
+
+    agent: str
+    duration_ms: int
+    ok: bool
+    error: str | None = None
+
+
 class WorkflowTrace(BaseModel):
     workflow_id: str
     objective: str
@@ -112,6 +135,8 @@ class WorkflowTrace(BaseModel):
     action_tool_output: ActionToolOutput | None = None
     validation_output: ValidationSafetyOutput | None = None
     tool_calls: list[ToolCallRecord] = Field(default_factory=list)
+    llm_calls: list[LlmCallRecord] = Field(default_factory=list)
+    agent_steps: list[AgentStepRecord] = Field(default_factory=list)
     error: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None

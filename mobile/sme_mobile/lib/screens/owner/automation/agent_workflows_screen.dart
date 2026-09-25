@@ -95,7 +95,7 @@ class _AgentWorkflowsScreenState extends ConsumerState<AgentWorkflowsScreen> {
   }
 }
 
-/// Shared with the AI Planner screen, which shows the plan it has just
+/// Shared with the Schedule Copilot screen, which shows the plan it has just
 /// proposed using exactly this card.
 class WorkflowCard extends ConsumerStatefulWidget {
   final AgentWorkflow workflow;
@@ -166,6 +166,17 @@ class _WorkflowCardState extends ConsumerState<WorkflowCard> {
     }
   }
 
+  /// "Dr. Perera · Mon 7/1 09:00" for a booking step; whatever text the step
+  /// carries for anything else.
+  static String _describeStep(Map<String, dynamic> step) {
+    final start = DateTime.tryParse((step['startTime'] ?? '').toString())?.toLocal();
+    final who = (step['resourceName'] ?? step['summary'] ?? step['description'] ?? step['action'] ?? 'Step').toString();
+    if (start == null) return who;
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final hm = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
+    return '$who · ${days[start.weekday - 1]} ${start.day}/${start.month} $hm';
+  }
+
   @override
   Widget build(BuildContext context) {
     final w = widget.workflow;
@@ -189,12 +200,23 @@ class _WorkflowCardState extends ConsumerState<WorkflowCard> {
             const SizedBox(height: 6),
             Text(
               [
-                if (w.isBilling) 'billing agent' else 'scheduling agent',
+                if (w.copilot != null) 'Schedule Copilot'
+                else if (w.isBilling) 'billing agent'
+                else 'scheduling agent',
                 '${steps.length} step${steps.length == 1 ? '' : 's'}',
                 if (w.createdAt != null) formatDayMonth(w.createdAt!),
               ].join(' · '),
               style: AppTextStyles.caption,
             ),
+            if (w.copilot?.planner != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${(w.copilot!.planner!.confidence * 100).round()}% confidence · '
+                  '${w.copilot!.checksPassed}/${w.copilot!.checks.length} checks passed',
+                  style: AppTextStyles.caption.copyWith(color: AppColors.cyan),
+                ),
+              ),
             if (w.estimatedRevenueImpact != 0)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -218,10 +240,7 @@ class _WorkflowCardState extends ConsumerState<WorkflowCard> {
               for (final step in steps)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Text(
-                    '• ${step['summary'] ?? step['description'] ?? step['startTime'] ?? step.toString()}',
-                    style: AppTextStyles.caption,
-                  ),
+                  child: Text('• ${_describeStep(step)}', style: AppTextStyles.caption),
                 ),
             ],
             if (!w.isTerminal) ...[
