@@ -32,9 +32,9 @@ DROP TABLE IF EXISTS _series_ctx;
 CREATE TEMP TABLE _series_ctx AS
 WITH params AS (
   SELECT
-    'd303c4ef-6eb9-4189-95e0-b537d2134ba9'::uuid   AS tenant_id,
+    'f15bae97-fa7e-42f5-95b7-b624db319ad2'::uuid   AS tenant_id,
     '%Morning Cruise%'::text                        AS resource_name,
-    'Whale Watching Tour'::text                     AS type_name,
+    'Whale Watching'::text                          AS type_name,
     'ocean.breeze.mirissa@example-demo.test'::text  AS customer_email,
     'Ocean Breeze Travels (Galle)'::text            AS customer_name,
     '+94912234455'::text                            AS customer_phone,
@@ -214,7 +214,7 @@ LEFT JOIN bookings occ
       AND occ."StartTime" >= anchor."StartTime"
       AND occ."StartTime" <= p."EndDate" + interval '1 day'
       AND occ."StartTime"::time = anchor."StartTime"::time
-WHERE anchor."TenantId" = 'd303c4ef-6eb9-4189-95e0-b537d2134ba9'::uuid
+WHERE anchor."TenantId" = 'f15bae97-fa7e-42f5-95b7-b624db319ad2'::uuid
 GROUP BY bt."Name", r."Name", u."FullName", p."Frequency", p."DaysOfWeek",
          anchor."StartTime", p."EndDate"
 ORDER BY r."Name";
