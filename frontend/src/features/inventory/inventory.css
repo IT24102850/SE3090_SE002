@@ -1687,10 +1687,31 @@
 .inventory-scope .badge::after { display: none; }
 .inventory-scope .page-actions .btn:hover:not(:disabled) { transform: translateY(-1px); }
 
-/* Keep stock pages calm: the sweeping hero sheen distracted from live data. */
-.inventory-scope :is(.inventory-manager-hero, .suppliers-hero, .purchase-orders-hero, .branch-overview-hero, .inventory-analytics-hero, .stocksense-hero)::after {
-  display: none;
-  animation: none;
+/* Give each inventory page header one restrained reflective pass. The narrow,
+   low-contrast sheen stays clipped to the hero card instead of washing the page
+   in the bright green sweep used by the earlier version. */
+.inventory-scope :is(.inventory-manager-hero, .suppliers-hero, .purchase-orders-hero, .branch-overview-hero, .inventory-analytics-hero, .stocksense-hero, .movement-hero, .workflow-hero) {
+  isolation: isolate;
+}
+.inventory-scope :is(.inventory-manager-hero, .suppliers-hero, .purchase-orders-hero, .branch-overview-hero, .inventory-analytics-hero, .stocksense-hero, .movement-hero, .workflow-hero)::after {
+  display: block;
+  position: absolute;
+  z-index: 0;
+  top: -20%;
+  left: -22%;
+  width: 16%;
+  height: 140%;
+  content: '';
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(105deg, transparent 8%, rgba(223,255,252,.025) 38%, rgba(223,255,252,.105) 50%, rgba(223,255,252,.025) 62%, transparent 90%);
+  transform: skewX(-18deg);
+  animation: inventory-hero-glint 10s ease-in-out infinite;
+}
+@keyframes inventory-hero-glint {
+  0%, 70% { left: -22%; opacity: 0; }
+  76% { opacity: .7; }
+  88%, 100% { left: 112%; opacity: 0; }
 }
 .inventory-scope .inventory-manager-hero { background: radial-gradient(ellipse at 82% 18%, rgba(23,198,174,.14), transparent 35%), linear-gradient(120deg, #102c3a 0%, #153b4d 52%, #14364c 100%); }
 .inventory-scope .inventory-manager-hero-art { opacity: .72; }
