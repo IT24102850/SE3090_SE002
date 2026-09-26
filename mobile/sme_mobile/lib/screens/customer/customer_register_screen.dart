@@ -6,13 +6,15 @@ import '../../theme/app_theme.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/ui/ui.dart';
 
-/// FR-C1: patient self-registration, scoped to the specific clinic they were
-/// browsing — the correct counterpart to [RegisterScreen], which is business
-/// onboarding and creates a brand new tenant. This screen never does that;
-/// it signs the caller up as a Customer of [tenant] via POST /auth/register.
+/// FR-C1: customer self-registration — the counterpart to [RegisterScreen],
+/// which is business onboarding and creates a brand new tenant. This screen
+/// never does that; it creates one global customer account via
+/// POST /auth/register. Opened from a business's page, [tenant] is set and
+/// the account joins that business straight away; opened from the sign-in
+/// screen, it is null and the account joins businesses as they are booked.
 class CustomerRegisterScreen extends ConsumerStatefulWidget {
-  final PublicTenant tenant;
-  const CustomerRegisterScreen({super.key, required this.tenant});
+  final PublicTenant? tenant;
+  const CustomerRegisterScreen({super.key, this.tenant});
 
   @override
   ConsumerState<CustomerRegisterScreen> createState() => _CustomerRegisterScreenState();
@@ -39,7 +41,7 @@ class _CustomerRegisterScreenState extends ConsumerState<CustomerRegisterScreen>
     FocusScope.of(context).unfocus();
 
     final success = await ref.read(authProvider.notifier).registerCustomer(
-          tenantId: widget.tenant.id,
+          tenantId: widget.tenant?.id,
           fullName: _fullNameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
@@ -66,7 +68,7 @@ class _CustomerRegisterScreenState extends ConsumerState<CustomerRegisterScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _SignUpHero(businessName: widget.tenant.businessName),
+              _SignUpHero(businessName: widget.tenant?.businessName),
               const SizedBox(height: 28),
               GlassCard(
                 padding: const EdgeInsets.all(20),
@@ -153,7 +155,8 @@ class _CustomerRegisterScreenState extends ConsumerState<CustomerRegisterScreen>
 class _SignUpHero extends StatelessWidget {
   const _SignUpHero({required this.businessName});
 
-  final String businessName;
+  /// Null when the sign-up did not start from a business's page.
+  final String? businessName;
 
   @override
   Widget build(BuildContext context) {
@@ -173,13 +176,15 @@ class _SignUpHero extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         Text(
-          'Sign up with $businessName',
+          businessName == null ? 'Create your Unify account' : 'Sign up with $businessName',
           textAlign: TextAlign.center,
           style: AppTextStyles.headlineSmall.copyWith(fontSize: 21),
         ),
         const SizedBox(height: 8),
         Text(
-          'Create a free account to book, track, and manage your appointments.',
+          businessName == null
+              ? 'One free account for every business on Unify. Pick a business and book - no need to choose one now.'
+              : 'Create a free account to book, track, and manage your appointments.',
           textAlign: TextAlign.center,
           style: AppTextStyles.bodyMuted,
         ),

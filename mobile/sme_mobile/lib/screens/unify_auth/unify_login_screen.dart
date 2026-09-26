@@ -13,6 +13,7 @@ import '../../widgets/unify_auth/social_sign_in_row.dart';
 import '../../widgets/unify_auth/unify_wordmark.dart';
 import '../customer/book_business_list_screen.dart';
 import '../register_screen.dart';
+import '../customer/customer_register_screen.dart';
 
 /// The app's first screen for a signed-out visitor: sign in to Unify —
 /// Enterprise Management System.
@@ -60,6 +61,14 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
   void _openRegister() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const RegisterScreen()),
+    );
+  }
+
+  // A customer account is global - no business to pick - so it has its own
+  // entry point here rather than only from a business's page.
+  void _openCustomerRegister() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const CustomerRegisterScreen()),
     );
   }
 
@@ -341,26 +350,49 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
             SocialSignInRow(onProviderTap: _showComingSoon),
             SizedBox(height: 20 * gap),
 
+            // Both ways in on one row. There are two kinds of sign-up now -
+            // a customer account, which belongs to no business, and business
+            // onboarding - but this layout compresses to fit rather than
+            // scrolling, and a second stacked line overflows a 360x740 phone
+            // (test/unify_login_screen_test.dart pins that).
+            // scaleDown keeps it to one line on a narrow phone: wrapping to
+            // two is what tips the column into overflow.
             Center(
-              child: _TextLink(
-                onTap: _openRegister,
-                child: const Text.rich(
-                  TextSpan(
-                    text: 'New to Unify? ',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: 'Create account',
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _TextLink(
+                      onTap: _openCustomerRegister,
+                      child: const Text(
+                        'Sign up to book',
                         style: TextStyle(
+                          fontSize: 14,
                           color: AppColors.cyan,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(
+                        '·',
+                        style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+                      ),
+                    ),
+                    _TextLink(
+                      onTap: _openRegister,
+                      child: const Text(
+                        'Register a business',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.cyan,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

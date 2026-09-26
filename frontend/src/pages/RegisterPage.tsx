@@ -19,7 +19,14 @@ import './signup.css';
  * different endpoints, collect different fields, and cannot be merged.
  *
  *   Business  POST /api/tenant/onboard   creates the tenant + an Admin user
- *   Customer  POST /api/auth/register    creates a Customer of one tenant
+ *   Customer  POST /api/auth/register    creates one global customer account
+ *
+ * A customer account is not tied to a business: they join one automatically
+ * the first time they open it in the Unify app (Services/
+ * CustomerAccountService.cs on the backend), so the form asks for nothing
+ * but who they are. Customers do their booking in the app, not here, which
+ * is why a successful sign-up ends on a "you're all set" panel rather than
+ * in the admin dashboard.
  *
  * Role is never client-supplied on either route - the customer endpoint
  * assigns Customer regardless of what is sent, which is what makes it safe to
@@ -47,13 +54,6 @@ const BUSINESS_TYPES = [
   { value: 'RealEstate', label: 'Real Estate' },
   { value: 'General', label: 'General' },
 ];
-
-interface PublicTenant {
-  id: string;
-  name: string;
-  businessType: string;
-  subType: string | null;
-}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const validName = (v: string) => v.trim().length >= 2;
@@ -126,25 +126,12 @@ const RegisterPage = () => {
   });
 
   const [customer, setCustomer] = useState({
-    tenantId: '',
     fullName: '',
     email: '',
     password: '',
     phone: '',
   });
-
-  /* The businesses a customer can join.
-   *
-   * Fetched on mount, not when the customer side is opened. Deferring it
-   * looks like the thriftier choice - most visitors here are registering a
-   * business and never see the list - but this endpoint measures 2-4s warm
-   * and 18s cold against the hosted database, so deferring means clicking
-   * "A customer" and watching a disabled select say "Loading businesses" for
-   * several seconds. Starting early usually means it has already arrived.
-   * The response is a few hundred bytes; the latency is the cost, not the
-   * payload. */
-  const [tenants, setTenants] = useState<PublicTenant[] | null>(null);
-  const [tenantsError, setTenantsError] = useState('');
+  const [customerDone, setCustomerDone] = useState<string | null>(null);
 
   useEffect(() => { if (error) show(error, 'error'); }, [error, show]);
   useEffect(() => {
@@ -152,19 +139,6 @@ const RegisterPage = () => {
     localStorage.setItem('unify-home-theme', theme);
     return () => { delete document.documentElement.dataset.unifyTheme; };
   }, [theme]);
-
-  useEffect(() => {
-    let cancelled = false;
-    axios
-      .get<PublicTenant[]>(`${API_BASE_URL}/tenant/public`)
-      .then((r) => { if (!cancelled) setTenants(r.data); })
-      .catch(() => {
-        if (cancelled) return;
-        setTenants([]);
-        setTenantsError('Could not load the list of businesses. Try again in a moment.');
-      });
-    return () => { cancelled = true; };
-  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -195,7 +169,7 @@ const RegisterPage = () => {
 
   const formValid = mode === 'business'
     ? validName(form.businessName) && validName(form.adminFullName) && validEmail(form.adminEmail) && validPassword(form.adminPassword) && confirm === form.adminPassword
-    : !!customer.tenantId && validName(customer.fullName) && validEmail(customer.email) && validPassword(customer.password) && confirm === customer.password;
+    : validName(customer.fullName) && validEmail(customer.email) && validPassword(customer.password) && confirm === customer.password;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,15 +181,21 @@ const RegisterPage = () => {
     setError('');
 
     try {
-      const { data } =
-        mode === 'business'
-          ? await axios.post(`${API_BASE_URL}/tenant/onboard`, form)
-          : await axios.post(`${API_BASE_URL}/auth/register`, customer);
+      if (mode === 'customer') {
+        // No token is kept: the admin web app has nothing for a customer
+        // to do, and a stale customer session here would only confuse the
+        // next business sign-in on this browser.
+        await axios.post(`${API_BASE_URL}/auth/register`, customer);
+        setCustomerDone(customer.email.trim());
+        show('Your account has been created!', 'success');
+        return;
+      }
 
+      const { data } = await axios.post(`${API_BASE_URL}/tenant/onboard`, form);
       localStorage.setItem('token', data.accessToken);
       localStorage.setItem('user', JSON.stringify(data.user));
       dispatch(initializeAuth());
-      show(mode === 'business' ? 'Your business workspace is ready!' : 'Your account has been created!', 'success');
+      show('Your business workspace is ready!', 'success');
       navigate('/dashboard');
     } catch (err: unknown) {
       const message = axios.isAxiosError(err)
@@ -257,7 +237,7 @@ const RegisterPage = () => {
           <div className="su-head">
             <p className="lp-kicker"><span /> GET STARTED</p>
             <h1 id="signup-title">Sign up, <em>simply.</em></h1>
-            <p>{mode === 'business' ? 'Set up your business workspace on Unify.' : 'Join a business on Unify and keep every booking in one place.'}</p>
+            <p>{mode === 'business' ? 'Set up your business workspace on Unify.' : 'One account for every business on Unify - book anywhere, keep it all in one place.'}</p>
             <svg className="su-flourish" viewBox="0 0 40 40" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
               <path d="M6 30c10 2 20-6 22-18" /><path d="M23 14l5-3 1 6" />
             </svg>
@@ -267,11 +247,22 @@ const RegisterPage = () => {
           <p className="su-mode-note">
             {mode === 'business'
               ? 'You will be the admin. Invite your team once you are in.'
-              : 'A customer account belongs to one business. To book with another, sign up with them too.'}
+              : 'No business to pick: you join one automatically the first time you book with it.'}
           </p>
 
           {error && <div className="su-alert" role="alert">{error}</div>}
 
+          {customerDone ? (
+            <div className="su-done" role="status">
+              <span className="su-done-mark" aria-hidden="true">✓</span>
+              <h2>You're all set</h2>
+              <p>Your Unify account for <b>{customerDone}</b> is ready. Open the <b>Unify app</b>, sign in, pick any business and book - it joins you to that business automatically.</p>
+              <div className="su-done-actions">
+                <Link className="su-submit" to="/login">Go to sign in <span aria-hidden="true">→</span></Link>
+                <button type="button" className="su-link-btn" onClick={() => { setCustomerDone(null); setCustomer({ fullName: '', email: '', password: '', phone: '' }); setConfirm(''); }}>Create another account</button>
+              </div>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} noValidate>
             {mode === 'business' ? (
               <div className="su-grid">
@@ -341,17 +332,6 @@ const RegisterPage = () => {
               </div>
             ) : (
               <div className="su-grid">
-                <div className="su-section">Which business</div>
-                <div className="su-full">
-                  <Field icon={I.building} label="Business" valid={v(true, customer.tenantId)}>
-                    <select name="tenantId" value={customer.tenantId} onChange={handleCustomerChange} disabled={tenants === null} required aria-label="Business">
-                      <option value="">{tenants === null ? 'Loading businesses…' : 'Choose the business you are joining'}</option>
-                      {(tenants ?? []).map((t) => <option key={t.id} value={t.id}>{t.name} — {t.subType || t.businessType}</option>)}
-                    </select>
-                  </Field>
-                </div>
-                {tenantsError && <p className="su-full su-mode-note" style={{ color: 'var(--su-err)' }}>{tenantsError}</p>}
-
                 <div className="su-section">Your details</div>
                 <div className="su-full">
                   <Field icon={I.user} label="Full name" valid={v(validName(customer.fullName), customer.fullName)}>
@@ -391,6 +371,7 @@ const RegisterPage = () => {
               <span className="su-secure"><span>✓</span>Private and secure · no credit card</span>
             </div>
           </form>
+          )}
         </section>
 
         {/* ── Art half: the landing page's world ───────────── */}

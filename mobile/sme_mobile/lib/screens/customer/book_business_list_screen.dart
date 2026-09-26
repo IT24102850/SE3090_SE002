@@ -218,23 +218,46 @@ class _BookBusinessListScreenState
                     backgroundColor: AppColors.overlaySurface,
                     onRefresh: () async =>
                         ref.invalidate(publicTenantsProvider),
+                    // A Wrap of fixed-width cards, not a GridView.
+                    //
+                    // A grid has to be told each cell's height up front, and
+                    // every way of saying it is a guess about text: an aspect
+                    // ratio made the height depend on the column width, so at
+                    // two columns on a phone each card got 70px for content
+                    // needing 80 and wore an overflow stripe. A fixed extent
+                    // only moves the guess. Here each card is given its width
+                    // and takes whatever height its own content needs, so the
+                    // font, the business name and the reader's text size
+                    // cannot push it out of its cell.
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final crossAxisCount =
-                            constraints.maxWidth > 600 ? 3 : 2;
-                        return GridView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: crossAxisCount,
-                            mainAxisSpacing: 10,
-                            crossAxisSpacing: 10,
-                            childAspectRatio: 3,
-                          ),
-                          itemCount: filtered.length,
-                          itemBuilder: (context, index) => _TenantCard(
-                            tenant: filtered[index],
-                            onTap: () => _onTenantTap(filtered[index]),
+                        const spacing = 10.0;
+                        const padding =
+                            EdgeInsets.fromLTRB(16, 6, 16, 32);
+                        final columns = constraints.maxWidth > 600 ? 3 : 2;
+                        final cardWidth = (constraints.maxWidth -
+                                padding.horizontal -
+                                spacing * (columns - 1)) /
+                            columns;
+
+                        return SingleChildScrollView(
+                          // Keeps pull-to-refresh working even when the list
+                          // is short enough not to scroll on its own.
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: padding,
+                          child: Wrap(
+                            spacing: spacing,
+                            runSpacing: spacing,
+                            children: [
+                              for (final tenant in filtered)
+                                SizedBox(
+                                  width: cardWidth,
+                                  child: _TenantCard(
+                                    tenant: tenant,
+                                    onTap: () => _onTenantTap(tenant),
+                                  ),
+                                ),
+                            ],
                           ),
                         );
                       },

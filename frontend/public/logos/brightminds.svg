@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <title>BrightMinds Tuition Center</title>
+  <rect width="120" height="120" rx="24" fill="#1D4ED8"/>
+  <circle cx="60" cy="50" r="22" fill="#FDE68A"/>
+  <path d="M46 68h28l-3 10H49z" fill="#F59E0B"/>
+  <g stroke="#FDE68A" stroke-width="4" stroke-linecap="round">
+    <line x1="60" y1="14" x2="60" y2="22"/><line x1="30" y1="50" x2="22" y2="50"/><line x1="98" y1="50" x2="90" y2="50"/>
+    <line x1="38" y1="28" x2="33" y2="23"/><line x1="82" y1="28" x2="87" y2="23"/>
+  </g>
+  <text x="60" y="106" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="800" fill="#fff" letter-spacing="1">BRIGHTMINDS</text>
+</svg>

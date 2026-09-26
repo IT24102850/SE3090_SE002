@@ -71,40 +71,67 @@ Flutter widget tests straightforward to write and defend individually at the viv
 
 ---
 
-## ADR-003: Agentic AI Framework
+## ADR-003: Agentic AI Framework and Orchestration Method
 
-**Status:** Accepted
+**Status:** Accepted (revised — an earlier revision of this ADR recorded LangGraph; the
+implementation is a custom orchestration, and this record has been corrected to match the
+code rather than the other way round.)
 
 **Context:**
-The system requires four distinct agents (Planner/Coordinator, Domain Analysis, Action/Tool, 
-Validation/Safety) with structured multi-step planning, delegation, persisted workflow state, 
-and human-in-the-loop approval pauses — all called internally from ASP.NET Core, never directly 
+The system requires four distinct agents (Planner/Coordinator, Domain Analysis, Action/Tool,
+Validation/Safety) with structured multi-step planning, delegation, persisted workflow state,
+and human-in-the-loop approval pauses — all called internally from ASP.NET Core, never directly
 from React or Flutter, per the assignment's mandatory backend rule.
 
+Two facts about our design shaped this decision, and both only became clear once the approval
+flow was built:
+
+1. **The pipeline is a fixed sequence, not a graph.** Planner → Domain Analysis → Action/Tool →
+   Validation/Safety runs in that order every time. There is no branching topology, no cyclic
+   delegation and no dynamic agent selection for a graph runtime to express.
+2. **The approval pause does not live in the Python service.** The authoritative workflow record
+   is the `AgentWorkflows` table in Postgres, and the approve/reject/revise endpoints are on
+   ASP.NET Core because that is where role-based authorization (`Admin,Manager`) and the
+   business data already are. A framework's human-in-the-loop node would have had to hold
+   approval state in a second place, which is the split-brain problem ADR-004 exists to avoid.
+
 **Options Considered:**
-1. **Semantic Kernel (C#)** — would keep everything in one language, but has less mature 
-   built-in support for human-in-the-loop pause/resume graph nodes compared to LangGraph.
-2. **LlamaIndex agents** — strong for retrieval-augmented workflows, but its agent-orchestration 
-   and multi-agent delegation patterns are less purpose-built for our planner-delegates-to-
-   specialist-agents structure.
-3. **Custom orchestration (Python or C#)** — full control, but reinventing state persistence, 
-   retries, and approval-pause logic from scratch is high-risk for a 9-week deadline.
-4. **LangGraph + FastAPI (chosen)** — used in labs, has built-in state persistence, explicit 
-   human-approval graph nodes, and graph-based delegation that maps directly onto our four-
-   agent architecture.
+1. **Semantic Kernel (C#)** — would keep everything in one language. Rejected: the assignment's
+   reference architecture and our lab experience are both Python-side, and it would not have
+   removed the need for our own deterministic safety gate.
+2. **LlamaIndex agents** — strong for retrieval-augmented workflows. Rejected: our problem is
+   constraint-checked scheduling against a live API, not retrieval over a corpus.
+3. **LangGraph + FastAPI** — used in labs; built-in state persistence and human-approval nodes.
+   Rejected on the two facts above: its state persistence would duplicate `AgentWorkflows`, and
+   its graph model would wrap a straight line. It also adds a substantial dependency whose
+   internals every team member would have to be able to explain under §18.2.
+4. **Custom orchestration in Python + FastAPI (chosen)** — a plain, readable call sequence with
+   Pydantic contracts at every agent boundary.
 
 **Decision:**
-We chose LangGraph running as an internal Python/FastAPI microservice, called only by ASP.NET 
-Core, because its graph model lets us represent the Planner Agent's delegation to the Domain 
-Analysis, Action/Tool, and Validation/Safety agents as explicit graph edges, with native support 
-for pausing a node until a human approval endpoint is called.
+We implemented a custom four-agent orchestration as an internal Python/FastAPI microservice
+(`agentic-ai-service`), called only by ASP.NET Core. Each agent is a module with an explicit
+Pydantic input/output contract in `schemas/contracts.py`; `main.py:/plan` runs them in sequence
+and assembles one `WorkflowTrace`. The Validation/Safety agent is deliberately **deterministic
+Python with no LLM call**, so the gate that decides whether a booking is allowed or must be
+escalated cannot be talked out of its decision by model output. Model access goes through one
+`llm_client` seam, so the provider (Gemini by default, Ollama behind `LLM_PROVIDER`) can be
+swapped without touching an agent.
 
 **Consequences:**
-- Positive: Matches the assignment's minimum-workflow requirements almost directly (plan → 
-  delegate → tool call → validate → pause for approval → auditable result); reduces custom 
-  state-management code.
-- Trade-off: Adds a second language/runtime (Python) alongside the C# backend, requiring careful 
-  process management (startup order, health checks) documented in our deployment instructions.
+- Positive: every element the assignment asks for is code we wrote and can explain — planning,
+  delegation, allow-listed tools, deterministic validation, safe failure, and the execution
+  trace. This directly serves the "explain, modify or debug your own contribution" requirement.
+- Positive: one source of truth for workflow state (Postgres, via ASP.NET Core). The Python
+  service's in-memory `_workflows` dict is explicitly a testing/introspection aid and is
+  documented as not being the production approval path.
+- Trade-off: we had to build retry, model fallback and the observability trace ourselves rather
+  than inheriting them. That work is real — see `gemini_client._call_with_resilience` and
+  `tests/test_observability.py` — and it was necessary regardless, because free-tier Gemini
+  returns 503 on individual models under load and no framework would have chosen our fallback
+  chain for us.
+- Trade-off: adds a second language/runtime (Python) alongside the C# backend, requiring careful
+  process management (startup order, health checks) documented in the deployment instructions.
 
 ---
 
@@ -216,3 +243,86 @@ operational overhead of managing multiple databases or schemas.
 - Trade-off: Relies entirely on correct enforcement of the global query filter in every query 
   path — a missed filter could leak cross-tenant data, so we treat this as a security-critical 
   code-review checkpoint on every pull request touching a tenant-scoped entity.
+---
+
+## ADR-007: Where the Language Model Sits in the Billing Agent
+
+**Status:** Accepted
+
+**Context:**
+Billing's Domain Analysis Agent (component 3.7) detects financial anomalies: discounts over the
+cap, tax outside its range, duplicate invoices, overpayments, totals that disagree with their own
+line items, price outliers, and insurance claims that exceed the invoice they are made against.
+
+Two facts about this problem shaped the decision:
+
+1. **Its golden cases are absolute.** Spec 3.9 requires that *"an invoice with a 50% discount on a
+   $10 item MUST flag for review"* and *"a valid insurance claim MUST pass"*. MUST means on every
+   run. A sampled language model cannot promise that, and a fraud check that flags differently on
+   Tuesday is worse than no fraud check — a business would stop trusting the whole feature after
+   one inconsistency it could not explain.
+2. **The form was the bottleneck, not the reasoning.** The agent already worked, but a caller had
+   to know to send `analysisType: "anomalies"`, a `DataRange` and a `ThresholdConfig`. The manager
+   who actually suspects discount abuse does not think in those fields. And once the agent had
+   returned forty anomalies, reading the pattern *across* them was still a human job.
+
+Booking and Inventory both call Gemini, so "why does billing not?" was a fair question to have an
+answer to.
+
+**Options Considered:**
+1. **Keep the agent fully deterministic, add nothing.** Defensible: §9.1's definition of a distinct
+   agent is responsibility, contracts, tool permissions, visible participation and deterministic
+   validation — a language model is not on that list, and the booking Validation/Safety agent is
+   deliberately model-free for the same reason. Rejected only because options existed that cost the
+   golden cases nothing.
+2. **Replace the rules engine with a model that reads invoices and judges them.** Rejected outright.
+   It trades a reproducible, auditable flag for a plausible-sounding one, and every §3.9 golden case
+   becomes a coin toss.
+3. **Model in the middle, rules as a second check.** Rejected: two sources of truth for "is this an
+   anomaly", and the interesting cases are exactly where they disagree.
+4. **Model at the two edges, rules untouched in the middle (chosen).** A planner turns the
+   manager's sentence into the request the agent already accepts; a narrator reads the pattern back
+   across the findings. Neither touches the detection.
+
+**Decision:**
+The detection stays deterministic C# permanently. `BillingRules.ValidateInvoice`, the discount-cap
+comparison, the excess calculation and the approval thresholds are unchanged and unreachable from
+model output. Gemini is added at the input and output edges only, as
+`agentic-ai-service/agents/billing_planner.py` (`POST /billing/plan`, `POST /billing/narrate`),
+reached through `POST /api/billing-agent/plan-analysis`.
+
+The planner may only **narrow** a run: pick one of the six existing analysis types, shorten the
+window, and *tighten* the discount cap. It cannot invent an analysis type or tool (both are closed
+vocabularies, so an invented one fails schema validation), exceed the one-year data cap, name a tool
+the chosen analysis type does not run, loosen any threshold, or approve anything. The two approval
+amounts have no field in the intent contract or on the wire at all, which is a stronger guarantee
+than a prompt rule: the model cannot ask for what it cannot address.
+
+That rule is enforced **twice** — `_sanitise` in Python, and `BillingPlanGuard` in ASP.NET Core on
+arrival. This is deliberate duplication, not an oversight: the two live in different processes
+across an HTTP boundary, and the guarantee has to survive the agent service being misconfigured,
+rolled back or replaced. Corrections are reported to the manager in `plannerWarnings`, never applied
+silently. The narrator is held to the matching rule at the other edge: a theme citing an anomaly id
+that was not passed in is dropped, so a narrative can only ever re-read the detector's own output.
+
+Both edges degrade rather than fail. With every model in the fallback chain down, a keyword planner
+produces the same contract marked `used_fallback`, and the narrator groups findings by type. The
+deterministic `POST /api/billing-agent/analyze` path has no dependency on the agent service at all,
+so a billing demo never depends on a third-party model being up — free-tier Gemini quota runs out
+daily, and it ran out mid-session while this was being built.
+
+**Consequences:**
+- Positive: both §3.9 golden cases are now asserted to survive *hostile* planner output.
+  `BillingCopilotTests` hands the guard a plan from a model that was successfully talked into setting
+  the cap to 100% and approving everything, and then asserts the 50%-discount invoice still flags and
+  nothing is approved. "The model cannot break the rules" is a test, not a claim.
+- Positive: the three components are now architecturally consistent (each has a planner with a
+  deterministic fallback, a contract, an allow-list and an approval gate) without billing giving up
+  the reproducibility its domain needs.
+- Positive: the stored `AgentWorkflow` row keeps the manager's own words, the plan, the corrections
+  the guard made and the narrative, so the audit trail records what was asked for as well as what ran.
+- Trade-off: one more network hop and one more failure mode on the copilot path. Mitigated by the
+  deterministic fallbacks and by keeping the direct `/analyze` path fully independent.
+- Trade-off: the same narrowing rule is now written in two places and must be changed in both. The
+  tests on either side pin it, and the duplication is the point — a single copy would sit on the
+  wrong side of a process boundary.

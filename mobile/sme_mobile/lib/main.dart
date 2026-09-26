@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/auth_provider.dart';
 import 'screens/unify_auth/unify_login_screen.dart';
-import 'screens/dashboard_screen.dart';
+import 'screens/role_home.dart';
 import 'screens/profile_setup_screen.dart';
 import 'services/push_notification_service.dart';
 import 'theme/app_theme.dart';
@@ -47,13 +47,15 @@ class _MyAppState extends ConsumerState<MyApp> {
     } else if (!auth.isProfileComplete) {
       home = const ProfileSetupScreen();
     } else {
-      home = const DashboardScreen();
+      // Role decides the home screen, in one place - see screens/role_home.dart.
+      home = roleHome(auth.user?.role);
     }
 
     return MaterialApp(
       title: 'Unify',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: PushNotificationService.messengerKey,
+      navigatorKey: PushNotificationService.navigatorKey,
       theme: AppTheme.dark(),
       // Dark-only by design: there is no light counterpart to fall back to,
       // so the system setting must not be able to switch it.

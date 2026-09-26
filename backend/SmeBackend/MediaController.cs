@@ -30,7 +30,12 @@ public class MediaController : ControllerBase
     /// <remarks>Branding images stay Admin/Manager-only; "avatar" is open to any
     /// signed-in user because Staff and Customers set their own profile photo.</remarks>
     [HttpPost("upload")]
-    public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] string purpose)
+    [Consumes("multipart/form-data")]
+    // IFormFile binds from the multipart body on its own. An explicit
+    // [FromForm] on it makes Swashbuckle throw while generating the document,
+    // and because the generator fails whole-document, that one attribute took
+    // down /swagger/v1/swagger.json for every endpoint in the API.
+    public async Task<IActionResult> Upload(IFormFile file, [FromForm] string purpose)
     {
         if (file == null || file.Length == 0)
             return BadRequest(new { message = "No file was uploaded." });

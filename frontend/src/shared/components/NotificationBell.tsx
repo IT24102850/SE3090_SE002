@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useGetNotificationsQuery, useGetUnreadNotificationCountQuery, useMarkNotificationReadMutation } from '../../api/bookingApi';
+import { useNotificationStream } from '../useNotificationStream';
+import { useToast } from './Toast';
 
 function relativeTime(value: string) {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
@@ -9,16 +11,47 @@ function relativeTime(value: string) {
   return `${Math.floor(minutes / 1440)}d ago`;
 }
 
-// In-app centre for booking confirmations, reminders, cancellations and
-// workflow updates. The panel is intentionally loaded only once opened.
+/* In-app centre for booking confirmations, reminders, cancellations and
+ * workflow updates.
+ *
+ * Live for real: an open Server-Sent Events connection pushes each
+ * notification the moment its row commits, wherever it was raised - this tab,
+ * another member of staff, a customer's phone, or one of the agents. The event
+ * invalidates the Notification tags, so the badge and the list are still
+ * served by the REST endpoints and remain the source of truth.
+ *
+ * The polls below are now a safety net rather than the mechanism, and are
+ * deliberately slow: they cover the seconds between losing the connection and
+ * the reconnect succeeding. They pause while the tab is in the background, so
+ * an unattended dashboard is not requesting all night, and a tab returning to
+ * focus refetches at once instead of waiting out an interval. */
+const COUNT_POLL_MS = 120_000;
+const LIST_POLL_MS = 120_000;
+
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const { data: countData } = useGetUnreadNotificationCountQuery(undefined, { pollingInterval: 30000 });
-  const { data, isLoading } = useGetNotificationsQuery(undefined, { pollingInterval: 30000 });
+  const { show } = useToast();
+  // Arriving notifications refresh the cache; the toast is so a manager
+  // watching another part of the screen still notices.
+  const streamStatus = useNotificationStream((n) => show(n.title, 'info'));
+  const { data: countData } = useGetUnreadNotificationCountQuery(undefined, {
+    pollingInterval: COUNT_POLL_MS,
+    skipPollingIfUnfocused: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  });
+  const { data, isLoading } = useGetNotificationsQuery(undefined, {
+    skip: !open && !countData?.count,
+    pollingInterval: open ? LIST_POLL_MS : 0,
+    skipPollingIfUnfocused: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMountOrArgChange: true,
+  });
   const [markRead] = useMarkNotificationReadMutation();
   const unread = countData?.count ?? 0;
 
-  return <div className="notification-center">
+  return <div className="notification-center" data-live={streamStatus}>
     <button className={`notification-trigger${unread > 0 ? ' has-unread' : ''}`} type="button" onClick={() => setOpen((value) => !value)} aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`} aria-expanded={open}>
       <span aria-hidden="true">🔔</span><small>Updates</small>{unread > 0 && <b>{unread > 9 ? '9+' : unread}</b>}
     </button>

@@ -144,6 +144,16 @@ class AppTheme {
         titleTextStyle: AppTextStyles.title,
         iconTheme: const IconThemeData(color: AppColors.iconPrimary),
       ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: _UnifyPageTransitionBuilder(),
+          TargetPlatform.iOS: _UnifyPageTransitionBuilder(),
+          TargetPlatform.windows: _UnifyPageTransitionBuilder(),
+          TargetPlatform.macOS: _UnifyPageTransitionBuilder(),
+          TargetPlatform.linux: _UnifyPageTransitionBuilder(),
+          TargetPlatform.fuchsia: _UnifyPageTransitionBuilder(),
+        },
+      ),
       iconTheme: const IconThemeData(color: AppColors.iconSecondary),
       cardTheme: CardThemeData(
         elevation: 0,
@@ -293,6 +303,46 @@ class AppTheme {
         unselectedItemColor: AppColors.textMuted,
         elevation: 0,
         type: BottomNavigationBarType.fixed,
+      ),
+    );
+  }
+}
+
+class _UnifyPageTransitionBuilder extends PageTransitionsBuilder {
+  const _UnifyPageTransitionBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final incoming = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    final outgoing = CurvedAnimation(
+      parent: secondaryAnimation,
+      curve: Curves.easeInCubic,
+    );
+
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.0, end: 1.0).animate(incoming),
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0.03, 0.02),
+          end: Offset.zero,
+        ).animate(incoming),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.985, end: 1.0).animate(incoming),
+          child: FadeTransition(
+            opacity: Tween<double>(begin: 1.0, end: 0.92).animate(outgoing),
+            child: child,
+          ),
+        ),
       ),
     );
   }

@@ -7,6 +7,8 @@ lives in the caller's search params, not in these function names.
 """
 from __future__ import annotations
 
+import functools
+import time
 from typing import Any
 
 import httpx
@@ -18,6 +20,33 @@ class ToolError(Exception):
     into the agent loop."""
 
 
+def _records_call(tool_name: str):
+    """Record every invocation of an allow-listed tool on the client.
+
+    The workflow trace is required to show which tools ran, in what order,
+    how long each took and whether it failed. Recording that here rather
+    than at each call site means a tool cannot be used without appearing in
+    the audit trail - including when it raises, which is exactly the case
+    an after-the-fact log tends to miss.
+    """
+
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(self, *args, **kwargs):
+            started = time.monotonic()
+            try:
+                result = fn(self, *args, **kwargs)
+            except Exception as e:
+                self._record(tool_name, started, ok=False, error=str(e)[:200])
+                raise
+            self._record(tool_name, started, ok=True, error=None)
+            return result
+
+        return wrapper
+
+    return decorator
+
+
 class BookingToolsClient:
     def __init__(self, base_url: str, auth_token: str, timeout: float = 15.0):
         self._client = httpx.Client(
@@ -25,6 +54,20 @@ class BookingToolsClient:
             headers={"Authorization": f"Bearer {auth_token}"},
             timeout=timeout,
         )
+        # Appended to by _records_call. The orchestrator sets current_agent
+        # before handing the client to each agent, so every entry is
+        # attributed to whichever agent was actually holding the client.
+        self.calls: list[dict[str, Any]] = []
+        self.current_agent: str = "unknown"
+
+    def _record(self, tool: str, started: float, *, ok: bool, error: str | None) -> None:
+        self.calls.append({
+            "tool": tool,
+            "agent": self.current_agent,
+            "duration_ms": int((time.monotonic() - started) * 1000),
+            "success": ok,
+            "error": error,
+        })
 
     def close(self) -> None:
         self._client.close()
@@ -36,6 +79,7 @@ class BookingToolsClient:
         self.close()
 
     # ── Domain Analysis Agent tools (read-only) ─────────────────────────
+    @_records_call("search_resources")
     def search_resources(
         self,
         tenant_id: str,
@@ -61,12 +105,14 @@ class BookingToolsClient:
             params["search"] = search
         return self._get("/resources", params)
 
+    @_records_call("get_resource_metadata")
     def get_resource_metadata(self, resource_id: str) -> dict[str, Any]:
         """Full detail for one resource, including the generic CustomAttributes/
         LocationMetadata JSON bags where business-type-specific ranking
         signals (rating, cuisine, distance, wait time, ...) live."""
         return self._get(f"/resources/{resource_id}")
 
+    @_records_call("check_staff_schedule")
     def check_staff_schedule(self, resource_id: str) -> dict[str, Any]:
         """Coarser than query_resource_availability: the full weekly working
         pattern (which days this resource works at all, plus any configured
@@ -76,6 +122,7 @@ class BookingToolsClient:
         return {"schedule": self._get(f"/resources/{resource_id}/schedule")}
 
     # ── Action/Tool Agent tools (read-only) ─────────────────────────────
+    @_records_call("query_resource_availability")
     def query_resource_availability(
         self, resource_id: str, date: str, duration_minutes: int, booking_type_id: str | None = None
     ) -> dict[str, Any]:
@@ -84,6 +131,7 @@ class BookingToolsClient:
             params["bookingTypeId"] = booking_type_id
         return self._get("/bookings/available-slots", params)
 
+    @_records_call("detect_conflicts")
     def detect_conflicts(
         self,
         resource_id: str,
@@ -108,14 +156,18 @@ class BookingToolsClient:
             return {"has_conflict": True, "reason": "Slot is no longer available."}
         return {"has_conflict": False, "reason": None}
 
+    @_records_call("predict_no_show_probability")
     def predict_no_show_probability(self) -> dict[str, Any]:
         """A real historical-rate heuristic (this customer's own past
         completed-vs-no-show ratio), not a trained ML model. Called directly
-        by validation_safety_agent.py, never exposed as an LLM-visible tool —
-        informational only, never a reason to deny a booking."""
+        by validation_safety_agent.py and also exposed to the Action/Tool
+        agent as an allow-listed tool, so a proposal can take a customer's
+        history into account. Informational either way: a high rate may
+        change which slot is proposed, and never denies a booking."""
         return self._get("/bookings/my-no-show-rate")
 
     # ── Validation/Safety Agent's own direct call (never a Gemini tool) ─
+    @_records_call("create_booking")
     def create_booking(
         self,
         tenant_id: str,

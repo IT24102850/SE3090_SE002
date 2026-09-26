@@ -5,6 +5,7 @@ import {
   useGetBookingsQuery, useGetResourcesQuery, useGetTenantQuery, useGetTenantProfileQuery,
 } from '../../api/bookingApi';
 import { businessHeroImage, businessDescriptor } from '../../shared/businessImagery';
+import BusinessAvatar from '../../shared/components/BusinessAvatar';
 import {
   addDays, buildMonthGrid, formatDayLabel, formatMonthYear, formatTime,
   isSameDay, startOfDay, toISODate, WEEKDAY_LABELS,
@@ -89,11 +90,14 @@ export default function CalendarDashboardPage() {
         <div className="hero-scrim" />
         <div className="hero-body">
           <div className="page-header" style={{ marginBottom: 0 }}>
-            <div>
-              <p className="hero-eyebrow">{descriptor}</p>
-              <h1 className="hero-title">{tenant?.name ?? 'Dashboard'}</h1>
-              <div className="hero-figure">{totalThisView.toLocaleString()}</div>
-              <p className="hero-sub">bookings in {formatMonthYear(anchor)}</p>
+            <div className="hero-identity">
+              <BusinessAvatar name={tenant?.name} src={profile?.logoUrl} />
+              <div>
+                <p className="hero-eyebrow">{descriptor}</p>
+                <h1 className="hero-title">{tenant?.name ?? 'Dashboard'}</h1>
+                <div className="hero-figure">{totalThisView.toLocaleString()}</div>
+                <p className="hero-sub">bookings in {formatMonthYear(anchor)}</p>
+              </div>
             </div>
             <div className="dashboard-resource-filter">
               <label htmlFor="dashboard-resource-filter">Showing</label>

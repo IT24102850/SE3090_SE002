@@ -1,0 +1,131 @@
+# Continuous integration for the SE3090 SME platform.
+#
+# Four independent jobs, one per runtime, so a failure names the layer that
+# broke instead of stopping the whole pipeline at the first error. Each job
+# runs the same commands a developer runs locally — no CI-only shortcuts, no
+# `continue-on-error`: a green tick here means the suite genuinely passed.
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+# A new push to the same branch supersedes the previous run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (ASP.NET Core 8 + xUnit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # There is no .sln in this repo; the test project references
+      # SmeBackend.csproj, so restoring and building it covers the API too.
+      - name: Restore
+        run: dotnet restore backend/SmeBackend.Tests/SmeBackend.Tests.csproj
+
+      - name: Build
+        run: >
+          dotnet build backend/SmeBackend.Tests/SmeBackend.Tests.csproj
+          --no-restore --configuration Release
+
+      - name: Test
+        # The suite runs against EF Core's in-memory provider, so it needs no
+        # PostgreSQL service container and no connection secrets.
+        run: >
+          dotnet test backend/SmeBackend.Tests/SmeBackend.Tests.csproj
+          --no-build --configuration Release --logger "trx;LogFileName=backend-tests.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: '**/TestResults/*.trx'
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend (React 19 + Vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        # `npm run build` also runs the nav-parity and subtype-registry checks
+        # and a full `tsc` pass, so type errors fail CI rather than reaching a
+        # deploy.
+        run: npm run build
+
+  agent-service:
+    name: Agentic AI service (FastAPI + pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agentic-ai-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: agentic-ai-service/requirements.txt
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Test
+        # No GEMINI_API_KEY and no .env: conftest.py seeds the few variables
+        # the app reads via os.environ.setdefault, and every LLM call is
+        # mocked at the client boundary. A suite that needed a live key could
+        # not run on a fork's pull request.
+        run: pytest tests/ -q
+
+  mobile:
+    name: Mobile (Flutter analyze + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/sme_mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.5'
+          channel: stable
+          cache: true
+
+      - name: Install packages
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test

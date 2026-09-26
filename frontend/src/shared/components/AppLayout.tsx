@@ -11,6 +11,7 @@ import { useToast } from './Toast';
 import WorkspaceAssistant from './WorkspaceAssistant';
 import UserAvatar from './UserAvatar';
 import BusinessAvatar from './BusinessAvatar';
+import { Icon as InventoryIcon } from '../../features/inventory/ui/Icon';
 
 interface NavItem {
   path: string;
@@ -36,24 +37,64 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Overview',
     items: [
       { path: '/dashboard', label: 'Dashboard', icon: '📊', roles: ['Admin', 'Manager', 'Staff', 'Customer'] },
-      { path: '/reports', label: 'Reports', icon: '📈', roles: ['Admin', 'Manager'] },
     ],
   },
   {
-    id: 'scheduling',
-    label: 'Scheduling',
+    // The customer's own destinations - the same four the Flutter app's
+    // customer tabs offer. Staff roles never see this section.
+    id: 'customer',
+    label: 'My visits',
     items: [
+      { path: '/book', label: 'Book a service', icon: '📅', roles: ['Customer'] },
+      { path: '/my-bookings', label: 'My bookings', icon: '🎟️', roles: ['Customer'] },
+      { path: '/ai-planner', label: 'AI planner', icon: '🤖', roles: ['Customer'] },
+      { path: '/business', label: 'About the business', icon: '🏪', roles: ['Customer'] },
+      { path: '/my-bills', label: 'My bills', icon: '💳', roles: ['Customer'] },
+    ],
+  },
+  {
+    // The Universal Booking & Resource Engine (spec 2.5). Its screens used
+    // to be scattered across Overview, Resources and Automation, which made
+    // the core engine look like the smallest thing in the product. They are
+    // grouped here because they are one component, not because the section
+    // needed padding: every entry is a screen the spec assigns to it.
+    id: 'scheduling',
+    label: 'Booking & Scheduling',
+    items: [
+      { path: '/calendar', label: 'Calendar', icon: '🗓️', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/bookings', label: 'Booking Manager', icon: '📅', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/my-schedule', label: 'My Schedule', icon: '🩺', roles: ['Staff'] },
       { path: '/multi-branch', label: 'Multi-Branch Schedule', icon: '🗂️', roles: ['Admin', 'Manager'] },
+      { path: '/availability', label: 'Availability Slots', icon: '⏳', roles: ['Admin', 'Manager'] },
+      { path: '/recurring', label: 'Recurring Series', icon: '🔁', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/booking-types', label: 'Booking Types', icon: '🏷️', roles: ['Admin', 'Manager'] },
+      { path: '/resources', label: 'Resource Manager', icon: '🏢', roles: ['Admin', 'Manager'] },
+      { path: '/planner', label: 'Schedule Copilot', icon: '✦', roles: ['Admin', 'Manager'] },
+      { path: '/agent-workflows', label: 'Agent Workflows', icon: '🛰️', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/reports', label: 'Reports', icon: '📈', roles: ['Admin', 'Manager'] },
+      { path: '/my-schedule', label: 'My Schedule', icon: '🩺', roles: ['Staff'] },
+    ],
+  },
+  {
+    // Billing & payments (component 3). Insurance claims is shared: staff
+    // work the pipeline, customers track their own.
+    id: 'billing',
+    label: 'Billing',
+    items: [
+      { path: '/billing', label: 'Billing Dashboard', icon: '💹', roles: ['Admin', 'Manager'] },
+      { path: '/invoices', label: 'Invoices', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/subscriptions', label: 'Subscriptions', icon: '🔁', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/insurance-claims', label: 'Insurance Claims', icon: '🛡️', roles: ['Admin', 'Manager', 'Staff', 'Customer'] },
+      { path: '/commission-rules', label: 'Commission Rules', icon: '🤝', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/billing-agent', label: 'Billing Agent', icon: '🧠', roles: ['Admin', 'Manager'] },
+      { path: '/invoice-designer', label: 'Invoice Designer', icon: '🎨', roles: ['Admin', 'Manager'] },
+      { path: '/form-builder', label: 'Form Builder', icon: '🧩', roles: ['Admin', 'Manager'] },
+      { path: '/payment-gateways', label: 'Payment Gateways', icon: '🔐', roles: ['Admin'] },
     ],
   },
   {
     id: 'resources',
-    label: 'Resources',
+    label: 'People & Places',
     items: [
-      { path: '/resources', label: 'Resource Manager', icon: '🏢', roles: ['Admin', 'Manager'] },
       { path: '/staff', label: 'Staff', icon: '🧑‍💼', roles: ['Admin', 'Manager'] },
       { path: '/branches', label: 'Branches', icon: '📍', roles: ['Admin'] },
     ],
@@ -63,19 +104,12 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Inventory',
     items: [
       { path: '/inventory', label: 'Inventory Manager', icon: '📦', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/suppliers', label: 'Suppliers', icon: '🏭', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/stock-movements', label: 'Stock Movements', icon: '🔄', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/purchase-orders', label: 'Purchase Orders', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/low-stock-alerts', label: 'Low Stock Alerts', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/low-stock-alerts', label: 'StockSense AI', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/branch-overview', label: 'Branch Overview', icon: '🏬', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/inventory-analytics', label: 'Inventory Analytics', icon: '📉', roles: ['Admin', 'Manager'] },
-    ],
-  },
-  {
-    id: 'automation',
-    label: 'Automation',
-    items: [
-      { path: '/planner', label: 'AI Planner', icon: '🤖', roles: ['Admin', 'Manager'] },
-      { path: '/agent-workflows', label: 'Agent Workflows', icon: '🛰️', roles: ['Admin', 'Manager', 'Staff'] },
     ],
   },
   {
@@ -90,6 +124,27 @@ const NAV_SECTIONS: NavSection[] = [
 
 /** Every nav path, in sidebar order. Exported for the parity test. */
 export const ALL_NAV_PATHS = NAV_SECTIONS.flatMap((s) => s.items.map((i) => i.path));
+
+const INVENTORY_NAV_ICONS: Record<string, string> = {
+  '/inventory': 'inventory',
+  '/suppliers': 'supplier',
+  '/stock-movements': 'movement',
+  '/purchase-orders': 'po',
+  '/low-stock-alerts': 'stocksense',
+  '/branch-overview': 'branch',
+  '/inventory-analytics': 'chart',
+};
+
+function NavigationIcon({ item, size = 18 }: { item: NavItem; size?: number }) {
+  const iconName = INVENTORY_NAV_ICONS[item.path];
+  if (iconName) return <InventoryIcon name={iconName} size={size} />;
+  return <>{item.icon}</>;
+}
+
+function inventoryIconClass(item: NavItem) {
+  const iconName = INVENTORY_NAV_ICONS[item.path];
+  return iconName ? `inventory-nav-icon inventory-nav-${iconName}` : undefined;
+}
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -116,6 +171,21 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     try { localStorage.setItem('unify-sidebar-tip-widget', '1'); } catch { /* private mode */ }
   };
   const { show } = useToast();
+
+  useEffect(() => {
+    if (!user) return;
+
+    const welcomeKey = `unify-welcome-shown:${user.id}`;
+    try {
+      if (sessionStorage.getItem(welcomeKey) === '1') return;
+      sessionStorage.setItem(welcomeKey, '1');
+    } catch {
+      // Private browsing can deny session storage; the greeting is still useful.
+    }
+
+    const name = user.fullName?.trim() || user.email.split('@')[0] || 'there';
+    show(`Welcome back, ${name}!`, 'success');
+  }, [show, user]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -161,9 +231,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     sections.flatMap((section) => section.items).find((item) => item.path === '/dashboard'),
     sections.find((section) => section.id === 'scheduling')?.items[0],
     sections.find((section) => section.id === 'inventory')?.items[0],
+    sections.find((section) => section.id === 'inventory')?.items.find((item) => item.path === '/low-stock-alerts'),
   ].filter((item): item is NavItem => Boolean(item));
   const pageName = location.pathname === '/inventory-analytics'
-    ? 'ENTERPRISE ANALYTICS'
+    ? 'INVENTORY ANALYTICS'
+    : location.pathname === '/low-stock-alerts'
+      ? 'STOCKSENSE AI'
     : location.pathname === '/inventory'
       ? 'STOCK MANAGEMENT'
       : location.pathname.replace('/', '').replace(/-/g, ' ').toUpperCase() || 'OPERATIONS';
@@ -195,6 +268,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   };
 
   const handleLogout = () => {
+    if (user) {
+      try {
+        sessionStorage.removeItem(`unify-welcome-shown:${user.id}`);
+      } catch {
+        // Ignore storage restrictions while logging out.
+      }
+    }
     dispatch(logout());
     // Both caches are keyed to the tenant that just logged out. RTK Query
     // keeps its store across a logout, and the sub-type is memoised in a
@@ -259,7 +339,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                         className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
                         onClick={() => setMobileNavOpen(false)}
                       >
-                        <span className="sidebar-link-icon" aria-hidden="true">{item.icon}</span>
+                        <span className={`sidebar-link-icon${inventoryIconClass(item) ? ` ${inventoryIconClass(item)}` : ''}`} aria-hidden="true"><NavigationIcon item={item} /></span>
                         <span>{item.label}</span>
                       </NavLink>
                     ))}
@@ -357,8 +437,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 to={item.path}
                 className={({ isActive }) => `mobile-quick-link${isActive ? ' active' : ''}`}
               >
-                <span aria-hidden="true">{item.icon}</span>
-                <small>{item.label.replace(' Manager', '')}</small>
+                <span className={inventoryIconClass(item)} aria-hidden="true"><NavigationIcon item={item} size={20} /></span>
+                <small>{item.label.replace(' Manager', '').replace('StockSense AI', 'StockSense')}</small>
               </NavLink>
             ))}
             <button type="button" className="mobile-quick-link mobile-quick-more" onClick={() => setMobileNavOpen(true)}>

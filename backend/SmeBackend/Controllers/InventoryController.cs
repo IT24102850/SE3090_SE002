@@ -6,6 +6,7 @@ using SmeBackend.Authorization;
 using SmeBackend.Data;
 using SmeBackend.Models;
 using SmeBackend.Shared;
+using SmeBackend.Services;
 
 namespace SmeBackend.Controllers;
 
@@ -15,9 +16,40 @@ namespace SmeBackend.Controllers;
 [Produces("application/json")]
 public sealed class InventoryController(
     AppDbContext db,
-    IAuthorizationService authorizationService) : ControllerBase
+    IAuthorizationService authorizationService,
+    IInventoryAgentService inventoryAgentService,
+    IJwtService jwtService) : ControllerBase
 {
     private const int MaxPageSize = 100;
+
+    [HttpPost("agent/plan")]
+    public async Task<IActionResult> PlanInventory(
+        [FromBody] InventoryAgentPlanRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+        if (string.IsNullOrWhiteSpace(request.Objective))
+            return BadRequest(new { message = "Describe what you want the inventory assistant to check." });
+
+        var branchId = ResolveBranchScope(request.BranchId);
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService, InventoryAuthorizationPolicies.InventoryRead, tenantId, branchId))
+            return Forbid();
+
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdClaim, out var userId)) return Unauthorized();
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == userId, cancellationToken);
+        if (user is null || user.TenantId != tenantId) return Unauthorized();
+
+        var response = await inventoryAgentService.PlanAsync(new InventoryAgentRequest(
+            request.Objective.Trim(), tenantId, branchId, jwtService.GenerateAccessToken(user)), cancellationToken);
+        return new ContentResult
+        {
+            StatusCode = response.StatusCode,
+            Content = response.Body,
+            ContentType = response.ContentType,
+        };
+    }
 
     [HttpGet]
     [ProducesResponseType(typeof(InventoryListResponse), StatusCodes.Status200OK)]
@@ -291,9 +323,9 @@ public sealed class InventoryController(
         item.Name = name;
         item.Sku = sku;
         item.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
-        item.CategoryId = request.CategoryId;
-        item.UnitId = request.UnitId;
-        item.BranchId = request.BranchId;
+        item.CategoryId = request.CategoryId ?? item.CategoryId;
+        item.UnitId = request.UnitId ?? item.UnitId;
+        item.BranchId = request.BranchId ?? item.BranchId;
         item.ReorderLevel = request.ReorderLevel;
         item.UnitCost = request.UnitCost;
         item.UpdatedAt = DateTime.UtcNow;
@@ -483,6 +515,80 @@ public sealed class InventoryController(
         return Ok(ToResponse(item));
     }
 
+    /// Logs food/stock waste: takes the quantity off hand and writes a
+    /// "Waste" movement priced at the item's unit cost, so the restaurant
+    /// dashboard can report waste cost and variance separately from
+    /// ordinary adjustments. Kept as its own movement type rather than a
+    /// negative Adjustment because that distinction is the whole report.
+    [HttpPost("{id:guid}/waste")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<InventoryItemResponse>> LogWaste(
+        Guid id,
+        WasteInventoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var item = await LoadItemAsync(id, cancellationToken);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        if (!await RequireItemAccessAsync(
+                InventoryAuthorizationPolicies.InventoryWrite,
+                item,
+                cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (request.Quantity <= 0)
+        {
+            ModelState.AddModelError("quantity", "Waste quantity must be greater than zero.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (!item.BranchId.HasValue)
+        {
+            return Conflict(new { message = "Stock operations require the item to be assigned to a branch." });
+        }
+
+        if (item.Quantity - request.Quantity < 0)
+        {
+            return Conflict(new { message = $"Waste would take '{item.Name}' below zero ({item.Quantity} on hand)." });
+        }
+
+        var reason = string.IsNullOrWhiteSpace(request.Reason) ? "Unspecified" : request.Reason.Trim();
+        item.Quantity -= request.Quantity;
+        item.UpdatedAt = DateTime.UtcNow;
+
+        db.StockMovements.Add(new StockMovement
+        {
+            InventoryItemId = item.Id,
+            BranchId = item.BranchId.Value,
+            MovementType = "Waste",
+            Quantity = -request.Quantity,
+            UnitCost = item.UnitCost,
+            Reference = string.IsNullOrWhiteSpace(request.Reference) ? $"WASTE-{DateTime.UtcNow:yyyyMMdd-HHmm}" : request.Reference.Trim(),
+            Notes = string.IsNullOrWhiteSpace(request.Notes) ? reason : $"{reason}: {request.Notes.Trim()}",
+            OccurredAt = DateTime.UtcNow,
+        });
+
+        NotificationHelper.Queue(db, tenantId, null, "StockWasted", "Waste logged", $"{item.Name}: {request.Quantity} written off ({reason}).");
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToResponse(item));
+    }
+
     [HttpPost]
     [Consumes("application/json")]
     [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status201Created)]
@@ -563,9 +669,23 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
-        if (request.BranchId.HasValue &&
-            !await db.Branches.AnyAsync(
-                branch => branch.Id == request.BranchId.Value, cancellationToken))
+        var branchId = request.BranchId;
+        if (!branchId.HasValue)
+        {
+            if (Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var userBranchId))
+            {
+                branchId = userBranchId;
+            }
+            else
+            {
+                branchId = await db.Branches
+                    .Where(branch => branch.TenantId == tenantId)
+                    .Select(branch => (Guid?)branch.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+        }
+        else if (!await db.Branches.AnyAsync(
+            branch => branch.Id == branchId.Value, cancellationToken))
         {
             ModelState.AddModelError("branchId", "The branch does not exist for this tenant.");
             return ValidationProblem(ModelState);
@@ -578,7 +698,7 @@ public sealed class InventoryController(
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             CategoryId = request.CategoryId,
             UnitId = request.UnitId,
-            BranchId = request.BranchId,
+            BranchId = branchId,
             Quantity = request.Quantity,
             ReorderLevel = request.ReorderLevel,
             UnitCost = request.UnitCost,
@@ -723,6 +843,17 @@ public sealed record AdjustInventoryRequest(
     decimal Quantity,
     string? Reference = null,
     string? Notes = null);
+
+/// Reason is free text on purpose ("Spoiled", "Over-prepped", "Dropped",
+/// "Expired") - the waste report groups by it, and every kitchen names
+/// these differently.
+public sealed record WasteInventoryRequest(
+    decimal Quantity,
+    string? Reason = null,
+    string? Reference = null,
+    string? Notes = null);
+
+public sealed record InventoryAgentPlanRequest(string Objective, Guid? BranchId = null);
 
 public sealed record ReceiveInventoryRequest(
     decimal Quantity,

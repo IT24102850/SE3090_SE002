@@ -1,7 +1,8 @@
 """Agent 3: Action/Tool. Checks real-time availability for the top-ranked
 candidate(s) and proposes a concrete booking. Never creates anything and
 never re-judges who's "best" — that's already decided by Domain Analysis.
-Read-only tools: query_resource_availability, detect_conflicts.
+Read-only tools: query_resource_availability, detect_conflicts,
+calculate_travel_time, predict_no_show_probability.
 """
 from __future__ import annotations
 
@@ -87,6 +88,17 @@ def _build_tools(client: BookingToolsClient) -> list[ToolSpec]:
                 "required": ["distance_km"],
             },
             handler=calculate_travel_time,
+        ),
+        ToolSpec(
+            name="predict_no_show_probability",
+            description=(
+                "This customer's own historical no-show rate, from their past bookings. "
+                "Informational only: use it to prefer a slot the business can afford to lose "
+                "(for example a quieter one for a customer who often misses), never as a "
+                "reason to refuse a booking."
+            ),
+            parameters_json_schema={"type": "object", "properties": {}},
+            handler=lambda: client.predict_no_show_probability(),
         ),
     ]
 

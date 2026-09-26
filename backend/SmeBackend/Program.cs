@@ -73,9 +73,42 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+builder.Services.AddMemoryCache();
+
+// SMS through text.lk (Sri Lankan numbers), and the keyless public-holiday
+// feed. Both are advisory paths, so both get short timeouts.
+builder.Services.AddHttpClient(SmeBackend.Services.TextLkSmsGateway.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddScoped<SmeBackend.Services.ISmsGateway, SmeBackend.Services.TextLkSmsGateway>();
+
+builder.Services.AddHttpClient(SmeBackend.Services.GoogleCalendarHolidayService.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<SmeBackend.Services.IPublicHolidayService,
+    SmeBackend.Services.GoogleCalendarHolidayService>();
+
+builder.Services.AddHttpClient(SmeBackend.Services.OpenRouteTravelTimeService.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<SmeBackend.Services.ITravelTimeService,
+    SmeBackend.Services.OpenRouteTravelTimeService>();
+
+// Open-Meteo: no API key, so the forecast works from a clean clone. A short
+// timeout keeps an advisory call from holding up the screen that asked for it.
+builder.Services.AddHttpClient(SmeBackend.Services.OpenMeteoForecastService.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(8));
+builder.Services.AddScoped<SmeBackend.Services.IWeatherForecastService,
+    SmeBackend.Services.OpenMeteoForecastService>();
+
+// Live notifications. The stream is a singleton because connections outlive
+// any one request; the interceptor publishes a Notification row the moment its
+// transaction commits, so every site that raises one is covered without having
+// to remember to announce it.
+builder.Services.AddSingleton<SmeBackend.Services.INotificationStream, SmeBackend.Services.NotificationStream>();
+builder.Services.AddSingleton<SmeBackend.Services.NotificationPublishInterceptor>();
+
 // PostgreSQL
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+           .AddInterceptors(sp.GetRequiredService<SmeBackend.Services.NotificationPublishInterceptor>()));
 
 // JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -117,18 +150,55 @@ builder.Services.AddAuthorization(options =>
     // Inventory module's branch-scoped resource policies (InventoryRead,
     // InventoryWrite, PurchaseOrderRead, PurchaseOrderWrite).
     InventoryAuthorizationPolicies.AddInventoryPolicies(options);
+
+    // The platform owner's console: SuperAdmin role + MFA-minted token +
+    // a live server-side session (Authorization/PlatformOwnerPolicy.cs).
+    PlatformOwnerPolicy.Add(options);
 });
 builder.Services.AddSingleton<IAuthorizationHandler, InventoryAccessHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, PlatformSessionHandler>();
+builder.Services.AddSingleton<IPlatformSecretProtector, PlatformSecretProtector>();
 
 // Custom services
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddScoped<ICustomerAccountService, CustomerAccountService>();
 builder.Services.AddHostedService<SmeBackend.Services.ReminderDispatchService>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPlannerAgentService, SmeBackend.Services.PlannerAgentService>();
-builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.StubReminderChannelSender>();
+builder.Services.AddHttpClient<SmeBackend.Services.IInventoryAgentService, SmeBackend.Services.InventoryAgentService>();
+// Real Twilio (SMS/WhatsApp) and SendGrid (email) delivery, reusing the
+// gateway code billing already ships. Without credentials it records
+// Simulated rather than pretending the reminder was sent.
+builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.ReminderChannelSender>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPushNotificationSender, SmeBackend.Services.FcmPushNotificationSender>();
 builder.Services.AddScoped<SmeBackend.Services.ICloudinaryImageService, SmeBackend.Services.CloudinaryImageService>();
+// Billing & payments engine (component 3). Integrations (Stripe, PayPal,
+// SendGrid, Twilio) share one named HttpClient; each falls back to an honest
+// "simulated" result when its credentials are not configured.
+builder.Services.AddHttpClient(SmeBackend.Services.Billing.BillingHttp.ClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
+builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingApprovalService, SmeBackend.Services.Billing.BillingApprovalService>();
+builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingMessenger, SmeBackend.Services.Billing.BillingMessenger>();
+builder.Services.AddScoped<IBillingService, BillingService>();
+builder.Services.AddScoped<IDynamicFormService, DynamicFormService>();
+builder.Services.AddScoped<SmeBackend.Services.Billing.BillingSettingsService>();
+builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingSettingsService>(sp =>
+    sp.GetRequiredService<SmeBackend.Services.Billing.BillingSettingsService>());
+builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingReportService, SmeBackend.Services.Billing.BillingReportService>();
+builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingAgentService, SmeBackend.Services.Billing.BillingAgentService>();
+// The billing copilot's two model edges (POST /billing/plan, /billing/narrate
+// on the agent service). The deterministic /analyze path does not depend on
+// it, so a missing agent service degrades the copilot alone.
+builder.Services.AddHttpClient<SmeBackend.Services.Billing.IBillingPlannerService, SmeBackend.Services.Billing.BillingPlannerService>();
+builder.Services.AddScoped<SmeBackend.Services.Billing.IPaymentCheckoutService, SmeBackend.Services.Billing.PaymentCheckoutService>();
+builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.StripePaymentProcessor>();
+builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.PayPalPaymentProcessor>();
+builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.ManualPaymentProcessor>();
+builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessorFactory, SmeBackend.Services.Billing.PaymentProcessorFactory>();
+builder.Services.AddHostedService<SmeBackend.Services.Billing.BillingAutomationService>();
 
 // The public website booking widget is anonymous, so it gets a per-IP
 // budget that no signed-in endpoint needs: enough for a family working
@@ -136,6 +206,18 @@ builder.Services.AddScoped<SmeBackend.Services.ICloudinaryImageService, SmeBacke
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // Platform console sign-in: five tries a minute per address, on top of
+    // the per-account lockout. An online guess of a 14+ character password
+    // and a 6-digit code is not happening at 5/min.
+    options.AddPolicy(SmeBackend.Controllers.PlatformAuthController.LoginRateLimitPolicy, context =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
     options.AddPolicy(SmeBackend.Controllers.PublicBookingController.RateLimitPolicy, context =>
         System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -185,6 +267,21 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseRateLimiter();
+// Nothing the platform console returns may be cached or framed: every
+// response under /api/platform is no-store and carries the usual hardening
+// headers, whatever proxy sits in front.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/platform"))
+    {
+        context.Response.Headers.CacheControl = "no-store, max-age=0";
+        context.Response.Headers.Pragma = "no-cache";
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Response.Headers["X-Frame-Options"] = "DENY";
+        context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    }
+    await next();
+});
 app.UseAuthentication();
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthorization();
@@ -206,6 +303,13 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+
+    // The platform owner exists in every environment - the console is for
+    // the deployed site. See Data/PlatformOwnerSeeder.cs for the config keys.
+    await PlatformOwnerSeeder.SeedAsync(
+        db,
+        app.Configuration,
+        scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PlatformOwnerSeeder"));
 
     if (app.Environment.IsDevelopment())
     {

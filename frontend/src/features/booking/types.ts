@@ -36,6 +36,10 @@ export interface Booking {
   totalCost?: number | null;
   createdAt: string;
   checkInAt?: string | null;
+  /** Set when the consultation begins (status -> InProgress). */
+  consultationStartedAt?: string | null;
+  /** Set when the visit completes (status -> Completed). */
+  checkOutAt?: string | null;
   // Fixed-departure excursion fields. All optional - a booking that has
   // none of them renders exactly as it did before they existed.
   departureId?: string | null;
@@ -100,6 +104,30 @@ export const DEPARTURE_STATUS_COLORS: Record<DepartureStatus, { bg: string; labe
   CancelledWeather: { bg: '#38BDF8', label: 'Weather-cancelled' },
   CancelledOther: { bg: '#7C7C85', label: 'Cancelled' },
 };
+
+/* An Open-Meteo forecast for one departure, plus the sail/no-sail call the
+ * backend derives from it. `available: false` means the forecast service could
+ * not be reached or the vessel has no coordinates - not that it is safe. */
+export interface DepartureForecast {
+  available: boolean;
+  message?: string;
+  observation?: WeatherObservation;
+  forecast?: {
+    forecastedFor: string;
+    windSpeedKnots?: number | null;
+    windGustKnots?: number | null;
+    waveHeightMetres?: number | null;
+    visibilityKm?: number | null;
+    source: string;
+    coordinates: { latitude: number; longitude: number; from: string };
+  };
+  risk?: {
+    level: 'ok' | 'caution' | 'unsafe' | 'unknown';
+    suggestCancellation: boolean;
+    reasons: string[];
+  };
+  guestsAffected?: number;
+}
 
 export interface WeatherObservation {
   id: string;
@@ -448,11 +476,59 @@ export interface WorkflowStep {
   parameters: Record<string, unknown>;
 }
 
+/* The auditable execution trace the agent service returns and ASP.NET Core
+ * stores on the workflow. Serialized as JSON strings on the entity, so the
+ * shapes below describe what parsing them yields. */
+export interface AgentStepRecord {
+  agent: string;
+  durationMs: number;
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface ToolCallRecord {
+  tool: string;
+  agent: string;
+  durationMs: number;
+  success: boolean;
+  error?: string | null;
+}
+
+/* One attempt against one model. Several entries for a single step is the
+ * retry/fallback layer working, not a fault — which is why the attempt
+ * number is kept rather than collapsed. */
+export interface LlmCallRecord {
+  model: string;
+  attempt: number;
+  durationMs: number;
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface ExecutionTrace {
+  agentSteps?: AgentStepRecord[];
+  toolCalls?: ToolCallRecord[];
+  llmCalls?: LlmCallRecord[];
+  plannerConfidence?: number | null;
+  predictedConflicts?: { kind: string; description: string; likelihood: number }[];
+  rankingCriteria?: string[];
+  error?: string | null;
+}
+
+export interface ValidationResultsSummary {
+  isAllowed?: boolean | null;
+  requiresHumanApproval?: boolean | null;
+  rejectionReason?: string | null;
+  notes?: string[];
+}
+
 export interface AgentWorkflow {
   id: string;
   tenantId: string;
   objective: string;
   planJson?: string | null;
+  toolResultsJson?: string | null;
+  validationResults?: string | null;
   status: string;
   approvalStatus: string;
   approvedBy?: string | null;
@@ -550,3 +626,845 @@ export const BOOKING_STATUSES: BookingStatus[] = [
   'Pending', 'Confirmed', 'CheckedIn', 'InProgress', 'Completed', 'Cancelled', 'NoShow', 'Rejected',
   'WeatherCancelled',
 ];
+
+// ── Clinic operations dashboard (ClinicReportsController) ─────────────
+
+export type ClinicGroupBy = 'day' | 'week' | 'month';
+
+export interface ClinicOverviewParams {
+  from?: string;
+  to?: string;
+  branchId?: string;
+  resourceId?: string;
+  bookingTypeId?: string;
+  insuranceProvider?: string;
+  groupBy?: ClinicGroupBy;
+}
+
+/** Rates and averages are null when there is nothing to measure yet, and
+ *  the UI shows a dash for them - never a zero pretending to be a result. */
+export interface ClinicKpis {
+  totalPatients: number;
+  newPatients: number;
+  activePatients: number;
+  totalDoctors: number;
+  doctorsOnDutyToday: number;
+  rooms: number;
+  totalAppointments: number;
+  completed: number;
+  noShows: number;
+  cancelled: number;
+  pending: number;
+  confirmed: number;
+  completionRate: number | null;
+  noShowRate: number | null;
+  cancellationRate: number | null;
+  revenueRealised: number;
+  revenueBooked: number;
+  currency: string;
+  avgWaitMinutes: number | null;
+  avgVisitMinutes: number | null;
+  waitSamples: number;
+  appointmentsToday: number;
+  patientsToday: number;
+  patientsPerDoctorToday: number | null;
+}
+
+export interface ClinicTrendBucket {
+  bucket: string;
+  label: string;
+  appointments: number;
+  completed: number;
+  noShows: number;
+  cancelled: number;
+  revenue: number;
+}
+
+export interface ClinicOverview {
+  from: string;
+  to: string;
+  groupBy: ClinicGroupBy;
+  asOf: string;
+  filters: { branchId?: string | null; resourceId?: string | null; bookingTypeId?: string | null; insuranceProvider?: string | null };
+  kpis: ClinicKpis;
+  statusMix: { status: BookingStatus; count: number }[];
+  trend: ClinicTrendBucket[];
+  byDoctor: { resourceId: string; name: string; specialty?: string | null; branchName?: string | null; appointments: number; completed: number; noShows: number; revenue: number; avgWaitMinutes: number | null }[];
+  byTreatment: { bookingTypeId: string; name: string; colorHex?: string | null; appointments: number; completed: number; revenue: number }[];
+  byBranch: { branchId?: string | null; name: string; appointments: number; patients: number; revenue: number; completionRate: number | null }[];
+  byInsurance: { provider: string; patients: number; appointments: number; revenue: number }[];
+  bySource: { source: string; appointments: number }[];
+  byHour: { hour: number; appointments: number }[];
+  filterOptions: {
+    branches: { id: string; name: string }[];
+    doctors: { id: string; name: string; specialty?: string | null; branchId?: string | null }[];
+    treatments: { id: string; name: string; colorHex?: string | null }[];
+    insuranceProviders: string[];
+  };
+}
+
+export type ClinicStage = 'scheduled' | 'waiting' | 'inConsultation' | 'completed' | 'noShow' | 'cancelled';
+
+export interface ClinicQueueEntry {
+  bookingId: string;
+  patientId: string;
+  patientName: string;
+  patientPhone?: string | null;
+  insuranceProvider?: string | null;
+  resourceId: string;
+  doctorName: string;
+  treatment: string;
+  colorHex?: string | null;
+  startTime: string;
+  endTime: string;
+  status: BookingStatus;
+  priority: BookingPriority;
+  stage: ClinicStage;
+  checkInAt?: string | null;
+  consultationStartedAt?: string | null;
+  checkOutAt?: string | null;
+  waitingMinutes: number | null;
+  isLongWait: boolean;
+  isOverdue: boolean;
+  reminderSent: boolean;
+}
+
+export interface ClinicFlow {
+  asOf: string;
+  date: string;
+  stages: Record<ClinicStage, number>;
+  waitingNow: ClinicQueueEntry[];
+  longestWaitMinutes: number | null;
+  avgWaitMinutesToday: number | null;
+  overdue: number;
+  doctorsOnDuty: number;
+  doctorsInConsultation: number;
+  patientsToday: number;
+  patientsPerDoctor: number | null;
+  rooms: { total: number; occupied: number; occupancyPercent: number | null };
+  queue: ClinicQueueEntry[];
+}
+
+export type ClinicAlertSeverity = 'critical' | 'warning' | 'info';
+
+export interface ClinicAlert {
+  id: string;
+  severity: ClinicAlertSeverity;
+  category: string;
+  title: string;
+  detail: string;
+  count: number;
+  href: string;
+}
+
+export interface ClinicReminderItem {
+  bookingId: string;
+  patientName: string;
+  patientPhone?: string | null;
+  patientEmail?: string | null;
+  doctorName: string;
+  treatment: string;
+  startTime: string;
+  status: BookingStatus;
+  reminderSent: boolean;
+  lastReminderAt?: string | null;
+  lastChannel?: string | null;
+}
+
+export interface ClinicFollowUp {
+  patientId: string;
+  patientName: string;
+  patientPhone?: string | null;
+  lastVisit: string;
+  doctorName: string;
+  treatment: string;
+  daysSince: number;
+}
+
+export interface ClinicReminders {
+  asOf: string;
+  withinHours: number;
+  unsent: number;
+  items: ClinicReminderItem[];
+  followUps: ClinicFollowUp[];
+}
+
+// ── Restaurant operations dashboard (RestaurantReportsController) ─────
+// An "order" is a Booking; see the controller header for the full mapping.
+// Rates and averages are null when there is nothing to measure yet.
+
+export type RestaurantGroupBy = 'hour' | 'day' | 'week' | 'month';
+export type RestaurantShift = 'breakfast' | 'lunch' | 'dinner' | 'late';
+export type RestaurantServiceMode = 'Dine-in' | 'Takeaway' | 'Delivery' | 'Drive-thru';
+export type RestaurantStage = 'new' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'noShow';
+export type RestaurantResourceKind = 'station' | 'table' | 'rider' | 'staff' | 'other';
+
+export interface RestaurantOverviewParams {
+  from?: string;
+  to?: string;
+  groupBy?: RestaurantGroupBy;
+  branchId?: string;
+  resourceId?: string;
+  bookingTypeId?: string;
+  channel?: string;
+  serviceMode?: string;
+  shift?: RestaurantShift;
+  /** Viewer offset in minutes east of UTC (-new Date().getTimezoneOffset()). */
+  tz?: number;
+}
+
+export interface RestaurantKpis {
+  currency: string;
+  orders: number;
+  completed: number;
+  cancelled: number;
+  noShows: number;
+  pending: number;
+  open: number;
+  completionRate: number | null;
+  cancellationRate: number | null;
+  revenue: number;
+  revenueBooked: number;
+  averageOrderValue: number | null;
+  covers: number;
+  revenuePerCover: number | null;
+  revenuePerDay: number;
+  ordersPerDay: number;
+  avgPrepMinutes: number | null;
+  avgTicketMinutes: number | null;
+  prepSamples: number;
+  onTimeRate: number | null;
+  delayed: number;
+  prepTargetMinutes: number;
+  tables: number;
+  tableTurnover: number | null;
+  staffRostered: number;
+  staffHeadcount: number;
+  laborHours: number;
+  laborCost: number;
+  laborPercent: number | null;
+  laborRated: number;
+  wasteUnits: number;
+  wasteCost: number;
+  wastePercent: number | null;
+  wasteEntries: number;
+  consumptionMovements: number;
+  consumptionCost: number;
+  lowStockItems: number;
+  ordersToday: number;
+  revenueToday: number;
+  coversToday: number;
+}
+
+export interface RestaurantTrendBucket {
+  bucket: string;
+  label: string;
+  orders: number;
+  completed: number;
+  cancelled: number;
+  revenue: number;
+  covers: number;
+  dineIn: number;
+  offPremise: number;
+}
+
+export interface RestaurantOverview {
+  from: string;
+  to: string;
+  groupBy: RestaurantGroupBy;
+  asOf: string;
+  tz: number;
+  filters: { branchId?: string | null; resourceId?: string | null; bookingTypeId?: string | null; channel?: string | null; serviceMode?: string | null; shift?: string | null };
+  kpis: RestaurantKpis;
+  previous: { from: string; to: string; orders: number; completed: number; cancelled: number; revenue: number; covers: number; averageOrderValue: number | null };
+  statusMix: { status: BookingStatus; count: number }[];
+  trend: RestaurantTrendBucket[];
+  byHour: { hour: number; orders: number; revenue: number }[];
+  byShift: { shift: RestaurantShift; label: string; hours: string; orders: number; completed: number; revenue: number; covers: number }[];
+  byChannel: { channel: string; orders: number; completed: number; cancelled: number; revenue: number; covers: number }[];
+  byServiceMode: { mode: string; orders: number; completed: number; revenue: number; covers: number; avgPrepMinutes: number | null }[];
+  byMenu: { bookingTypeId: string; name: string; colorHex?: string | null; serviceMode: string; orders: number; completed: number; revenue: number; avgPrepMinutes: number | null; prepTargetMinutes: number; onTimeRate: number | null }[];
+  byStation: { resourceId: string; name: string; kind: RestaurantResourceKind; branchName?: string | null; orders: number; completed: number; cancelled: number; revenue: number; covers: number; avgPrepMinutes: number | null; delayed: number }[];
+  byBranch: { branchId?: string | null; name: string; orders: number; completed: number; revenue: number; covers: number }[];
+  waste: {
+    byItem: { inventoryItemId: string; name: string; units: number; cost: number }[];
+    byReason: { reason: string; entries: number; units: number; cost: number }[];
+  };
+  filterOptions: {
+    branches: { id: string; name: string }[];
+    stations: { id: string; name: string; kind: RestaurantResourceKind; branchId?: string | null }[];
+    menu: { id: string; name: string; colorHex?: string | null; serviceMode: string; prepTargetMinutes: number }[];
+    channels: string[];
+    serviceModes: string[];
+    shifts: { id: RestaurantShift; label: string; hours: string }[];
+  };
+}
+
+export interface RestaurantOrder {
+  bookingId: string;
+  customerName: string;
+  customerPhone?: string | null;
+  resourceId: string;
+  resourceName: string;
+  resourceKind: RestaurantResourceKind;
+  menuItem: string;
+  colorHex?: string | null;
+  serviceMode: string;
+  channel: string;
+  startTime: string;
+  endTime: string;
+  createdAt: string;
+  status: BookingStatus;
+  stage: RestaurantStage;
+  priority: BookingPriority;
+  covers: number;
+  totalCost?: number | null;
+  notes?: string | null;
+  kitchenStartedAt?: string | null;
+  readyAt?: string | null;
+  servedAt?: string | null;
+  kitchenMinutes: number | null;
+  prepTargetMinutes: number;
+  isDelayed: boolean;
+  wasDelayed: boolean;
+  waitingMinutes: number | null;
+  isStale: boolean;
+  isLateStart: boolean;
+}
+
+export interface RestaurantShiftRow {
+  resourceId: string;
+  name: string;
+  role?: string | null;
+  shiftStart: string;
+  shiftEnd: string;
+  scheduledHours: number;
+  hoursSoFar: number;
+  hourlyRate?: number | null;
+  onShift: boolean;
+  status: 'busy' | 'on shift' | 'finished' | 'due later';
+  ordersHandled: number;
+}
+
+export interface RestaurantLive {
+  asOf: string;
+  date: string;
+  isToday: boolean;
+  stages: Record<RestaurantStage, number>;
+  kitchen: {
+    openTickets: number;
+    delayed: number;
+    stale: number;
+    lateStarts: number;
+    longestOpenMinutes: number | null;
+    avgPrepMinutesToday: number | null;
+    onTimeRateToday: number | null;
+    defaultTargetMinutes: number;
+  };
+  tables: { total: number; occupied: number; occupancyPercent: number | null };
+  sales: {
+    currency: string;
+    revenue: number;
+    orders: number;
+    covers: number;
+    averageOrderValue: number | null;
+    revenueBooked: number;
+    byHour: { hour: number; orders: number; revenue: number }[];
+  };
+  labor: {
+    headcountRostered: number;
+    onShiftNow: number;
+    scheduledToday: number;
+    hoursSoFar: number;
+    hoursScheduled: number;
+    costSoFar: number;
+    costScheduled: number;
+    laborPercent: number | null;
+    rated: number;
+    shifts: RestaurantShiftRow[];
+  };
+  stations: { resourceId: string; name: string; kind: RestaurantResourceKind; orders: number; open: number; queued: number; completed: number; delayed: number; avgPrepMinutes: number | null; covers: number; revenue: number }[];
+  upcoming: { bookingId: string; customerName: string; customerPhone?: string | null; resourceName: string; menuItem: string; serviceMode: string; channel: string; startTime: string; status: BookingStatus; covers: number; totalCost?: number | null; notes?: string | null }[];
+  feed: RestaurantOrder[];
+}
+
+export interface RestaurantInventoryItem {
+  id: string;
+  name: string;
+  sku: string;
+  category?: string | null;
+  unit?: string | null;
+  quantity: number;
+  reorderLevel: number;
+  unitCost?: number | null;
+  status: 'out' | 'low' | 'ok';
+  levelPercent: number | null;
+  wastedInRange: number;
+  consumedInRange: number;
+}
+
+export interface RestaurantInventory {
+  asOf: string;
+  from: string;
+  to: string;
+  currency: string;
+  summary: {
+    items: number;
+    lowStock: number;
+    outOfStock: number;
+    stockValue: number;
+    wasteEntries: number;
+    wasteUnits: number;
+    wasteCost: number;
+    consumptionMovements: number;
+    consumptionUnits: number;
+    consumptionCost: number;
+    ordersConsumed: number;
+  };
+  items: RestaurantInventoryItem[];
+  waste: {
+    byItem: { inventoryItemId: string; name: string; entries: number; units: number; cost: number }[];
+    byReason: { reason: string; entries: number; units: number; cost: number }[];
+    log: { id: string; occurredAt: string; item: string; units: number; cost: number; reason: string; notes?: string | null; reference?: string | null }[];
+  };
+  recentMovements: { id: string; occurredAt: string; item: string; movementType: string; quantity: number; reference?: string | null; notes?: string | null }[];
+}
+
+// ── Gym / fitness operations dashboard (GymReportsController) ─────────
+// A "visit" is a Booking with a CheckInAt; a membership is a Subscription.
+// Rates and averages are null when there is nothing to measure yet.
+
+export type GymGroupBy = 'hour' | 'day' | 'week' | 'month';
+export type GymBookingKind = 'access' | 'class' | 'pt' | 'dropIn';
+export type GymMembershipStatus = 'active' | 'frozen' | 'cancelled' | 'expired' | 'none';
+export type GymPaymentStatus = 'Paid' | 'Pending' | 'Failed' | 'Overdue';
+export type GymMaintenanceStatus = 'none' | 'scheduled' | 'dueSoon' | 'overdue' | 'usageDue' | 'inService';
+
+export interface GymOverviewParams {
+  from?: string;
+  to?: string;
+  groupBy?: GymGroupBy;
+  branchId?: string;
+  resourceId?: string;
+  bookingTypeId?: string;
+  plan?: string;
+  tz?: number;
+}
+
+export interface GymKpis {
+  currency: string;
+  visits: number;
+  uniqueVisitors: number;
+  visitsPerDay: number;
+  avgVisitMinutes: number | null;
+  visitSamples: number;
+  peakHour: number | null;
+  peakHourCheckIns: number;
+  totalMembers: number;
+  activeMembers: number;
+  frozenMembers: number;
+  expiredMembers: number;
+  cancelledMembers: number;
+  withoutMembership: number;
+  newMembers: number;
+  signUps: number;
+  lapsed: number;
+  churnRate: number | null;
+  renewalsDue30: number;
+  renewalsDue7: number;
+  overduePayments: number;
+  overdueAmount: number;
+  revenue: number;
+  membershipRevenue: number;
+  dropInRevenue: number;
+  revenueMtd: number;
+  revenueYtd: number;
+  monthlyRecurring: number;
+  classSessions: number;
+  classBookings: number;
+  classFillRate: number | null;
+  equipmentItems: number;
+  equipmentUtilisation: number | null;
+  maintenanceDue: number;
+  zones: number;
+  trainers: number;
+}
+
+export interface GymTrendBucket {
+  bucket: string;
+  label: string;
+  visits: number;
+  uniqueMembers: number;
+  classBookings: number;
+  signUps: number;
+  revenue: number;
+}
+
+export interface GymRenewal {
+  subscriptionId: string;
+  memberId: string;
+  memberName: string;
+  phone?: string | null;
+  email?: string | null;
+  plan: string;
+  amount: number;
+  endDate: string;
+  daysLeft: number;
+  autoRenew: boolean;
+  paymentStatus: GymPaymentStatus;
+}
+
+export interface GymEquipmentRow {
+  equipmentItemId: string;
+  name: string;
+  category: string;
+  units: number;
+  uses: number;
+  hoursUsed: number;
+  utilisationPercent: number | null;
+  lastServicedAt?: string | null;
+  nextDueAt?: string | null;
+  usesSinceService: number;
+  maintenanceEveryUses: number;
+  maintenanceStatus: GymMaintenanceStatus;
+  maintenanceNotes?: string | null;
+}
+
+export interface GymOverview {
+  from: string;
+  to: string;
+  groupBy: GymGroupBy;
+  asOf: string;
+  tz: number;
+  filters: { branchId?: string | null; resourceId?: string | null; bookingTypeId?: string | null; plan?: string | null };
+  targets: { facilityCapacity: number | null; monthlyRevenueTarget: number | null; yearlyRevenueTarget: number | null; monthTargetToDate: number | null; openHoursPerDay: number; maintenanceEveryUses: number };
+  kpis: GymKpis;
+  previous: { visits: number; uniqueVisitors: number; signUps: number; revenue: number };
+  renewals: GymRenewal[];
+  outstanding: { subscriptionId: string; memberId: string; memberName: string; phone?: string | null; plan: string; amount: number; paymentStatus: GymPaymentStatus; nextBillingAt?: string | null; lastPaymentAt?: string | null }[];
+  payment: { status: GymPaymentStatus; memberships: number; amount: number }[];
+  statusMix: { status: BookingStatus; count: number }[];
+  trend: GymTrendBucket[];
+  heatmap: { dayOfWeek: number; label: string; hours: number[] }[];
+  byHour: { hour: number; checkIns: number }[];
+  byMethod: { method: string; checkIns: number }[];
+  byClass: { bookingTypeId: string; name: string; colorHex?: string | null; sessions: number; bookings: number; attended: number; capacityPerSession?: number | null; fillRate: number | null; avgPerSession: number | null; noShows: number; revenue: number }[];
+  byTrainer: { resourceId: string; name: string; specialty?: string | null; sessions: number; bookings: number; completed: number; revenue: number }[];
+  byZone: { resourceId: string; name: string; capacity?: number | null; visits: number; hoursBooked: number; utilisationPercent: number | null }[];
+  byEquipment: GymEquipmentRow[];
+  byPlan: { plan: string; members: number; monthlyValue: number; signUpsInRange: number }[];
+  byAge: { band: string; members: number }[];
+  byGender: { gender: string; members: number }[];
+  byBranch: { branchId?: string | null; name: string; visits: number; members: number }[];
+  filterOptions: {
+    branches: { id: string; name: string }[];
+    zones: { id: string; name: string; capacity?: number | null }[];
+    trainers: { id: string; name: string; specialty?: string | null }[];
+    classes: { id: string; name: string; colorHex?: string | null; capacity?: number | null }[];
+    bookingTypes: { id: string; name: string; kind: GymBookingKind }[];
+    plans: string[];
+  };
+}
+
+export interface GymLiveRow {
+  bookingId: string;
+  memberId: string;
+  memberName: string;
+  plan?: string | null;
+  membershipStatus: GymMembershipStatus;
+  paymentStatus?: GymPaymentStatus | null;
+  kind: GymBookingKind;
+  activity: string;
+  colorHex?: string | null;
+  zone: string;
+  method: string;
+  status: BookingStatus;
+  startTime: string;
+  checkInAt?: string | null;
+  checkOutAt?: string | null;
+  minutesInside: number | null;
+  isInside: boolean;
+}
+
+export interface GymLive {
+  asOf: string;
+  date: string;
+  insideNow: number;
+  capacity: number | null;
+  occupancyPercent: number | null;
+  entriesToday: number;
+  exitsToday: number;
+  uniqueToday: number;
+  expiredInsideToday: number;
+  byHour: { hour: number; entries: number; exits: number }[];
+  inside: GymLiveRow[];
+  recent: GymLiveRow[];
+  classesToday: { bookingTypeId: string; name: string; colorHex?: string | null; resourceName: string; startTime: string; endTime: string; booked: number; checkedIn: number; capacity?: number | null; fillPercent: number | null; isFull: boolean; state: 'upcoming' | 'inProgress' | 'done' }[];
+  trainers: { rostered: number; onFloor: number; list: { resourceId: string; name: string; specialty?: string | null; shiftStart: string; shiftEnd: string; onFloor: boolean; busy: boolean; sessionsToday: number }[] };
+}
+
+export interface GymAttendanceRow {
+  bookingId: string;
+  memberId: string;
+  memberName: string;
+  phone?: string | null;
+  plan?: string | null;
+  membershipStatus: GymMembershipStatus;
+  method: string;
+  kind: GymBookingKind;
+  activity: string;
+  zone: string;
+  checkInAt: string;
+  checkOutAt?: string | null;
+  minutes: number | null;
+  status: BookingStatus;
+}
+
+export interface GymAttendance {
+  asOf: string;
+  from: string;
+  to: string;
+  total: number;
+  page: number;
+  pageSize: number;
+  methods: string[];
+  rows: GymAttendanceRow[];
+}
+
+// ── School / tuition-centre dashboard (SchoolReportsController) ───────
+// A lesson session is one start time on one resource; each student has a
+// booking on it whose FormData carries the attendance mark. Exams and
+// assignments are bookings whose FormData carries the score.
+
+export type SchoolGroupBy = 'day' | 'week' | 'month';
+export type SchoolKind = 'lesson' | 'tutoring' | 'exam' | 'assignment';
+export type AttendanceMark = 'present' | 'late' | 'absent' | 'excused';
+export type SchoolPaymentStatus = 'Paid' | 'Pending' | 'Failed' | 'Overdue';
+export type SchoolTuitionStatus = SchoolPaymentStatus | 'lapsed' | 'none';
+
+export interface SchoolOverviewParams {
+  from?: string;
+  to?: string;
+  groupBy?: SchoolGroupBy;
+  branchId?: string;
+  resourceId?: string;
+  bookingTypeId?: string;
+  grade?: string;
+  tz?: number;
+}
+
+export interface SchoolKpis {
+  currency: string;
+  students: number;
+  enrolled: number;
+  newStudents: number;
+  lapsed: number;
+  retentionRate: number | null;
+  pendingApprovals: number;
+  pendingStudents: number;
+  pendingStaff: number;
+  sessions: number;
+  sessionsHeld: number;
+  attendanceRate: number | null;
+  present: number;
+  late: number;
+  absent: number;
+  excused: number;
+  unmarked: number;
+  unmarkedSessions: number;
+  assessments: number;
+  gradedEntries: number;
+  ungradedOverdue: number;
+  avgScore: number | null;
+  passRate: number | null;
+  atRisk: number;
+  behaviourPoints: number;
+  incidents: number;
+  commendations: number;
+  teachers: number;
+  rooms: number;
+  conflicts: number;
+  tuitionPaid: number;
+  tutoringFees: number;
+  income: number;
+  payrollHours: number;
+  payrollCost: number;
+  purchases: number;
+  costs: number;
+  net: number;
+  outstandingCount: number;
+  outstandingAmount: number;
+  monthlyRecurring: number;
+}
+
+export interface SchoolStudentRow {
+  studentId: string;
+  name: string;
+  phone?: string | null;
+  grade?: string | null;
+  sessionsMarked: number;
+  attended: number;
+  late: number;
+  absent: number;
+  excused: number;
+  attendanceRate: number | null;
+  avgScore: number | null;
+  graded: number;
+  points: number;
+  incidents: number;
+  commendations: number;
+  lastSeen?: string | null;
+  atRisk: boolean;
+  reasons: string[];
+  medicalAlert: boolean;
+  tuitionStatus: SchoolTuitionStatus;
+}
+
+export interface SchoolTrendBucket {
+  bucket: string;
+  label: string;
+  sessions: number;
+  attendanceRate: number | null;
+  absences: number;
+  avgScore: number | null;
+  newStudents: number;
+  tuitionPaid: number;
+}
+
+export interface SchoolOverview {
+  from: string;
+  to: string;
+  groupBy: SchoolGroupBy;
+  asOf: string;
+  tz: number;
+  filters: { branchId?: string | null; resourceId?: string | null; bookingTypeId?: string | null; grade?: string | null };
+  thresholds: { atRiskAttendancePercent: number; atRiskGradePercent: number; lateAfterMinutes: number; scale: { grade: string; min: number }[] };
+  calendar: {
+    terms: { name: string; from: string; to: string; isCurrent: boolean }[];
+    currentTerm: { name: string; from: string; to: string; daysLeft: number; progressPercent: number } | null;
+    holidays: { name: string; date: string; daysAway: number }[];
+    nextHoliday: { name: string; date: string; daysAway: number } | null;
+  };
+  kpis: SchoolKpis;
+  previous: { attendanceRate: number | null; avgScore: number | null; newStudents: number; income: number; sessions: number };
+  attendanceMix: { mark: AttendanceMark; count: number }[];
+  distribution: { grade: string; min: number; count: number }[];
+  trend: SchoolTrendBucket[];
+  bySubject: { bookingTypeId: string; name: string; subject?: string | null; grade?: string | null; kind: SchoolKind; colorHex?: string | null; teacher?: string | null; sessions: number; students: number; attendanceRate: number | null; assessments: number; graded: number; avgScore: number | null; weight: number }[];
+  byGrade: { grade: string; students: number; sessions: number; attendanceRate: number | null; avgScore: number | null; atRisk: number }[];
+  byGradeEnrolment: { grade: string; students: number }[];
+  byTeacher: { resourceId: string; name: string; specialty?: string | null; sessions: number; hoursTaught: number; students: number; attendanceRate: number | null; unmarkedSessions: number; payEstimate: number | null }[];
+  byRoom: { resourceId: string; name: string; capacity?: number | null; sessions: number; hoursBooked: number; utilisationPercent: number | null }[];
+  atRisk: SchoolStudentRow[];
+  students: SchoolStudentRow[];
+  payment: { status: SchoolPaymentStatus; students: number; amount: number }[];
+  outstanding: { subscriptionId: string; studentId: string; studentName: string; phone?: string | null; plan: string; amount: number; paymentStatus: SchoolPaymentStatus; nextBillingAt?: string | null; lastPaymentAt?: string | null }[];
+  pendingApprovals: { id: string; fullName: string; email: string; phone: string; createdAt: string; role: string }[];
+  conflicts: { resource: string; first: string; second: string; startTime: string; overlapMinutes: number }[];
+  filterOptions: {
+    branches: { id: string; name: string }[];
+    teachers: { id: string; name: string; specialty?: string | null }[];
+    rooms: { id: string; name: string; capacity?: number | null }[];
+    subjects: { id: string; name: string; kind: SchoolKind; subject?: string | null; grade?: string | null }[];
+    grades: string[];
+  };
+}
+
+export interface SchoolRosterRow {
+  bookingId: string;
+  studentId: string;
+  studentName: string;
+  phone?: string | null;
+  mark: AttendanceMark | null;
+  arrivedAt?: string | null;
+  points: number;
+  note?: string | null;
+  medicalAlert?: string | null;
+  tuitionStatus: SchoolTuitionStatus;
+}
+
+export interface SchoolSession {
+  sessionKey: string;
+  bookingTypeId: string;
+  name: string;
+  subject?: string | null;
+  grade?: string | null;
+  colorHex?: string | null;
+  resourceId: string;
+  resourceName: string;
+  resourceKind: 'teacher' | 'room';
+  startTime: string;
+  endTime: string;
+  state: 'upcoming' | 'inProgress' | 'done';
+  students: number;
+  present: number;
+  late: number;
+  absent: number;
+  excused: number;
+  unmarked: number;
+  needsMarking: boolean;
+  roster: SchoolRosterRow[];
+}
+
+export interface SchoolToday {
+  asOf: string;
+  date: string;
+  holiday?: string | null;
+  term?: string | null;
+  summary: { sessions: number; done: number; inProgress: number; upcoming: number; needsMarking: number; studentsExpected: number; presentSoFar: number; absentSoFar: number; medicalAlerts: number };
+  sessions: SchoolSession[];
+  teachers: { rostered: number; onDuty: number; list: { resourceId: string; name: string; specialty?: string | null; shiftStart: string; shiftEnd: string; onDuty: boolean; sessionsToday: number }[] };
+  assignments: { bookingTypeId: string; name: string; subject?: string | null; grade?: string | null; dueAt: string; isOverdue: boolean; students: number; submitted: number; graded: number }[];
+  pendingApprovals: { id: string; fullName: string; email: string; phone: string; role: string; createdAt: string }[];
+}
+
+export interface SchoolStudentDetail {
+  asOf: string;
+  student: { id: string; fullName: string; email: string; phone: string; address?: string | null; medicalNotes?: string | null; joinedAt: string; isApproved: boolean; dateOfBirth?: string | null };
+  tuition: { plan: string; amount: number; status: string; paymentStatus: SchoolPaymentStatus; endDate: string } | null;
+  summary: { attendanceRate: number | null; avgScore: number | null; letter?: string | null; points: number; incidents: number; commendations: number; atRisk: boolean; reasons: string[]; sessionsMarked: number; attended: number } | null;
+  perSubject: { bookingTypeId: string; name: string; subject?: string | null; grade?: string | null; kind: SchoolKind; colorHex?: string | null; sessions: number; attended: number; marked: number; attendanceRate: number | null; avgScore: number | null; letter?: string | null }[];
+  assessments: { bookingId: string; name: string; subject?: string | null; kind: SchoolKind; colorHex?: string | null; date: string; dueAt: string; submittedAt?: string | null; score: number | null; maxScore: number; percent: number | null; letter?: string | null; weight: number; feedback?: string | null }[];
+  attendance: { bookingId: string; date: string; name: string; teacher: string; mark: AttendanceMark | null; arrivedAt?: string | null; points: number; note?: string | null }[];
+  behaviour: { bookingId: string; date: string; name: string; teacher: string; mark: AttendanceMark | null; points: number; note?: string | null }[];
+}
+
+export interface SchoolGradebookRow {
+  bookingId: string;
+  studentId: string;
+  studentName: string;
+  score: number | null;
+  maxScore: number;
+  percent: number | null;
+  letter?: string | null;
+  submittedAt?: string | null;
+  feedback?: string | null;
+}
+
+export interface SchoolAssessment {
+  key: string;
+  bookingTypeId: string;
+  name: string;
+  subject?: string | null;
+  grade?: string | null;
+  kind: SchoolKind;
+  colorHex?: string | null;
+  weight: number;
+  date: string;
+  dueAt: string;
+  isOverdue: boolean;
+  students: number;
+  submitted: number;
+  graded: number;
+  avgPercent: number | null;
+  maxScore: number;
+  rows: SchoolGradebookRow[];
+}
+
+export interface SchoolGradebook {
+  asOf: string;
+  from: string;
+  to: string;
+  scale: { grade: string; min: number }[];
+  assessments: SchoolAssessment[];
+}
