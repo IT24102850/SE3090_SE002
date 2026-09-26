@@ -692,11 +692,13 @@
 .inventory-scope .stocksense-insight-movement .stocksense-insight-icon { color: var(--color-critical); background: var(--color-critical-soft); border-color: var(--color-critical-soft); }
 .inventory-scope .stocksense-insight-coverage .stocksense-insight-icon { color: var(--color-accent-high); background: var(--color-accent-soft); border-color: var(--color-accent-soft); }
 .inventory-scope .stocksense-insight-cost .stocksense-insight-icon { color: var(--color-good); background: var(--color-good-soft); border-color: var(--color-good-soft); }
+.inventory-scope .stocksense-insight-trend .stocksense-insight-icon { color: var(--color-primary); background: var(--color-primary-soft); border-color: var(--color-primary-soft); }
 .inventory-scope .stocksense-insight-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--color-primary); }
 .inventory-scope .stocksense-insight-data_quality::before { background: var(--color-warning); }
 .inventory-scope .stocksense-insight-movement::before { background: var(--color-critical); }
 .inventory-scope .stocksense-insight-coverage::before { background: var(--color-accent-high); }
 .inventory-scope .stocksense-insight-cost::before { background: var(--color-good); }
+.inventory-scope .stocksense-insight-trend::before { background: var(--color-primary); }
 .inventory-scope .stocksense-insight-category { margin: 0; color: var(--color-primary); font-size: .66rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .inventory-scope .stocksense-insight-card h3 { margin: 0 0 .42rem; font-size: .94rem; }
 .inventory-scope .stocksense-insight-card .cell-sub { white-space: normal; line-height: 1.5; }
