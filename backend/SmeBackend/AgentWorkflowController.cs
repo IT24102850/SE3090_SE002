@@ -76,10 +76,11 @@ public class AgentWorkflowController : ControllerBase
             .Where(b => resourceIds.Contains(b.ResourceId) && b.DeletedAt == null
                 && b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.Rejected
                 && b.StartTime.Date >= today && b.StartTime.Date < horizonEnd)
-            .Select(b => new { b.ResourceId, b.StartTime, b.EndTime })
+            .Select(b => new { b.ResourceId, b.StartTime, b.EndTime, b.TicketBreakdown, b.AttendeeCount })
             .ToListAsync())
             .GroupBy(b => b.ResourceId)
-            .ToDictionary(g => g.Key, g => g.Select(b => (b.StartTime, b.EndTime)).ToList());
+            .ToDictionary(g => g.Key, g => g.Select(b => new SlotBooking(
+                b.StartTime, b.EndTime, TicketPricing.SeatsUsed(b.TicketBreakdown, b.AttendeeCount))).ToList());
 
         var proposedSteps = new List<StepDto>();
         var now = DateTime.UtcNow;
@@ -99,21 +100,26 @@ public class AgentWorkflowController : ControllerBase
 
                 if (!bookingsByResource.TryGetValue(resource.Id, out var existingForResource))
                 {
-                    existingForResource = new List<(DateTime, DateTime)>();
+                    existingForResource = new List<SlotBooking>();
                     bookingsByResource[resource.Id] = existingForResource;
                 }
-                var existingForDay = existingForResource.Where(b => b.Item1.Date == day).ToList();
+                var existingForDay = existingForResource.Where(b => b.StartTime.Date == day).ToList();
 
                 var (isOpen, slots) = SlotCalculator.Calculate(
                     day, schedule, duration, bookingType.BufferMinutesBefore, bookingType.BufferMinutesAfter,
-                    existingForDay, now);
+                    existingForDay, now, false,
+                    // A shared vessel is only full once its seats are gone, so
+                    // the planner can keep filling one sailing.
+                    CapacityRules.Resolve(resource, bookingType));
                 if (!isOpen) continue;
 
                 var openSlot = slots.FirstOrDefault(s => s.IsAvailable);
                 if (openSlot == null) continue;
 
                 // Reserve it locally so a later resource/day this same pass doesn't propose it twice.
-                existingForResource.Add((openSlot.StartTime, openSlot.EndTime));
+                // On a shared vessel this is one seat off the sailing, not the
+                // whole boat, so the pass can keep filling it.
+                existingForResource.Add(new SlotBooking(openSlot.StartTime, openSlot.EndTime, 1));
 
                 proposedSteps.Add(new StepDto(
                     "Planner",

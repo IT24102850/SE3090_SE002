@@ -12,6 +12,7 @@ import type { RootState } from '../../store/store';
 import { apiErrorMessage, useToast } from '../../shared/components/Toast';
 import { addDays, formatDayLabel, formatTime, toISODate } from '../../shared/dateUtils';
 import type { AvailableSlot, Booking } from '../booking/types';
+import { AddToCalendarButton } from '../../shared/components/AddToCalendarButton';
 import { BookingCard, CheckInQr, isUpcoming } from './customerShared';
 
 /* My bookings - the web twin of the Flutter MyBookingsScreen: upcoming,
@@ -102,6 +103,7 @@ export default function MyBookingsPage() {
                 actions={tab === 'upcoming' ? (
                   <>
                     {b.status !== 'Pending' && <button type="button" className="btn btn-primary" onClick={() => setQrFor(b)}>Check-in code</button>}
+                    <AddToCalendarButton bookingId={b.id} />
                     {tenant && canChange(b, tenant.rescheduleCutoffHours) && (b.status === 'Pending' || b.status === 'Confirmed') && (
                       <button type="button" className="btn btn-secondary" onClick={() => setMoving(b)}>Reschedule</button>
                     )}

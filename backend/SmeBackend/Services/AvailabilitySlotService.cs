@@ -38,7 +38,9 @@ public static class AvailabilitySlotService
         DateTime from,
         DateTime to,
         int slotMinutes,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IPublicHolidayService? holidays = null,
+        string? countryCode = null)
     {
         from = from.Date;
         to = to.Date;
@@ -53,6 +55,17 @@ public static class AvailabilitySlotService
             .Select(e => e.Date.Date)
             .ToListAsync(ct);
         var closed = closedDates.ToHashSet();
+
+        // Public holidays close the business unless someone has deliberately
+        // said otherwise, so they join the same closed set as a one-off
+        // exception. Passing no holiday service (tests, or a tenant that
+        // trades through holidays) simply skips this.
+        if (holidays is not null)
+        {
+            var holidayDates = await holidays.GetHolidayDatesAsync(
+                countryCode ?? "LK", DateOnly.FromDateTime(from), DateOnly.FromDateTime(to), ct);
+            foreach (var holiday in holidayDates) closed.Add(holiday.ToDateTime(TimeOnly.MinValue).Date);
+        }
 
         // What already exists in the window, so a re-run is a no-op rather
         // than a duplicate.
@@ -86,7 +99,7 @@ public static class AvailabilitySlotService
 
             var (isOpen, slots) = SlotCalculator.Calculate(
                 day, schedule, slotMinutes, 0, 0,
-                Array.Empty<(DateTime, DateTime)>(),
+                Array.Empty<SlotBooking>(),
                 // A generation run is about capacity, not about what is left
                 // today, so "now" is the start of the day: generating this
                 // morning's slots this afternoon must still produce them.

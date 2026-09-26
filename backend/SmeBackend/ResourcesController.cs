@@ -338,9 +338,11 @@ public class ResourcesController : ControllerBase
 
         var bufferBefore = 0;
         var bufferAfter = 0;
+        BookingType? searchBookingType = null;
         if (bookingTypeId.HasValue)
         {
             var bookingType = await _db.BookingTypes.AsNoTracking().FirstOrDefaultAsync(bt => bt.Id == bookingTypeId);
+            searchBookingType = bookingType;
             if (bookingType != null)
             {
                 if (duration <= 0) duration = bookingType.DefaultDurationMinutes;
@@ -361,11 +363,13 @@ public class ResourcesController : ControllerBase
             .ToHashSet();
         var bookingsByResource = (await _db.Bookings.AsNoTracking()
             .Where(b => resourceIds.Contains(b.ResourceId) && b.StartTime.Date == date.Date && b.DeletedAt == null
-                && b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.Rejected)
-            .Select(b => new { b.ResourceId, b.StartTime, b.EndTime })
+                && b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.Rejected
+                && b.Status != BookingStatus.WeatherCancelled)
+            .Select(b => new { b.ResourceId, b.StartTime, b.EndTime, b.TicketBreakdown, b.AttendeeCount })
             .ToListAsync())
             .GroupBy(b => b.ResourceId)
-            .ToDictionary(g => g.Key, g => g.Select(b => (b.StartTime, b.EndTime)).ToList());
+            .ToDictionary(g => g.Key, g => g.Select(b => new SlotBooking(
+                b.StartTime, b.EndTime, TicketPricing.SeatsUsed(b.TicketBreakdown, b.AttendeeCount))).ToList());
 
         var now = DateTime.UtcNow;
         var results = candidates.Select(r =>
@@ -374,7 +378,9 @@ public class ResourcesController : ControllerBase
             bookingsByResource.TryGetValue(r.Id, out var existing);
             var (isOpen, slots) = SlotCalculator.Calculate(
                 date, schedule, duration, bufferBefore, bufferAfter,
-                existing ?? new List<(DateTime, DateTime)>(), now, closedResourceIds.Contains(r.Id));
+                existing ?? new List<SlotBooking>(), now, closedResourceIds.Contains(r.Id),
+                // Shared vessels stay searchable while they have seats left.
+                CapacityRules.Resolve(r, searchBookingType));
             var nextSlot = slots.FirstOrDefault(s => s.IsAvailable);
 
             return new

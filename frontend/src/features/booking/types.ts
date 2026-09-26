@@ -105,6 +105,30 @@ export const DEPARTURE_STATUS_COLORS: Record<DepartureStatus, { bg: string; labe
   CancelledOther: { bg: '#7C7C85', label: 'Cancelled' },
 };
 
+/* An Open-Meteo forecast for one departure, plus the sail/no-sail call the
+ * backend derives from it. `available: false` means the forecast service could
+ * not be reached or the vessel has no coordinates - not that it is safe. */
+export interface DepartureForecast {
+  available: boolean;
+  message?: string;
+  observation?: WeatherObservation;
+  forecast?: {
+    forecastedFor: string;
+    windSpeedKnots?: number | null;
+    windGustKnots?: number | null;
+    waveHeightMetres?: number | null;
+    visibilityKm?: number | null;
+    source: string;
+    coordinates: { latitude: number; longitude: number; from: string };
+  };
+  risk?: {
+    level: 'ok' | 'caution' | 'unsafe' | 'unknown';
+    suggestCancellation: boolean;
+    reasons: string[];
+  };
+  guestsAffected?: number;
+}
+
 export interface WeatherObservation {
   id: string;
   resourceId?: string | null;

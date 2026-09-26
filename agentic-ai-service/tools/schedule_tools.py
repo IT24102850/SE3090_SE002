@@ -39,8 +39,13 @@ ALLOWED_TOOLS: dict[str, frozenset[str]] = {
     }),
     "ActionToolAgent": frozenset({
         "query_resource_availability", "calculate_travel_time", "detect_conflicts",
+        "check_weather_forecast",
     }),
-    "ValidationSafetyAgent": frozenset({"detect_conflicts", "check_staff_schedule"}),
+    # The gate may re-check weather for itself: a departure that became unsafe
+    # between planning and approval must not be waved through on a stale read.
+    "ValidationSafetyAgent": frozenset({
+        "detect_conflicts", "check_staff_schedule", "check_weather_forecast",
+    }),
 }
 
 NO_SHOW_LOOKBACK_DAYS = 90
@@ -149,7 +154,58 @@ class ScheduleToolsClient(BookingToolsClient):
 
     @_records_call("calculate_travel_time")
     def travel_minutes(self, distance_km: float, average_speed_kmh: float = 30.0) -> dict[str, Any]:
+        """Straight-line fallback, used when neither endpoint has coordinates."""
         return calculate_travel_time(distance_km, average_speed_kmh)
+
+    @_records_call("calculate_travel_time")
+    def road_travel_minutes(self, from_lat: float, from_lon: float,
+                            to_lat: float, to_lon: float) -> dict[str, Any]:
+        """Real driving time between two points.
+
+        Goes through the backend's /integrations/travel-time rather than
+        calling OpenRouteService here: the spec requires external services to
+        be reached through ASP.NET Core, and that is also where the key lives.
+        The reply always says whether it is a routed time or an estimate, so a
+        proposal can be honest about which it used.
+        """
+        data = self._get("/integrations/travel-time", {
+            "fromLat": from_lat, "fromLon": from_lon, "toLat": to_lat, "toLon": to_lon,
+        })
+        return {
+            "estimated_minutes": data.get("estimatedMinutes"),
+            "distance_km": data.get("distanceKm"),
+            "is_estimate": data.get("isEstimate", True),
+            "source": data.get("source"),
+            "basis": data.get("basis"),
+        }
+
+    @_records_call("check_weather_forecast")
+    def weather_forecast(self, departure_id: str) -> dict[str, Any]:
+        """Marine forecast and sail/no-sail assessment for one departure.
+
+        Read-only and advisory: it reports that conditions are outside limits,
+        it does not cancel anything. Cancelling a departure strands every guest
+        aboard, so it stays a human decision behind the cancel-weather
+        endpoint - which is exactly the high-impact action the approval rule
+        exists for.
+        """
+        data = self._get(f"/departures/{departure_id}/forecast")
+        if not data.get("available", False):
+            return {"available": False, "reason": data.get("message", "No forecast available.")}
+        risk = data.get("risk", {}) or {}
+        forecast = data.get("forecast", {}) or {}
+        return {
+            "available": True,
+            "risk_level": risk.get("level"),
+            "suggest_cancellation": risk.get("suggestCancellation", False),
+            "reasons": risk.get("reasons", []),
+            "wind_knots": forecast.get("windSpeedKnots"),
+            "gust_knots": forecast.get("windGustKnots"),
+            "wave_metres": forecast.get("waveHeightMetres"),
+            "visibility_km": forecast.get("visibilityKm"),
+            "guests_affected": data.get("guestsAffected", 0),
+            "source": forecast.get("source"),
+        }
 
 
 class AgentToolbox:
@@ -195,6 +251,12 @@ class AgentToolbox:
 
     def calculate_travel_time(self, distance_km: float, average_speed_kmh: float = 30.0) -> dict[str, Any]:
         return self._enter("calculate_travel_time").travel_minutes(distance_km, average_speed_kmh)
+
+    def road_travel_time(self, from_lat: float, from_lon: float, to_lat: float, to_lon: float) -> dict[str, Any]:
+        return self._enter("calculate_travel_time").road_travel_minutes(from_lat, from_lon, to_lat, to_lon)
+
+    def check_weather_forecast(self, departure_id: str) -> dict[str, Any]:
+        return self._enter("check_weather_forecast").weather_forecast(departure_id)
 
 
 # ── helpers shared by the agents ────────────────────────────────────────

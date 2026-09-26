@@ -9,7 +9,7 @@ import '../widgets/ui/ui.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
 import 'inventory_panel.dart';
-import 'notification_ws.dart';
+import '../services/notification_stream_service.dart';
 
 class PurchaseOrderApprovalScreen extends StatefulWidget {
   const PurchaseOrderApprovalScreen({
@@ -37,25 +37,26 @@ class _PurchaseOrderApprovalScreenState
   void initState() {
     super.initState();
     _load();
-    NotificationService().connect();
-    try {
-      _notifSub = NotificationService().stream.listen((event) {
-        try {
-          if (event['type'] == 'workflow_update') {
-            final action = event['actionType'] as String? ?? '';
-            if (action == 'generate_purchase_order' &&
-                (event['backend_result'] != null ||
-                    event['status'] == 'approved')) {
-              if (mounted) {
-                showAppNotification('Agent placed or updated a purchase order.',
-                    tone: AppNotificationTone.info);
-                _load();
-              }
-            }
-          }
-        } catch (_) {}
-      });
-    } catch (_) {}
+    // Live updates from the API's notification stream. This used to listen to
+    // a WebSocket on ws://10.0.2.2:8000/ws/workflows - a port and route that
+    // do not exist here - so the list only ever refreshed on a manual pull.
+    unawaited(NotificationStreamService().start());
+    _notifSub = NotificationStreamService().notifications.listen((n) {
+      if (!mounted) return;
+      // Purchase-order and approval traffic is what this screen is showing,
+      // so anything else is left for the notification centre.
+      const watched = {
+        'PurchaseOrderCreated',
+        'PurchaseOrderApproved',
+        'PurchaseOrderRejected',
+        'WorkflowApproval',
+        'WorkflowApproved',
+        'WorkflowApplied',
+      };
+      if (!watched.contains(n.type)) return;
+      showAppNotification(n.title, tone: AppNotificationTone.info);
+      _load();
+    });
   }
 
   @override
