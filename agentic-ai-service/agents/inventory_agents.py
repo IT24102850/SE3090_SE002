@@ -222,9 +222,9 @@ def analyze_inventory_health(
         ))
 
     coverage_rows: list[tuple[float, str, float]] = []
-    for sku, (quantity, oldest_age, event_count) in outflow.items():
+    for sku, (quantity, oldest_age, _) in outflow.items():
         item = item_by_sku.get(sku)
-        if not item or event_count < 2:
+        if not item:
             continue
         daily = quantity / min(30, max(7, oldest_age))
         if daily <= 0:
