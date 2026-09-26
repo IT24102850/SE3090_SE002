@@ -169,8 +169,9 @@ def plan_inventory_stock(request: InventoryPlanRequest) -> InventoryAgentTrace |
                     "Recommendations still use authorized stock and movement data, with reorder-level fallback when history is missing."
                 )
             trace.warnings.append(
-                f"No supplier lead-time data is available; planning assumes "
-                f"{plan_output.lead_time_days} lead-time days plus {plan_output.safety_days} safety-stock days."
+                f"Supplier-specific lead times are not connected to inventory planning yet. "
+                f"This estimate uses the configured defaults of {plan_output.lead_time_days} lead-time days "
+                f"and {plan_output.safety_days} safety-stock days; confirm them with your Sri Lankan supplier."
             )
             domain = analyze_inventory_domain(
                 objective=request.objective,
