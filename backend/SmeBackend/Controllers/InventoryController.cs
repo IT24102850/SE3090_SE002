@@ -176,10 +176,22 @@ public sealed class InventoryController(
             .AsNoTracking()
             .Where(item => itemIds.Contains(item.Id))
             .ToDictionaryAsync(item => item.Id, cancellationToken);
+        var supplierIds = movements
+            .Where(movement => movement.SupplierId.HasValue)
+            .Select(movement => movement.SupplierId!.Value)
+            .Distinct()
+            .ToList();
+        var suppliers = await db.Suppliers
+            .AsNoTracking()
+            .Where(supplier => supplierIds.Contains(supplier.Id))
+            .ToDictionaryAsync(supplier => supplier.Id, cancellationToken);
 
         return Ok(movements.Select(movement =>
         {
             items.TryGetValue(movement.InventoryItemId, out var item);
+            Supplier? supplier = null;
+            if (movement.SupplierId.HasValue)
+                suppliers.TryGetValue(movement.SupplierId.Value, out supplier);
             return new InventoryMovementResponse(
                 movement.Id,
                 movement.OccurredAt,
@@ -188,7 +200,10 @@ public sealed class InventoryController(
                 movement.MovementType,
                 movement.Quantity,
                 movement.Reference,
-                movement.Notes);
+                movement.Notes,
+                movement.SupplierId,
+                supplier?.Name,
+                supplier?.LeadTimeDays);
         }).ToList());
     }
 
@@ -816,7 +831,10 @@ public sealed record InventoryMovementResponse(
     string MovementType,
     decimal Quantity,
     string? Reference,
-    string? Notes);
+    string? Notes,
+    Guid? SupplierId,
+    string? SupplierName,
+    int? SupplierLeadTimeDays);
 
 public sealed record CreateInventoryRequest(
     string Name,

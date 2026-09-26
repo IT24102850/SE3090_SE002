@@ -451,6 +451,13 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
+        modelBuilder.Entity<Supplier>(entity =>
+        {
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_Suppliers_LeadTimeDays",
+                "\"LeadTimeDays\" IS NULL OR \"LeadTimeDays\" BETWEEN 1 AND 90"));
+        });
+
         modelBuilder.Entity<StockMovement>(entity =>
         {
             entity.Property(movement => movement.MovementType).HasMaxLength(30).IsRequired();
