@@ -449,6 +449,10 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(item => item.BranchId)
                 .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(item => item.Supplier)
+                .WithMany()
+                .HasForeignKey(item => item.SupplierId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Supplier>(entity =>

@@ -112,8 +112,10 @@ def _recent_outflow(movements: list[dict[str, Any]]) -> dict[str, tuple[float, i
     return outflow
 
 
-def _latest_supplier_lead_times(movements: list[dict[str, Any]]) -> dict[str, tuple[int, str | None]]:
-    """Use the lead time of the supplier on each item's latest supplier-linked receipt."""
+def _latest_supplier_lead_times(
+    movements: list[dict[str, Any]], items: list[dict[str, Any]] | None = None,
+) -> dict[str, tuple[int, str | None, str]]:
+    """Prefer the explicitly assigned supplier; otherwise use the latest linked receipt."""
     latest: dict[str, tuple[datetime, int, str | None]] = {}
     receipt_types = {"receive", "received", "purchasereceived"}
     for movement in movements:
@@ -137,7 +139,19 @@ def _latest_supplier_lead_times(movements: list[dict[str, Any]]) -> dict[str, tu
         if current is None or occurred > current[0]:
             name = str(movement.get("supplierName", "")).strip() or None
             latest[sku] = (occurred, days, name)
-    return {sku: (days, name) for sku, (_, days, name) in latest.items()}
+    result = {sku: (days, name, "latest supplier-linked receipt") for sku, (_, days, name) in latest.items()}
+    for item in items or []:
+        sku = str(item.get("sku", ""))
+        if not sku or not item.get("supplierId"):
+            continue
+        try:
+            days = int(item.get("supplierLeadTimeDays"))
+        except (TypeError, ValueError):
+            continue
+        if 1 <= days <= 90:
+            name = str(item.get("supplierName", "")).strip() or None
+            result[sku] = (days, name, "assigned inventory supplier")
+    return result
 
 
 def analyze_inventory_health(
@@ -238,7 +252,7 @@ def recommend_replenishment(
         sku: quantity / min(30, max(7, oldest_age))
         for sku, (quantity, oldest_age, _) in outflow.items()
     }
-    supplier_lead_times = _latest_supplier_lead_times(snapshot.movements)
+    supplier_lead_times = _latest_supplier_lead_times(snapshot.movements, snapshot.items)
 
     recommendations: list[InventoryRecommendation] = []
     for item in snapshot.items:
@@ -248,6 +262,7 @@ def recommend_replenishment(
         supplier_lead_time = supplier_lead_times.get(sku)
         lead_time_days = supplier_lead_time[0] if supplier_lead_time else plan.lead_time_days
         supplier_name = supplier_lead_time[1] if supplier_lead_time else None
+        supplier_lead_time_source = supplier_lead_time[2] if supplier_lead_time else None
         daily = daily_outflow.get(sku)
         needs_reorder = on_hand <= reorder
         days_until_reorder = max(0, (on_hand - reorder) / daily) if daily and daily > 0 else None
@@ -269,7 +284,7 @@ def recommend_replenishment(
             _, _, event_count = outflow[sku]
             confidence = 0.75 if event_count >= 5 and len(snapshot.movements) < 100 else 0.55 if event_count >= 2 else 0.4
         if supplier_lead_time:
-            notes.append(f"Uses the configured {lead_time_days}-day lead time for {supplier_name or 'the supplier'} from the latest supplier-linked receipt.")
+            notes.append(f"Uses the configured {lead_time_days}-day lead time for {supplier_name or 'the supplier'} from the {supplier_lead_time_source}.")
         else:
             notes.append(f"No supplier-linked receipt with lead-time data was found; uses the configured {plan.lead_time_days}-day default.")
         if not item.get("branchId"):

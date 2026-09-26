@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SmeBackend.Data;
@@ -12,9 +13,11 @@ using SmeBackend.Data;
 namespace SmeBackend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260926052205_AddInventoryPreferredSupplier")]
+    partial class AddInventoryPreferredSupplier
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -139,9 +142,6 @@ namespace SmeBackend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<decimal?>("AmountDue")
-                        .HasColumnType("numeric");
-
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -185,24 +185,15 @@ namespace SmeBackend.Migrations
                     b.Property<Guid?>("DepartureId")
                         .HasColumnType("uuid");
 
-                    b.Property<decimal?>("DepositAmount")
-                        .HasColumnType("numeric");
-
                     b.Property<DateTime>("EndTime")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("FormData")
                         .HasColumnType("jsonb");
 
-                    b.Property<DateTime?>("HoldExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("PaymentMode")
-                        .HasColumnType("text");
 
                     b.Property<string>("Priority")
                         .IsRequired()
@@ -1296,9 +1287,6 @@ namespace SmeBackend.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<decimal?>("ExchangeRate")
-                        .HasColumnType("numeric");
-
                     b.Property<string>("GatewayResponse")
                         .HasColumnType("text");
 
@@ -1320,12 +1308,6 @@ namespace SmeBackend.Migrations
                     b.Property<string>("Provider")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
-
-                    b.Property<decimal?>("SettlementAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("SettlementCurrency")
-                        .HasColumnType("text");
 
                     b.Property<string>("Status")
                         .IsRequired()
