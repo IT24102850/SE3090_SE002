@@ -1,6 +1,4 @@
-import 'dart:io' show Platform;
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'secure_storage_service.dart';
 
 /// Central HTTP client for the ASP.NET Core backend.
