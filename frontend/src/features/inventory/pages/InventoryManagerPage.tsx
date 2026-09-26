@@ -16,6 +16,7 @@ type StockRow = {
   categoryId?: string;
   unitId?: string;
   branchId?: string;
+  supplierId?: string;
   sku: string;
   item: string;
   category: string;
@@ -27,6 +28,7 @@ type StockRow = {
 };
 
 type StockForm = Omit<StockRow, 'sku'>;
+type SupplierOption = { id: string; name: string; leadTimeDays: number | null };
 
 const PAGE_SIZE = 5;
 
@@ -49,6 +51,7 @@ const emptyForm: StockForm = {
   qty: 0,
   reorder: 10,
   owner: '',
+  supplierId: undefined,
 };
 
 function deriveStatus(qty: number, reorder: number): StockStatus {
@@ -107,12 +110,14 @@ function ItemModal({
   onClose,
   onSave,
   saving,
+  suppliers,
 }: {
   title: string;
   initial: StockForm;
   onClose: () => void;
   onSave: (form: StockForm) => void;
   saving: boolean;
+  suppliers: SupplierOption[];
 }) {
   const [form, setForm] = useState(initial);
   const [error, setError] = useState('');
@@ -188,6 +193,13 @@ function ItemModal({
               Owner
               <input value={form.owner} onChange={(event) => update('owner', event.target.value)} placeholder="Staff member responsible" />
             </label>
+            <label className="form-field form-field-wide">
+              Preferred supplier for AI planning
+              <select value={form.supplierId ?? ''} onChange={(event) => update('supplierId', event.target.value || undefined)}>
+                <option value="">No supplier assigned</option>
+                {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}{supplier.leadTimeDays ? ` (${supplier.leadTimeDays} days)` : ' (lead time not set)'}</option>)}
+              </select>
+            </label>
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
@@ -216,6 +228,7 @@ export function InventoryManagerPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState<StockRow[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -291,6 +304,7 @@ export function InventoryManagerPage() {
         categoryId: item.categoryId ?? undefined,
         unitId: item.unitId ?? undefined,
         branchId: item.branchId ?? undefined,
+        supplierId: item.supplierId ?? undefined,
         price: Number(item.unitCost ?? 0),
         qty: Number(item.quantity ?? 0),
         reorder: Number(item.reorderLevel ?? 0),
@@ -312,6 +326,18 @@ export function InventoryManagerPage() {
 
   useEffect(() => {
     void loadInventory();
+  }, [token]);
+
+  useEffect(() => {
+    let active = true;
+    void fetch('/api/suppliers', { headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Supplier request failed (${response.status})`);
+        return response.json();
+      })
+      .then((result) => { if (active) setSuppliers(Array.isArray(result.items) ? result.items : []); })
+      .catch((error) => { console.error(error); });
+    return () => { active = false; };
   }, [token]);
 
   async function handleRefresh() {
@@ -339,6 +365,8 @@ export function InventoryManagerPage() {
           ...(existing ? {} : { quantity: form.qty }),
           reorderLevel: form.reorder,
           unitCost: form.price,
+          supplierId: form.supplierId ?? null,
+          ...(existing ? { clearSupplier: !form.supplierId } : {}),
         }),
       });
       if (!response.ok) {
@@ -543,11 +571,12 @@ export function InventoryManagerPage() {
         <ItemModal
           title={modal.mode === 'add' ? 'Add inventory item' : 'Edit inventory item'}
           initial={modal.mode === 'edit' && editingItem
-            ? { item: editingItem.item, category: editingItem.category, unit: editingItem.unit, price: editingItem.price, qty: editingItem.qty, reorder: editingItem.reorder, owner: editingItem.owner }
+            ? { item: editingItem.item, category: editingItem.category, unit: editingItem.unit, price: editingItem.price, qty: editingItem.qty, reorder: editingItem.reorder, owner: editingItem.owner, supplierId: editingItem.supplierId }
             : emptyForm}
           onClose={() => setModal(null)}
           onSave={handleSave}
           saving={saving}
+          suppliers={suppliers}
         />
       )}
 

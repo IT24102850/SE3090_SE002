@@ -85,6 +85,7 @@ public sealed class InventoryController(
             .Include(item => item.Category)
             .Include(item => item.Unit)
             .Include(item => item.Branch)
+            .Include(item => item.Supplier)
             .AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(category))
@@ -335,12 +336,21 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
+        if (request.SupplierId.HasValue &&
+            !await db.Suppliers.AnyAsync(supplier => supplier.Id == request.SupplierId.Value, cancellationToken))
+        {
+            ModelState.AddModelError("supplierId", "The supplier does not exist for this tenant.");
+            return ValidationProblem(ModelState);
+        }
+
         item.Name = name;
         item.Sku = sku;
         item.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
         item.CategoryId = request.CategoryId ?? item.CategoryId;
         item.UnitId = request.UnitId ?? item.UnitId;
         item.BranchId = request.BranchId ?? item.BranchId;
+        if (request.SupplierId.HasValue) item.SupplierId = request.SupplierId;
+        else if (request.ClearSupplier) item.SupplierId = null;
         item.ReorderLevel = request.ReorderLevel;
         item.UnitCost = request.UnitCost;
         item.UpdatedAt = DateTime.UtcNow;
@@ -684,6 +694,13 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
+        if (request.SupplierId.HasValue &&
+            !await db.Suppliers.AnyAsync(supplier => supplier.Id == request.SupplierId.Value, cancellationToken))
+        {
+            ModelState.AddModelError("supplierId", "The supplier does not exist for this tenant.");
+            return ValidationProblem(ModelState);
+        }
+
         var branchId = request.BranchId;
         if (!branchId.HasValue)
         {
@@ -714,6 +731,7 @@ public sealed class InventoryController(
             CategoryId = request.CategoryId,
             UnitId = request.UnitId,
             BranchId = branchId,
+            SupplierId = request.SupplierId,
             Quantity = request.Quantity,
             ReorderLevel = request.ReorderLevel,
             UnitCost = request.UnitCost,
@@ -727,6 +745,7 @@ public sealed class InventoryController(
             .Include(createdItem => createdItem.Category)
             .Include(createdItem => createdItem.Unit)
             .Include(createdItem => createdItem.Branch)
+            .Include(createdItem => createdItem.Supplier)
             .AsNoTracking()
             .SingleAsync(createdItem => createdItem.Id == item.Id, cancellationToken);
 
@@ -753,6 +772,7 @@ public sealed class InventoryController(
             .Include(item => item.Category)
             .Include(item => item.Unit)
             .Include(item => item.Branch)
+            .Include(item => item.Supplier)
             .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
 
     private async Task<bool> RequireItemAccessAsync(
@@ -791,6 +811,9 @@ public sealed class InventoryController(
             item.Unit?.Code,
             item.BranchId,
             item.Branch?.Name,
+            item.SupplierId,
+            item.Supplier?.Name,
+            item.Supplier?.LeadTimeDays,
             item.Quantity,
             item.ReorderLevel,
             item.UnitCost,
@@ -817,6 +840,9 @@ public sealed record InventoryItemResponse(
     string? Unit,
     Guid? BranchId,
     string? Branch,
+    Guid? SupplierId,
+    string? SupplierName,
+    int? SupplierLeadTimeDays,
     decimal Quantity,
     decimal ReorderLevel,
     decimal? UnitCost,
@@ -845,7 +871,8 @@ public sealed record CreateInventoryRequest(
     Guid? BranchId,
     decimal Quantity = 0,
     decimal ReorderLevel = 0,
-    decimal? UnitCost = null);
+    decimal? UnitCost = null,
+    Guid? SupplierId = null);
 
 public sealed record UpdateInventoryRequest(
     string? Name,
@@ -855,7 +882,9 @@ public sealed record UpdateInventoryRequest(
     Guid? UnitId,
     Guid? BranchId,
     decimal ReorderLevel = 0,
-    decimal? UnitCost = null);
+    decimal? UnitCost = null,
+    Guid? SupplierId = null,
+    bool ClearSupplier = false);
 
 public sealed record AdjustInventoryRequest(
     decimal Quantity,

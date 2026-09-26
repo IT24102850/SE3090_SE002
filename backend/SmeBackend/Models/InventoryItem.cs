@@ -12,6 +12,8 @@ public class InventoryItem : BaseEntity, ITenantScoped
     public InventoryUnit? Unit { get; set; }
     public Guid? BranchId { get; set; }
     public Branch? Branch { get; set; }
+    public Guid? SupplierId { get; set; }
+    public Supplier? Supplier { get; set; }
     public decimal Quantity { get; set; }
     public decimal ReorderLevel { get; set; }
     public decimal? UnitCost { get; set; }

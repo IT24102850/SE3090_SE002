@@ -174,13 +174,13 @@ def plan_inventory_stock(request: InventoryPlanRequest) -> InventoryAgentTrace |
                 client=client,
             )
             trace.data_sources = ["Authorized inventory snapshot", "Recent stock movements"]
-            supplier_lead_times = _latest_supplier_lead_times(domain.movements)
+            supplier_lead_times = _latest_supplier_lead_times(domain.movements, domain.items)
             items_with_supplier_lead_time = sum(
                 1 for item in domain.items if str(item.get("sku", "")) in supplier_lead_times
             )
             if domain.items:
                 if items_with_supplier_lead_time:
-                    trace.data_sources.append("Configured supplier lead times from recent receipts")
+                    trace.data_sources.append("Assigned supplier lead times and recent supplier-linked receipts")
                 if items_with_supplier_lead_time < len(domain.items):
                     trace.warnings.append(
                         f"Supplier lead-time data is available for {items_with_supplier_lead_time} of {len(domain.items)} items. "
