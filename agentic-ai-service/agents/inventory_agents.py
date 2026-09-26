@@ -222,9 +222,9 @@ def analyze_inventory_health(
         ))
 
     coverage_rows: list[tuple[float, str, float]] = []
-    for sku, (quantity, oldest_age, _) in outflow.items():
+    for sku, (quantity, oldest_age, event_count) in outflow.items():
         item = item_by_sku.get(sku)
-        if not item:
+        if not item or event_count < 2:
             continue
         daily = quantity / min(30, max(7, oldest_age))
         if daily <= 0:
@@ -246,6 +246,56 @@ def analyze_inventory_health(
                 + f". Compare these estimates with the assumed {plan.lead_time_days}-day lead time and {plan.safety_days}-day safety buffer."
             ),
             affected_items=[name for _, name, _ in shortest],
+        ))
+
+    # Long stock cover can tie up cash. Treat this as a review signal only,
+    # since demand is based on a bounded recent movement sample.
+    try:
+        slow_cover_days = min(365, max(1, int(os.getenv("INVENTORY_SLOW_MOVING_COVER_DAYS", "60"))))
+    except ValueError:
+        slow_cover_days = 60
+    slow_movers = []
+    for sku, (quantity, oldest_age, event_count) in outflow.items():
+        item = item_by_sku.get(sku)
+        if not item or event_count < 2:
+            continue
+        daily = quantity / min(30, max(7, oldest_age))
+        on_hand = float(item.get("quantity") or 0)
+        if daily > 0 and on_hand > 0 and on_hand / daily >= slow_cover_days:
+            slow_movers.append((on_hand / daily, item, sku))
+    slow_movers.sort(key=lambda row: row[0], reverse=True)
+    if slow_movers:
+        names = [str(item.get("name", sku)) for _, item, sku in slow_movers[:8]]
+        value = sum(float(item.get("quantity") or 0) * float(item.get("unitCost") or 0)
+                    for _, item, _ in slow_movers if item.get("unitCost") is not None)
+        detail = (
+            f"{len(slow_movers)} items have estimated stock cover of at least {slow_cover_days} days based on recent recorded outflow. "
+            "Check upcoming demand, expiry and branch transfers before reordering or reducing stock."
+        )
+        priced = sum(1 for _, item, _ in slow_movers if item.get("unitCost") is not None)
+        if priced:
+            detail += f" Their priced on-hand value is about {value:,.2f} across {priced} items."
+        insights.append(InventoryHealthInsight(
+            category="excess", title="Potential slow-moving stock", detail=detail, affected_items=names,
+        ))
+
+    # Flag time-sensitive replenishment candidates where recorded demand exists.
+    supplier_lead_times = _latest_supplier_lead_times(movements, items)
+    at_risk = []
+    for recommendation in recommendations:
+        if recommendation.days_until_reorder is None or recommendation.avg_daily_outflow is None:
+            continue
+        lead = supplier_lead_times.get(recommendation.sku, (plan.lead_time_days, None, ""))[0]
+        if recommendation.days_until_reorder <= lead:
+            at_risk.append((recommendation.days_until_reorder, recommendation.item_name, lead))
+    if at_risk:
+        at_risk.sort()
+        insights.append(InventoryHealthInsight(
+            category="risk", title="Reorder review may be time-sensitive",
+            detail=("These items are projected to reach their reorder level within their supplier lead time: "
+                    + "; ".join(f"{name} in about {days:.1f} days (lead time {lead} days)" for days, name, lead in at_risk[:8])
+                    + ". Review supplier availability and budget promptly."),
+            affected_items=[name for _, name, _ in at_risk[:8]],
         ))
 
     trends = _demand_trends(movements)

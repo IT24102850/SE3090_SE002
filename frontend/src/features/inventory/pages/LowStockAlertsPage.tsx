@@ -49,6 +49,8 @@ function insightIcon(category: string) {
     case 'coverage': return 'predict';
     case 'movement': return 'workflow';
     case 'trend': return 'chart';
+    case 'excess': return 'inventory';
+    case 'risk': return 'alert';
     case 'data_quality': return 'info';
     case 'cost': return 'chart';
     default: return 'inventory';
