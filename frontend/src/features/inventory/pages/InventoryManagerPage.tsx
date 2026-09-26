@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { QRCodeSVG } from 'qrcode.react';
@@ -239,6 +239,8 @@ export function InventoryManagerPage() {
   const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; sku: string } | null>(null);
   const [qrItem, setQrItem] = useState<StockRow | null>(null);
   const [deleteSku, setDeleteSku] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
     const queryLower = query.trim().toLowerCase();
@@ -289,7 +291,6 @@ export function InventoryManagerPage() {
       const response = await fetch('/api/inventory?page=1&pageSize=100', {
         headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
       });
-      if (!response.ok) throw new Error(`Inventory request failed (${response.status})`);
       if (!response.ok) {
         const errorBody = await response.json().catch(() => null);
         throw new Error(errorBody?.message || errorBody?.title || `Inventory request failed (${response.status})`);
@@ -313,7 +314,6 @@ export function InventoryManagerPage() {
     } catch (error) {
       console.error(error);
       setItems([]);
-      setLoadError('Unable to load inventory from the database. Refresh and try again.');
       const message = error instanceof Error ? error.message : 'Unable to load inventory from the database.';
       setLoadError(`${message} Refresh and try again.`);
       notify(message, 'error');
@@ -322,6 +322,73 @@ export function InventoryManagerPage() {
       setLoading(false);
     }
     return true;
+  }
+
+  function exportInventoryCsv() {
+    if (!items.length) {
+      notify('No inventory items to export.', 'warning');
+      return;
+    }
+    const header = 'Item,SKU,Category,On Hand,Unit,Reorder Level,Unit Price (LKR),Owner';
+    const lines = items.map(r =>
+      [r.item, r.sku, r.category, r.qty, r.unit, r.reorder, r.price, r.owner]
+        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+        .join(',')
+    );
+    const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `inventory-catalog-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    notify(`Exported ${items.length} inventory items to CSV.`, 'success');
+  }
+
+  async function handleCsvImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        throw new Error('CSV file is empty or missing headers.');
+      }
+      // Simple parse: skip header
+      let createdCount = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
+        if (!cols[0]) continue;
+        const name = cols[0];
+        const category = cols[2] || categoryOptions[0];
+        const qty = Number(cols[3]) || 0;
+        const unit = cols[4] || 'unit';
+        const reorder = Number(cols[5]) || 10;
+        const price = Number(cols[6]) || 0;
+        const res = await fetch('/api/inventory', {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: token ? 'Bearer ' + token : '' },
+          body: JSON.stringify({
+            name,
+            sku: nextSku(items),
+            description: `${category} (${unit})`,
+            quantity: qty,
+            reorderLevel: reorder,
+            unitCost: price,
+            branchId: user?.branchId ?? null,
+          }),
+        });
+        if (res.ok) createdCount++;
+      }
+      await loadInventory();
+      notify(`Successfully imported ${createdCount} items from CSV.`, 'success');
+    } catch (err: any) {
+      notify(err?.message || 'Failed to import CSV.', 'error');
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   }
 
   useEffect(() => {
@@ -447,8 +514,16 @@ export function InventoryManagerPage() {
           <span className="inventory-manager-art-label">STOCK<br />VISIBILITY</span>
         </div>
         <div className="page-actions">
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".csv"
+            style={{ display: 'none' }}
+            onChange={handleCsvImport}
+          />
           <button className="btn btn-secondary inventory-manager-refresh" type="button" onClick={() => void handleRefresh()} disabled={loading}><span aria-hidden="true">↻</span> {loading ? 'Refreshing…' : 'Refresh data'}</button>
-          <button className="btn btn-secondary" type="button" onClick={() => notify('Import is ready for a CSV file. File selection will be available next.', 'warning')}><span aria-hidden="true">⇧</span> Import</button>
+          <button className="btn btn-secondary" type="button" onClick={() => fileInputRef.current?.click()} disabled={importing || loading} title="Import items from CSV file"><span aria-hidden="true">⇧</span> {importing ? 'Importing…' : 'Import CSV'}</button>
+          <button className="btn btn-secondary" type="button" onClick={exportInventoryCsv} title="Export inventory catalogue as CSV"><span aria-hidden="true">⇩</span> Export CSV</button>
           <Link className="btn btn-secondary inventory-manager-suppliers-link" to="/suppliers"><span aria-hidden="true">♧</span> Suppliers</Link>
           <button className="btn btn-primary inventory-manager-add" type="button" onClick={() => setModal({ mode: 'add' })}><span aria-hidden="true">＋</span> Add item</button>
         </div>
@@ -487,6 +562,36 @@ export function InventoryManagerPage() {
             <select className="filter-select" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} aria-label="Filter by status">
               {statusFilters.map((option) => <option key={option}>{option}</option>)}
             </select>
+          </div>
+          <div className="inventory-quick-filters" role="group" aria-label="Quick stock status filters">
+            <button
+              type="button"
+              className={`inventory-chip${status === 'All statuses' ? ' is-active' : ''}`}
+              onClick={() => setStatus('All statuses')}
+            >
+              All Items <strong>({stats.items})</strong>
+            </button>
+            <button
+              type="button"
+              className={`inventory-chip chip-green${status === 'In stock' ? ' is-active' : ''}`}
+              onClick={() => setStatus('In stock')}
+            >
+              In Stock <strong>({Math.max(0, stats.items - stats.low - stats.out)})</strong>
+            </button>
+            <button
+              type="button"
+              className={`inventory-chip chip-amber${status === 'Low stock' ? ' is-active' : ''}`}
+              onClick={() => setStatus('Low stock')}
+            >
+              Low Stock <strong>({stats.low})</strong>
+            </button>
+            <button
+              type="button"
+              className={`inventory-chip chip-red${status === 'Out of stock' ? ' is-active' : ''}`}
+              onClick={() => setStatus('Out of stock')}
+            >
+              Out of Stock <strong>({stats.out})</strong>
+            </button>
           </div>
 
           <div className="table-wrap">

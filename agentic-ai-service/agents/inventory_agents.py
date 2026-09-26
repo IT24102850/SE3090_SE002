@@ -42,7 +42,7 @@ def plan_inventory(objective: str) -> InventoryPlan:
             response_schema=InventoryPlanSummary,
             model=os.getenv(
                 "GEMINI_MODEL_INVENTORY",
-                os.getenv("GEMINI_MODEL_PLANNER", os.getenv("GEMINI_MODEL_DEFAULT", "gemini-3.5-flash-lite")),
+                os.getenv("GEMINI_MODEL_PLANNER", os.getenv("GEMINI_MODEL_DEFAULT", "gemini-2.5-flash")),
             ),
         )
         summary = generated.summary

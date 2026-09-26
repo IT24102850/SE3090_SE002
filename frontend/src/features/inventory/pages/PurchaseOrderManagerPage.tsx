@@ -1008,6 +1008,14 @@ export function PurchaseOrderManagerPage() {
                       {statusSavingId === selected.id ? 'Saving…' : `Advance to ${statusLabels[nextStatus(selected.status)!]}`}
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => window.print()}
+                    title="Print purchase order or save as PDF"
+                  >
+                    🖨️ Print PO
+                  </button>
                   {selected.status !== 'Received' && selected.status !== 'Cancelled' && (
                     <button type="button" className="btn btn-secondary" onClick={() => cancelOrder(selected)} disabled={statusSavingId !== null}>{statusSavingId === selected.id ? 'Saving…' : 'Cancel PO'}</button>
                   )}

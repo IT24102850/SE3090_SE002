@@ -225,7 +225,24 @@ export function LowStockAlertsPage() {
         </div>
         <div className="stocksense-ai-body">
           <p className="cell-sub">Read-only analysis using {plan.data_sources.join(' and ').toLowerCase()}. It has not changed stock or created purchase orders.</p>
-          {plan.warnings.map((warning, index) => <p className="page-notice" key={index}>{warning}</p>)}
+          {plan.warnings.map((warning, index) => {
+            const isDeterministic = warning.toLowerCase().includes('deterministic') || warning.toLowerCase().includes('gemini is unavailable');
+            return (
+              <div
+                className={`stocksense-status-notice ${isDeterministic ? 'notice-info' : 'notice-neutral'}`}
+                key={index}
+                role="status"
+              >
+                <span className="stocksense-notice-icon">
+                  <Icon name={isDeterministic ? 'workflow' : 'info'} size={16} />
+                </span>
+                <div className="stocksense-notice-content">
+                  <strong>{isDeterministic ? 'Operational Notice' : 'Planning Parameter'}</strong>
+                  <p>{warning}</p>
+                </div>
+              </div>
+            );
+          })}
           {plan.insights?.length > 0 && <><div className="stocksense-section-heading"><div><p className="eyebrow">SIGNALS FROM YOUR DATA</p><h3>Inventory health insights</h3></div><span>{plan.insights.length} insights</span></div><div className="stocksense-insights-grid" aria-label="Inventory health insights">{plan.insights.map((insight, index) => <article className={`stocksense-insight-card stocksense-insight-${insight.category}`} key={`${insight.category}-${index}`} style={{ animationDelay: `${Math.min(index * 75, 450)}ms` }}>
             <div className="stocksense-insight-top"><span className="stocksense-insight-icon"><Icon name={insightIcon(insight.category)} size={19} /></span><p className="stocksense-insight-category">{insight.category.replace('_', ' ')}</p></div><h3>{insight.title}</h3><p className="cell-sub">{insight.detail}</p>
             {insight.affected_items?.length > 0 && <div className="stocksense-item-chips">{insight.affected_items.map((itemName) => <span key={itemName}>{itemName}</span>)}</div>}

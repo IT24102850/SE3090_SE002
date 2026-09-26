@@ -1611,3 +1611,100 @@
 /* Analytics page spacing */
 .inventory-scope .inventory-analytics-page { display: grid; gap: 1rem; }
 
+/* Quick status filter chips in Inventory Manager */
+.inventory-scope .inventory-quick-filters {
+  display: flex; gap: .45rem; flex-wrap: wrap; padding: .65rem 1.25rem;
+  background: var(--color-surface); border-bottom: 1px solid var(--color-border);
+}
+.inventory-scope .inventory-chip {
+  display: inline-flex; align-items: center; gap: .35rem; padding: .32rem .75rem;
+  font: inherit; font-size: .75rem; font-weight: 650; color: var(--color-text-secondary);
+  background: var(--color-surface-muted); border: 1px solid var(--color-border);
+  border-radius: 999px; cursor: pointer; transition: all .16s ease;
+}
+.inventory-scope .inventory-chip:hover { border-color: var(--color-border-strong); transform: translateY(-1px); }
+.inventory-scope .inventory-chip strong { font-weight: 800; font-size: .72rem; }
+.inventory-scope .inventory-chip.is-active {
+  background: var(--color-primary-soft); border-color: var(--color-primary);
+  color: var(--color-primary); font-weight: 800;
+}
+.inventory-scope .inventory-chip.chip-green.is-active { background: var(--color-good-soft); border-color: var(--color-good); color: var(--color-good); }
+.inventory-scope .inventory-chip.chip-amber.is-active { background: var(--color-warning-soft); border-color: var(--color-warning); color: var(--color-warning); }
+.inventory-scope .inventory-chip.chip-red.is-active   { background: var(--color-critical-soft); border-color: var(--color-critical); color: var(--color-critical); }
+
+/* StockSense AI Status Notice (non-alarming, enterprise operational notice) */
+.inventory-scope .stocksense-status-notice {
+  display: flex; gap: .75rem; align-items: flex-start; padding: .85rem 1.1rem;
+  margin: .65rem 0; border-radius: .85rem; font-size: .82rem; line-height: 1.4;
+  animation: inv-page-in .2s ease-out;
+}
+.inventory-scope .stocksense-status-notice.notice-info {
+  background: linear-gradient(135deg, color-mix(in srgb, #118bd0 8%, var(--color-surface)), var(--color-surface));
+  border: 1px solid color-mix(in srgb, #118bd0 24%, var(--color-border));
+  border-left: 3px solid #118bd0;
+}
+.inventory-scope .stocksense-status-notice.notice-neutral {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-text-muted) 6%, var(--color-surface)), var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-text-muted);
+}
+.inventory-scope .stocksense-notice-icon {
+  display: grid; width: 28px; height: 28px; place-items: center; flex: none;
+  border-radius: 8px; background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.inventory-scope .stocksense-status-notice.notice-info .stocksense-notice-icon { color: #118bd0; }
+.inventory-scope .stocksense-status-notice.notice-neutral .stocksense-notice-icon { color: var(--color-text-muted); }
+.inventory-scope .stocksense-notice-content { display: grid; gap: .15rem; min-width: 0; }
+.inventory-scope .stocksense-notice-content strong { font-size: .75rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--color-text); }
+.inventory-scope .stocksense-notice-content p { margin: 0; color: var(--color-text-secondary); font-size: .8rem; }
+
+/* Print view for Purchase Orders */
+@media print {
+  body { background: white !important; color: black !important; }
+  .inventory-scope .page-head,
+  .inventory-scope .purchase-orders-hero,
+  .inventory-scope .po-list-panel,
+  .inventory-scope .stat-strip,
+  .inventory-scope .po-actions,
+  .sidebar, .navbar, .notification-bell { display: none !important; }
+  .inventory-scope .po-detail-panel { border: 1px solid #ccc !important; box-shadow: none !important; max-width: 100% !important; width: 100% !important; }
+}
+
+/* Final consistency pass across the inventory workspace. */
+.inventory-scope :is(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-primary) 45%, transparent);
+  outline-offset: 2px;
+}
+.inventory-scope .panel,
+.inventory-scope .kpi-card,
+.inventory-scope .stat {
+  border-color: color-mix(in srgb, var(--color-border) 88%, var(--color-primary) 12%);
+}
+.inventory-scope .panel-head { background: linear-gradient(105deg, color-mix(in srgb, var(--color-primary-soft) 72%, var(--color-surface)), var(--color-surface) 72%); }
+.inventory-scope .data-table th { background: var(--color-surface-muted); }
+.inventory-scope .data-table tbody tr:hover { background: color-mix(in srgb, var(--color-primary-soft) 58%, var(--color-surface)); }
+.inventory-scope .badge { animation: none; box-shadow: none; }
+.inventory-scope .badge::after { display: none; }
+.inventory-scope .page-actions .btn:hover:not(:disabled) { transform: translateY(-1px); }
+
+@media (max-width: 700px) {
+  .inventory-scope .page { min-width: 0; }
+  .inventory-scope .page-head { align-items: flex-start; margin-bottom: 1rem; }
+  .inventory-scope .page-head h1 { font-size: clamp(1.35rem, 6vw, 1.7rem); }
+  .inventory-scope .page-actions { width: 100%; }
+  .inventory-scope .page-actions .btn { flex: 1 1 auto; justify-content: center; }
+  .inventory-scope .panel-head { padding: .9rem 1rem; }
+  .inventory-scope .toolbar { gap: .55rem; padding: .75rem 1rem; }
+  .inventory-scope .toolbar .search-field { flex: 1 1 100%; min-width: 0; }
+  .inventory-scope .filter-select { flex: 1 1 140px; min-width: 0; }
+  .inventory-scope .table-wrap { overscroll-behavior-x: contain; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inventory-scope *, .inventory-scope *::before, .inventory-scope *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
