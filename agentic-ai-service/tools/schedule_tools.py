@@ -28,7 +28,14 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
-from tools.booking_tools import BookingToolsClient, ToolError, _records_call, calculate_travel_time
+from tools.booking_tools import (
+    BookingToolsClient,
+    ToolError,
+    _records_call,
+    as_utc as _as_utc,
+    calculate_travel_time,
+    parse_dt as _parse_dt,
+)
 
 ALLOWED_TOOLS: dict[str, frozenset[str]] = {
     # The planner reasons over the objective alone. Giving it tools would let
@@ -260,20 +267,6 @@ class AgentToolbox:
 
 
 # ── helpers shared by the agents ────────────────────────────────────────
-def _as_utc(value: datetime) -> datetime:
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
-
-
-def _parse_dt(value: Any) -> datetime | None:
-    if not value:
-        return None
-    text = str(value).replace("Z", "+00:00")
-    try:
-        return _as_utc(datetime.fromisoformat(text))
-    except ValueError:
-        return None
-
-
 def parse_hhmm(value: Any) -> int | None:
     """'09:30:00' / '09:30' -> minutes after midnight."""
     if not value:

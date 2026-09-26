@@ -30,6 +30,25 @@ class ApiService {
     ),
   );
 
+  /// Per-request options for the endpoints that run an LLM pipeline.
+  ///
+  /// The 15-second default above is right for CRUD: if a list of bookings has
+  /// not arrived by then something is wrong, and failing fast beats a spinner.
+  /// It is far too short for the agent endpoints - a four-agent run makes
+  /// several Gemini calls and a dozen tool calls back into this same API, and
+  /// takes well past a minute when Gemini is rate-limiting and the client
+  /// falls back across models.
+  ///
+  /// This was not theoretical: "Ask AI to book for you" timed out at 15s on
+  /// every attempt while the pipeline went on to finish successfully and
+  /// return 200, so the customer saw a failure for a booking the server had
+  /// actually planned.
+  ///
+  /// Raised per request rather than on BaseOptions, so an ordinary screen
+  /// still gives up quickly when the API is genuinely down.
+  static Options get aiPipelineOptions =>
+      Options(receiveTimeout: const Duration(minutes: 3));
+
   static bool _interceptorAttached = false;
 
   /// Called once when the backend rejects the session (401).

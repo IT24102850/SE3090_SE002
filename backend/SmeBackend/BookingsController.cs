@@ -33,6 +33,41 @@ public class BookingsController : ControllerBase
     // stays as it is.
     private ICustomerAccountService Customers => new CustomerAccountService(_db);
 
+    /// <summary>
+    /// Pay to confirm: prices the booking on the server, holds the seat and
+    /// hands off to the tenant's payment gateway.
+    /// </summary>
+    /// <remarks>
+    /// POST /api/bookings/checkout?provider=&amp;method=
+    ///
+    /// The booking comes back PendingPayment with a hold that expires, plus
+    /// whatever the gateway needs the client to do next (a client secret, or
+    /// a URL to send the customer to). The booking only becomes Confirmed
+    /// when the gateway says the money arrived - never because the client
+    /// says so.
+    ///
+    /// A booking type that takes payment at the venue returns a Confirmed
+    /// booking and no checkout, which is how every tenant behaves until it
+    /// configures a "payment" block on the type.
+    /// </remarks>
+    [HttpPost("checkout")]
+    [Authorize]
+    public async Task<IActionResult> Checkout(
+        [FromBody] CreateBookingDto dto,
+        [FromServices] Services.BookingPayments.IBookingCheckoutService checkout,
+        [FromQuery] string? provider = null,
+        [FromQuery] string method = "Card",
+        CancellationToken ct = default)
+    {
+        var actor = Services.Billing.BillingActor.FromPrincipal(User);
+        if (actor is null) return Unauthorized();
+
+        var result = await checkout.StartAsync(actor, dto, provider, method, ct);
+        return result.Success
+            ? Ok(result.Value)
+            : StatusCode(result.StatusCode, new { message = result.Error });
+    }
+
     // ── FR-B1: Search availability ─────────────────────────────
     // Consults the resource's weekly ResourceSchedule (falls back to 9am-5pm if
     // the resource has no schedule configured yet) and honors the booking type's
@@ -80,12 +115,10 @@ public class BookingsController : ControllerBase
         // always excluded it, and leaving it in here was why a called-off
         // trip could still hold a slot shut.
         var existing = await _db.Bookings.AsNoTracking()
+            .HoldingSeats(DateTime.UtcNow)
             .Where(b => b.ResourceId == resourceId
                 && b.StartTime.Date == date.Date
-                && b.DeletedAt == null
-                && b.Status != Models.BookingStatus.Cancelled
-                && b.Status != Models.BookingStatus.Rejected
-                && b.Status != Models.BookingStatus.WeatherCancelled)
+                && b.Status != Models.BookingStatus.Rejected)
             .Select(b => new { b.StartTime, b.EndTime, b.TicketBreakdown, b.AttendeeCount })
             .ToListAsync();
 

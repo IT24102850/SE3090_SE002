@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../models/admin_billing_models.dart';
 import '../models/billing_models.dart';
+import 'api_service.dart';
 
 /// The owner's side of the billing engine: every invoice rather than just
 /// mine, the subscription book, the claim pipeline, commission rules,
@@ -376,10 +377,12 @@ class AdminBillingRepository {
   // ── Domain analysis agent ─────────────────────────────────────────────
 
   Future<BillingAnalysis> analyze({required String tenantId, String analysisType = 'full'}) async {
-    final response = await _dio.post('/billing-agent/analyze', data: {
-      'tenantId': tenantId,
-      'analysisType': analysisType,
-    });
+    final response = await _dio.post(
+      '/billing-agent/analyze',
+      data: {'tenantId': tenantId, 'analysisType': analysisType},
+      // Runs the LLM pipeline: needs minutes, not the CRUD default.
+      options: ApiService.aiPipelineOptions,
+    );
     return BillingAnalysis.fromJson(response.data as Map<String, dynamic>);
   }
 

@@ -48,7 +48,19 @@ public partial class PlannerAgentService : IPlannerAgentService
         _config = config;
         var baseUrl = config["AgentService:BaseUrl"] ?? "http://localhost:8001";
         http.BaseAddress = new Uri(baseUrl);
-        http.Timeout = TimeSpan.FromSeconds(config.GetValue("AgentService:TimeoutSeconds", 60));
+        // 60s was not enough and produced a confusing failure: the pipeline
+        // went on to finish and return 200 while this client had already
+        // given up, so a booking the agents had planned was reported as
+        // unreachable. A full run is four agents, up to six tool turns each,
+        // and a Gemini call that is allowed 30s and retried across three
+        // models - comfortably past a minute whenever the free tier is
+        // rate-limiting.
+        //
+        // The budget is layered so the innermost failure is the one the user
+        // sees: Gemini 30s per call < this 150s < the mobile client's 180s.
+        // Raising this above the client's budget would only swap a clear
+        // message for a silent client-side timeout.
+        http.Timeout = TimeSpan.FromSeconds(config.GetValue("AgentService:TimeoutSeconds", 150));
         _http = http;
     }
 

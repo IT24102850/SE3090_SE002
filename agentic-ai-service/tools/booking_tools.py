@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -45,6 +46,34 @@ def _records_call(tool_name: str):
         return wrapper
 
     return decorator
+
+
+def as_utc(value: datetime) -> datetime:
+    """A timestamp with no zone is the API's UTC wall clock - every DateTime
+    it stores and returns is UTC - so naive means UTC here, not local."""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def parse_dt(value: Any) -> datetime | None:
+    """Parse an ISO-8601 timestamp from either side of the wire, or None.
+
+    The two sides do not spell the same instant the same way: .NET writes a
+    UTC DateTime as "2026-09-28T10:00:00Z" while Python's isoformat() writes
+    "2026-09-28T10:00:00+00:00". Comparing those as strings says they differ,
+    which is exactly how every AI booking came to be rejected with "requested
+    time is not a valid slot" while the slot sat there, free, in the very
+    list being searched. Timestamps are compared as instants here, never as
+    text.
+    """
+    if not value:
+        return None
+    text = str(value).strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    try:
+        return as_utc(datetime.fromisoformat(text))
+    except ValueError:
+        return None
 
 
 class BookingToolsClient:
@@ -147,7 +176,11 @@ class BookingToolsClient:
         existing data, not "is this one slot free")."""
         data = self.query_resource_availability(resource_id, date, duration_minutes, booking_type_id)
         slots = data.get("slots", [])
-        match = next((s for s in slots if s.get("startTime") == scheduled_datetime), None)
+        wanted = parse_dt(scheduled_datetime)
+        match = next(
+            (s for s in slots if wanted is not None and parse_dt(s.get("startTime")) == wanted),
+            None,
+        )
         if not data.get("isOpen", False):
             return {"has_conflict": True, "reason": "Resource is closed on this date."}
         if match is None:

@@ -164,6 +164,12 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<ICustomerAccountService, CustomerAccountService>();
+
+// Pay to confirm a booking: the booking half of the payment flow, built on
+// the billing engine's gateways rather than beside them (Services/Booking).
+builder.Services.AddScoped<SmeBackend.Services.BookingPayments.IBookingCheckoutService, SmeBackend.Services.BookingPayments.BookingCheckoutService>();
+builder.Services.AddScoped<SmeBackend.Services.BookingPayments.IBookingPaymentListener, SmeBackend.Services.BookingPayments.BookingPaymentListener>();
+builder.Services.AddHostedService<SmeBackend.Services.BookingPayments.BookingHoldExpiryService>();
 builder.Services.AddHostedService<SmeBackend.Services.ReminderDispatchService>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPlannerAgentService, SmeBackend.Services.PlannerAgentService>();
 builder.Services.AddHttpClient<SmeBackend.Services.IInventoryAgentService, SmeBackend.Services.InventoryAgentService>();

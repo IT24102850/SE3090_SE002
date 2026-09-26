@@ -73,8 +73,8 @@ public class AgentWorkflowController : ControllerBase
             .ToDictionary(g => g.Key, g => g.ToDictionary(s => s.DayOfWeek));
 
         var bookingsByResource = (await _db.Bookings.AsNoTracking()
-            .Where(b => resourceIds.Contains(b.ResourceId) && b.DeletedAt == null
-                && b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.Rejected
+            .HoldingSeats(DateTime.UtcNow)
+            .Where(b => resourceIds.Contains(b.ResourceId) && b.Status != BookingStatus.Rejected
                 && b.StartTime.Date >= today && b.StartTime.Date < horizonEnd)
             .Select(b => new { b.ResourceId, b.StartTime, b.EndTime, b.TicketBreakdown, b.AttendeeCount })
             .ToListAsync())

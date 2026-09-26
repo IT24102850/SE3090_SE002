@@ -362,9 +362,9 @@ public class ResourcesController : ControllerBase
             .ToListAsync())
             .ToHashSet();
         var bookingsByResource = (await _db.Bookings.AsNoTracking()
-            .Where(b => resourceIds.Contains(b.ResourceId) && b.StartTime.Date == date.Date && b.DeletedAt == null
-                && b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.Rejected
-                && b.Status != BookingStatus.WeatherCancelled)
+            .HoldingSeats(DateTime.UtcNow)
+            .Where(b => resourceIds.Contains(b.ResourceId) && b.StartTime.Date == date.Date
+                && b.Status != BookingStatus.Rejected)
             .Select(b => new { b.ResourceId, b.StartTime, b.EndTime, b.TicketBreakdown, b.AttendeeCount })
             .ToListAsync())
             .GroupBy(b => b.ResourceId)

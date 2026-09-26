@@ -5,6 +5,7 @@ import '../models/booking_model.dart';
 import '../models/booking_type_model.dart';
 import '../models/branch_model.dart';
 import '../models/resource_model.dart';
+import '../services/api_service.dart';
 import 'api_service_provider.dart';
 import 'auth_provider.dart';
 
@@ -131,6 +132,45 @@ String? _extractApiMessage(DioException e) {
     return data['message']?.toString() ?? data['title']?.toString();
   }
   return null;
+}
+
+/// What went wrong when the API itself never said.
+///
+/// A request that never arrived has no body to quote, so without this the
+/// caller falls back to blaming its own feature - "the AI planner could not
+/// complete this request" for what is really a stopped server. That sends
+/// someone to debug the wrong thing, so the transport failure is named
+/// plainly and the feature-specific fallback is kept for the case where the
+/// API really did answer and really did refuse.
+String? _transportFailureMessage(DioException e) {
+  final status = e.response?.statusCode;
+  if (status == 401) return 'Your session has expired. Please sign in again.';
+  if (status == 403) return 'This account is not allowed to do that.';
+  if (status != null && status >= 500) {
+    return 'The server hit an error handling this ($status). Please try again.';
+  }
+
+  switch (e.type) {
+    case DioExceptionType.connectionError:
+    case DioExceptionType.connectionTimeout:
+      return 'Could not reach the server. Check that the API is running and '
+          'that this device can see it.';
+    case DioExceptionType.sendTimeout:
+    case DioExceptionType.receiveTimeout:
+    case DioExceptionType.transformTimeout:
+      return 'The server took too long to answer. Please try again.';
+    case DioExceptionType.badCertificate:
+      return "The server's security certificate was rejected.";
+    case DioExceptionType.cancel:
+      return 'The request was cancelled.';
+    case DioExceptionType.badResponse:
+    case DioExceptionType.unknown:
+      // unknown covers a SocketException raised before any response.
+      return e.response == null
+          ? 'Could not reach the server. Check that the API is running and '
+              'that this device can see it.'
+          : null;
+  }
 }
 
 /// Creates a booking, echoing the exact [startTimeIso]/[endTimeIso] strings
@@ -293,12 +333,17 @@ Future<AiPlanOutcome> findAndBook(
   DateTime? dateTo,
 }) async {
   try {
-    final response = await dio.post('/agent/find-and-book', data: {
-      'objective': objective,
-      'dateFrom': dateFrom?.toUtc().toIso8601String(),
-      'dateTo': dateTo?.toUtc().toIso8601String(),
-      'extraConstraints': {'booking_type_id': bookingTypeId},
-    });
+    final response = await dio.post(
+      '/agent/find-and-book',
+      data: {
+        'objective': objective,
+        'dateFrom': dateFrom?.toUtc().toIso8601String(),
+        'dateTo': dateTo?.toUtc().toIso8601String(),
+        'extraConstraints': {'booking_type_id': bookingTypeId},
+      },
+      // Four agents, several Gemini calls: minutes, not the CRUD default.
+      options: ApiService.aiPipelineOptions,
+    );
     final data = response.data as Map<String, dynamic>;
     if (response.statusCode == 202) {
       return AiPlanOutcome(
@@ -315,7 +360,10 @@ Future<AiPlanOutcome> findAndBook(
     );
   } on DioException catch (e) {
     final data = e.response?.data;
-    final message = (data is Map ? data['message']?.toString() : null) ?? _extractApiMessage(e) ?? 'The AI planner could not complete this request.';
+    final message = (data is Map ? data['message']?.toString() : null) ??
+        _extractApiMessage(e) ??
+        _transportFailureMessage(e) ??
+        'The AI planner could not complete this request.';
     return AiPlanOutcome(
       status: 'Rejected',
       message: message,

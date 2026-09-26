@@ -14,6 +14,14 @@ namespace SmeBackend.Tests;
 /// that decides whether a boat sails and whether a guest is told.
 public class IntegrationServiceTests
 {
+    /// Real configuration rather than a hand-written double: the services
+    /// under test read settings through GetValue<T>, which goes via
+    /// GetSection, and a stub that only implements the indexer throws.
+    private static IConfiguration Config(params (string Key, string? Value)[] values) =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(values.ToDictionary(v => v.Key, v => v.Value))
+            .Build();
+
     // ---------- Open-Meteo: the sail / no-sail call ----------
 
     private static MarineForecast Reading(decimal? wind = null, decimal? gust = null,
@@ -273,7 +281,7 @@ public class IntegrationServiceTests
     // ---------- OpenRouteService: always answering ----------
 
     private static OpenRouteTravelTimeService UnconfiguredTravelTime() =>
-        new(new UnusableHttpClientFactory(), new EmptyConfiguration(),
+        new(new UnusableHttpClientFactory(), Config(),
             new NoopLogger<OpenRouteTravelTimeService>());
 
     [Fact]
@@ -307,6 +315,46 @@ public class IntegrationServiceTests
         Assert.Equal(0, result.Minutes);
         Assert.Equal(0, result.DistanceKm);
     }
+
+    // ---------- the agent service: waiting long enough to get an answer ----------
+
+    [Fact]
+    public void The_agent_client_outlasts_a_full_pipeline_run()
+    {
+        // 60s was too short. The four agents finished and returned 200 while
+        // this client had already given up, so a booking the AI had planned
+        // came back to the customer as "could not reach the AI planning
+        // service". A run makes several Gemini calls, each allowed 30s and
+        // retried across three models.
+        using var http = new HttpClient();
+        _ = new PlannerAgentService(http, Config());
+
+        Assert.True(http.Timeout >= TimeSpan.FromSeconds(120),
+            $"a full pipeline run outlasts {http.Timeout.TotalSeconds:0}s");
+    }
+
+    [Fact]
+    public void The_agent_client_gives_up_before_the_mobile_client_does()
+    {
+        // The budgets are layered so the innermost failure is the one the
+        // user reads. If this outlasted the app's 180s, a slow pipeline would
+        // surface as a silent client timeout instead of this service's own
+        // message naming what went wrong.
+        using var http = new HttpClient();
+        _ = new PlannerAgentService(http, Config());
+
+        Assert.True(http.Timeout < TimeSpan.FromSeconds(180),
+            "must expire before the mobile client's 3-minute budget");
+    }
+
+    [Fact]
+    public void The_agent_timeout_can_be_tuned_without_a_rebuild()
+    {
+        using var http = new HttpClient();
+        _ = new PlannerAgentService(http, Config(("AgentService:TimeoutSeconds", "42")));
+
+        Assert.Equal(TimeSpan.FromSeconds(42), http.Timeout);
+    }
 }
 
 // --- stand-ins, so none of the above can reach the network ---
@@ -325,12 +373,4 @@ file sealed class UnusableHttpClientFactory : IHttpClientFactory
 {
     public HttpClient CreateClient(string name) =>
         throw new InvalidOperationException($"'{name}' should not be called on this path.");
-}
-
-file sealed class EmptyConfiguration : IConfiguration
-{
-    public string? this[string key] { get => null; set { } }
-    public IEnumerable<IConfigurationSection> GetChildren() => Array.Empty<IConfigurationSection>();
-    public IChangeToken GetReloadToken() => throw new NotSupportedException();
-    public IConfigurationSection GetSection(string key) => throw new NotSupportedException();
 }
