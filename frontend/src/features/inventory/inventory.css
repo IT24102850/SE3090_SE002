@@ -1329,19 +1329,61 @@
 
 /* Clear, inviting StockSense action and a more legible live loading sequence. */
 .inventory-scope .stocksense-hero-actions { gap: .38rem; }
-.inventory-scope .stocksense-hero .stocksense-analyze-button { position: relative; isolation: isolate; display: inline-flex; min-width: 218px; min-height: 48px; gap: .55rem; align-items: center; justify-content: center; overflow: hidden; padding: .72rem 1.05rem; color: #063b38; font-size: .9rem; font-weight: 850; border: 1px solid rgba(202,255,248,.62); border-radius: .9rem; background: linear-gradient(115deg, #7af1d9 0%, #36d8ba 52%, #4ee2c8 100%); box-shadow: 0 10px 24px rgba(21,207,177,.26), inset 0 1px rgba(255,255,255,.65); animation: stocksense-cta-pulse 2.8s ease-in-out infinite; transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
-.inventory-scope .stocksense-hero .stocksense-analyze-button::after { position: absolute; z-index: 0; top: -25%; left: -75%; width: 48%; height: 150%; content: ''; pointer-events: none; background: linear-gradient(105deg, transparent, rgba(255,255,255,.68), transparent); transform: skewX(-20deg); animation: stocksense-cta-sheen 4.2s ease-in-out infinite; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button { position: relative; isolation: isolate; display: inline-flex; min-width: 218px; min-height: 48px; gap: .55rem; align-items: center; justify-content: center; overflow: hidden; padding: .72rem 1.05rem; color: #fff; font-size: .9rem; font-weight: 850; border: 1px solid rgba(209,216,255,.42); border-radius: .9rem; background: linear-gradient(115deg, #536df0 0%, #695fe9 52%, #8058e8 100%); box-shadow: 0 8px 20px rgba(86,101,226,.24), inset 0 1px rgba(255,255,255,.25); animation: none; transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button::after { display: none; animation: none; }
 .inventory-scope .stocksense-hero .stocksense-analyze-button > span { position: relative; z-index: 1; }
 .inventory-scope .stocksense-hero .stocksense-analyze-button .stocksense-button-spark { font-size: 1.1rem; }
 .inventory-scope .stocksense-hero .stocksense-analyze-button .stocksense-button-arrow { margin-left: .12rem; font-size: 1.12rem; transition: transform .2s ease; }
-.inventory-scope .stocksense-hero .stocksense-analyze-button:hover:not(:disabled) { transform: translateY(-3px); filter: saturate(1.12) brightness(1.04); box-shadow: 0 15px 30px rgba(21,207,177,.36), inset 0 1px rgba(255,255,255,.75); }
+.inventory-scope .stocksense-hero .stocksense-analyze-button:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.08); box-shadow: 0 12px 24px rgba(86,101,226,.34), inset 0 1px rgba(255,255,255,.35); }
 .inventory-scope .stocksense-hero .stocksense-analyze-button:hover:not(:disabled) .stocksense-button-arrow { transform: translateX(3px); }
-.inventory-scope .stocksense-hero .stocksense-analyze-button:focus-visible { outline: 3px solid #d7fff6; outline-offset: 4px; }
-.inventory-scope .stocksense-hero .stocksense-analyze-button:disabled { cursor: progress; animation: none; opacity: .88; }
-.inventory-scope .stocksense-hero .stocksense-analyze-button:disabled::after { animation-duration: 1.6s; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button:focus-visible { outline: 3px solid #d7ddff; outline-offset: 4px; }
+.inventory-scope .stocksense-hero .stocksense-analyze-button:disabled { cursor: progress; animation: none; filter: saturate(.7); opacity: .78; }
 .inventory-scope .stocksense-cta-hint { color: rgba(220,255,248,.75); font-size: .65rem; font-weight: 650; text-align: right; }
-@keyframes stocksense-cta-pulse { 0%, 100% { box-shadow: 0 10px 24px rgba(21,207,177,.22), inset 0 1px rgba(255,255,255,.65); } 50% { box-shadow: 0 12px 30px rgba(21,207,177,.38), 0 0 0 4px rgba(87,232,208,.08), inset 0 1px rgba(255,255,255,.72); } }
-@keyframes stocksense-cta-sheen { 0%, 34% { left: -75%; opacity: 0; } 43% { opacity: .9; } 72%, 100% { left: 140%; opacity: 0; } }
+
+/* StockSense table actions should read like useful controls rather than bare
+   links tucked against the right edge of each row. */
+.inventory-scope .stocksense-page .row-actions { flex-wrap: wrap; gap: .4rem; }
+.inventory-scope .stocksense-page .stocksense-inventory-panel .row-actions a,
+.inventory-scope .stocksense-page .stocksense-ai-panel .link-button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  padding: .4rem .62rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  border-radius: .62rem;
+  font-size: .76rem;
+  font-weight: 750;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform .16s ease, background .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.inventory-scope .stocksense-page .stocksense-inventory-panel .row-actions .table-link {
+  color: #d4ddff;
+  background: color-mix(in srgb, #647cf4 14%, var(--color-surface));
+  border-color: color-mix(in srgb, #647cf4 32%, var(--color-border));
+}
+.inventory-scope .stocksense-page .stocksense-inventory-panel .row-actions .table-link::after,
+.inventory-scope .stocksense-page .stocksense-ai-panel .link-button::after { content: '↗'; font-size: .82rem; }
+.inventory-scope .stocksense-page .stocksense-inventory-panel .row-actions .link-button,
+.inventory-scope .stocksense-page .stocksense-ai-panel .link-button {
+  color: #a8f0e2;
+  background: color-mix(in srgb, #20cbb0 12%, var(--color-surface));
+  border-color: color-mix(in srgb, #20cbb0 30%, var(--color-border));
+}
+.inventory-scope .stocksense-page .stocksense-inventory-panel .row-actions a:hover,
+.inventory-scope .stocksense-page .stocksense-ai-panel .link-button:hover {
+  transform: translateY(-1px);
+  text-decoration: none;
+  box-shadow: 0 5px 14px rgba(6, 16, 34, .22);
+}
+.inventory-scope .stocksense-page .stocksense-inventory-panel .row-actions a:focus-visible,
+.inventory-scope .stocksense-page .stocksense-ai-panel .link-button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-primary) 60%, white);
+  outline-offset: 2px;
+}
 
 .inventory-scope .stocksense-progress-panel { grid-template-columns: 94px minmax(0, 1fr); min-height: 164px; background: radial-gradient(circle at 6% 50%, color-mix(in srgb, #20cbb0 17%, transparent), transparent 30%), linear-gradient(115deg, var(--color-surface), color-mix(in srgb, #20cbb0 7%, var(--color-surface))); }
 .inventory-scope .stocksense-progress-panel::before { position: absolute; top: -92px; right: -42px; width: 240px; height: 240px; content: ''; pointer-events: none; border: 1px solid color-mix(in srgb, #20cbb0 14%, transparent); border-radius: 50%; box-shadow: 0 0 0 22px color-mix(in srgb, #20cbb0 4%, transparent), 0 0 0 48px color-mix(in srgb, #20cbb0 3%, transparent); }
@@ -1671,6 +1713,23 @@
 }
 
 /* Final consistency pass across the inventory workspace. */
+/* Inventory screens sit inside the shared app shell. Remove its fixed ambient
+   color wash here: on dark themes it reads as an oversized green panel behind
+   the sidebar and inventory cards. Keep the route canvas deliberately even. */
+body:has(.page-category-inventory) {
+  background: var(--color-bg);
+}
+.app-main:has(.page-category-inventory) {
+  background: var(--color-bg);
+}
+.app-main:has(.page-category-inventory)::before {
+  display: none;
+  content: none;
+}
+.page-category-inventory {
+  background: transparent;
+}
+
 .inventory-scope :is(button, a, input, select, textarea):focus-visible {
   outline: 3px solid color-mix(in srgb, var(--color-primary) 45%, transparent);
   outline-offset: 2px;

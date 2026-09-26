@@ -19,6 +19,22 @@ import 'purchase_order_approval_screen.dart';
 import 'stock_check_screen.dart';
 import 'stock_count_screen.dart';
 
+String _formatQuantity(double value) =>
+    value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+
+String _compactLkr(double value) {
+  if (value >= 1000000000) {
+    return 'LKR ${(value / 1000000000).toStringAsFixed(1)}B';
+  }
+  if (value >= 1000000) {
+    return 'LKR ${(value / 1000000).toStringAsFixed(1)}M';
+  }
+  if (value >= 10000) {
+    return 'LKR ${(value / 1000).toStringAsFixed(1)}K';
+  }
+  return 'LKR ${value.toStringAsFixed(0)}';
+}
+
 class InventoryDashboard extends StatefulWidget {
   const InventoryDashboard({
     super.key,
@@ -36,10 +52,12 @@ class InventoryDashboard extends StatefulWidget {
 }
 
 class _InventoryDashboardState extends State<InventoryDashboard> {
+  static const _previewLimit = 100;
   late final _repository = InventoryDashboardRepository(widget.client);
   DashboardSummary? _summary;
   List<InventoryItem> _allItems = const [];
   List<InventoryItem> _filteredItems = const [];
+  final TextEditingController _searchController = TextEditingController();
   String? _error;
   Map<String, dynamic>? _inventoryAiPlan;
   String? _inventoryAiError;
@@ -49,7 +67,8 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   bool _loading = true;
   bool _requestInFlight = false;
   String _searchQuery = '';
-  String _selectedFilter = 'All'; // 'All', 'Low Stock', 'Out of Stock'
+  String _selectedFilter = 'All';
+  String _sortMode = 'Stock health';
 
   @override
   void initState() {
@@ -60,6 +79,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   @override
   void dispose() {
     _inventoryAiStepTimer?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -71,13 +91,13 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
       _error = null;
     });
     try {
-      final summary = await _repository.loadSummary();
-      final liveItems = await _repository.loadPreviewItems();
+      final dashboard =
+          await _repository.loadDashboard(previewLimit: _previewLimit);
       if (mounted) {
         setState(() {
-          _summary = summary;
-          _allItems = liveItems;
-          _applyFilter();
+          _summary = dashboard.summary;
+          _allItems = dashboard.previewItems;
+          _filteredItems = _filterItems();
         });
         if (showSuccess) {
           showAppNotification(
@@ -100,24 +120,62 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   }
 
   void _applyFilter() {
-    var list = _allItems;
-    if (_selectedFilter == 'Low Stock') {
-      list = list.where((i) => i.isLowStock && i.quantity > 0).toList();
-    } else if (_selectedFilter == 'Out of Stock') {
-      list = list.where((i) => i.quantity <= 0).toList();
+    setState(() => _filteredItems = _filterItems());
+  }
+
+  List<InventoryItem> _filterItems() {
+    var list = List<InventoryItem>.of(_allItems);
+    switch (_selectedFilter) {
+      case 'Needs attention':
+        list = list.where((item) => item.isLowStock).toList();
+        break;
+      case 'Low stock':
+        list =
+            list.where((item) => item.isLowStock && item.quantity > 0).toList();
+        break;
+      case 'Out of stock':
+        list = list.where((item) => item.quantity <= 0).toList();
+        break;
+      case 'In stock':
+        list = list.where((item) => !item.isLowStock).toList();
+        break;
     }
 
-    if (_searchQuery.isNotEmpty) {
-      final q = _searchQuery.toLowerCase();
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isNotEmpty) {
       list = list
-          .where((i) =>
-              i.name.toLowerCase().contains(q) ||
-              i.sku.toLowerCase().contains(q) ||
-              i.category.toLowerCase().contains(q))
+          .where((item) =>
+              '${item.name} ${item.sku} ${item.category} ${item.branch}'
+                  .toLowerCase()
+                  .contains(query))
           .toList();
     }
 
-    setState(() => _filteredItems = list);
+    int rank(InventoryItem item) => item.quantity <= 0
+        ? 0
+        : item.isLowStock
+            ? 1
+            : 2;
+    switch (_sortMode) {
+      case 'Name A–Z':
+        list.sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        break;
+      case 'Quantity low to high':
+        list.sort((a, b) => a.quantity.compareTo(b.quantity));
+        break;
+      case 'Quantity high to low':
+        list.sort((a, b) => b.quantity.compareTo(a.quantity));
+        break;
+      default:
+        list.sort((a, b) {
+          final health = rank(a).compareTo(rank(b));
+          return health != 0
+              ? health
+              : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
+    }
+    return list;
   }
 
   void _fail(String message) {
@@ -264,7 +322,16 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                       const SizedBox(height: 6),
                       TextField(
                         controller: qtyController,
-                        keyboardType: TextInputType.number,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: [
+                          TextInputFormatter.withFunction((oldValue, newValue) {
+                            return RegExp(r'^\d*\.?\d{0,3}$')
+                                    .hasMatch(newValue.text)
+                                ? newValue
+                                : oldValue;
+                          }),
+                        ],
                         style: AppTextStyles.body.copyWith(color: Colors.white),
                         decoration: InputDecoration(
                           hintText: 'Enter quantity',
@@ -308,11 +375,20 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
       },
     );
 
+    final enteredQuantity = qtyController.text.trim();
+    qtyController.dispose();
     if (confirmed != true || !mounted) return;
-    final qty = double.tryParse(qtyController.text);
+    final qty = double.tryParse(enteredQuantity);
     if (qty == null || qty <= 0) {
       showAppNotification('Please enter a valid positive quantity',
           tone: AppNotificationTone.warning);
+      return;
+    }
+    if (!isAdd && qty > item.quantity) {
+      showAppNotification(
+        'You can issue up to ${_formatQuantity(item.quantity)} ${item.unit}.',
+        tone: AppNotificationTone.warning,
+      );
       return;
     }
 
@@ -375,11 +451,20 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
           color: AppColors.cyan,
           backgroundColor: AppColors.overlaySurface,
           onRefresh: () => _load(showSuccess: true),
-          child: _loading
+          child: _loading && _summary == null
               ? const AppLoader(message: 'Loading inventory hub...')
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   children: [
+                    if (_loading)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 10),
+                        child: LinearProgressIndicator(
+                          minHeight: 2,
+                          color: AppColors.cyan,
+                          backgroundColor: AppColors.glassBorder,
+                        ),
+                      ),
                     // High-tech Hero Banner
                     _buildHeroBanner(),
                     const SizedBox(height: 18),
@@ -389,7 +474,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                       const SizedBox(height: 18),
                     ],
 
-                    // Top 4 Metrics Cards
+                    // Inventory health at a glance.
                     if (_summary != null) ...[
                       _buildMetricCards(_summary!),
                       const SizedBox(height: 22),
@@ -413,11 +498,38 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                     SectionHeader(
                       'STOCK LEDGER',
                       trailing: Text(
-                          '${_filteredItems.length} of ${_allItems.length} SKUs',
+                          '${_filteredItems.length} shown · ${_summary?.totalItems ?? _allItems.length} total',
                           style: AppTextStyles.caption
                               .copyWith(color: AppColors.cyan)),
                     ),
                     const SizedBox(height: 12),
+
+                    if ((_summary?.totalItems ?? _allItems.length) >
+                        _allItems.length) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: AppColors.cyan.withValues(alpha: .08),
+                          borderRadius: BorderRadius.circular(11),
+                          border: Border.all(
+                              color: AppColors.cyan.withValues(alpha: .2)),
+                        ),
+                        child: Row(children: [
+                          const Icon(Icons.info_outline_rounded,
+                              size: 16, color: AppColors.cyan),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Showing the first ${_allItems.length} of ${_summary!.totalItems} items. Search and filters apply to this preview.',
+                              style: AppTextStyles.caption.copyWith(
+                                  color: AppColors.textSecondary, height: 1.35),
+                            ),
+                          ),
+                        ]),
+                      ),
+                    ],
 
                     // Search and Filter Bar
                     _buildSearchAndFilterBar(),
@@ -425,13 +537,45 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
 
                     // Items List
                     if (_filteredItems.isEmpty && _error == null)
-                      EmptyState(
-                        icon: Icons.inventory_2_outlined,
-                        title: 'No inventory items match',
-                        message: _searchQuery.isNotEmpty
-                            ? 'No products found matching "$_searchQuery"'
-                            : 'No inventory items in this filter group.',
-                      )
+                      _allItems.isEmpty
+                          ? const EmptyState(
+                              icon: Icons.inventory_2_outlined,
+                              title: 'Your inventory is ready to begin',
+                              message:
+                                  'Items will appear here once your catalog has stock records.',
+                            )
+                          : InventoryPanel(
+                              child: Column(
+                                children: [
+                                  const Icon(Icons.filter_alt_off_rounded,
+                                      color: AppColors.textMuted, size: 30),
+                                  const SizedBox(height: 9),
+                                  Text('No items match this view',
+                                      style: AppTextStyles.subtitle.copyWith(
+                                          fontWeight: FontWeight.w800)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Try another filter or clear your search.',
+                                    textAlign: TextAlign.center,
+                                    style: AppTextStyles.caption.copyWith(
+                                        color: AppColors.textSecondary),
+                                  ),
+                                  const SizedBox(height: 11),
+                                  TextButton.icon(
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() {
+                                        _searchQuery = '';
+                                        _selectedFilter = 'All';
+                                        _filteredItems = _filterItems();
+                                      });
+                                    },
+                                    icon: const Icon(Icons.restart_alt_rounded),
+                                    label: const Text('Reset filters'),
+                                  ),
+                                ],
+                              ),
+                            )
                     else
                       ..._filteredItems.map((item) => _buildItemCard(item)),
                   ],
@@ -852,71 +996,108 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
 
   Widget _buildHeroBanner() {
     return InventoryPanel(
-      padding: const EdgeInsets.all(18),
-      fill: const Color(0xFF142235),
-      borderColor: const Color(0xFF2A4058),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
+      padding: EdgeInsets.zero,
+      borderColor: const Color(0xFF344A70),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1C2B4A), Color(0xFF17233A), Color(0xFF142C3A)],
+            ),
+          ),
+          child: Stack(children: [
+            Positioned(
+              right: -45,
+              top: -68,
+              child: Container(
+                width: 190,
+                height: 190,
                 decoration: BoxDecoration(
-                  color: AppColors.cyan.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: const Icon(Icons.inventory_2_rounded,
-                    color: AppColors.cyan, size: 23),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('INVENTORY OVERVIEW',
-                        style: AppTextStyles.label.copyWith(
-                          color: AppColors.cyan,
-                          fontSize: 10,
-                          letterSpacing: 1,
-                        )),
-                    const SizedBox(height: 3),
-                    Text('Inventory Command',
-                        style: AppTextStyles.title.copyWith(
-                          fontSize: 21,
-                          fontWeight: FontWeight.w800,
-                        )),
+                  shape: BoxShape.circle,
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: .06)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.violet.withValues(alpha: .1),
+                      blurRadius: 45,
+                      spreadRadius: 24,
+                    ),
                   ],
                 ),
               ),
-              if (widget.canApprove)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text('MANAGER',
-                      style: AppTextStyles.label.copyWith(
-                        color: AppColors.success,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                      )),
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Stock, counts, purchase orders and equipment in one place.',
-            style: AppTextStyles.body.copyWith(
-              color: AppColors.textSecondary,
-              fontSize: 13,
-              height: 1.4,
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [
+                          AppColors.cyan.withValues(alpha: .24),
+                          AppColors.violet.withValues(alpha: .18),
+                        ]),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: AppColors.cyan.withValues(alpha: .24)),
+                      ),
+                      child: const Icon(Icons.inventory_2_rounded,
+                          color: AppColors.cyan, size: 23),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('INVENTORY CONTROL CENTER',
+                              style: AppTextStyles.label.copyWith(
+                                color: const Color(0xFF9FE8F2),
+                                fontSize: 9,
+                                letterSpacing: 1.05,
+                              )),
+                          const SizedBox(height: 4),
+                          Text('Stock, made simple',
+                              style: AppTextStyles.title.copyWith(
+                                fontSize: 21,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -.3,
+                              )),
+                        ],
+                      ),
+                    ),
+                    if (widget.canApprove) const _RoleBadge(label: 'MANAGER'),
+                  ]),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Keep products, counts, orders and equipment moving from one clear workspace.',
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 12.5,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    _HeroPill(
+                      icon: Icons.inventory_2_outlined,
+                      label: '${_summary?.totalItems ?? _allItems.length} SKUs',
+                    ),
+                    _HeroPill(
+                      icon: Icons.schedule_rounded,
+                      label: _loading ? 'Updating stock' : 'Live stock view',
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          ]),
+        ),
       ),
     );
   }
@@ -929,24 +1110,25 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
             Expanded(
               child: _CyberStatCard(
                 label: 'TOTAL VALUATION',
-                value: 'LKR ${summary.totalValue.toStringAsFixed(2)}',
+                value: _compactLkr(summary.totalValue),
                 icon: Icons.account_balance_wallet_rounded,
-                accentColor: const Color(0xFF10B981),
-                subLabel: 'Asset on-hand value',
+                accentColor: const Color(0xFF7C8CFF),
+                subLabel:
+                    'LKR ${summary.totalValue.toStringAsFixed(2)} on hand',
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _CyberStatCard(
-                label: 'LOW STOCK ALERTS',
+                label: 'LOW STOCK',
                 value: '${summary.lowStock}',
                 icon: Icons.warning_amber_rounded,
                 accentColor: summary.lowStock > 0
                     ? const Color(0xFFF59E0B)
-                    : const Color(0xFF10B981),
+                    : const Color(0xFF55D6C2),
                 subLabel: summary.lowStock > 0
-                    ? 'Requires attention'
-                    : 'Optimal reserves',
+                    ? 'At or below reorder level'
+                    : 'Reorder levels healthy',
               ),
             ),
           ],
@@ -956,11 +1138,15 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
           children: [
             Expanded(
               child: _CyberStatCard(
-                label: 'TOTAL CATALOG SKUS',
-                value: '${summary.totalItems}',
-                icon: Icons.category_rounded,
-                accentColor: AppColors.cyan,
-                subLabel: 'Tracked items',
+                label: 'OUT OF STOCK',
+                value: '${summary.outOfStock}',
+                icon: Icons.remove_shopping_cart_rounded,
+                accentColor: summary.outOfStock > 0
+                    ? const Color(0xFFF16D83)
+                    : const Color(0xFF55D6C2),
+                subLabel: summary.outOfStock > 0
+                    ? 'Needs replenishment'
+                    : 'Nothing empty',
               ),
             ),
             const SizedBox(width: 12),
@@ -969,7 +1155,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                 label: 'PENDING PO QUEUE',
                 value: '${summary.pendingOrders}',
                 icon: Icons.assignment_late_rounded,
-                accentColor: const Color(0xFF8B5CF6),
+                accentColor: const Color(0xFFB28CFF),
                 subLabel: 'In-review orders',
               ),
             ),
@@ -1068,65 +1254,132 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   }
 
   Widget _buildSearchAndFilterBar() {
+    final filters = <(String, int)>[
+      ('All', _allItems.length),
+      ('Needs attention', _allItems.where((item) => item.isLowStock).length),
+      (
+        'Low stock',
+        _allItems.where((item) => item.isLowStock && item.quantity > 0).length
+      ),
+      ('Out of stock', _allItems.where((item) => item.quantity <= 0).length),
+      ('In stock', _allItems.where((item) => !item.isLowStock).length),
+    ];
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Search Input
-        Container(
-          height: 48,
-          decoration: BoxDecoration(
-            color: AppColors.inputFill,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.glassBorder),
-          ),
-          child: TextField(
-            onChanged: (val) {
-              _searchQuery = val;
-              _applyFilter();
-            },
-            style:
-                AppTextStyles.body.copyWith(color: Colors.white, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'Search items by name, SKU or category...',
-              hintStyle: AppTextStyles.bodyMuted.copyWith(fontSize: 13),
-              prefixIcon: const Icon(Icons.search_rounded,
-                  color: AppColors.textSecondary, size: 20),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear_rounded,
-                          size: 18, color: AppColors.textSecondary),
-                      onPressed: () {
-                        setState(() {
-                          _searchQuery = '';
-                          _applyFilter();
-                        });
-                      },
-                    )
-                  : null,
-              border: InputBorder.none,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        TextField(
+          controller: _searchController,
+          onChanged: (val) {
+            _searchQuery = val;
+            _applyFilter();
+          },
+          textInputAction: TextInputAction.search,
+          style: AppTextStyles.body.copyWith(color: Colors.white, fontSize: 14),
+          decoration: InputDecoration(
+            hintText: 'Search name, SKU, category or branch',
+            hintStyle: AppTextStyles.bodyMuted.copyWith(fontSize: 13),
+            prefixIcon: const Icon(Icons.search_rounded,
+                color: AppColors.textSecondary, size: 20),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    tooltip: 'Clear search',
+                    icon: const Icon(Icons.clear_rounded,
+                        size: 18, color: AppColors.textSecondary),
+                    onPressed: () {
+                      _searchController.clear();
+                      _searchQuery = '';
+                      _applyFilter();
+                    },
+                  )
+                : null,
+            filled: true,
+            fillColor: const Color(0xFF141D2C),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(15),
+              borderSide: const BorderSide(color: AppColors.glassBorder),
             ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(15),
+              borderSide: const BorderSide(color: AppColors.glassBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(15),
+              borderSide: const BorderSide(color: AppColors.cyan, width: 1.4),
+            ),
+            contentPadding: const EdgeInsets.symmetric(vertical: 14),
           ),
         ),
         const SizedBox(height: 10),
-        // Filter Chips
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
-            children: [
-              _buildFilterPill('All', _allItems.length),
-              const SizedBox(width: 8),
-              _buildFilterPill(
-                  'Low Stock',
-                  _allItems
-                      .where((i) => i.isLowStock && i.quantity > 0)
-                      .length),
-              const SizedBox(width: 8),
-              _buildFilterPill('Out of Stock',
-                  _allItems.where((i) => i.quantity <= 0).length),
-            ],
+            children: filters
+                .map((filter) => Padding(
+                      padding: const EdgeInsets.only(right: 7),
+                      child: _buildFilterPill(filter.$1, filter.$2),
+                    ))
+                .toList(),
           ),
         ),
+        const SizedBox(height: 9),
+        Row(children: [
+          Text('Sort',
+              style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: _sortMode,
+              isExpanded: true,
+              dropdownColor: const Color(0xFF172235),
+              style: AppTextStyles.caption.copyWith(color: Colors.white),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                filled: true,
+                fillColor: const Color(0xFF141D2C),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.glassBorder)),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.glassBorder)),
+              ),
+              items: const [
+                'Stock health',
+                'Name A–Z',
+                'Quantity low to high',
+                'Quantity high to low',
+              ]
+                  .map((mode) =>
+                      DropdownMenuItem(value: mode, child: Text(mode)))
+                  .toList(),
+              onChanged: (mode) {
+                if (mode == null) return;
+                setState(() {
+                  _sortMode = mode;
+                  _filteredItems = _filterItems();
+                });
+              },
+            ),
+          ),
+          if (_searchQuery.isNotEmpty ||
+              _selectedFilter != 'All' ||
+              _sortMode != 'Stock health')
+            TextButton(
+              onPressed: () {
+                _searchController.clear();
+                setState(() {
+                  _searchQuery = '';
+                  _selectedFilter = 'All';
+                  _sortMode = 'Stock health';
+                  _filteredItems = _filterItems();
+                });
+              },
+              child: const Text('Reset'),
+            ),
+        ]),
       ],
     );
   }
@@ -1138,7 +1391,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
       onTap: () {
         setState(() {
           _selectedFilter = label;
-          _applyFilter();
+          _filteredItems = _filterItems();
         });
       },
       child: Container(
@@ -1281,166 +1534,147 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
     final isOutOfStock = item.quantity <= 0;
     final isLow = item.isLowStock;
     final statusColor = isOutOfStock
-        ? const Color(0xFFF43F5E)
+        ? const Color(0xFFF16D83)
         : isLow
-            ? const Color(0xFFF59E0B)
-            : const Color(0xFF10B981);
-
-    final statusText =
-        isOutOfStock ? 'OUT OF STOCK' : (isLow ? 'LOW STOCK' : 'OPTIMAL');
-
-    final progressRatio = item.reorderLevel > 0
-        ? (item.quantity / (item.reorderLevel * 2)).clamp(0.02, 1.0)
-        : 1.0;
+            ? const Color(0xFFF3B64D)
+            : const Color(0xFF55D6C2);
+    final statusText = isOutOfStock
+        ? 'OUT OF STOCK'
+        : isLow
+            ? 'LOW STOCK'
+            : 'IN STOCK';
+    final progress = item.reorderLevel > 0
+        ? (item.quantity / item.reorderLevel).clamp(0.0, 1.0)
+        : (item.quantity > 0 ? 1.0 : 0.0);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 11),
       child: InventoryPanel(
-        padding: const EdgeInsets.all(16),
-        borderColor: statusColor.withValues(alpha: 0.3),
+        padding: const EdgeInsets.all(15),
+        borderColor: statusColor.withValues(alpha: .3),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.name,
-                        style: AppTextStyles.subtitle.copyWith(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.glassFill,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: AppColors.glassBorder),
-                            ),
-                            child: Text(
-                              item.sku,
-                              style: AppTextStyles.caption.copyWith(
-                                color: AppColors.cyan,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            item.category,
-                            style: AppTextStyles.caption
-                                .copyWith(color: AppColors.textSecondary),
-                          ),
-                          if (item.branch.isNotEmpty) ...[
-                            Text(' • ',
-                                style: AppTextStyles.caption
-                                    .copyWith(color: AppColors.textMuted)),
-                            Text(
-                              item.branch,
-                              style: AppTextStyles.caption
-                                  .copyWith(color: AppColors.textSecondary),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _InventoryStatusBadge(
-                      label: statusText,
-                      color: statusColor,
-                      icon: isOutOfStock
-                          ? Icons.error_outline_rounded
-                          : isLow
-                              ? Icons.warning_amber_rounded
-                              : Icons.check_circle_outline_rounded,
-                    ),
-                    IconButton(
-                      tooltip: 'Show item QR label',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => _showItemQrLabel(item),
-                      icon: const Icon(
-                        Icons.qr_code_2_rounded,
-                        color: AppColors.cyan,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            // Progress bar and stock count
-            Row(
-              children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(
-                      value: progressRatio,
-                      minHeight: 6,
-                      backgroundColor: Colors.white.withValues(alpha: 0.08),
-                      valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Text(
-                  '${item.quantity.toInt()} / ${item.reorderLevel.toInt()} ${item.unit}',
+            Row(children: [
+              Expanded(
+                child: Text(
+                  item.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.subtitle.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              ),
+              const SizedBox(width: 8),
+              _InventoryStatusBadge(
+                label: statusText,
+                color: statusColor,
+                icon: isOutOfStock
+                    ? Icons.remove_shopping_cart_rounded
+                    : isLow
+                        ? Icons.warning_amber_rounded
+                        : Icons.check_circle_outline_rounded,
+              ),
+            ]),
+            const SizedBox(height: 9),
+            Wrap(
+              spacing: 7,
+              runSpacing: 6,
               children: [
-                Text(
-                  'Unit Cost: LKR ${item.unitCost.toStringAsFixed(2)}',
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.textMuted),
-                ),
-                InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: () => _quickAdjustItem(item),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 6,
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Tap to adjust',
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.cyan,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Icon(Icons.chevron_right_rounded,
-                            size: 16, color: AppColors.cyan),
-                      ],
-                    ),
-                  ),
-                ),
+                _ItemInfoChip(label: item.sku, icon: Icons.qr_code_2_rounded),
+                _ItemInfoChip(
+                    label: item.category, icon: Icons.category_outlined),
+                if (item.branch.isNotEmpty)
+                  _ItemInfoChip(
+                      label: item.branch, icon: Icons.storefront_outlined),
               ],
             ),
+            const SizedBox(height: 15),
+            Row(children: [
+              const Icon(Icons.inventory_2_outlined,
+                  color: AppColors.textMuted, size: 16),
+              const SizedBox(width: 6),
+              Text('ON HAND',
+                  style: AppTextStyles.label.copyWith(
+                      color: AppColors.textMuted,
+                      fontSize: 9,
+                      letterSpacing: .7)),
+              const Spacer(),
+              Text(
+                '${_formatQuantity(item.quantity)} ${item.unit}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.subtitle
+                    .copyWith(fontWeight: FontWeight.w800, fontSize: 14),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 7,
+                backgroundColor: Colors.white.withValues(alpha: .08),
+                valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(children: [
+              Expanded(
+                child: Text(
+                  item.reorderLevel > 0
+                      ? 'Reorder at ${_formatQuantity(item.reorderLevel)} ${item.unit}'
+                      : 'No reorder level set',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textSecondary),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'LKR ${item.unitCost.toStringAsFixed(2)} / ${item.unit}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textMuted, fontSize: 10),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showItemQrLabel(item),
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 17),
+                  label: const Text('Item label'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    minimumSize: const Size(0, 40),
+                    side: const BorderSide(color: AppColors.glassBorder),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(11)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: () => _quickAdjustItem(item),
+                  icon: const Icon(Icons.tune_rounded, size: 17),
+                  label: const Text('Adjust stock'),
+                  style: FilledButton.styleFrom(
+                    foregroundColor: AppColors.cyan,
+                    backgroundColor: AppColors.cyan.withValues(alpha: .12),
+                    minimumSize: const Size(0, 40),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(11)),
+                  ),
+                ),
+              ),
+            ]),
           ],
         ),
       ),
@@ -1448,7 +1682,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   }
 }
 
-class _InventoryStatusBadge extends StatefulWidget {
+class _InventoryStatusBadge extends StatelessWidget {
   const _InventoryStatusBadge({
     required this.label,
     required this.color,
@@ -1460,107 +1694,105 @@ class _InventoryStatusBadge extends StatefulWidget {
   final IconData icon;
 
   @override
-  State<_InventoryStatusBadge> createState() => _InventoryStatusBadgeState();
-}
-
-class _InventoryStatusBadgeState extends State<_InventoryStatusBadge>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _animationController;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animationController,
-      builder: (context, child) {
-        final pulse = 0.75 + (_animationController.value * 0.25);
-        final sweep = -1.2 + (_animationController.value * 2.4);
-
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: widget.color.withValues(alpha: 0.16 * pulse),
-                blurRadius: 10 + (pulse * 4),
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: widget.color.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: widget.color.withValues(alpha: 0.45 * pulse),
-                ),
-              ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: FractionalTranslation(
-                      translation: Offset(sweep, 0),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          width: 22,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.transparent,
-                                widget.color.withValues(alpha: 0.22),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(widget.icon, size: 12, color: widget.color),
-                        const SizedBox(width: 4),
-                        Text(
-                          widget.label,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: widget.color,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: .3)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 5),
+        Text(label,
+            style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: color,
+                letterSpacing: .35)),
+      ]),
     );
   }
+}
+
+class _RoleBadge extends StatelessWidget {
+  const _RoleBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.violet.withValues(alpha: .15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.violet.withValues(alpha: .35)),
+        ),
+        child: Text(label,
+            style: AppTextStyles.label.copyWith(
+                color: const Color(0xFFC3AEFF),
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: .5)),
+      );
+}
+
+class _HeroPill extends StatelessWidget {
+  const _HeroPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .055),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: .09)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 13, color: const Color(0xFF9FE8F2)),
+          const SizedBox(width: 6),
+          Text(label,
+              style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 10)),
+        ]),
+      );
+}
+
+class _ItemInfoChip extends StatelessWidget {
+  const _ItemInfoChip({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        constraints: const BoxConstraints(maxWidth: 190),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppColors.glassFill,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 12, color: AppColors.cyan),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ]),
+      );
 }
 
 class _AiFocusTag extends StatelessWidget {
@@ -1619,6 +1851,18 @@ class _CyberStatCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Container(
+            height: 3,
+            width: 38,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(3),
+              gradient: LinearGradient(colors: [
+                accentColor,
+                accentColor.withValues(alpha: .28),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1736,26 +1980,34 @@ class InventoryDashboardRepository {
   InventoryDashboardRepository(this._client);
   final AuthenticatedApiClient _client;
 
-  Future<DashboardSummary> loadSummary() async {
-    final results = await Future.wait([_loadInventory(), _loadPendingOrders()]);
-    final items = results[0] as List<_DashboardItem>;
+  Future<({DashboardSummary summary, List<InventoryItem> previewItems})>
+      loadDashboard({int previewLimit = 100}) async {
+    final results = await Future.wait<Object>([
+      _loadInventory(),
+      _loadPendingOrders(),
+    ]);
+    final items = results[0] as List<InventoryItem>;
     final pendingOrders = results[1] as int;
-    final lowStock = items
-        .where(
-            (item) => item.quantity <= 0 || item.quantity <= item.reorderLevel)
-        .length;
-    final value = items.fold<double>(
-        0, (total, item) => total + (item.quantity * item.unitCost));
-    return DashboardSummary(
-      totalItems: items.length,
-      totalValue: value,
-      lowStock: lowStock,
-      pendingOrders: pendingOrders,
+    final outOfStock = items.where((item) => item.quantity <= 0).length;
+    final lowStock =
+        items.where((item) => item.quantity > 0 && item.isLowStock).length;
+    final value =
+        items.fold<double>(0, (total, item) => total + item.totalValue);
+
+    return (
+      summary: DashboardSummary(
+        totalItems: items.length,
+        totalValue: value,
+        lowStock: lowStock,
+        outOfStock: outOfStock,
+        pendingOrders: pendingOrders,
+      ),
+      previewItems: items.take(previewLimit).toList(growable: false),
     );
   }
 
-  Future<List<_DashboardItem>> _loadInventory() async {
-    final items = <_DashboardItem>[];
+  Future<List<InventoryItem>> _loadInventory() async {
+    final items = <InventoryItem>[];
     var page = 1;
     var totalPages = 1;
     while (page <= totalPages) {
@@ -1768,7 +2020,7 @@ class InventoryDashboardRepository {
       totalPages = (data['totalPages'] as num?)?.toInt() ?? 1;
       items.addAll(((data['items'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
-          .map(_DashboardItem.fromJson));
+          .map(InventoryItem.fromJson));
       page++;
     }
     return items;
@@ -1783,32 +2035,6 @@ class InventoryDashboardRepository {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return (data['totalCount'] as num?)?.toInt() ?? 0;
   }
-
-  Future<List<InventoryItem>> loadPreviewItems() async {
-    final response = await _client.get('/api/inventory?page=1&pageSize=100');
-    if (response.statusCode != 200) {
-      throw Exception('Inventory preview request failed');
-    }
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return ((data['items'] as List?) ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(InventoryItem.fromJson)
-        .toList();
-  }
-}
-
-class _DashboardItem {
-  const _DashboardItem({
-    required this.quantity,
-    required this.reorderLevel,
-    required this.unitCost,
-  });
-  final double quantity, reorderLevel, unitCost;
-  factory _DashboardItem.fromJson(Map<String, dynamic> json) => _DashboardItem(
-        quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
-        reorderLevel: (json['reorderLevel'] as num?)?.toDouble() ?? 0,
-        unitCost: (json['unitCost'] as num?)?.toDouble() ?? 0,
-      );
 }
 
 class DashboardSummary {
@@ -1816,8 +2042,9 @@ class DashboardSummary {
     required this.totalItems,
     required this.totalValue,
     required this.lowStock,
+    required this.outOfStock,
     required this.pendingOrders,
   });
-  final int totalItems, lowStock, pendingOrders;
+  final int totalItems, lowStock, outOfStock, pendingOrders;
   final double totalValue;
 }

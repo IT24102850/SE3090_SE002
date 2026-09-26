@@ -31,7 +31,7 @@ class InventoryItem {
   final double unitCost;
   final String branch;
 
-  bool get isLowStock => quantity <= 0 || quantity < reorderLevel;
+  bool get isLowStock => quantity <= 0 || quantity <= reorderLevel;
   double get totalValue => quantity * unitCost;
 
   factory InventoryItem.fromJson(Map<String, dynamic> json) => InventoryItem(
