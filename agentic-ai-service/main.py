@@ -34,7 +34,7 @@ from schemas.contracts import (  # noqa: E402
 from tools.booking_tools import BookingToolsClient, ToolError  # noqa: E402
 from tools.inventory_tools import InventoryToolsClient  # noqa: E402
 from agents.inventory_agents import (  # noqa: E402
-    analyze_inventory_domain, analyze_inventory_health, plan_inventory, recommend_replenishment,
+    _latest_supplier_lead_times, analyze_inventory_domain, analyze_inventory_health, plan_inventory, recommend_replenishment,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -168,17 +168,30 @@ def plan_inventory_stock(request: InventoryPlanRequest) -> InventoryAgentTrace |
                     "Gemini is unavailable; deterministic inventory planning is being used. "
                     "Recommendations still use authorized stock and movement data, with reorder-level fallback when history is missing."
                 )
-            trace.warnings.append(
-                f"Supplier-specific lead times are not connected to inventory planning yet. "
-                f"This estimate uses the configured defaults of {plan_output.lead_time_days} lead-time days "
-                f"and {plan_output.safety_days} safety-stock days; confirm them with your Sri Lankan supplier."
-            )
             domain = analyze_inventory_domain(
                 objective=request.objective,
                 branch_id=request.branch_id,
                 client=client,
             )
             trace.data_sources = ["Authorized inventory snapshot", "Recent stock movements"]
+            supplier_lead_times = _latest_supplier_lead_times(domain.movements)
+            items_with_supplier_lead_time = sum(
+                1 for item in domain.items if str(item.get("sku", "")) in supplier_lead_times
+            )
+            if domain.items:
+                if items_with_supplier_lead_time:
+                    trace.data_sources.append("Configured supplier lead times from recent receipts")
+                if items_with_supplier_lead_time < len(domain.items):
+                    trace.warnings.append(
+                        f"Supplier lead-time data is available for {items_with_supplier_lead_time} of {len(domain.items)} items. "
+                        f"The configured {plan_output.lead_time_days}-day lead-time default is used for the rest; "
+                        f"safety stock uses the configured {plan_output.safety_days}-day buffer."
+                    )
+                else:
+                    trace.warnings.append(
+                        f"Supplier lead times are based on the latest supplier-linked receipts. "
+                        f"Safety stock uses the configured {plan_output.safety_days}-day buffer."
+                    )
             trace.warnings.extend(domain.warnings)
             if len(domain.movements) >= 100:
                 trace.warnings.append("The backend returned its 100 most recent movements; older history is not included.")

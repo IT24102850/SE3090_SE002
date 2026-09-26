@@ -40,6 +40,7 @@ public sealed class SuppliersController(
                 supplier.Name,
                 supplier.Email,
                 supplier.Phone,
+                supplier.LeadTimeDays,
                 supplier.CreatedAt,
                 supplier.UpdatedAt))
             .ToListAsync(cancellationToken);
@@ -70,6 +71,12 @@ public sealed class SuppliersController(
         var email = request.Email?.Trim();
         var phone = request.Phone?.Trim();
 
+        if (request.LeadTimeDays is < 1 or > 90)
+        {
+            ModelState.AddModelError("leadTimeDays", "Lead time must be between 1 and 90 days.");
+            return ValidationProblem(ModelState);
+        }
+
         if (string.IsNullOrWhiteSpace(name))
         {
             ModelState.AddModelError("name", "Name is required.");
@@ -87,12 +94,54 @@ public sealed class SuppliersController(
             Name = name,
             Email = email ?? string.Empty,
             Phone = phone ?? string.Empty,
+            LeadTimeDays = request.LeadTimeDays,
         };
 
         db.Suppliers.Add(supplier);
         await db.SaveChangesAsync(cancellationToken);
 
         return CreatedAtAction(nameof(GetSuppliers), new { }, ToResponse(supplier));
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<SupplierResponse>> UpdateSupplier(
+        Guid id,
+        UpdateSupplierRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService, InventoryAuthorizationPolicies.InventoryWrite, tenantId, branchId: null))
+            return Forbid();
+
+        var supplier = await db.Suppliers.SingleOrDefaultAsync(value => value.Id == id, cancellationToken);
+        if (supplier is null) return NotFound();
+
+        if (request.LeadTimeDays is < 1 or > 90)
+        {
+            ModelState.AddModelError("leadTimeDays", "Lead time must be between 1 and 90 days.");
+            return ValidationProblem(ModelState);
+        }
+
+        var name = request.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            ModelState.AddModelError("name", "Name is required.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (await db.Suppliers.IgnoreQueryFilters().AnyAsync(
+                other => other.TenantId == tenantId && other.Id != id && other.Name == name,
+                cancellationToken))
+            return Conflict(new { message = $"A supplier named '{name}' already exists." });
+
+        supplier.Name = name;
+        supplier.Email = request.Email?.Trim() ?? string.Empty;
+        supplier.Phone = request.Phone?.Trim() ?? string.Empty;
+        supplier.LeadTimeDays = request.LeadTimeDays;
+        supplier.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToResponse(supplier));
     }
 
     private bool TryGetTenantId(out Guid tenantId) =>
@@ -104,6 +153,7 @@ public sealed class SuppliersController(
             supplier.Name,
             supplier.Email,
             supplier.Phone,
+            supplier.LeadTimeDays,
             supplier.CreatedAt,
             supplier.UpdatedAt);
 }
@@ -115,10 +165,18 @@ public sealed record SupplierResponse(
     string Name,
     string Email,
     string Phone,
+    int? LeadTimeDays,
     DateTime CreatedAt,
     DateTime UpdatedAt);
 
 public sealed record CreateSupplierRequest(
     string? Name,
     string? Email = null,
-    string? Phone = null);
+    string? Phone = null,
+    int? LeadTimeDays = null);
+
+public sealed record UpdateSupplierRequest(
+    string? Name,
+    string? Email = null,
+    string? Phone = null,
+    int? LeadTimeDays = null);

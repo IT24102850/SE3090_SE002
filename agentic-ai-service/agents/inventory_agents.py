@@ -112,6 +112,34 @@ def _recent_outflow(movements: list[dict[str, Any]]) -> dict[str, tuple[float, i
     return outflow
 
 
+def _latest_supplier_lead_times(movements: list[dict[str, Any]]) -> dict[str, tuple[int, str | None]]:
+    """Use the lead time of the supplier on each item's latest supplier-linked receipt."""
+    latest: dict[str, tuple[datetime, int, str | None]] = {}
+    receipt_types = {"receive", "received", "purchasereceived"}
+    for movement in movements:
+        if str(movement.get("movementType", "")).strip().lower() not in receipt_types:
+            continue
+        if not movement.get("supplierId"):
+            continue
+        try:
+            days = int(movement.get("supplierLeadTimeDays"))
+            occurred = datetime.fromisoformat(str(movement.get("occurredAt", "")).replace("Z", "+00:00"))
+            if occurred.tzinfo is None:
+                occurred = occurred.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            continue
+        if days < 1 or days > 90:
+            continue
+        sku = str(movement.get("sku", ""))
+        if not sku:
+            continue
+        current = latest.get(sku)
+        if current is None or occurred > current[0]:
+            name = str(movement.get("supplierName", "")).strip() or None
+            latest[sku] = (occurred, days, name)
+    return {sku: (days, name) for sku, (_, days, name) in latest.items()}
+
+
 def analyze_inventory_health(
     *, snapshot: DomainSnapshot, plan: InventoryPlan, recommendations: list[InventoryRecommendation]
 ) -> list[InventoryHealthInsight]:
@@ -210,19 +238,23 @@ def recommend_replenishment(
         sku: quantity / min(30, max(7, oldest_age))
         for sku, (quantity, oldest_age, _) in outflow.items()
     }
+    supplier_lead_times = _latest_supplier_lead_times(snapshot.movements)
 
     recommendations: list[InventoryRecommendation] = []
     for item in snapshot.items:
         on_hand = float(item.get("quantity") or 0)
         reorder = float(item.get("reorderLevel") or 0)
         sku = str(item.get("sku", ""))
+        supplier_lead_time = supplier_lead_times.get(sku)
+        lead_time_days = supplier_lead_time[0] if supplier_lead_time else plan.lead_time_days
+        supplier_name = supplier_lead_time[1] if supplier_lead_time else None
         daily = daily_outflow.get(sku)
         needs_reorder = on_hand <= reorder
         days_until_reorder = max(0, (on_hand - reorder) / daily) if daily and daily > 0 else None
-        if not needs_reorder and (days_until_reorder is None or days_until_reorder > plan.lead_time_days):
+        if not needs_reorder and (days_until_reorder is None or days_until_reorder > lead_time_days):
             continue
 
-        target = max(reorder, daily * (plan.lead_time_days + plan.safety_days) if daily else reorder)
+        target = max(reorder, daily * (lead_time_days + plan.safety_days) if daily else reorder)
         quantity = max(0, math.ceil(target - on_hand))
         if quantity <= 0:
             continue
@@ -236,13 +268,17 @@ def recommend_replenishment(
             notes.append("Outflow rate uses recent issue/sale/consumption and negative manual-adjustment movements; waste and positive corrections were excluded.")
             _, _, event_count = outflow[sku]
             confidence = 0.75 if event_count >= 5 and len(snapshot.movements) < 100 else 0.55 if event_count >= 2 else 0.4
+        if supplier_lead_time:
+            notes.append(f"Uses the configured {lead_time_days}-day lead time for {supplier_name or 'the supplier'} from the latest supplier-linked receipt.")
+        else:
+            notes.append(f"No supplier-linked receipt with lead-time data was found; uses the configured {plan.lead_time_days}-day default.")
         if not item.get("branchId"):
             notes.append("Item has no assigned branch; choose a branch before creating a purchase order.")
             confidence = min(confidence, 0.4)
         reason = (
             f"On hand is {on_hand:g} against reorder level {reorder:g}. "
             + (f"Recent recorded outflow averages {daily:.2f} per day; stock is projected to reach the reorder level in {days_until_reorder:.1f} days. " if daily else "No reliable daily usage rate is recorded. ")
-            + f"Suggested quantity {quantity:g} covers the reorder target and {plan.lead_time_days}-day lead time plus {plan.safety_days} safety days."
+            + f"Suggested quantity {quantity:g} covers the reorder target and {lead_time_days}-day lead time plus {plan.safety_days} safety days."
         )
         recommendations.append(InventoryRecommendation(
             inventory_item_id=str(item.get("id", "")),
