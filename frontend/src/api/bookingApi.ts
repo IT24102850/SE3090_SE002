@@ -5,6 +5,7 @@ import type {
   AgentWorkflow,
   AvailabilityDay,
   DepartureBoard,
+  DepartureForecast,
   DepartureManifest,
   ExcursionKpis,
   RescheduleOption,
@@ -459,6 +460,13 @@ export const bookingApi = createApi({
       query: (params) => ({ url: '/departures/weather', params: params ?? undefined }),
       providesTags: [{ type: 'Weather', id: 'LIST' }],
     }),
+    // Open-Meteo forecast for one departure. Fetched on demand rather than
+    // polled: it is a third-party call, and a board showing twelve sailings
+    // should not make twelve of them on a timer.
+    getDepartureForecast: builder.query<DepartureForecast, string>({
+      query: (departureId) => ({ url: `/departures/${departureId}/forecast` }),
+      providesTags: (_r, _e, id) => [{ type: 'Weather', id }],
+    }),
     recordWeather: builder.mutation<
       WeatherObservation,
       {
@@ -909,6 +917,8 @@ export const {
   useGetRescheduleOptionsQuery,
   useBulkRescheduleDepartureMutation,
   useGetWeatherQuery,
+  useGetDepartureForecastQuery,
+  useLazyGetDepartureForecastQuery,
   useRecordWeatherMutation,
   useGetSafetyPanelQuery,
   useGetSightingsQuery,

@@ -73,6 +73,24 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+builder.Services.AddMemoryCache();
+
+// SMS through text.lk (Sri Lankan numbers), and the keyless public-holiday
+// feed. Both are advisory paths, so both get short timeouts.
+builder.Services.AddHttpClient(SmeBackend.Services.TextLkSmsGateway.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddScoped<SmeBackend.Services.ISmsGateway, SmeBackend.Services.TextLkSmsGateway>();
+
+builder.Services.AddHttpClient(SmeBackend.Services.GoogleCalendarHolidayService.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<SmeBackend.Services.IPublicHolidayService,
+    SmeBackend.Services.GoogleCalendarHolidayService>();
+
+builder.Services.AddHttpClient(SmeBackend.Services.OpenRouteTravelTimeService.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<SmeBackend.Services.ITravelTimeService,
+    SmeBackend.Services.OpenRouteTravelTimeService>();
+
 // Open-Meteo: no API key, so the forecast works from a clean clone. A short
 // timeout keeps an advisory call from holding up the screen that asked for it.
 builder.Services.AddHttpClient(SmeBackend.Services.OpenMeteoForecastService.ClientName,
@@ -149,7 +167,10 @@ builder.Services.AddScoped<ICustomerAccountService, CustomerAccountService>();
 builder.Services.AddHostedService<SmeBackend.Services.ReminderDispatchService>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPlannerAgentService, SmeBackend.Services.PlannerAgentService>();
 builder.Services.AddHttpClient<SmeBackend.Services.IInventoryAgentService, SmeBackend.Services.InventoryAgentService>();
-builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.StubReminderChannelSender>();
+// Real Twilio (SMS/WhatsApp) and SendGrid (email) delivery, reusing the
+// gateway code billing already ships. Without credentials it records
+// Simulated rather than pretending the reminder was sent.
+builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.ReminderChannelSender>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPushNotificationSender, SmeBackend.Services.FcmPushNotificationSender>();
 builder.Services.AddScoped<SmeBackend.Services.ICloudinaryImageService, SmeBackend.Services.CloudinaryImageService>();
 // Billing & payments engine (component 3). Integrations (Stripe, PayPal,

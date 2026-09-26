@@ -48,8 +48,8 @@ public class BookingsController : ControllerBase
     {
         date = DateTimeUtil.AsUtc(date);
 
-        var resourceExists = await _db.Resources.AnyAsync(r => r.Id == resourceId);
-        if (!resourceExists) return NotFound(new { message = "Resource not found." });
+        var resource = await _db.Resources.AsNoTracking().FirstOrDefaultAsync(r => r.Id == resourceId);
+        if (resource == null) return NotFound(new { message = "Resource not found." });
 
         var dayOfWeek = (int)date.DayOfWeek;
         var schedule = await _db.ResourceSchedules.AsNoTracking()
@@ -57,9 +57,10 @@ public class BookingsController : ControllerBase
 
         var bufferBefore = 0;
         var bufferAfter = 0;
+        Models.BookingType? bookingType = null;
         if (bookingTypeId.HasValue)
         {
-            var bookingType = await _db.BookingTypes.AsNoTracking()
+            bookingType = await _db.BookingTypes.AsNoTracking()
                 .FirstOrDefaultAsync(bt => bt.Id == bookingTypeId);
             if (bookingType != null)
             {
@@ -69,13 +70,23 @@ public class BookingsController : ControllerBase
             }
         }
 
+        // A shared vessel sells seats, not exclusive use of the day. Null
+        // here (the ordinary one-party-at-a-time resource) keeps the
+        // original conflict behaviour exactly.
+        var capacity = CapacityRules.Resolve(resource, bookingType);
+
+        // WeatherCancelled belongs with the other releases: the sea took the
+        // sailing, so its seats go back on sale. Availability.CheckAsync has
+        // always excluded it, and leaving it in here was why a called-off
+        // trip could still hold a slot shut.
         var existing = await _db.Bookings.AsNoTracking()
             .Where(b => b.ResourceId == resourceId
                 && b.StartTime.Date == date.Date
                 && b.DeletedAt == null
                 && b.Status != Models.BookingStatus.Cancelled
-                && b.Status != Models.BookingStatus.Rejected)
-            .Select(b => new { b.StartTime, b.EndTime })
+                && b.Status != Models.BookingStatus.Rejected
+                && b.Status != Models.BookingStatus.WeatherCancelled)
+            .Select(b => new { b.StartTime, b.EndTime, b.TicketBreakdown, b.AttendeeCount })
             .ToListAsync();
 
         var isClosedException = await _db.ResourceScheduleExceptions.AsNoTracking()
@@ -83,15 +94,24 @@ public class BookingsController : ControllerBase
 
         var (isOpen, slots) = SlotCalculator.Calculate(
             date, schedule, duration, bufferBefore, bufferAfter,
-            existing.Select(b => (b.StartTime, b.EndTime)).ToList(),
-            DateTime.UtcNow, isClosedException);
+            existing.Select(b => new SlotBooking(
+                b.StartTime, b.EndTime, TicketPricing.SeatsUsed(b.TicketBreakdown, b.AttendeeCount))).ToList(),
+            DateTime.UtcNow, isClosedException, capacity);
 
         return Ok(new
         {
             date = date.Date,
             isOpen,
             resourceId,
-            slots = slots.Select(s => new { startTime = s.StartTime, endTime = s.EndTime, isAvailable = s.IsAvailable })
+            capacity,
+            slots = slots.Select(s => new
+            {
+                startTime = s.StartTime,
+                endTime = s.EndTime,
+                isAvailable = s.IsAvailable,
+                capacity = s.Capacity,
+                seatsRemaining = s.SeatsRemaining,
+            })
         });
     }
 
@@ -1495,6 +1515,67 @@ public class BookingsController : ControllerBase
     }
 
     /// <summary>Gets a single booking by id.</summary>
+    /// <summary>Downloads this booking as a calendar file the guest can add to Google, Apple or Outlook calendar.</summary>
+    /// <remarks>
+    /// A plain .ics rather than a Google Calendar integration: it needs no API
+    /// key, no OAuth consent screen and no rate limit, and it works in every
+    /// calendar app rather than one. The guest gets a reminder their own
+    /// device raises, which still fires when our SMS or push does not.
+    ///
+    /// Open to the guest on the booking and to staff; a booking belonging to
+    /// someone else is a 403, the same rule GetById applies.
+    /// </remarks>
+    [HttpGet("{id}/calendar.ics")]
+    public async Task<IActionResult> GetCalendarFile(Guid id, CancellationToken ct)
+    {
+        var (callerId, callerRole) = CallerIdentity();
+        if (callerId == null) return Unauthorized();
+
+        var booking = await _db.Bookings.AsNoTracking().IgnoreQueryFilters()
+            .Include(b => b.Resource)
+            .Include(b => b.BookingType)
+            .FirstOrDefaultAsync(b => b.Id == id && b.DeletedAt == null, ct);
+        if (booking == null) return NotFound(new { message = "Booking not found." });
+
+        if (callerRole == Roles.Customer)
+        {
+            var mine = await Customers.AccountIdsAsync(callerId.Value);
+            if (!mine.Contains(booking.BookedBy) && !(booking.BookedFor.HasValue && mine.Contains(booking.BookedFor.Value)))
+                return Forbid();
+        }
+        else if (!Guid.TryParse(User.FindFirst("tenantId")?.Value, out var staffTenant) || staffTenant != booking.TenantId)
+        {
+            return Forbid();
+        }
+
+        var tenantName = await _db.Tenants.AsNoTracking().IgnoreQueryFilters()
+            .Where(t => t.Id == booking.TenantId).Select(t => t.Name).FirstOrDefaultAsync(ct);
+
+        var what = booking.BookingType?.Name ?? booking.Title ?? "Booking";
+        var where = booking.Resource?.Name;
+        var cancelled = booking.Status is Models.BookingStatus.Cancelled
+                     or Models.BookingStatus.Rejected
+                     or Models.BookingStatus.WeatherCancelled;
+
+        var ics = CalendarInvite.Build(
+            bookingId: booking.Id,
+            summary: tenantName is null ? what : $"{what} - {tenantName}",
+            startUtc: booking.StartTime,
+            endUtc: booking.EndTime,
+            description: string.IsNullOrWhiteSpace(booking.Notes)
+                ? $"Booking reference {booking.Id}."
+                : $"{booking.Notes}\n\nBooking reference {booking.Id}.",
+            location: where,
+            organiserName: tenantName,
+            createdUtc: booking.CreatedAt,
+            // A cancelled booking still hands back a file, as a CANCEL, so the
+            // guest's calendar drops the entry instead of keeping a dead one.
+            cancelled: cancelled);
+
+        return File(System.Text.Encoding.UTF8.GetBytes(ics), "text/calendar",
+            $"booking-{booking.Id:N}.ics");
+    }
+
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(Guid id)
     {

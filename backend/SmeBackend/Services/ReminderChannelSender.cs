@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
+using SmeBackend.DTOs;
 using SmeBackend.Models;
 using SmeBackend.Services.Billing;
 
 namespace SmeBackend.Services;
 
-/// Sends booking reminders over Twilio (SMS, WhatsApp) and SendGrid (email).
+/// Sends booking reminders over text.lk (SMS), Twilio (WhatsApp) and
+/// SendGrid (email) - each channel on the provider that suits it.
 ///
 /// It delegates to IBillingMessenger rather than re-implementing either
 /// gateway: that class already handles the Twilio form encoding, the SendGrid
@@ -23,12 +25,15 @@ public sealed class ReminderChannelSender : IReminderChannelSender
 {
     private readonly AppDbContext _db;
     private readonly IBillingMessenger _messenger;
+    private readonly ISmsGateway _sms;
     private readonly ILogger<ReminderChannelSender> _logger;
 
-    public ReminderChannelSender(AppDbContext db, IBillingMessenger messenger, ILogger<ReminderChannelSender> logger)
+    public ReminderChannelSender(AppDbContext db, IBillingMessenger messenger, ISmsGateway sms,
+        ILogger<ReminderChannelSender> logger)
     {
         _db = db;
         _messenger = messenger;
+        _sms = sms;
         _logger = logger;
     }
 
@@ -62,6 +67,17 @@ public sealed class ReminderChannelSender : IReminderChannelSender
                 return ReminderDeliveryResult.Skipped($"No phone number on file, so {normalized} could not be used.");
 
             var body = $"Reminder: {what} on {when}. Please arrive 15 minutes early.";
+
+            // SMS goes through text.lk, which reaches any Sri Lankan number;
+            // WhatsApp stays on Twilio, which is what actually carries it.
+            if (normalized == MessageChannels.Sms)
+            {
+                var sms = await _sms.SendAsync(recipient.Phone, body, ct);
+                if (sms.Delivered) return ReminderDeliveryResult.Sent(sms.ProviderMessageId);
+                if (sms.Simulated) return ReminderDeliveryResult.Simulated(sms.Error ?? "SMS is not configured on this server.");
+                return ReminderDeliveryResult.Failed(sms.Error ?? "The SMS could not be sent.");
+            }
+
             var text = await _messenger.SendTextAsync(normalized, recipient.Phone, body, ct);
             return Translate(text, normalized, recipient.Phone);
         }

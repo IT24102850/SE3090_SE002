@@ -116,7 +116,7 @@ public class DepartureOpsTests
 
     private static DeparturesController NewDeparturesController(AppDbContext db, string role = Roles.Admin)
     {
-        var controller = new DeparturesController(db, new NoopPushSender());
+        var controller = new DeparturesController(db, new NoopPushSender(), new NoopForecastService());
         TestHelpers.SetUser(controller, AdminId, TenantId, role);
         return controller;
     }
@@ -906,9 +906,22 @@ internal sealed class NoopPushSender : IPushNotificationSender
     public Task SendAsync(Guid tenantId, Guid userId, string title, string body) => Task.CompletedTask;
 }
 
-/// StubReminderChannelSender needs an ILogger; these tests never assert on
-/// reminders, so a no-op keeps the fixture free of logging plumbing.
+/// The real sender needs text.lk, SendGrid and a database; these tests never
+/// assert on reminders, so a no-op keeps the fixture free of that plumbing.
+/// It reports Simulated, which is what an unconfigured server would do.
 internal sealed class NoopReminderSender : IReminderChannelSender
 {
-    public Task SendAsync(Booking booking, string channel) => Task.CompletedTask;
+    public Task<ReminderDeliveryResult> SendAsync(Booking booking, string channel, CancellationToken ct = default) =>
+        Task.FromResult(ReminderDeliveryResult.Simulated("No reminder gateway in tests."));
+}
+/// The forecast endpoint is covered by its own tests; these ones only need the
+/// controller to construct, so this stands in for Open-Meteo without a network
+/// call. It returns nothing, which is the "service unreachable" path.
+internal sealed class NoopForecastService : IWeatherForecastService
+{
+    public Task<MarineForecast?> GetForecastAsync(double latitude, double longitude, DateTime whenUtc, CancellationToken ct = default) =>
+        Task.FromResult<MarineForecast?>(null);
+
+    public SailingRisk Assess(MarineForecast forecast, SailingThresholds? thresholds = null) =>
+        new("unknown", false, new[] { "No forecast in tests." }, forecast);
 }
