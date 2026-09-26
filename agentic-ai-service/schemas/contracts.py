@@ -135,7 +135,7 @@ class InventoryRecommendation(BaseModel):
 
 
 class InventoryHealthInsight(BaseModel):
-    category: Literal["overview", "coverage", "movement", "data_quality", "cost"]
+    category: Literal["overview", "coverage", "movement", "data_quality", "cost", "trend"]
     title: str
     detail: str
     affected_items: list[str] = Field(default_factory=list)

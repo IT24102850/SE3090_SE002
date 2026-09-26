@@ -112,6 +112,39 @@ def _recent_outflow(movements: list[dict[str, Any]]) -> dict[str, tuple[float, i
     return outflow
 
 
+def _demand_trends(movements: list[dict[str, Any]]) -> list[tuple[str, float]]:
+    """Compare seven recent days with the preceding 23 days; require evidence in both windows."""
+    now = datetime.now(timezone.utc)
+    windows: dict[str, list[float]] = {}
+    for movement in movements:
+        kind = str(movement.get("movementType", "")).strip().lower()
+        if kind not in {"issue", "issued", "sale", "sold", "consume", "consumed", "usage", "outflow", "adjustment"}:
+            continue
+        quantity = float(movement.get("quantity") or 0)
+        if kind == "adjustment" and quantity >= 0:
+            continue
+        try:
+            occurred = datetime.fromisoformat(str(movement.get("occurredAt", "")).replace("Z", "+00:00"))
+            if occurred.tzinfo is None:
+                occurred = occurred.replace(tzinfo=timezone.utc)
+            age = (now - occurred).total_seconds() / 86400
+        except (TypeError, ValueError):
+            continue
+        sku = str(movement.get("sku", ""))
+        if not sku or quantity == 0 or age < 0 or age > 30:
+            continue
+        totals = windows.setdefault(sku, [0.0, 0.0])
+        totals[0 if age <= 7 else 1] += abs(quantity)
+    trends = []
+    for sku, (recent, previous) in windows.items():
+        if recent <= 0 or previous <= 0:
+            continue
+        change = (recent / 7 - previous / 23) / (previous / 23)
+        if abs(change) >= 0.30:
+            trends.append((sku, change))
+    return sorted(trends, key=lambda row: abs(row[1]), reverse=True)
+
+
 def _latest_supplier_lead_times(
     movements: list[dict[str, Any]], items: list[dict[str, Any]] | None = None,
 ) -> dict[str, tuple[int, str | None, str]]:
@@ -214,6 +247,23 @@ def analyze_inventory_health(
             ),
             affected_items=[name for _, name, _ in shortest],
         ))
+
+    trends = _demand_trends(movements)
+    if trends:
+        descriptions = []
+        for sku, change in trends[:8]:
+            item = item_by_sku.get(sku)
+            if item:
+                direction = "increased" if change > 0 else "decreased"
+                descriptions.append(f"{item.get('name', sku)}: recorded daily outflow {direction} about {abs(change) * 100:.0f}%")
+        if descriptions:
+            insights.append(InventoryHealthInsight(
+                category="trend",
+                title="Recent demand trend",
+                detail=("Compared the last 7 days with the preceding 23 days. " + "; ".join(descriptions)
+                        + ". This is a short-term signal from recorded movements, not a seasonal forecast."),
+                affected_items=[item_by_sku[sku].get("name", sku) for sku, change in trends[:8] if sku in item_by_sku],
+            ))
 
     waste_by_sku: dict[str, float] = {}
     for movement in movements:
