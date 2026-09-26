@@ -248,7 +248,7 @@ export function StockMovementLogPage() {
                     <p className="cell-title">{row.item}</p>
                     <p className="cell-sub">{row.sku}</p>
                   </td>
-                  <td><Badge tone={typeTone[row.movementType]}>{row.movementType}</Badge></td>
+                  <td className={`movement-type-cell movement-type-cell-${row.movementType.toLowerCase().replace(/\s+/g, '-')}`}><Badge tone={typeTone[row.movementType]}>{row.movementType}</Badge></td>
                   <td>
                     <span className={`movement-quantity${row.quantity > 0 ? ' is-in' : row.quantity < 0 ? ' is-out' : ''}`}>
                       {row.quantity > 0 ? `+${row.quantity}` : row.quantity}

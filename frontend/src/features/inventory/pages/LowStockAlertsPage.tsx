@@ -188,6 +188,7 @@ export function LowStockAlertsPage() {
   return (
     <div className="page stocksense-page">
       <header className="page-head stocksense-hero">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
         <div className="stocksense-hero-copy">
           <div className="stocksense-brandmark"><Icon name="stocksense" size={38} /></div>
           <div>

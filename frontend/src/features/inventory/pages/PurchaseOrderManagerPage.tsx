@@ -984,6 +984,13 @@ export function PurchaseOrderManagerPage() {
         <aside className="panel po-detail-panel">
           {selected ? (
             <>
+              <div className="po-print-heading">
+                <div>
+                  <span>UNIFY · PROCUREMENT</span>
+                  <h1>Purchase order</h1>
+                </div>
+                <strong>{selected.number}</strong>
+              </div>
               <div className="panel-head">
                 <div>
                   <h2>{selected.number}</h2>
@@ -1044,13 +1051,14 @@ export function PurchaseOrderManagerPage() {
                     <h3>Line items</h3>
                     <table className="po-detail-items-table">
                       <thead>
-                        <tr><th>Item / Description</th><th className="num">Quantity</th><th className="num">Unit price</th><th className="num">Total</th></tr>
+                        <tr><th>Item / Description</th><th className="num">Ordered</th><th className="num">Received</th><th className="num">Unit price</th><th className="num">Line total</th></tr>
                       </thead>
                       <tbody>
                         {selected.items.map((item) => (
                           <tr key={item.id}>
                             <td>{item.itemName || item.description || 'Unnamed item'}</td>
                             <td className="num">{item.quantity.toLocaleString()}</td>
+                            <td className="num">{item.receivedQuantity.toLocaleString()}</td>
                             <td className="num">{formatPrice(item.unitPrice)}</td>
                             <td className="num">{formatPrice(item.lineTotal)}</td>
                           </tr>
@@ -1059,6 +1067,11 @@ export function PurchaseOrderManagerPage() {
                     </table>
                   </div>
                 )}
+                <div className="po-print-total"><span>Order total</span><strong>{formatPrice(selected.amount)}</strong></div>
+                <div className="po-print-signatures" aria-hidden="true">
+                  <span>Prepared by</span><span>Authorized by</span><span>Received by</span>
+                </div>
+                <p className="po-print-note">Generated from the Unify inventory workspace. Please verify quantities at delivery.</p>
               </div>
             </>
           ) : (

@@ -229,10 +229,7 @@ html, body, #root {
 
 body {
   font-family: var(--font-sans);
-  background:
-    radial-gradient(circle at 82% -15%, var(--bg-glow-1), transparent 34rem),
-    radial-gradient(circle at 5% 115%, var(--bg-glow-2), transparent 28rem),
-    var(--color-bg);
+  background: var(--color-bg);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
 }
@@ -805,7 +802,7 @@ select.input option { background: var(--color-surface-muted); color: var(--color
 
 @media (prefers-reduced-motion: reduce) {
   .badge, .active-status, .status-active { animation: none; }
-  .badge::after, .active-status::before, .is-active::before { animation: none; }
+  .badge::after, .active-status::before { animation: none; }
 }
 
 .badge-good { background: var(--color-good-soft); color: var(--color-good); border-color: rgba(22, 163, 74, 0.24); }
@@ -830,8 +827,7 @@ select.input option { background: var(--color-surface-muted); color: var(--color
   background:
     linear-gradient(135deg, var(--color-good-soft), var(--color-primary-soft));
 }
-.active-status::before,
-.is-active::before {
+.active-status::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -1007,7 +1003,7 @@ body.modal-open { overflow: hidden; }
 
 /* Shared dashboard polish: these elements frame every signed-in page, so a
    little warmth and depth here improves the whole workspace consistently. */
-.app-main { background: radial-gradient(circle at 100% 0, var(--color-primary-soft), transparent 24rem), var(--color-bg); }
+.app-main { background: var(--color-bg); }
 .app-topbar { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .sidebar { box-shadow: 14px 0 38px -31px rgba(15, 23, 42, .34); }
 .sidebar-link { position: relative; }.sidebar-link-icon { width: 22px; display: inline-grid; place-items: center; filter: saturate(.8); }.sidebar-link.active { box-shadow: inset 3px 0 var(--color-primary), 0 7px 18px -14px var(--color-primary); }
@@ -1078,97 +1074,6 @@ body.modal-open { overflow: hidden; }
 @keyframes notification-in { from { opacity: 0; transform: translateY(-7px) scale(.98); } to { opacity: 1; transform: none; } }
 @media (max-width: 640px) { .confirm-dialog { padding: 24px; }.confirm-dialog-actions { flex-direction: column-reverse; }.confirm-dialog-actions .btn { width: 100%; }.notification-trigger small { display: none; }.notification-trigger { width: 35px; justify-content: center; padding: 6px; } }
 
-/* ── Workspace 2.0 ─────────────────────────────────────────────
-   One visual system for every authenticated route: quiet teal navigation,
-   warm canvas, glass-like controls and clearer information hierarchy. */
-:root {
-  --color-bg: #F4F7F5;
-  --color-surface: #FFFFFF;
-  --color-surface-muted: #F0F5F2;
-  --color-surface-raised: #FFFFFF;
-  --color-border: #DCE7E2;
-  --color-border-strong: #C5D9D2;
-  --color-text: #152728;
-  --color-text-secondary: #526D6B;
-  --color-text-muted: #809693;
-  --color-primary: #006E68;
-  --color-primary-hover: #005A55;
-  --color-primary-soft: rgba(0, 110, 104, .10);
-  --color-primary-contrast: #FFFFFF;
-  --color-accent-high: #E66B54;
-  --color-accent-soft: rgba(230, 107, 84, .12);
-  --color-accent-cyan: #129C97;
-  --gradient-brand: linear-gradient(135deg, #007A73 0%, #159B94 100%);
-  --gradient-hero: linear-gradient(110deg, #0A4E50 0%, #006E68 52%, #159B94 100%);
-  --color-good: #15805B;
-  --color-good-soft: rgba(21, 128, 91, .11);
-  --color-warning: #B66714;
-  --color-warning-soft: rgba(182, 103, 20, .12);
-  --color-critical: #C94F45;
-  --color-critical-soft: rgba(201, 79, 69, .10);
-  --color-neutral: #607877;
-  --color-neutral-soft: rgba(96, 120, 119, .10);
-  --sidebar-bg: #112E31;
-  --sidebar-line: rgba(205, 239, 229, .10);
-  --sidebar-text: #B6D0CA;
-  --sidebar-text-strong: #F2FBF8;
-  --sidebar-muted: #7E9B95;
-  --sidebar-hover: rgba(164, 231, 207, .10);
-  --hover-tint: rgba(0, 110, 104, .045);
-  --chip-bg: rgba(255, 255, 255, .76);
-  --overlay: rgba(9, 35, 36, .52);
-  --scrollbar: rgba(0, 110, 104, .20);
-  --bg-glow-1: rgba(92, 204, 173, .18);
-  --bg-glow-2: rgba(255, 188, 118, .13);
-  --chart-tick: #809693;
-  --chart-grid: rgba(21, 39, 40, .08);
-  --chart-tooltip-bg: #FFFFFF;
-  --chart-tooltip-fg: #152728;
-  --chart-tooltip-border: #DCE7E2;
-  --radius-sm: 12px;
-  --radius-md: 18px;
-  --radius-lg: 26px;
-  --shadow-sm: 0 2px 7px rgba(17, 59, 55, .05), 0 10px 22px -18px rgba(0, 110, 104, .22);
-  --shadow-md: 0 6px 15px rgba(17, 59, 55, .05), 0 24px 46px -28px rgba(0, 110, 104, .25);
-  --shadow-lg: 0 12px 32px rgba(17, 59, 55, .10), 0 34px 76px -34px rgba(0, 110, 104, .36);
-}
-:root[data-theme="dark"], :root[data-theme="system"] {
-  --color-bg: #0D2023;
-  --color-surface: #132A2D;
-  --color-surface-muted: #183337;
-  --color-surface-raised: #183337;
-  --color-border: rgba(185, 232, 220, .12);
-  --color-border-strong: rgba(185, 232, 220, .23);
-  --color-text: #EAF7F3;
-  --color-text-secondary: #A9C7C0;
-  --color-text-muted: #7E9F98;
-  --color-primary: #81DCC2;
-  --color-primary-hover: #A7EED8;
-  --color-primary-soft: rgba(129, 220, 194, .14);
-  --color-primary-contrast: #10272A;
-  --color-accent-high: #FFAA8E;
-  --color-accent-soft: rgba(255, 170, 142, .14);
-  --color-accent-cyan: #65D6CE;
-  --gradient-brand: linear-gradient(135deg, #4BBFAE, #8CE3CA);
-  --gradient-hero: linear-gradient(110deg, #123E40, #1C655E, #4BBFAE);
-  --sidebar-bg: #0B191C;
-  --sidebar-line: rgba(185, 232, 220, .09);
-  --sidebar-text: #A8C5BE;
-  --sidebar-text-strong: #ECFAF6;
-  --sidebar-muted: #6E918A;
-  --sidebar-hover: rgba(129, 220, 194, .10);
-  --hover-tint: rgba(255, 255, 255, .045);
-  --chip-bg: rgba(19, 42, 45, .82);
-  --overlay: rgba(0, 0, 0, .64);
-  --scrollbar: rgba(185, 232, 220, .18);
-  --bg-glow-1: rgba(60, 170, 143, .19);
-  --bg-glow-2: rgba(251, 170, 120, .07);
-  --chart-tick: #7E9F98;
-  --chart-grid: rgba(255, 255, 255, .07);
-  --chart-tooltip-bg: #183337;
-  --chart-tooltip-fg: #EAF7F3;
-  --chart-tooltip-border: rgba(185, 232, 220, .20);
-}
 .app-shell { background: var(--color-bg); }.app-topbar { margin: 14px 20px 0; min-height: 58px; padding: 10px 16px; border: 1px solid var(--color-border); border-radius: 18px; background: color-mix(in srgb, var(--color-surface) 80%, transparent); box-shadow: var(--shadow-sm); }.app-content { padding: 28px 40px 42px; }.app-breadcrumb { font-size: .66rem; }.app-breadcrumb strong { color: var(--color-text); }.app-breadcrumb span:last-child { padding: 5px 8px; border-radius: 99px; color: var(--color-primary); background: var(--color-primary-soft); letter-spacing: .05em; }.app-clock { display: none; }.app-user-chip { padding: 4px 10px 4px 5px; box-shadow: var(--shadow-sm); }.app-user-avatar { width: 30px; height: 30px; }.app-signout { border-color: transparent; background: transparent; }.app-signout:hover { color: var(--color-critical); background: var(--color-critical-soft); border-color: transparent; }
 .sidebar { width: 286px; margin: 12px 0 12px 12px; min-height: 0; height: calc(100vh - 24px); position: sticky; top: 12px; align-self: flex-start; overflow: hidden; padding: 18px 13px; border: 0; border-radius: 24px; box-shadow: 0 22px 52px rgba(4, 28, 29, .18); }.sidebar-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 2px; }.sidebar-brand { padding: 7px 9px 21px; border-bottom-color: var(--sidebar-line); }.sidebar-brand-mark { box-shadow: 0 10px 21px rgba(0,0,0,.22); }.sidebar-nav { gap: 6px; }.sidebar-section { padding: 0 4px; }.sidebar-section-header { border-radius: 9px; }.sidebar-link { margin-block: 1px; padding: 10px 11px; border-radius: 10px; font-size: .84rem; }.sidebar-link.active { color: #F1FFFB; background: linear-gradient(90deg, rgba(129,220,194,.20), rgba(129,220,194,.06)); box-shadow: inset 2px 0 #81DCC2; }.sidebar-link:hover { background: rgba(255,255,255,.06); }.sidebar-footer { margin-inline: 4px; padding: 13px 9px 4px; border-top-color: var(--sidebar-line); }.sidebar-logout { background: rgba(255,255,255,.06); color: #E3F2ED; }.sidebar-logout:hover { color: #FFB6A8; border-color: rgba(255,170,142,.4); background: rgba(255,170,142,.09); }
 .page-header { padding-bottom: 17px; border-bottom: 1px solid var(--color-border); }.page-title { font-size: clamp(1.55rem, 2.4vw, 2rem); letter-spacing: -.05em; }.page-subtitle { max-width: 65ch; }.card { border-radius: 20px; }.card-pad { padding: 26px; }.stat-grid { gap: 14px; }.stat-tile { min-height: 128px; padding: 19px 20px; border-radius: 18px; }.stat-tile-label { color: var(--color-text-muted); }.stat-tile-value { position: relative; z-index: 1; font-size: 2rem; }.stat-tile-sub { position: relative; z-index: 1; }
@@ -1915,7 +1820,9 @@ table.data-table tbody tr:hover { transform: translateX(2px); }
 
 /* Workspace-wide visual refinement: shared classes keep every route consistent. */
 .app-main { position: relative; isolation: isolate; }
-.app-main::before { content: ''; position: fixed; z-index: -1; inset: 0 0 0 auto; width: min(48vw, 680px); pointer-events: none; background: radial-gradient(circle at 85% 10%, var(--color-primary-soft), transparent 56%); opacity: .72; }
+/* This fixed ambient orb sat above every route and read as a large sweeping
+   color wash over inventory. Keep the app canvas flat instead. */
+.app-main::before { display: none; content: none; }
 .sidebar-brand, .app-topbar, .app-footer { transition: border-color .22s ease, background .22s ease, box-shadow .22s ease; }
 .sidebar-link { position: relative; overflow: hidden; }
 .sidebar-link::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; border-radius: 0 4px 4px 0; background: var(--color-primary); transform: scaleY(0); transform-origin: center; transition: transform .18s ease; }
@@ -1982,3 +1889,12 @@ table.data-table tbody tr:hover { transform: translateX(2px); }
 /* Popups always sit above navigation and keep their controls in view. */
 .modal-backdrop { z-index: 2000; padding: clamp(12px, 3vh, 32px); }
 .modal { width: min(100%, 640px); max-height: calc(100dvh - clamp(24px, 6vh, 64px)); }
+/* Inventory routes suppress ambient canvas layers from the shared shell. */
+body:has(.inventory-scope),
+body:has(.inventory-scope) #root,
+body:has(.inventory-scope) .app-shell,
+body:has(.inventory-scope) .app-main,
+body:has(.inventory-scope) .app-content {
+  background-color: var(--color-bg) !important;
+  background-image: none !important;
+}

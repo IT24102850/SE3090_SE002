@@ -64,6 +64,28 @@ function formatPrice(amount: number) {
   return `LKR ${amount.toLocaleString()}`;
 }
 
+function parseCsvRow(line: string): string[] {
+  const values: string[] = [];
+  let value = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index++) {
+    const character = line[index];
+    if (character === '"' && quoted && line[index + 1] === '"') {
+      value += '"';
+      index++;
+    } else if (character === '"') {
+      quoted = !quoted;
+    } else if (character === ',' && !quoted) {
+      values.push(value.trim());
+      value = '';
+    } else {
+      value += character;
+    }
+  }
+  values.push(value.trim());
+  return values;
+}
+
 function displayCategory(category: string | null | undefined, itemName: string) {
   if (category?.trim()) return category.trim();
   const normalized = itemName.toLowerCase();
@@ -86,7 +108,7 @@ function StockLevelBar({ qty, reorder }: { qty: number; reorder: number }) {
   const pct = reorder > 0 ? Math.min(100, (qty / reorder) * 100) : qty > 0 ? 100 : 0;
   const tone = qty <= 0 ? 'red' : reorder > 0 && qty <= reorder ? 'amber' : 'green';
   return (
-    <div className="stock-level stock-level-wide" title={`${Math.round(pct)}% of reorder level`}>
+    <div className="stock-level stock-level-wide" role="progressbar" aria-label="Stock level relative to reorder point" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} aria-valuetext={`${qty} on hand; reorder point ${reorder}`} title={`${Math.round(pct)}% of reorder level`}>
       <div className={`stock-level-fill stock-level-${tone}`} style={{ width: `${Math.max(4, pct)}%` }} />
     </div>
   );
@@ -242,6 +264,14 @@ export function InventoryManagerPage() {
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const categoryFilterOptions = useMemo(() => [
+    categories[0],
+    ...Array.from(new Set([
+      ...categoryOptions,
+      ...items.map((row) => row.category),
+    ].filter((value) => value && value !== categories[0]))).sort((a, b) => a.localeCompare(b)),
+  ], [items]);
+
   const filtered = useMemo(() => {
     const queryLower = query.trim().toLowerCase();
     return items.filter((row) => {
@@ -250,7 +280,9 @@ export function InventoryManagerPage() {
         queryLower === '' ||
         row.item.toLowerCase().includes(queryLower) ||
         row.sku.toLowerCase().includes(queryLower) ||
-        row.owner.toLowerCase().includes(queryLower);
+        row.owner.toLowerCase().includes(queryLower) ||
+        row.category.toLowerCase().includes(queryLower) ||
+        row.unit.toLowerCase().includes(queryLower);
       const matchesCategory = category === 'All categories' || row.category === category;
       const matchesStatus = status === 'All statuses' || rowStatus === status;
       return matchesQuery && matchesCategory && matchesStatus;
@@ -288,15 +320,23 @@ export function InventoryManagerPage() {
     setLoading(true);
     setLoadError('');
     try {
-      const response = await fetch('/api/inventory?page=1&pageSize=100', {
-        headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
-      });
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => null);
-        throw new Error(errorBody?.message || errorBody?.title || `Inventory request failed (${response.status})`);
+      const headers = { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' };
+      const firstResponse = await fetch('/api/inventory?page=1&pageSize=100', { headers });
+      if (!firstResponse.ok) {
+        const errorBody = await firstResponse.json().catch(() => null);
+        throw new Error(errorBody?.message || errorBody?.title || `Inventory request failed (${firstResponse.status})`);
       }
-      const data = await response.json();
-      setItems((data.items ?? []).map((item: any): StockRow => ({
+      const firstPage = await firstResponse.json();
+      const totalPages = Math.max(1, Number(firstPage.totalPages) || 1);
+      const remainingPages = await Promise.all(
+        Array.from({ length: totalPages - 1 }, async (_, index) => {
+          const response = await fetch(`/api/inventory?page=${index + 2}&pageSize=100`, { headers });
+          if (!response.ok) throw new Error(`Inventory page ${index + 2} failed (${response.status})`);
+          return response.json();
+        }),
+      );
+      const allRows = [firstPage, ...remainingPages].flatMap((pageData) => pageData.items ?? []);
+      setItems(allRows.map((item: any): StockRow => ({
         id: item.id,
         sku: item.sku,
         item: item.name,
@@ -313,7 +353,6 @@ export function InventoryManagerPage() {
       })));
     } catch (error) {
       console.error(error);
-      setItems([]);
       const message = error instanceof Error ? error.message : 'Unable to load inventory from the database.';
       setLoadError(`${message} Refresh and try again.`);
       notify(message, 'error');
@@ -341,7 +380,7 @@ export function InventoryManagerPage() {
     a.href = url;
     a.download = `inventory-catalog-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify(`Exported ${items.length} inventory items to CSV.`, 'success');
   }
 
@@ -360,7 +399,7 @@ export function InventoryManagerPage() {
       let failedCount = 0;
       const stagedItems = [...items];
       for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
+        const cols = parseCsvRow(lines[i]);
         if (!cols[0]) continue;
         const name = cols[0];
         const category = cols[2] || categoryOptions[0];
@@ -510,6 +549,7 @@ export function InventoryManagerPage() {
   return (
     <div className="page inventory-manager-page">
       <header className="inventory-manager-hero">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
         <div className="inventory-manager-hero-copy">
           <p className="inventory-manager-eyebrow"><span aria-hidden="true">◆</span> INVENTORY CONTROL CENTER</p>
           <h1>Inventory manager</h1>
@@ -543,7 +583,7 @@ export function InventoryManagerPage() {
         </div>
       </header>
       {loadError && <p className="page-notice">{loadError}</p>}
-      {loading && <div className="panel p-6">Loading live inventory…</div>}
+      {loading && <div className="inventory-manager-loading" role="status"><span className="inventory-manager-loading-dot" />{items.length ? 'Refreshing inventory data…' : 'Loading inventory data…'}</div>}
 
       <section className="stat-strip" aria-label="Inventory summary">
         <article className="stat metric-card inventory-manager-metric inventory-manager-metric-items"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="inventory" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">CATALOGUE</span><strong className="inventory-manager-metric-value">{stats.items}</strong><span className="inventory-manager-metric-label">Items tracked</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">01</span></div><div className="inventory-manager-metric-detail">Organized across {stats.categories} {stats.categories === 1 ? 'category' : 'categories'}</div></article>
@@ -571,7 +611,7 @@ export function InventoryManagerPage() {
               />
             </div>
             <select className="filter-select" value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filter by category">
-              {categories.map((option) => <option key={option}>{option}</option>)}
+              {categoryFilterOptions.map((option) => <option key={option}>{option}</option>)}
             </select>
             <select className="filter-select" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} aria-label="Filter by status">
               {statusFilters.map((option) => <option key={option}>{option}</option>)}
@@ -636,7 +676,7 @@ export function InventoryManagerPage() {
                         <p className="cell-sub">{row.sku} · {row.owner}</p>
                       </td>
                       <td><span className="category-pill">{row.category}</span></td>
-                      <td><span className="qty">{row.qty}</span> <span className="cell-sub">{row.unit}s</span></td>
+                      <td><span className="qty">{row.qty}</span> <span className="cell-sub">{row.unit}</span></td>
                       <td><StockLevelBar qty={row.qty} reorder={row.reorder} /></td>
                       <td className="amount">{formatPrice(row.price)}</td>
                       <td><Badge tone={statusTone[rowStatus]}>{rowStatus}</Badge></td>
@@ -651,7 +691,7 @@ export function InventoryManagerPage() {
                   );
                 })}
                 {paged.length === 0 && (
-                  <tr><td colSpan={7} className="empty-state">No items match your filters.</td></tr>
+                  <tr><td colSpan={7} className="empty-state"><div className="inventory-manager-empty"><strong>{items.length === 0 ? 'Your catalogue is ready for its first item' : 'No items match these filters'}</strong><span>{items.length === 0 ? 'Add an item to start tracking quantity, reorder levels, and stock value.' : 'Try another search or clear the active filters.'}</span>{items.length === 0 ? <button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'add' })}>Add first item</button> : hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); }}>Clear filters</button> : null}</div></td></tr>
                 )}
               </tbody>
             </table>
