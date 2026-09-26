@@ -175,6 +175,7 @@ export function LowStockAlertsPage() {
       (!term || alert.item.toLowerCase().includes(term) || alert.sku.toLowerCase().includes(term)),
     );
   }, [branch, healthFilter, inventory, query]);
+  const branchInventory = inventory.filter((item) => branch === 'All branches' || item.branch === branch);
 
   const outOfStock = inventory.filter((item) => item.health === 'Out of stock').length;
   const belowReorder = inventory.filter((item) => item.health === 'Below reorder').length;
@@ -182,6 +183,7 @@ export function LowStockAlertsPage() {
   const pricedItems = inventory.filter((item) => item.unitCost != null);
   const estimatedValue = pricedItems.reduce((sum, item) => sum + item.onHand * (item.unitCost ?? 0), 0);
   const branchOptions = ['All branches', ...Array.from(new Set(inventory.map((item) => item.branch)))];
+  const hasActiveFilters = Boolean(query.trim()) || branch !== 'All branches' || healthFilter !== healthFilters[0];
 
   return (
     <div className="page stocksense-page">
@@ -276,6 +278,13 @@ export function LowStockAlertsPage() {
           <div className="search-field"><span className="search-icon" aria-hidden="true">⌕</span><input type="search" placeholder="Search item or SKU…" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Search inventory" /></div>
           <select className="filter-select" value={branch} onChange={(event) => setBranch(event.target.value)} aria-label="Filter inventory by branch">{branchOptions.map((entry) => <option key={entry}>{entry}</option>)}</select>
           <select className="filter-select" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as (typeof healthFilters)[number])} aria-label="Filter inventory by health">{healthFilters.map((entry) => <option key={entry}>{entry}</option>)}</select>
+          {hasActiveFilters && <button type="button" className="btn btn-ghost inventory-clear-filters" onClick={() => { setQuery(''); setBranch('All branches'); setHealthFilter(healthFilters[0]); }}>Clear filters</button>}
+        </div>
+        <div className="inventory-quick-filters" role="group" aria-label="Quick inventory health filters">
+          <button type="button" className={`inventory-chip${healthFilter === healthFilters[0] ? ' is-active' : ''}`} aria-pressed={healthFilter === healthFilters[0]} onClick={() => setHealthFilter(healthFilters[0])}>All items <strong>({branchInventory.length})</strong></button>
+          <button type="button" className={`inventory-chip chip-red${healthFilter === 'Out of stock' ? ' is-active' : ''}`} aria-pressed={healthFilter === 'Out of stock'} onClick={() => setHealthFilter('Out of stock')}>Out of stock <strong>({branchInventory.filter((item) => item.health === 'Out of stock').length})</strong></button>
+          <button type="button" className={`inventory-chip chip-amber${healthFilter === 'Below reorder' ? ' is-active' : ''}`} aria-pressed={healthFilter === 'Below reorder'} onClick={() => setHealthFilter('Below reorder')}>Below reorder <strong>({branchInventory.filter((item) => item.health === 'Below reorder').length})</strong></button>
+          <button type="button" className={`inventory-chip chip-green${healthFilter === 'Healthy' ? ' is-active' : ''}`} aria-pressed={healthFilter === 'Healthy'} onClick={() => setHealthFilter('Healthy')}>Healthy <strong>({branchInventory.filter((item) => item.health === 'Healthy').length})</strong></button>
         </div>
         <div className="table-wrap">
           <table className="data-table">

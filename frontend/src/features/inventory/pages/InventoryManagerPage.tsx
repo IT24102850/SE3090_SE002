@@ -55,8 +55,8 @@ const emptyForm: StockForm = {
 };
 
 function deriveStatus(qty: number, reorder: number): StockStatus {
-  if (qty === 0) return 'Out of stock';
-  if (reorder > 0 && qty / reorder < 0.45) return 'Low stock';
+  if (qty <= 0) return 'Out of stock';
+  if (reorder > 0 && qty <= reorder) return 'Low stock';
   return 'In stock';
 }
 
@@ -84,7 +84,7 @@ function nextSku(items: StockRow[]) {
 
 function StockLevelBar({ qty, reorder }: { qty: number; reorder: number }) {
   const pct = reorder > 0 ? Math.min(100, (qty / reorder) * 100) : qty > 0 ? 100 : 0;
-  const tone = qty === 0 ? 'red' : pct < 45 ? 'amber' : 'green';
+  const tone = qty <= 0 ? 'red' : reorder > 0 && qty <= reorder ? 'amber' : 'green';
   return (
     <div className="stock-level stock-level-wide" title={`${Math.round(pct)}% of reorder level`}>
       <div className={`stock-level-fill stock-level-${tone}`} style={{ width: `${Math.max(4, pct)}%` }} />
@@ -357,6 +357,8 @@ export function InventoryManagerPage() {
       }
       // Simple parse: skip header
       let createdCount = 0;
+      let failedCount = 0;
+      const stagedItems = [...items];
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
         if (!cols[0]) continue;
@@ -366,12 +368,13 @@ export function InventoryManagerPage() {
         const unit = cols[4] || 'unit';
         const reorder = Number(cols[5]) || 10;
         const price = Number(cols[6]) || 0;
+        const sku = nextSku(stagedItems);
         const res = await fetch('/api/inventory', {
           method: 'POST',
           headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: token ? 'Bearer ' + token : '' },
           body: JSON.stringify({
             name,
-            sku: nextSku(items),
+            sku,
             description: `${category} (${unit})`,
             quantity: qty,
             reorderLevel: reorder,
@@ -379,10 +382,20 @@ export function InventoryManagerPage() {
             branchId: user?.branchId ?? null,
           }),
         });
-        if (res.ok) createdCount++;
+        if (res.ok) {
+          createdCount++;
+          stagedItems.push({ sku, item: name, category, unit, price, qty, reorder, owner: 'Inventory Admin' });
+        } else {
+          failedCount++;
+        }
       }
       await loadInventory();
-      notify(`Successfully imported ${createdCount} items from CSV.`, 'success');
+      notify(
+        failedCount
+          ? `Imported ${createdCount} items. ${failedCount} rows could not be imported.`
+          : `Successfully imported ${createdCount} items from CSV.`,
+        failedCount ? 'warning' : 'success',
+      );
     } catch (err: any) {
       notify(err?.message || 'Failed to import CSV.', 'error');
     } finally {
@@ -492,6 +505,7 @@ export function InventoryManagerPage() {
 
   const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
+  const hasActiveFilters = Boolean(query.trim()) || category !== categories[0] || status !== statusFilters[0];
 
   return (
     <div className="page inventory-manager-page">
@@ -562,11 +576,21 @@ export function InventoryManagerPage() {
             <select className="filter-select" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} aria-label="Filter by status">
               {statusFilters.map((option) => <option key={option}>{option}</option>)}
             </select>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                className="btn btn-ghost inventory-clear-filters"
+                onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); }}
+              >
+                Clear filters
+              </button>
+            )}
           </div>
           <div className="inventory-quick-filters" role="group" aria-label="Quick stock status filters">
             <button
               type="button"
               className={`inventory-chip${status === 'All statuses' ? ' is-active' : ''}`}
+              aria-pressed={status === 'All statuses'}
               onClick={() => setStatus('All statuses')}
             >
               All Items <strong>({stats.items})</strong>
@@ -574,6 +598,7 @@ export function InventoryManagerPage() {
             <button
               type="button"
               className={`inventory-chip chip-green${status === 'In stock' ? ' is-active' : ''}`}
+              aria-pressed={status === 'In stock'}
               onClick={() => setStatus('In stock')}
             >
               In Stock <strong>({Math.max(0, stats.items - stats.low - stats.out)})</strong>
@@ -581,6 +606,7 @@ export function InventoryManagerPage() {
             <button
               type="button"
               className={`inventory-chip chip-amber${status === 'Low stock' ? ' is-active' : ''}`}
+              aria-pressed={status === 'Low stock'}
               onClick={() => setStatus('Low stock')}
             >
               Low Stock <strong>({stats.low})</strong>
@@ -588,6 +614,7 @@ export function InventoryManagerPage() {
             <button
               type="button"
               className={`inventory-chip chip-red${status === 'Out of stock' ? ' is-active' : ''}`}
+              aria-pressed={status === 'Out of stock'}
               onClick={() => setStatus('Out of stock')}
             >
               Out of Stock <strong>({stats.out})</strong>

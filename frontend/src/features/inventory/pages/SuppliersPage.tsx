@@ -12,12 +12,14 @@ type Supplier = {
   createdAt: string;
   updatedAt: string;
 };
+type SupplierFilter = 'all' | 'missing-contact' | 'missing-lead-time';
 
 export function SuppliersPage() {
   const token = getStoredToken();
   const { notify } = useToast();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [query, setQuery] = useState('');
+  const [directoryFilter, setDirectoryFilter] = useState<SupplierFilter>('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -52,10 +54,14 @@ export function SuppliersPage() {
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return suppliers;
-    return suppliers.filter((supplier) =>
-      [supplier.name, supplier.email, supplier.phone].some((field) => field.toLowerCase().includes(needle)));
-  }, [query, suppliers]);
+    return suppliers.filter((supplier) => {
+      const matchesQuery = !needle || [supplier.name, supplier.email, supplier.phone].some((field) => field.toLowerCase().includes(needle));
+      const matchesFilter = directoryFilter === 'all' ||
+        (directoryFilter === 'missing-contact' && !supplier.email && !supplier.phone) ||
+        (directoryFilter === 'missing-lead-time' && !supplier.leadTimeDays);
+      return matchesQuery && matchesFilter;
+    });
+  }, [directoryFilter, query, suppliers]);
 
   async function createSupplier(event: FormEvent) {
     event.preventDefault();
@@ -111,6 +117,8 @@ export function SuppliersPage() {
   }
 
   const contactCount = suppliers.filter((supplier) => supplier.email || supplier.phone).length;
+  const missingContactCount = suppliers.length - contactCount;
+  const missingLeadTimeCount = suppliers.filter((supplier) => !supplier.leadTimeDays).length;
 
   return (
     <div className="page suppliers-page">
@@ -162,6 +170,12 @@ export function SuppliersPage() {
 
       <section className="panel suppliers-directory-panel">
         <div className="suppliers-directory-head"><div><span className="suppliers-section-mark" aria-hidden="true">▤</span><div><h2>All suppliers</h2><p>Contact details available to your inventory workspace.</p></div></div><label className="suppliers-search"><span aria-hidden="true">⌕</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name or contact" aria-label="Search suppliers" /></label></div>
+        <div className="inventory-quick-filters" role="group" aria-label="Filter supplier directory">
+          <button type="button" className={`inventory-chip${directoryFilter === 'all' ? ' is-active' : ''}`} aria-pressed={directoryFilter === 'all'} onClick={() => setDirectoryFilter('all')}>All suppliers <strong>({suppliers.length})</strong></button>
+          <button type="button" className={`inventory-chip chip-amber${directoryFilter === 'missing-contact' ? ' is-active' : ''}`} aria-pressed={directoryFilter === 'missing-contact'} onClick={() => setDirectoryFilter('missing-contact')}>Missing contact <strong>({missingContactCount})</strong></button>
+          <button type="button" className={`inventory-chip chip-red${directoryFilter === 'missing-lead-time' ? ' is-active' : ''}`} aria-pressed={directoryFilter === 'missing-lead-time'} onClick={() => setDirectoryFilter('missing-lead-time')}>Lead time not set <strong>({missingLeadTimeCount})</strong></button>
+          {(query || directoryFilter !== 'all') && <button type="button" className="btn btn-ghost inventory-clear-filters" onClick={() => { setQuery(''); setDirectoryFilter('all'); }}>Clear filters</button>}
+        </div>
         <div className="table-wrap">
           <table className="data-table suppliers-table">
             <thead><tr><th>Supplier</th><th>Email</th><th>Phone</th><th>Lead time</th><th>Added</th><th>Orders</th><th>Actions</th></tr></thead>

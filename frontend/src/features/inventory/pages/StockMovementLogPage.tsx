@@ -96,7 +96,7 @@ export function StockMovementLogPage() {
     return () => { active = false; };
   }, [loadMovements]);
 
-  const filtered = useMemo(() => {
+  const contextFiltered = useMemo(() => {
     const queryLower = query.trim().toLowerCase();
     const fromMs = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
     const toMs = dateTo ? new Date(`${dateTo}T23:59:59`).getTime() : null;
@@ -110,12 +110,22 @@ export function StockMovementLogPage() {
         row.reference?.toLowerCase().includes(queryLower) ||
         row.reasonLabel.toLowerCase().includes(queryLower) ||
         row.notes?.toLowerCase().includes(queryLower);
-      const matchesType = type === 'All types' || row.movementType === type;
       const matchesFrom = fromMs === null || occurredMs >= fromMs;
       const matchesTo = toMs === null || occurredMs <= toMs;
-      return matchesQuery && matchesType && matchesFrom && matchesTo;
+      return matchesQuery && matchesFrom && matchesTo;
     });
-  }, [dateFrom, dateTo, movements, query, type]);
+  }, [dateFrom, dateTo, movements, query]);
+  const filtered = useMemo(
+    () => type === 'All types' ? contextFiltered : contextFiltered.filter((row) => row.movementType === type),
+    [contextFiltered, type],
+  );
+  const movementTypeCounts = useMemo(() => ({
+    all: contextFiltered.length,
+    received: contextFiltered.filter((row) => row.movementType === 'Receive').length,
+    issued: contextFiltered.filter((row) => row.movementType === 'Issue').length,
+    wasted: contextFiltered.filter((row) => row.movementType === 'Waste').length,
+    adjusted: contextFiltered.filter((row) => row.movementType === 'Adjustment').length,
+  }), [contextFiltered]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -220,11 +230,11 @@ export function StockMovementLogPage() {
         </div>
 
         <div className="movement-type-summary" aria-label="Movement type counts">
-          <button type="button" className={`movement-type-chip${type === 'All types' ? ' is-active' : ''}`} onClick={() => setType('All types')}>All <strong>{filtered.length}</strong></button>
-          <button type="button" className={`movement-type-chip movement-chip-receive${type === 'Receive' ? ' is-active' : ''}`} onClick={() => setType(type === 'Receive' ? 'All types' : 'Receive')}><i /> Received <strong>{stats.receives}</strong></button>
-          <button type="button" className={`movement-type-chip movement-chip-issue${type === 'Issue' ? ' is-active' : ''}`} onClick={() => setType(type === 'Issue' ? 'All types' : 'Issue')}><i /> Issued <strong>{stats.issues}</strong></button>
-          <button type="button" className={`movement-type-chip movement-chip-waste${type === 'Waste' ? ' is-active' : ''}`} onClick={() => setType(type === 'Waste' ? 'All types' : 'Waste')}><i /> Wasted <strong>{stats.wastes}</strong></button>
-          <button type="button" className={`movement-type-chip movement-chip-adjust${type === 'Adjustment' ? ' is-active' : ''}`} onClick={() => setType(type === 'Adjustment' ? 'All types' : 'Adjustment')}><i /> Adjusted <strong>{stats.adjustments}</strong></button>
+          <button type="button" className={`movement-type-chip${type === 'All types' ? ' is-active' : ''}`} aria-pressed={type === 'All types'} onClick={() => setType('All types')}>All <strong>{movementTypeCounts.all}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-receive${type === 'Receive' ? ' is-active' : ''}`} aria-pressed={type === 'Receive'} onClick={() => setType(type === 'Receive' ? 'All types' : 'Receive')}><i /> Received <strong>{movementTypeCounts.received}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-issue${type === 'Issue' ? ' is-active' : ''}`} aria-pressed={type === 'Issue'} onClick={() => setType(type === 'Issue' ? 'All types' : 'Issue')}><i /> Issued <strong>{movementTypeCounts.issued}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-waste${type === 'Waste' ? ' is-active' : ''}`} aria-pressed={type === 'Waste'} onClick={() => setType(type === 'Waste' ? 'All types' : 'Waste')}><i /> Wasted <strong>{movementTypeCounts.wasted}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-adjust${type === 'Adjustment' ? ' is-active' : ''}`} aria-pressed={type === 'Adjustment'} onClick={() => setType(type === 'Adjustment' ? 'All types' : 'Adjustment')}><i /> Adjusted <strong>{movementTypeCounts.adjusted}</strong></button>
         </div>
 
         <div className="table-wrap">

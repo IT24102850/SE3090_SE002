@@ -24,7 +24,7 @@ const healthTone: Record<BranchSummary['health'], BadgeTone> = { Healthy: 'green
 
 function healthFor(items: InventoryItem[]): BranchSummary['health'] {
   if (items.some((item) => item.quantity <= 0)) return 'Critical';
-  if (items.some((item) => item.quantity < item.reorderLevel)) return 'Needs attention';
+  if (items.some((item) => item.quantity <= item.reorderLevel)) return 'Needs attention';
   return 'Healthy';
 }
 
@@ -52,6 +52,8 @@ export function BranchOverviewPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [itemQuery, setItemQuery] = useState('');
+  const [itemBranch, setItemBranch] = useState('All branches');
 
   const loadInventory = useCallback(async (showMessage = false) => {
     setLoading(true);
@@ -99,7 +101,7 @@ export function BranchOverviewPage() {
         name: branch.name,
         items: items.length,
         value: items.reduce((sum, item) => sum + Number(item.quantity ?? 0) * Number(item.unitCost ?? 0), 0),
-        attention: items.filter((item) => item.quantity <= 0 || item.quantity < item.reorderLevel).length,
+        attention: items.filter((item) => item.quantity <= 0 || item.quantity <= item.reorderLevel).length,
         health: items.length ? healthFor(items) : 'Healthy',
       };
     });
@@ -110,7 +112,7 @@ export function BranchOverviewPage() {
         name: 'Unassigned stock',
         items: unassigned.length,
         value: unassigned.reduce((sum, item) => sum + Number(item.quantity ?? 0) * Number(item.unitCost ?? 0), 0),
-        attention: unassigned.filter((item) => item.quantity <= 0 || item.quantity < item.reorderLevel).length,
+        attention: unassigned.filter((item) => item.quantity <= 0 || item.quantity <= item.reorderLevel).length,
         health: healthFor(unassigned),
       });
     }
@@ -124,16 +126,26 @@ export function BranchOverviewPage() {
     healthy: branches.filter((branch) => branch.health === 'Healthy').length,
   }), [branches]);
 
+  const comparisonItems = useMemo(() => {
+    const term = itemQuery.trim().toLowerCase();
+    return inventory.filter((item) => {
+      const matchesBranch = itemBranch === 'All branches' || (item.branch ?? 'Unassigned') === itemBranch;
+      const category = categoryPresentation(item.category, item.name).label;
+      const matchesText = !term || [item.name, item.sku, item.branch ?? 'Unassigned', category].some((field) => field.toLowerCase().includes(term));
+      return matchesBranch && matchesText;
+    });
+  }, [inventory, itemBranch, itemQuery]);
+  const comparisonBranches = ['All branches', ...Array.from(new Set(inventory.map((item) => item.branch ?? 'Unassigned'))).sort((a, b) => a.localeCompare(b))];
   const categoryGroups = useMemo(() => {
     const grouped = new Map<string, InventoryItem[]>();
-    inventory.forEach((item) => {
+    comparisonItems.forEach((item) => {
       const label = categoryPresentation(item.category, item.name).label;
       grouped.set(label, [...(grouped.get(label) ?? []), item]);
     });
     return [...grouped.entries()]
       .map(([label, items]) => ({ ...categoryPresentation(label), items, value: items.reduce((sum, item) => sum + Number(item.quantity ?? 0) * Number(item.unitCost ?? 0), 0) }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [inventory]);
+  }, [comparisonItems]);
 
   return (
     <div className="page branch-overview-page">
@@ -171,9 +183,14 @@ export function BranchOverviewPage() {
       <section className="panel">
         <div className="panel-head comparison-heading">
           <div><p className="eyebrow">INVENTORY DIRECTORY</p><h2>Live stock comparison</h2><p>Browse every database item by its operational category and branch.</p></div>
-          <span className="comparison-count">{inventory.length} items · {categoryGroups.length} categories</span>
+          <span className="comparison-count">{comparisonItems.length} of {inventory.length} items · {categoryGroups.length} categories</span>
         </div>
-        {loading && !inventory.length ? <div className="branch-overview-loading"><span className="branch-loading-spinner" />Loading branch stock…</div> : inventory.length ? (
+        <div className="toolbar toolbar-wrap branch-comparison-toolbar">
+          <div className="search-field"><span className="search-icon" aria-hidden="true">⌕</span><input type="search" aria-label="Search branch inventory" placeholder="Search item, SKU, category or branch" value={itemQuery} onChange={(event) => setItemQuery(event.target.value)} /></div>
+          <select className="filter-select" aria-label="Filter by branch" value={itemBranch} onChange={(event) => setItemBranch(event.target.value)}>{comparisonBranches.map((entry) => <option key={entry}>{entry}</option>)}</select>
+          {(itemQuery || itemBranch !== 'All branches') && <button type="button" className="btn btn-ghost inventory-clear-filters" onClick={() => { setItemQuery(''); setItemBranch('All branches'); }}>Clear filters</button>}
+        </div>
+        {loading && !inventory.length ? <div className="branch-overview-loading"><span className="branch-loading-spinner" />Loading branch stock…</div> : comparisonItems.length ? (
           <div className="category-directory">
             {categoryGroups.map((group) => (
               <section className={`category-stock-card category-${group.tone}`} key={group.label}>
@@ -200,7 +217,7 @@ export function BranchOverviewPage() {
               </section>
             ))}
           </div>
-        ) : <p className="empty-state">No inventory items are recorded yet.</p>}
+        ) : <p className="empty-state">{inventory.length ? 'No stock items match these filters. Clear filters or choose another branch.' : 'No inventory items are recorded yet.'}</p>}
       </section>
     </div>
   );
