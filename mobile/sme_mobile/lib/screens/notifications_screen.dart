@@ -31,8 +31,20 @@ class NotificationsScreen extends ConsumerWidget {
               color: AppColors.cyan,
               backgroundColor: AppColors.overlaySurface,
               onRefresh: () async {
-                ref.invalidate(notificationsProvider);
-                ref.invalidate(unreadNotificationCountProvider);
+                try {
+                  await Future.wait<Object>([
+                    ref.refresh(notificationsProvider.future),
+                    ref.refresh(unreadNotificationCountProvider.future),
+                  ]);
+                } catch (_) {
+                  if (context.mounted) {
+                    showAppNotification(
+                      'Could not refresh notifications. Please try again.',
+                      tone: AppNotificationTone.error,
+                      title: 'Refresh failed',
+                    );
+                  }
+                }
               },
               child: ListView.separated(
                 physics: const AlwaysScrollableScrollPhysics(),

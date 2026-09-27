@@ -80,9 +80,22 @@ export function LowStockAlertsPage() {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       if (!response.ok) throw new Error(`Inventory request failed (${response.status})`);
-      const data = await response.json();
-      setInventoryTotalCount(Number(data.totalCount ?? data.items?.length ?? 0));
-      setInventory((data.items ?? []).map((item: any): InventoryHealthRow => {
+      const firstPage = await response.json();
+      const totalPages = Math.max(1, Number(firstPage.totalPages) || 1);
+      const remainingPages = await Promise.all(
+        Array.from({ length: totalPages - 1 }, async (_, index) => {
+          const page = index + 2;
+          const pageResponse = await fetch(`/api/inventory?page=${page}&pageSize=100`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          });
+          if (!pageResponse.ok) throw new Error(`Inventory page ${page} failed (${pageResponse.status})`);
+          return pageResponse.json();
+        }),
+      );
+      const pages = [firstPage, ...remainingPages];
+      const allItems = pages.flatMap((page) => page.items ?? []);
+      setInventoryTotalCount(Number(firstPage.totalCount ?? allItems.length));
+      setInventory(allItems.map((item: any): InventoryHealthRow => {
         const onHand = Number(item.quantity ?? 0);
         const reorderLevel = Number(item.reorderLevel ?? 0);
         return {

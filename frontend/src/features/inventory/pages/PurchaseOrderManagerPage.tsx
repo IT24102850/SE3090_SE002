@@ -676,11 +676,18 @@ export function PurchaseOrderManagerPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const response = await apiGet<PurchaseOrderListResponse>('/purchase-orders?pageSize=100', token);
+      const firstPage = await apiGet<PurchaseOrderListResponse>('/purchase-orders?page=1&pageSize=100', token);
+      const remainingPages = await Promise.all(
+        Array.from({ length: Math.max(0, firstPage.totalPages - 1) }, (_, index) =>
+          apiGet<PurchaseOrderListResponse>(`/purchase-orders?page=${index + 2}&pageSize=100`, token),
+        ),
+      );
       const referenceData = await apiGet<PurchaseOrderOptionsResponse>('/purchase-orders/options', token)
         .catch(() => ({ branches: [], suppliers: [], items: [] }));
       if (!isActive()) return false;
-      const loadedOrders = Array.isArray(response.items) ? response.items.map((item) => responseToOrder(item)) : [];
+      const loadedOrders = [firstPage, ...remainingPages]
+        .flatMap((response) => response.items ?? [])
+        .map((item) => responseToOrder(item));
       setOrders(loadedOrders);
       setOptions(referenceData);
       setSelectedId((current) => current && loadedOrders.some((order) => order.id === current) ? current : loadedOrders[0]?.id ?? null);
