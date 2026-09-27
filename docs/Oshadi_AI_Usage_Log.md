@@ -51,6 +51,34 @@ Component 3: Billing, Payments & Dynamic Forms, and its Domain Analysis Agent.
 - **What was changed:** Wrote the injection tests as the brief said - before the feature, and asserting on outcomes rather than prose. The important ones hand the guard a plan from a model that has been successfully talked into setting the cap to 100% and approving everything, then assert the 50%-discount invoice still flags and nothing is approved. `BillingCopilotWireTests` pins a response captured from the running agent service, so a field renamed on either side of the HTTP boundary fails a test instead of quietly deserializing to null. The re-capture recipe is in the agent service README.
 - **Verification:** All four suites green: 116 pytest, 306 xUnit, 146 Vitest, plus `npm run build`. Also confirmed the container really fills the optional planner parameter, so the copilot cannot silently report "not configured" forever.
 
+## 2026-08-24
+- **Tool:** Antigravity
+- **Task:** Establish the billing domain model and database configuration.
+- **What it produced:** Billing entities and their persistence configuration.
+- **What was changed:** Added the billing entities and database setup in commit `b610d0d`.
+- **Verification:** Commit `b610d0d` is present in the history for author `IT24101203`.
+
+## 2026-09-10
+- **Tool:** Antigravity
+- **Task:** Add the billing database migration and implement the billing and payments API.
+- **What it produced:** EF Core migration support and a JWT-authenticated, validated Billing & Payments Web API.
+- **What was changed:** Added the migration in `6cf41f7` and the Web API in `f0d5fea`.
+- **Verification:** Both commits are present in the history for author `IT24101203`.
+
+## 2026-09-23
+- **Tool:** Antigravity
+- **Task:** Complete the billing engine across backend, web, and mobile clients.
+- **What it produced:** The billing engine backend, billing and payments web screens, mobile billing screens, and Stripe hosted checkout.
+- **What was changed:** Added the backend in `1879df9`, web screens in `dac2e3f`, mobile screens and checkout in `175318a`, desktop plugin registration in `fde700f`, SendGrid and Twilio configuration documentation in `02bf079`, and the billing status review in `8410838`.
+- **Verification:** All listed commits are present in the history for author `IT24101203`.
+
+## 2026-09-27
+- **Tool:** GitHub Copilot
+- **Task:** Update this AI usage log through today using repository evidence.
+- **What it produced:** Reconstructed entries for the previously undocumented billing work and a transparent note where the original AI tool cannot be verified from Git history.
+- **What was changed:** Updated `docs/Oshadi_AI_Usage_Log.md` without attributing work to unsupported tools or authors.
+- **Verification:** Confirmed the latest `IT24101203`-authored commit is `cb58061` on 2026-09-25; no later commits by that author were found through 2026-09-27.
+
 ## What I need to be able to explain (§18.2)
 
 Written down because unexplained work scores zero, not as a summary of the above:

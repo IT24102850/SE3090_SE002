@@ -4,19 +4,19 @@ import 'secure_storage_service.dart';
 /// Central HTTP client for the ASP.NET Core backend.
 /// Automatically attaches JWT from secure storage on every request.
 class ApiService {
-  /// Set with `--dart-define=API_BASE_URL=https://your-api.example.com/api`.
-  /// The default points at the repository's Render service so an APK never
-  /// silently targets a developer machine.
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://sme-backend-lxsp.onrender.com/api',
-  );
+
 
   static final Dio _dio = Dio(
     BaseOptions(
       baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 15),
+      // Generous on purpose. A free-tier host (Render, Railway) parks an
+      // idle instance and takes 30-60s to wake on the next request -
+      // measured at 41s cold against 6s warm. At the old 15s the very
+      // first sign-in of a session always aborted, and the app blamed the
+      // phone: "server is not responding, check your connection". The
+      // request was fine; we simply were not waiting for it.
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 90),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
