@@ -46,7 +46,7 @@ public partial class PlannerAgentService : IPlannerAgentService
     public PlannerAgentService(HttpClient http, IConfiguration config)
     {
         _config = config;
-        var baseUrl = config["AgentService:BaseUrl"] ?? "http://localhost:8001";
+        var baseUrl = config["AgentService:BaseUrl"] ?? "https://sme-agentic-ai.onrender.com";
         http.BaseAddress = new Uri(baseUrl);
         // 60s was not enough and produced a confusing failure: the pipeline
         // went on to finish and return 200 while this client had already
@@ -131,8 +131,8 @@ public partial class PlannerAgentService
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             return ScheduleCopilotResult.Failed(
-                $"Could not reach the Schedule Copilot at {_http.BaseAddress}. Start the agent service " +
-                $"(uvicorn main:app --port 8001) and retry. {ex.Message}");
+                $"Could not reach the deployed Schedule Copilot at {_http.BaseAddress}. " +
+                $"Verify the agent service is running and retry. {ex.Message}");
         }
 
         // Every outcome of a run - ready, awaiting approval, rejected by the

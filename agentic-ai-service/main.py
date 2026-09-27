@@ -50,6 +50,11 @@ logger = logging.getLogger("agentic-ai-service")
 
 app = FastAPI(title="Agentic AI Subsystem", version="1.0.0")
 
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
 # In-memory only — see module docstring. Not a substitute for the
 # AgentWorkflows table in Postgres, which ASP.NET Core owns.
 _workflows: dict[str, WorkflowTrace] = {}
