@@ -28,7 +28,9 @@ class LiveNotification {
         type: (j['type'] ?? '').toString(),
         title: (j['title'] ?? '').toString(),
         message: (j['message'] ?? '').toString(),
-        createdAt: DateTime.tryParse((j['createdAt'] ?? '').toString())?.toLocal() ?? DateTime.now(),
+        createdAt:
+            DateTime.tryParse((j['createdAt'] ?? '').toString())?.toLocal() ??
+                DateTime.now(),
       );
 }
 
@@ -37,17 +39,15 @@ enum StreamStatus { connecting, live, offline }
 /// Live notifications over Server-Sent Events, from the same ASP.NET Core API
 /// everything else uses.
 ///
-/// This replaces a WebSocket client that pointed at ws://10.0.2.2:8000/ws/workflows
-/// - a port and a route that do not exist in this system - so the phone was in
-/// practice waiting for its next manual refresh. SSE also keeps the spec's
-/// rule that the app talks only to ASP.NET Core: the notification never comes
-/// from the Python agent service directly.
+/// The app talks only to ASP.NET Core: notifications never come from the
+/// Python agent service directly.
 ///
 /// The durable record is still the Notifications table. A phone that was in a
 /// tunnel misses nothing permanently: it refetches the list on reconnect.
 class NotificationStreamService {
   NotificationStreamService._internal();
-  static final NotificationStreamService _instance = NotificationStreamService._internal();
+  static final NotificationStreamService _instance =
+      NotificationStreamService._internal();
   factory NotificationStreamService() => _instance;
 
   static const _retryBase = Duration(seconds: 1);
@@ -104,7 +104,10 @@ class NotificationStreamService {
         cancelToken: _cancel,
         options: Options(
           responseType: ResponseType.stream,
-          headers: {'Authorization': 'Bearer $token', 'Accept': 'text/event-stream'},
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'text/event-stream'
+          },
           // The whole point is that this connection stays open, so the
           // read timeout that protects ordinary requests must not apply.
           receiveTimeout: Duration.zero,

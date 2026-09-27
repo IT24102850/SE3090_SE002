@@ -9,6 +9,21 @@ import '../../../widgets/ui/ui.dart';
 import '../../business_profile_editor_screen.dart';
 import '../owner_widgets.dart';
 
+const _tourismSubTypes = [
+  'Water sports / diving',
+  'Safari / wildlife',
+  'Whale / dolphin watching',
+  'Surf schools',
+  'Hiking / trekking / adventure',
+  'Cultural / heritage tours',
+  'Multi-day packages',
+  'Accommodation',
+  'Villa / Hotel',
+  'Vehicle rental / transport',
+  'Wellness / Ayurveda',
+  'Cycling tours',
+];
+
 /// Business Settings — the mobile twin of the web Settings page: the name
 /// customers see, and the two cutoffs that decide how late someone may
 /// change their mind. The richer listing (logo, hours, gallery) stays in
@@ -17,13 +32,18 @@ class BusinessSettingsScreen extends ConsumerStatefulWidget {
   const BusinessSettingsScreen({super.key});
 
   @override
-  ConsumerState<BusinessSettingsScreen> createState() => _BusinessSettingsScreenState();
+  ConsumerState<BusinessSettingsScreen> createState() =>
+      _BusinessSettingsScreenState();
 }
 
-class _BusinessSettingsScreenState extends ConsumerState<BusinessSettingsScreen> {
+class _BusinessSettingsScreenState
+    extends ConsumerState<BusinessSettingsScreen> {
   final _name = TextEditingController();
   int? _rescheduleHours;
   int? _cancelHours;
+  String _logoUrl = '';
+  String? _subType;
+  bool _isTourism = false;
   bool _loaded = false;
   bool _saving = false;
 
@@ -38,6 +58,8 @@ class _BusinessSettingsScreenState extends ConsumerState<BusinessSettingsScreen>
     try {
       await ref.read(ownerRepositoryProvider).updateTenant(
             name: _name.text.trim(),
+            logoUrl: _logoUrl.trim(),
+            subType: _isTourism ? _subType : null,
             rescheduleCutoffHours: _rescheduleHours,
             cancellationCutoffHours: _cancelHours,
           );
@@ -70,6 +92,9 @@ class _BusinessSettingsScreenState extends ConsumerState<BusinessSettingsScreen>
             _name.text = tenant.name;
             _rescheduleHours = tenant.rescheduleCutoffHours;
             _cancelHours = tenant.cancellationCutoffHours;
+            _logoUrl = tenant.logoUrl ?? '';
+            _subType = tenant.subType;
+            _isTourism = tenant.businessType == 'Tourism';
             _loaded = true;
           }
 
@@ -77,11 +102,16 @@ class _BusinessSettingsScreenState extends ConsumerState<BusinessSettingsScreen>
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
             children: [
               StatGrid(tiles: [
-                StatTile(label: 'Business type', value: tenant.businessType, sub: tenant.subType ?? 'no sub-type'),
+                StatTile(
+                    label: 'Business type',
+                    value: tenant.businessType,
+                    sub: tenant.subType ?? 'no sub-type'),
                 StatTile(
                   label: 'Status',
                   value: tenant.isActive ? 'Active' : 'Suspended',
-                  sub: tenant.isActive ? 'taking bookings' : 'not taking bookings',
+                  sub: tenant.isActive
+                      ? 'taking bookings'
+                      : 'not taking bookings',
                   accent: tenant.isActive ? AppColors.success : AppColors.error,
                 ),
               ]),
@@ -93,6 +123,27 @@ class _BusinessSettingsScreenState extends ConsumerState<BusinessSettingsScreen>
                   children: [
                     NeonInputField(label: 'Business name', controller: _name),
                     const SizedBox(height: 10),
+                    NeonInputField(
+                      label: 'Logo URL',
+                      initialValue: _logoUrl,
+                      onChanged: (value) => _logoUrl = value,
+                    ),
+                    if (tenant.businessType == 'Tourism') ...[
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        value: _subType,
+                        decoration: const InputDecoration(
+                            labelText: 'Tourism sub-type'),
+                        items: [
+                          const DropdownMenuItem(
+                              value: null, child: Text('Not set')),
+                          ..._tourismSubTypes.map((value) => DropdownMenuItem(
+                              value: value, child: Text(value))),
+                        ],
+                        onChanged: (value) => setState(() => _subType = value),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
                     Text(
                       'The logo, cover photo, opening hours and gallery live in the Business Profile.',
                       style: AppTextStyles.caption,
@@ -103,7 +154,8 @@ class _BusinessSettingsScreenState extends ConsumerState<BusinessSettingsScreen>
                       icon: Icons.storefront_outlined,
                       height: 44,
                       onPressed: () => Navigator.of(context).push(
-                        slideFadeRoute<void>(const BusinessProfileEditorScreen()),
+                        slideFadeRoute<void>(
+                            const BusinessProfileEditorScreen()),
                       ),
                     ),
                   ],
@@ -147,7 +199,10 @@ class _BusinessSettingsScreenState extends ConsumerState<BusinessSettingsScreen>
                       onSelected: (v) => setState(() => _cancelHours = v),
                     ),
                     const SizedBox(height: 16),
-                    NeonButton(label: 'Save settings', isLoading: _saving, onPressed: _saving ? null : _save),
+                    NeonButton(
+                        label: 'Save settings',
+                        isLoading: _saving,
+                        onPressed: _saving ? null : _save),
                   ],
                 ),
               ),

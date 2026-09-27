@@ -37,9 +37,8 @@ class _PurchaseOrderApprovalScreenState
   void initState() {
     super.initState();
     _load();
-    // Live updates from the API's notification stream. This used to listen to
-    // a WebSocket on ws://10.0.2.2:8000/ws/workflows - a port and route that
-    // do not exist here - so the list only ever refreshed on a manual pull.
+    // Live updates come from the deployed ASP.NET notification stream, so the
+    // list stays current without connecting directly to the agent service.
     unawaited(NotificationStreamService().start());
     _notifSub = NotificationStreamService().notifications.listen((n) {
       if (!mounted) return;

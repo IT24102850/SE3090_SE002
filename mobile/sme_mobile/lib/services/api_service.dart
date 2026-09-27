@@ -1,22 +1,16 @@
-import 'dart:io' show Platform;
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'secure_storage_service.dart';
 
 /// Central HTTP client for the ASP.NET Core backend.
 /// Automatically attaches JWT from secure storage on every request.
 class ApiService {
-  // Android's emulator networking sandboxes "localhost" to the emulator
-  // itself, not the host machine - 10.0.2.2 is the documented alias back to
-  // the host. Every other target (iOS simulator, Windows/web/physical
-  // device on the same network as a manually-set host) keeps using
-  // localhost as before.
-  // - Physical device:   http://<your-lan-ip>:5298/api
-  // - Deployed:          https://your-api.railway.app/api
-  static String get baseUrl {
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5298/api';
-    return 'http://localhost:5298/api';
-  }
+  /// Set with `--dart-define=API_BASE_URL=https://your-api.example.com/api`.
+  /// The default points at the repository's Render service so an APK never
+  /// silently targets a developer machine.
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://sme-backend-lxsp.onrender.com/api',
+  );
 
   static final Dio _dio = Dio(
     BaseOptions(
