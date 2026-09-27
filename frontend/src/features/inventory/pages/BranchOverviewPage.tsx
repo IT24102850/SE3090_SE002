@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useGetBranchesQuery } from '../../../api/bookingApi';
 import type { RootState } from '../../../store/store';
 import { Badge, type BadgeTone } from '../ui/Badge';
 import { getStoredToken } from '../authToken';
+import { useToast } from '../ui/ToastContext';
 
 type InventoryItem = {
   id: string;
@@ -17,7 +18,7 @@ type InventoryItem = {
   reorderLevel: number;
   unitCost?: number;
 };
-type BranchSummary = { id: string; name: string; items: number; value: number; health: 'Healthy' | 'Needs attention' | 'Critical' };
+type BranchSummary = { id: string; name: string; items: number; value: number; attention: number; health: 'Healthy' | 'Needs attention' | 'Critical' };
 
 const healthTone: Record<BranchSummary['health'], BadgeTone> = { Healthy: 'green', 'Needs attention': 'amber', Critical: 'red' };
 
@@ -43,43 +44,47 @@ function categoryPresentation(category?: string, itemName?: string) {
 }
 
 export function BranchOverviewPage() {
+  const { notify } = useToast();
   const token = getStoredToken();
   const tenantId = useSelector((state: RootState) => state.auth.user?.tenantId ?? '');
   const { data: databaseBranches = [] } = useGetBranchesQuery({ tenantId }, { skip: !tenantId });
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const rows: InventoryItem[] = [];
-        let page = 1;
-        let totalPages = 1;
-        do {
-          const response = await fetch(`/api/inventory?page=${page}&pageSize=100`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          });
-          if (!response.ok) throw new Error(`Inventory request failed (${response.status})`);
-          const data = await response.json() as { items?: InventoryItem[]; totalPages?: number };
-          rows.push(...(data.items ?? []));
-          totalPages = Number(data.totalPages ?? 1);
-          page += 1;
-        } while (page <= totalPages);
-        if (!cancelled) {
-          setInventory(rows);
-          setError('');
-        }
-      } catch {
-        if (!cancelled) {
-          setInventory([]);
-          setError('Unable to load branch inventory from the database.');
-        }
-      }
+  const loadInventory = useCallback(async (showMessage = false) => {
+    setLoading(true);
+    try {
+      const rows: InventoryItem[] = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const response = await fetch(`/api/inventory?page=${page}&pageSize=100`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (!response.ok) throw new Error(`Inventory request failed (${response.status})`);
+        const data = await response.json() as { items?: InventoryItem[]; totalPages?: number };
+        rows.push(...(data.items ?? []));
+        totalPages = Number(data.totalPages ?? 1);
+        page += 1;
+      } while (page <= totalPages);
+      setInventory(rows);
+      setError('');
+      setLastUpdated(new Date());
+      if (showMessage) notify('Branch inventory refreshed.', 'success');
+      return true;
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : 'Unable to load branch inventory from the database.';
+      setError(message);
+      if (showMessage) notify(message, 'error');
+      return false;
+    } finally {
+      setLoading(false);
     }
-    void load();
-    return () => { cancelled = true; };
-  }, [token]);
+  }, [notify, token]);
+
+  useEffect(() => { void loadInventory(); }, [loadInventory]);
 
   const branches = useMemo<BranchSummary[]>(() => {
     const grouped = new Map<string, InventoryItem[]>();
@@ -94,6 +99,7 @@ export function BranchOverviewPage() {
         name: branch.name,
         items: items.length,
         value: items.reduce((sum, item) => sum + Number(item.quantity ?? 0) * Number(item.unitCost ?? 0), 0),
+        attention: items.filter((item) => item.quantity <= 0 || item.quantity < item.reorderLevel).length,
         health: items.length ? healthFor(items) : 'Healthy',
       };
     });
@@ -104,11 +110,19 @@ export function BranchOverviewPage() {
         name: 'Unassigned stock',
         items: unassigned.length,
         value: unassigned.reduce((sum, item) => sum + Number(item.quantity ?? 0) * Number(item.unitCost ?? 0), 0),
+        attention: unassigned.filter((item) => item.quantity <= 0 || item.quantity < item.reorderLevel).length,
         health: healthFor(unassigned),
       });
     }
     return summaries;
   }, [databaseBranches, inventory]);
+
+  const summary = useMemo(() => ({
+    branches: branches.length,
+    attention: branches.reduce((sum, branch) => sum + branch.attention, 0),
+    value: branches.reduce((sum, branch) => sum + branch.value, 0),
+    healthy: branches.filter((branch) => branch.health === 'Healthy').length,
+  }), [branches]);
 
   const categoryGroups = useMemo(() => {
     const grouped = new Map<string, InventoryItem[]>();
@@ -122,34 +136,44 @@ export function BranchOverviewPage() {
   }, [inventory]);
 
   return (
-    <div className="page">
-      <header className="page-head">
-        <div>
-          <p className="eyebrow">OPERATIONS / NETWORK</p>
-          <h1>Multi-branch overview</h1>
-          <p className="page-sub">See stock levels, item values, and replenishment needs across every branch.</p>
+    <div className="page branch-overview-page">
+      <header className="branch-overview-hero">
+        <div className="branch-overview-hero-copy">
+          <p className="branch-overview-eyebrow"><span aria-hidden="true">✣</span> INVENTORY / NETWORK</p>
+          <h1>Branch overview</h1>
+          <p>Compare stock health, inventory value, and replenishment needs across your locations.</p>
+          <div className="branch-overview-live"><span className={loading ? 'is-loading' : error ? 'is-error' : ''} />{loading ? 'Syncing branch inventory…' : error ? 'Branch inventory sync needs attention' : `${summary.branches} locations · ${inventory.length} items tracked`}{lastUpdated && !loading && <small>Updated {lastUpdated.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</small>}</div>
         </div>
+        <div className="branch-overview-art" aria-hidden="true"><span className="branch-overview-orbit" /><span className="branch-overview-art-icon">⌖</span><i /><i /><i /></div>
+        <button type="button" className="btn branch-overview-refresh" onClick={() => void loadInventory(true)} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh data'}</button>
       </header>
-      {error && <p className="page-notice">{error}</p>}
+      {error && <p className="page-notice" role="alert">{error}</p>}
+      <section className="branch-overview-metrics" aria-label="Network inventory summary">
+        <article className="branch-overview-metric branch-overview-metric-locations"><span className="branch-overview-metric-icon">⌖</span><span className="branch-overview-metric-label">NETWORK</span><strong>{summary.branches}</strong><small>Locations in view</small></article>
+        <article className="branch-overview-metric branch-overview-metric-items"><span className="branch-overview-metric-icon">▦</span><span className="branch-overview-metric-label">STOCK COVERAGE</span><strong>{inventory.length}</strong><small>Items across branches</small></article>
+        <article className="branch-overview-metric branch-overview-metric-health"><span className="branch-overview-metric-icon">✓</span><span className="branch-overview-metric-label">HEALTHY LOCATIONS</span><strong>{summary.healthy}</strong><small>Meeting reorder levels</small></article>
+        <article className="branch-overview-metric branch-overview-metric-value"><span className="branch-overview-metric-icon">LKR</span><span className="branch-overview-metric-label">INVENTORY VALUE</span><strong>{money(summary.value)}</strong><small>{summary.attention} items need review</small></article>
+      </section>
       <section className="branch-summary-grid" aria-label="Branch stock summary">
         {branches.map((branch) => (
-          <article className="branch-card" key={branch.id}>
+          <article className={`branch-card branch-card-${branch.health.toLowerCase().replace(' ', '-')}`} key={branch.id}>
             <div className="branch-card-head">
-              <div><h2>{branch.name}</h2><p>{branch.items} items tracked</p></div>
+              <span className="branch-card-icon" aria-hidden="true">⌖</span>
+              <div className="branch-card-name"><h2>{branch.name}</h2><p>{branch.items} items tracked</p></div>
               <Badge tone={healthTone[branch.health]}>{branch.health}</Badge>
             </div>
-            <strong>{money(branch.value)}</strong>
-            <span>Inventory value</span>
+            <div className="branch-card-value"><strong>{money(branch.value)}</strong><span>Inventory value</span></div>
+            <div className="branch-card-foot"><span>{branch.attention ? `${branch.attention} items need attention` : 'Stock levels look healthy'}</span><span className="branch-health-pulse" aria-hidden="true" /></div>
           </article>
         ))}
-        {!branches.length && !error && <p className="cell-sub">No branches are recorded yet.</p>}
+        {!branches.length && !error && !loading && <p className="cell-sub">No branches are recorded yet.</p>}
       </section>
       <section className="panel">
         <div className="panel-head comparison-heading">
           <div><p className="eyebrow">INVENTORY DIRECTORY</p><h2>Live stock comparison</h2><p>Browse every database item by its operational category and branch.</p></div>
           <span className="comparison-count">{inventory.length} items · {categoryGroups.length} categories</span>
         </div>
-        {inventory.length ? (
+        {loading && !inventory.length ? <div className="branch-overview-loading"><span className="branch-loading-spinner" />Loading branch stock…</div> : inventory.length ? (
           <div className="category-directory">
             {categoryGroups.map((group) => (
               <section className={`category-stock-card category-${group.tone}`} key={group.label}>

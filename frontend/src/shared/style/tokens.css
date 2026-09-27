@@ -765,6 +765,8 @@ select.input option { background: var(--color-surface-muted); color: var(--color
 
 /* ── Badges / status chips ────────────────────────────────── */
 .badge {
+  position: relative;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -776,14 +778,115 @@ select.input option { background: var(--color-surface-muted); color: var(--color
   letter-spacing: 0.03em;
   white-space: nowrap;
   border: 1px solid transparent;
+  animation: badge-glow 2.4s ease-in-out infinite;
+  isolation: isolate;
 }
 .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 -45%;
+  width: 34%;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, .38), transparent);
+  transform: skewX(-18deg);
+  animation: badge-shimmer 2.8s ease-in-out infinite;
+}
+.badge > * { position: relative; z-index: 1; }
+
+@keyframes badge-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(37, 99, 235, 0); }
+  50% { box-shadow: 0 0 14px color-mix(in srgb, currentColor 28%, transparent); }
+}
+@keyframes badge-shimmer {
+  0%, 35% { left: -45%; }
+  75%, 100% { left: 125%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge, .active-status, .status-active { animation: none; }
+  .badge::after, .active-status::before, .is-active::before { animation: none; }
+}
 
 .badge-good { background: var(--color-good-soft); color: var(--color-good); border-color: rgba(22, 163, 74, 0.24); }
 .badge-warning { background: var(--color-warning-soft); color: var(--color-warning); border-color: rgba(217, 119, 6, 0.24); }
 .badge-critical { background: var(--color-critical-soft); color: var(--color-critical); border-color: rgba(220, 38, 38, 0.22); }
 .badge-neutral { background: var(--color-neutral-soft); color: var(--color-neutral); border-color: var(--color-border); }
 .badge-primary { background: var(--color-primary-soft); color: var(--color-primary); border-color: transparent; }
+
+/* Live/active surfaces share the same visual language as status badges.
+   Tables opt in automatically when a row contains an active/good badge, while
+   cards and custom rows can use .active-status or .is-active explicitly. */
+.badge-good,
+.badge-primary,
+.status-active,
+.active-status {
+  position: relative;
+  animation: active-status-pulse 2.6s ease-in-out infinite;
+}
+.status-active,
+.active-status {
+  border: 1px solid color-mix(in srgb, var(--color-good) 42%, var(--color-border));
+  background:
+    linear-gradient(135deg, var(--color-good-soft), var(--color-primary-soft));
+}
+.active-status::before,
+.is-active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    110deg,
+    transparent 18%,
+    color-mix(in srgb, var(--color-good) 22%, transparent) 48%,
+    transparent 76%
+  );
+  transform: translateX(-120%);
+  animation: active-status-sweep 3.4s ease-in-out infinite;
+}
+@keyframes active-status-pulse {
+  0%, 100% { box-shadow: 0 0 0 color-mix(in srgb, var(--color-good) 0%, transparent); }
+  50% { box-shadow: 0 0 18px color-mix(in srgb, var(--color-good) 24%, transparent); }
+}
+@keyframes active-status-sweep {
+  0%, 32% { transform: translateX(-120%); }
+  72%, 100% { transform: translateX(120%); }
+}
+
+/* Any data table row carrying an active state gets a quiet lit edge, a
+   tinted surface and a moving highlight instead of a distracting full-row
+   animation. :has keeps this centralized so every feature table benefits. */
+table.data-table tbody tr:has(.badge-good),
+table.data-table tbody tr:has(.badge-primary),
+table.data-table tbody tr:has(.status-active),
+table.data-table tbody tr.is-active,
+table.data-table tbody tr.active-status {
+  position: relative;
+  background:
+    linear-gradient(90deg, var(--color-good-soft), transparent 68%);
+}
+table.data-table tbody tr:has(.badge-good) td:first-child,
+table.data-table tbody tr:has(.badge-primary) td:first-child,
+table.data-table tbody tr:has(.status-active) td:first-child,
+table.data-table tbody tr.is-active td:first-child,
+table.data-table tbody tr.active-status td:first-child {
+  box-shadow: inset 3px 0 var(--color-good);
+}
+table.data-table tbody tr:has(.badge-good):hover,
+table.data-table tbody tr:has(.badge-primary):hover,
+table.data-table tbody tr:has(.status-active):hover,
+table.data-table tbody tr.is-active:hover,
+table.data-table tbody tr.active-status:hover {
+  background:
+    linear-gradient(90deg, var(--color-good-soft), var(--color-primary-soft) 70%, transparent);
+}
+.table-wrap:has(table.data-table tbody tr:has(.badge-good)),
+.table-wrap:has(table.data-table tbody tr.is-active) {
+  border-color: color-mix(in srgb, var(--color-good) 28%, var(--color-border));
+  box-shadow: var(--shadow-sm), 0 0 24px color-mix(in srgb, var(--color-good) 8%, transparent);
+}
 
 /* ── Tables ───────────────────────────────────────────────── */
 .table-wrap { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--color-border); }
@@ -1469,6 +1572,16 @@ body.modal-open { overflow: hidden; }
   background: var(--sidebar-hover);
   font-size: 0.9rem;
 }
+.sidebar-link-icon.inventory-nav-icon { color: var(--inventory-icon-color); background: color-mix(in srgb, var(--inventory-icon-color) 13%, var(--sidebar-hover)); }
+.sidebar-link-icon.inventory-nav-icon svg { width: 19px; height: 19px; }
+.inventory-nav-inventory { --inventory-icon-color: #0891B2; }
+.inventory-nav-supplier { --inventory-icon-color: #DB2777; }
+.inventory-nav-movement { --inventory-icon-color: #059669; }
+.inventory-nav-po { --inventory-icon-color: #7C3AED; }
+.inventory-nav-stocksense { --inventory-icon-color: #6366F1; }
+.inventory-nav-branch { --inventory-icon-color: #D97706; }
+.inventory-nav-chart { --inventory-icon-color: #2563EB; }
+.sidebar-link.active .sidebar-link-icon.inventory-nav-icon { color: var(--inventory-icon-color); background: color-mix(in srgb, var(--inventory-icon-color) 22%, var(--sidebar-hover)); box-shadow: 0 5px 15px color-mix(in srgb, var(--inventory-icon-color) 20%, transparent); }
 .sidebar-link.active .sidebar-link-icon {
   color: #fff;
   background: var(--gradient-brand);
@@ -1728,7 +1841,7 @@ body.modal-open { overflow: hidden; }
     left: 12px;
     z-index: 35;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     align-items: stretch;
     gap: 3px;
     min-height: 62px;
@@ -1757,8 +1870,11 @@ body.modal-open { overflow: hidden; }
     transition: transform .16s ease, color .16s ease, background .16s ease;
   }
   .mobile-quick-link > span { font-size: 1.05rem; line-height: 1; }
+  .mobile-quick-link > span.inventory-nav-icon { display: grid; place-items: center; width: 30px; height: 28px; border-radius: 10px; color: var(--inventory-icon-color); background: color-mix(in srgb, var(--inventory-icon-color) 13%, transparent); }
+  .mobile-quick-link > span.inventory-nav-icon svg { width: 19px; height: 19px; }
   .mobile-quick-link small { max-width: 100%; overflow: hidden; font-size: .6rem; font-weight: 750; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-quick-link.active { color: var(--color-primary); background: var(--color-primary-soft); }
+  .mobile-quick-link.active > span.inventory-nav-icon { color: var(--inventory-icon-color); background: color-mix(in srgb, var(--inventory-icon-color) 22%, transparent); box-shadow: 0 4px 12px color-mix(in srgb, var(--inventory-icon-color) 18%, transparent); }
   .mobile-quick-more > span { font-weight: 900; letter-spacing: 1px; }
   .sidebar-overlay { backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
   .sidebar.open { animation: mobile-drawer-in .25s cubic-bezier(.2,.8,.25,1) both; }

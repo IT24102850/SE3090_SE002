@@ -10,6 +10,10 @@ namespace SmeBackend.Services;
 public interface IJwtService
 {
     string GenerateAccessToken(User user);
+    /// Platform-console token: same signing key, but scoped so it is only
+    /// honoured by the PlatformOwner policy and bound to a server-side
+    /// session through <paramref name="jti"/>.
+    string GeneratePlatformAccessToken(User user, string jti, DateTime expiresAt);
     string GenerateRefreshToken();
     ClaimsPrincipal? ValidateToken(string token);
 }
@@ -70,6 +74,30 @@ public class JwtService : IJwtService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
     
+    public string GeneratePlatformAccessToken(User user, string jti, DateTime expiresAt)
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var claims = new List<Claim>
+        {
+            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new Claim(JwtRegisteredClaimNames.Email, user.Email),
+            new Claim(JwtRegisteredClaimNames.Jti, jti),
+            new Claim("tenantId", user.TenantId.ToString()),
+            new Claim(ClaimTypes.Role, UserRole.SuperAdmin.ToString()),
+            new Claim("fullName", user.FullName),
+            new Claim(Authorization.PlatformOwnerPolicy.ScopeClaim, Authorization.PlatformOwnerPolicy.ScopeValue),
+            new Claim(Authorization.PlatformOwnerPolicy.AmrClaim, Authorization.PlatformOwnerPolicy.AmrMfa),
+        };
+        var token = new JwtSecurityToken(
+            issuer: _config["Jwt:Issuer"],
+            audience: _config["Jwt:Audience"],
+            claims: claims,
+            expires: expiresAt,
+            signingCredentials: creds);
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
     public string GenerateRefreshToken()
     {
         var randomBytes = new byte[64];

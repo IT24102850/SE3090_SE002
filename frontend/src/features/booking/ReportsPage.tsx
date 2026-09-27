@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
-import { useGetNoShowStatsQuery, useGetResourcesQuery, useGetTenantQuery } from '../../api/bookingApi';
+import { useGetNoShowStatsQuery, useGetResourcesQuery, useGetRevenuePerSlotQuery, useGetTenantQuery } from '../../api/bookingApi';
 import { addDays, toISODate } from '../../shared/dateUtils';
 import HorizontalBarChart from './HorizontalBarChart';
 import ResourceMetricsCollector, { type ResourceMetrics } from './ResourceMetricsCollector';
@@ -9,6 +9,9 @@ import { STATUS_COLORS } from './types';
 import ExcursionReports from '../dashboard/ExcursionReports';
 import { getSubtypeConfig } from '../dashboard/subtypes/subtypeRegistry';
 import { parseTenantSubType } from '../dashboard/subtypes/tourismSubTypes';
+
+/** 14 -> "2pm": the operator's own clock, not a 24-hour column header. */
+const hourLabel = (hour: number) => `${hour % 12 === 0 ? 12 : hour % 12}${hour < 12 ? 'am' : 'pm'}`;
 
 export default function ReportsPage() {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -23,6 +26,12 @@ export default function ReportsPage() {
     { skip: !tenantId }
   );
   const { data: resourcesData } = useGetResourcesQuery({ tenantId, pageSize: 50 }, { skip: !tenantId });
+  /* Minutes east of UTC, so an evening booking lands in the evening column
+     rather than in the small hours of the next UTC day. */
+  const { data: perSlot, isLoading: perSlotLoading } = useGetRevenuePerSlotQuery(
+    { tenantId, from, to: toISODate(addDays(new Date(to), 1)), tz: -new Date().getTimezoneOffset() },
+    { skip: !tenantId },
+  );
   // Sub-type-specific report sections are additive: an unrecognised or
   // unset SubType resolves to the generic config, whose departures module
   // is off, so this page renders exactly as it did before.
@@ -124,6 +133,58 @@ export default function ReportsPage() {
                 color: 'var(--color-good)',
               }))}
           />
+        </div>
+
+        {/* Spec 2.5's "revenue per slot". The chart above answers which
+            resource earns; this answers which hour of the day earns, which
+            is what an operator prices and rosters against. */}
+        <div className="card chart-card" style={{ gridColumn: '1 / -1' }}>
+          <p className="chart-title">Revenue per slot</p>
+          <p className="chart-subtitle">
+            By hour of the day, on your own clock
+            {perSlot?.richestHour != null && ` · best hour ${hourLabel(perSlot.richestHour)}`}
+          </p>
+          {perSlotLoading ? (
+            <div className="loading-row"><span className="spinner spinner-dark" /> Working out the day…</div>
+          ) : !perSlot || perSlot.totalBookings === 0 ? (
+            <div className="empty-state">Nothing booked in this range yet.</div>
+          ) : (
+            <>
+              <div className="stat-tile-row" style={{ marginBottom: 16 }}>
+                <div className="stat-tile">
+                  <div className="stat-tile-label">Taken</div>
+                  <div className="stat-tile-value">LKR {perSlot.totalRevenue.toFixed(0)}</div>
+                </div>
+                <div className="stat-tile">
+                  <div className="stat-tile-label">Average booking</div>
+                  <div className="stat-tile-value">LKR {perSlot.averagePerBooking.toFixed(0)}</div>
+                </div>
+                <div className="stat-tile">
+                  <div className="stat-tile-label">Busiest hour</div>
+                  <div className="stat-tile-value">{perSlot.busiestHour == null ? '—' : hourLabel(perSlot.busiestHour)}</div>
+                </div>
+                <div className="stat-tile">
+                  <div className="stat-tile-label">Lost to cancellations</div>
+                  <div className="stat-tile-value" style={{ color: 'var(--color-critical)' }}>
+                    LKR {perSlot.forgoneRevenue.toFixed(0)}
+                  </div>
+                </div>
+              </div>
+              <HorizontalBarChart
+                data={perSlot.slots
+                  .filter((s) => s.bookings > 0)
+                  .map((s) => ({
+                    label: s.label,
+                    value: s.revenue,
+                    displayValue: `LKR ${s.revenue.toFixed(0)} · ${s.bookings} booking${s.bookings === 1 ? '' : 's'}`,
+                    /* An hour that lost more bookings than it kept is a
+                       problem hour, and should not look like a good one
+                       merely because it still took some money. */
+                    color: s.lostBookings > s.earnedBookings ? 'var(--color-critical)' : 'var(--color-good)',
+                  }))}
+              />
+            </>
+          )}
         </div>
       </div>
 

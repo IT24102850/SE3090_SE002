@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/tourism_subtype.dart';
 import '../providers/auth_provider.dart';
-import '../screens/dashboard_screen.dart';
+import 'role_home.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/ui/ui.dart';
@@ -68,9 +68,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         );
 
     if (success && mounted) {
-      // Pop all routes and go to dashboard
+      // Registering a business makes the caller its Admin, so this lands on
+      // the owner workspace, not the customer dashboard. roleHome keeps that
+      // decision in step with main.dart.
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        MaterialPageRoute(builder: (_) => roleHome(ref.read(authProvider).user?.role)),
         (route) => false,
       );
     }

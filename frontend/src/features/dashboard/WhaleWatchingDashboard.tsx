@@ -19,6 +19,7 @@ import ScheduleDeparturesModal from './components/ScheduleDeparturesModal';
 import SightingsPanel, { LogSightingModal } from './components/SightingsPanel';
 import WeatherCancelModal from './components/WeatherCancelModal';
 import WeatherConsole from './components/WeatherConsole';
+import BusinessAvatar from '../../shared/components/BusinessAvatar';
 import { splitProducts } from './productCategory';
 import type { SubtypeDashboardConfig } from './subtypes/SubtypeDashboardConfig';
 
@@ -136,27 +137,30 @@ export default function WhaleWatchingDashboard({
         <div className="hero-scrim" />
         <div className="hero-body">
           <div className="page-header" style={{ marginBottom: 0 }}>
-            <div>
-              <p className="hero-eyebrow">
-                {config.icon} {config.label}
-                {season && (
-                  <span className={`badge ${season.tone}`} style={{ marginLeft: 8 }}>{season.label}</span>
-                )}
-              </p>
-              <h1 className="hero-title">{tenant?.name ?? 'Departure operations'}</h1>
-              {/* The headline follows the horizon picker beside it: today's
-                  sailings and pax for "Today only", the window's total for
-                  anything longer - otherwise the picker looks inert, since
-                  the rest of the strip is deliberately about today. */}
-              <div className="hero-figure">
-                {kpisLoading || boardLoading ? '…'
-                  : horizon > 1 ? (board?.today.length ?? 0) + (board?.upcoming.length ?? 0)
-                  : (kpis?.departuresToday ?? 0)}
+            <div className="hero-identity">
+              <BusinessAvatar name={tenant?.name} src={profile?.logoUrl} />
+              <div>
+                <p className="hero-eyebrow">
+                  {config.icon} {config.label}
+                  {season && (
+                    <span className={`badge ${season.tone}`} style={{ marginLeft: 8 }}>{season.label}</span>
+                  )}
+                </p>
+                <h1 className="hero-title">{tenant?.name ?? 'Departure operations'}</h1>
+                {/* The headline follows the horizon picker beside it: today's
+                    sailings and pax for "Today only", the window's total for
+                    anything longer - otherwise the picker looks inert, since
+                    the rest of the strip is deliberately about today. */}
+                <div className="hero-figure">
+                  {kpisLoading || boardLoading ? '…'
+                    : horizon > 1 ? (board?.today?.length ?? 0) + (board?.upcoming?.length ?? 0)
+                    : (kpis?.departuresToday ?? 0)}
+                </div>
+                <p className="hero-sub">
+                  {config.resourceTermPlural.toLowerCase()} {horizon > 1 ? `in the next ${horizon} days` : 'today'} ·{' '}
+                  {kpis ? `${horizon > 1 ? kpis.nextDaysPax : kpis.paxBookedToday} pax booked` : 'loading'}
+                </p>
               </div>
-              <p className="hero-sub">
-                {config.resourceTermPlural.toLowerCase()} {horizon > 1 ? `in the next ${horizon} days` : 'today'} ·{' '}
-                {kpis ? `${horizon > 1 ? kpis.nextDaysPax : kpis.paxBookedToday} pax booked` : 'loading'}
-              </p>
             </div>
             <div className="filter-bar" style={{ marginBottom: 0 }}>
               <select className="input" value={horizon} onChange={(e) => setHorizon(Number(e.target.value))}>

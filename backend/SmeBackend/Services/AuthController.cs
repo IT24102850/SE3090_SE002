@@ -14,48 +14,43 @@ public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IJwtService _jwtService;
-    
-    public AuthController(AppDbContext context, IJwtService jwtService)
+    private readonly ICustomerAccountService _customers;
+
+    public AuthController(AppDbContext context, IJwtService jwtService, ICustomerAccountService customers)
     {
         _context = context;
         _jwtService = jwtService;
+        _customers = customers;
     }
-    
-    // Public customer self-registration: signs the caller up as a Customer of
-    // an existing, active tenant. Role is never client-supplied (see
-    // RegisterDto) — this is the only role this endpoint can ever create.
+
+    // Public customer self-registration. Creates one global customer
+    // account (Services/CustomerAccountService.cs); TenantId is optional and,
+    // when given, also joins that business straight away so the token that
+    // comes back is already scoped to it. Role is never client-supplied
+    // (see RegisterDto) — Customer is the only role this can ever create.
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponseDto>> Register([FromBody] RegisterDto dto)
     {
-        var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.Id == dto.TenantId);
-        if (tenant == null || !tenant.IsActive)
-            return BadRequest(new { message = "This business is not available for sign-up." });
+        var email = dto.Email.Trim().ToLowerInvariant();
 
-        // Check if email exists
-        if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
+        if (dto.TenantId is { } tenantId)
+        {
+            var tenant = await _context.Tenants.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId);
+            if (tenant == null || !tenant.IsActive || CustomerAccountService.IsReserved(tenant.BusinessType))
+                return BadRequest(new { message = "This business is not available for sign-up." });
+        }
+
+        // One sign-in per email: any account that can log in with it (an
+        // identity, a legacy per-business customer, or staff) blocks it.
+        if (await _context.Users.IgnoreQueryFilters().AnyAsync(u => u.Email == email && u.LinkedAccountId == null))
             return BadRequest(new { message = "Email already registered" });
 
-        // Hash password with BCrypt
-        var passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
+        var user = await _customers.RegisterAsync(email, dto.Password, dto.FullName, dto.Phone, dto.TenantId, dto.BranchId);
 
-        var user = new User
-        {
-            Email = dto.Email,
-            PasswordHash = passwordHash,
-            FullName = dto.FullName,
-            Phone = dto.Phone,
-            TenantId = dto.TenantId,
-            BranchId = dto.BranchId,
-            Role = UserRole.Customer
-        };
-
-        _context.Users.Add(user);
-        await _context.SaveChangesAsync();
-        
         var token = _jwtService.GenerateAccessToken(user);
         var refreshToken = _jwtService.GenerateRefreshToken();
-        
+
         return Ok(new AuthResponseDto
         {
             AccessToken = token,
@@ -64,7 +59,7 @@ public class AuthController : ControllerBase
             User = MapToUserDto(user)
         });
     }
-    
+
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
@@ -85,19 +80,27 @@ public class AuthController : ControllerBase
             .IgnoreQueryFilters()
             .Include(u => u.Tenant)
             .Where(u => u.Email == dto.Email && u.IsActive)
+            // The platform owner signs in only through the platform console
+            // (PlatformAuthController), where a TOTP code is mandatory. The
+            // ordinary login never sees that account, so a leaked password
+            // alone opens nothing.
+            .Where(u => u.Role != UserRole.SuperAdmin)
+            // Memberships never sign in; the global identity does, and
+            // POST /auth/join mints per-business tokens from it.
+            .Where(u => u.LinkedAccountId == null)
             .OrderByDescending(u => u.CreatedAt)
             .ToListAsync();
 
         var user = candidates.FirstOrDefault(u => BCrypt.Net.BCrypt.Verify(dto.Password, u.PasswordHash));
         if (user == null)
             return Unauthorized(new { message = "Invalid email or password" });
-        
+
         if (!user.Tenant.IsActive)
             return Unauthorized(new { message = "Tenant is inactive" });
-        
+
         var token = _jwtService.GenerateAccessToken(user);
         var refreshToken = _jwtService.GenerateRefreshToken();
-        
+
         return Ok(new AuthResponseDto
         {
             AccessToken = token,
@@ -106,7 +109,33 @@ public class AuthController : ControllerBase
             User = MapToUserDto(user)
         });
     }
-    
+
+    /// <summary>
+    /// Customer joins a business: returns a token scoped to that business
+    /// (creating the membership on first contact), so the resource, slot and
+    /// booking endpoints - which are scoped by the token's tenant - work
+    /// there. Idempotent; the account's other memberships are untouched.
+    /// </summary>
+    [HttpPost("join/{tenantId:guid}")]
+    [Authorize(Roles = "Customer")]
+    public async Task<ActionResult<AuthResponseDto>> JoinBusiness(Guid tenantId)
+    {
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null) return Unauthorized();
+
+        var membership = await _customers.JoinAsync(Guid.Parse(userId), tenantId);
+        if (membership == null)
+            return BadRequest(new { message = "This business is not available." });
+
+        return Ok(new AuthResponseDto
+        {
+            AccessToken = _jwtService.GenerateAccessToken(membership),
+            RefreshToken = _jwtService.GenerateRefreshToken(),
+            ExpiresAt = DateTime.UtcNow.AddHours(2),
+            User = MapToUserDto(membership)
+        });
+    }
+
     [HttpGet("me")]
     [Authorize]
     public async Task<ActionResult<UserResponseDto>> GetCurrentUser()
@@ -145,6 +174,10 @@ public class AuthController : ControllerBase
         user.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+        // A customer is one person across every business they have joined;
+        // the identity and the other memberships get the same change.
+        if (user.Role == UserRole.Customer)
+            await _customers.PropagateProfileAsync(user.Id, user);
         return Ok(MapToUserDto(user));
     }
 
@@ -167,6 +200,9 @@ public class AuthController : ControllerBase
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
         user.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+        // The identity is what signs in, so it must carry the new hash too.
+        if (user.Role == UserRole.Customer)
+            await _customers.PropagatePasswordAsync(user.Id, user.PasswordHash);
 
         return Ok(new { message = "Password changed." });
     }

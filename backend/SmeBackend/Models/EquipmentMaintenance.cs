@@ -9,4 +9,6 @@ public class EquipmentMaintenance : BaseEntity
     public decimal Cost { get; set; }
     public string? Notes { get; set; }
     public string Status { get; set; } = "Scheduled";
+    /// <summary>JSON array of durable photo evidence URLs.</summary>
+    public string? PhotoUrls { get; set; }
 }

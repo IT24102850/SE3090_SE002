@@ -50,7 +50,13 @@ public class SightingsController : ControllerBase
         if (resourceId == Guid.Empty)
             return BadRequest(new { message = "Either DepartureId or ResourceId is required." });
 
-        var resourceExists = await _db.Resources.AnyAsync(r => r.Id == resourceId && r.TenantId == tenantId);
+        // Resource carries AppDbContext's ambient-tenant query filter, but this
+        // controller belongs to the half of the schema that scopes off the JWT's
+        // tenantId claim directly (see Departure's doc-comment). Relying on the
+        // ambient filter here silently returns nothing whenever TenantContext was
+        // never populated, so the scope is stated explicitly instead.
+        var resourceExists = await _db.Resources.IgnoreQueryFilters()
+            .AnyAsync(r => r.Id == resourceId && r.TenantId == tenantId && r.DeletedAt == null);
         if (!resourceExists) return NotFound(new { message = "Resource not found." });
 
         if (dto.Count is <= 0)

@@ -24,6 +24,13 @@ public class TenantService : ITenantService
     
     public async Task<AuthResponseDto> OnboardTenantAsync(TenantOnboardingDto dto)
     {
+        // "Platform" is reserved for the tenant that hosts the owner's
+        // account; a business registered under it would drop out of every
+        // platform report and the public directory.
+        if (string.Equals(dto.BusinessType?.Trim(), Data.PlatformOwnerSeeder.PlatformBusinessType, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(dto.BusinessType?.Trim(), CustomerAccountService.PoolBusinessType, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("That business type is reserved.");
+
         // Use transaction — all or nothing
         await using var transaction = await _context.Database.BeginTransactionAsync();
         

@@ -36,6 +36,9 @@ import './reservations.css';
 
 type View = 'list' | 'week';
 
+// Matches the live cadence of the operational dashboards.
+const LIVE_POLL_MS = 30_000;
+
 const AVATAR_HUES = [212, 262, 330, 20, 152, 190];
 
 const money = (n: number, currency = 'LKR') => `${currency} ${Math.round(n).toLocaleString()}`;
@@ -97,7 +100,11 @@ export default function BookingManagerPage() {
   const windowTo = useMemo(() => addDays(monthDays[41], 1), [monthDays]);
   const { data: windowData, isFetching: windowLoading } = useGetBookingsQuery(
     { ...scope, dateFrom: toISODate(windowFrom < monthDays[0] ? windowFrom : monthDays[0]), dateTo: toISODate(windowTo), pageSize: 1000 },
-    { skip: !tenantId },
+    /* This window is what "Next up" reads, and the desk watches it while
+     * customers book from their phones, so it refreshes on its own rather
+     * than only when this tab makes a change. Paused while the tab is in
+     * the background, and brought up to date the moment it is focused. */
+    { skip: !tenantId, pollingInterval: LIVE_POLL_MS, skipPollingIfUnfocused: true, refetchOnFocus: true, refetchOnReconnect: true },
   );
   const windowItems = useMemo(() => windowData?.items ?? [], [windowData]);
 

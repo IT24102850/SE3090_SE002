@@ -19,6 +19,11 @@ class PushNotificationService {
   /// BuildContext through here. Attach via MaterialApp(scaffoldMessengerKey:).
   static final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
 
+  /// The navigator, so a notification can be shown as an overlay entry rather
+  /// than a snack bar. The inventory feed (lib/inventory/app_notifications.dart)
+  /// needs an Overlay to insert into, and only the navigator has one.
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
   static Future<void> init(WidgetRef ref) async {
     if (kIsWeb) {
       // Web push needs a service worker + VAPID key, and there's no way to

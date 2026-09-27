@@ -19,7 +19,7 @@ public class InventoryControllerTests
     {
         var db = CreateDbContext();
         var authorizationService = CreateAuthorizationService();
-        var controller = new InventoryController(db, authorizationService.Object)
+        var controller = new InventoryController(db, authorizationService.Object, CreateAgentService().Object, CreateJwtService().Object)
         {
             ControllerContext = new ControllerContext
             {
@@ -59,7 +59,7 @@ public class InventoryControllerTests
         await db.SaveChangesAsync();
 
         var authorizationService = CreateAuthorizationService();
-        var controller = new InventoryController(db, authorizationService.Object)
+        var controller = new InventoryController(db, authorizationService.Object, CreateAgentService().Object, CreateJwtService().Object)
         {
             ControllerContext = new ControllerContext
             {
@@ -104,7 +104,7 @@ public class InventoryControllerTests
         await db.SaveChangesAsync();
 
         var authorizationService = CreateAuthorizationService();
-        var controller = new InventoryController(db, authorizationService.Object)
+        var controller = new InventoryController(db, authorizationService.Object, CreateAgentService().Object, CreateJwtService().Object)
         {
             ControllerContext = new ControllerContext
             {
@@ -120,6 +120,13 @@ public class InventoryControllerTests
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);
     }
+
+    /// The inventory AI is a separate service over HTTP. These tests are about
+    /// the controller's own listing and authorisation, so it is stubbed rather
+    /// than reached.
+    private static Mock<IInventoryAgentService> CreateAgentService() => new();
+
+    private static Mock<IJwtService> CreateJwtService() => new();
 
     private static Mock<IAuthorizationService> CreateAuthorizationService()
     {

@@ -22,11 +22,13 @@ namespace SmeBackend.Controllers;
 public class DeparturesController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly IWeatherForecastService _forecast;
     private readonly IPushNotificationSender _pushSender;
 
-    public DeparturesController(AppDbContext db, IPushNotificationSender pushSender)
+    public DeparturesController(AppDbContext db, IPushNotificationSender pushSender, IWeatherForecastService forecast)
     {
         _db = db;
+        _forecast = forecast;
         _pushSender = pushSender;
     }
 
@@ -162,8 +164,13 @@ public class DeparturesController : ControllerBase
     {
         if (!TryTenant(out var tenantId)) return Unauthorized();
 
-        var resource = await _db.Resources.AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == dto.ResourceId && r.TenantId == tenantId);
+        // Resource carries AppDbContext's ambient-tenant query filter, but this
+        // controller belongs to the half of the schema that scopes off the JWT's
+        // tenantId claim directly (see Departure's doc-comment). Relying on the
+        // ambient filter here silently returns nothing whenever TenantContext was
+        // never populated, so the scope is stated explicitly instead.
+        var resource = await _db.Resources.AsNoTracking().IgnoreQueryFilters()
+            .FirstOrDefaultAsync(r => r.Id == dto.ResourceId && r.TenantId == tenantId && r.DeletedAt == null);
         if (resource == null) return NotFound(new { message = "Vessel not found." });
 
         var scheduled = DateTimeUtil.AsUtc(dto.ScheduledDeparture);
@@ -522,6 +529,129 @@ public class DeparturesController : ControllerBase
         return Ok(new { latest = rows.Select(Project).FirstOrDefault(), items = rows.Select(Project) });
     }
 
+    /// <summary>Fetches the marine forecast for one departure, records it as an observation, and says whether it is safe to sail.</summary>
+    /// <remarks>
+    /// Open-Meteo, so there is no API key to distribute and nothing to expire -
+    /// an examiner can run this from a clean clone. The reading is stored as a
+    /// WeatherObservation with Source "Open-Meteo" so the console shows
+    /// forecast and manual readings side by side, and a manager can see which
+    /// is which before acting on it.
+    ///
+    /// It only ever *suggests* a cancellation. Cancelling is a destructive act
+    /// affecting every guest on the boat, so it stays behind the existing
+    /// cancel-weather endpoint and a human decision.
+    /// </remarks>
+    [HttpGet("{id}/forecast")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    public async Task<IActionResult> GetDepartureForecast(Guid id, CancellationToken ct)
+    {
+        if (!TryTenant(out var tenantId)) return Unauthorized();
+
+        var departure = await _db.Departures.AsNoTracking()
+            .Include(d => d.Resource)
+            .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == tenantId, ct);
+        if (departure == null) return NotFound(new { message = "Departure not found." });
+
+        var (lat, lon, origin) = ResolveCoordinates(departure.Resource);
+        if (lat is null || lon is null)
+        {
+            return Ok(new
+            {
+                available = false,
+                message = "This vessel has no latitude/longitude recorded, so a forecast cannot be fetched. " +
+                          "Add them to the resource's custom attributes.",
+            });
+        }
+
+        var forecast = await _forecast.GetForecastAsync(lat.Value, lon.Value, departure.ScheduledDeparture, ct);
+        if (forecast is null)
+        {
+            return Ok(new
+            {
+                available = false,
+                message = "The forecast service could not be reached. Record a manual reading instead.",
+            });
+        }
+
+        var risk = _forecast.Assess(forecast);
+
+        // Keep one forecast row per departure per hour: re-opening the console
+        // should refresh the reading, not fill the console with duplicates.
+        var existing = await _db.WeatherObservations.FirstOrDefaultAsync(
+            w => w.DepartureId == id && w.Source == "Open-Meteo" && w.ObservedAt == forecast.ForecastedFor, ct);
+
+        if (existing is null)
+        {
+            existing = new WeatherObservation
+            {
+                TenantId = tenantId,
+                ResourceId = departure.ResourceId,
+                DepartureId = departure.Id,
+                ObservedAt = forecast.ForecastedFor,
+                Source = "Open-Meteo",
+            };
+            _db.WeatherObservations.Add(existing);
+        }
+
+        existing.WindSpeedKnots = forecast.WindSpeedKnots;
+        existing.WaveHeightMetres = forecast.WaveHeightMetres;
+        existing.VisibilityKm = forecast.VisibilityKm;
+        existing.Note = string.Join(" ", risk.Reasons);
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new
+        {
+            available = true,
+            observation = Project(existing),
+            forecast = new
+            {
+                forecastedFor = forecast.ForecastedFor,
+                windSpeedKnots = forecast.WindSpeedKnots,
+                windGustKnots = forecast.WindGustKnots,
+                waveHeightMetres = forecast.WaveHeightMetres,
+                visibilityKm = forecast.VisibilityKm,
+                source = forecast.Source,
+                coordinates = new { latitude = lat, longitude = lon, from = origin },
+            },
+            risk = new
+            {
+                level = risk.Level,
+                suggestCancellation = risk.SuggestCancellation,
+                reasons = risk.Reasons,
+            },
+            guestsAffected = await _db.Bookings.CountAsync(
+                b => b.DepartureId == id && b.DeletedAt == null
+                  && b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.WeatherCancelled, ct),
+        });
+    }
+
+    /// Latitude/longitude for a vessel, read from the generic CustomAttributes
+    /// JSON the platform already uses for business-specific fields. Falls back
+    /// to Mirissa harbour so a tenant that has not recorded coordinates still
+    /// gets a usable local forecast rather than an error.
+    private static (double? Lat, double? Lon, string Origin) ResolveCoordinates(Resource? resource)
+    {
+        if (resource?.CustomAttributes is { Length: > 0 } raw)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(raw);
+                foreach (var (latKey, lonKey) in new[] { ("latitude", "longitude"), ("lat", "lng"), ("lat", "lon") })
+                {
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object
+                        && doc.RootElement.TryGetProperty(latKey, out var la)
+                        && doc.RootElement.TryGetProperty(lonKey, out var lo)
+                        && la.ValueKind == JsonValueKind.Number && lo.ValueKind == JsonValueKind.Number)
+                    {
+                        return (la.GetDouble(), lo.GetDouble(), "resource");
+                    }
+                }
+            }
+            catch (JsonException) { /* operator-authored JSON; fall through */ }
+        }
+        return (5.9483, 80.4716, "default (Mirissa harbour)");
+    }
+
     // ── Safety and compliance panel ────────────────────────────────────
     /// <summary>Per-vessel safety readiness: life jackets against licensed capacity, and expiry-dated gear that is expired or expiring soon.</summary>
     [HttpGet("safety")]
@@ -533,8 +663,13 @@ public class DeparturesController : ControllerBase
         expiringWithinDays = Math.Clamp(expiringWithinDays, 1, 365);
         var horizon = DateTime.UtcNow.Date.AddDays(expiringWithinDays);
 
-        var vessels = await _db.Resources.AsNoTracking()
-            .Where(r => r.TenantId == tenantId && r.Category == ResourceCategory.Vehicle)
+        // Resource carries AppDbContext's ambient-tenant query filter, but this
+        // controller belongs to the half of the schema that scopes off the JWT's
+        // tenantId claim directly (see Departure's doc-comment). Relying on the
+        // ambient filter here silently returns nothing whenever TenantContext was
+        // never populated, so the scope is stated explicitly instead.
+        var vessels = await _db.Resources.AsNoTracking().IgnoreQueryFilters()
+            .Where(r => r.TenantId == tenantId && r.Category == ResourceCategory.Vehicle && r.DeletedAt == null)
             .ToListAsync();
 
         // Equipment is tenant-wide, not per-vessel (EquipmentItem has no

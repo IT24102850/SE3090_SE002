@@ -167,3 +167,15 @@ html[data-unify-theme='dark'] .su-field.is-valid { border-bottom-color: #3f8f78;
   .su-actions { flex-direction: column; align-items: stretch; }
   .su-submit { justify-content: space-between; }
 }
+
+/* Customer sign-up ends here rather than in the admin dashboard: the web app
+   has nothing for a customer to do, the Unify app does. */
+.su-done { display: grid; gap: 12px; padding: 22px 22px 20px; border: 1px solid var(--line); border-radius: 18px; color: var(--ink); }
+.su-done-mark { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: var(--brand); color: #fff; font-size: 1.3rem; font-weight: 900; }
+.su-done h2 { margin: 2px 0 0; font-size: 1.3rem; letter-spacing: -.02em; }
+.su-done p { margin: 0; line-height: 1.55; color: var(--faint); }
+.su-done p b { color: var(--ink); }
+.su-done-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 4px; }
+.su-done-actions .su-submit { text-decoration: none; }
+.su-link-btn { border: 0; background: none; padding: 0; color: var(--faint); font: inherit; text-decoration: underline; cursor: pointer; }
+.su-link-btn:hover { color: var(--ink); }

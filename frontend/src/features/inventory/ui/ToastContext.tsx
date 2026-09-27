@@ -1,44 +1,18 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
+import { useToast as useSharedToast } from '../../../shared/components/Toast';
 
 export type ToastTone = 'success' | 'error' | 'warning' | 'info';
-type Toast = { id: number; message: string; tone: ToastTone };
 type ToastContextValue = { notify: (message: string, tone?: ToastTone) => void };
 
 const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const dismiss = useCallback((id: number) => {
-    setToasts((current) => current.filter((toast) => toast.id !== id));
-  }, []);
-  const notify = useCallback((message: string, tone: ToastTone = 'success') => {
-    const id = Date.now() + Math.random();
-    setToasts((current) => [...current, { id, message, tone }]);
-    window.setTimeout(() => dismiss(id), tone === 'error' || tone === 'warning' ? 6000 : 4200);
-  }, [dismiss]);
-  const value = useMemo(() => ({ notify }), [notify]);
+  const { show } = useSharedToast();
+  const value = { notify: show };
+
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="inventory-scope">
-        <div className="toast-region" aria-live="polite" aria-relevant="additions">
-          {toasts.map((toast) => (
-            <div className={`toast toast-${toast.tone}`} key={toast.id} role={toast.tone === 'error' ? 'alert' : 'status'}>
-              <span className="toast-icon" aria-hidden="true">
-                {toast.tone === 'success' ? '✓' : toast.tone === 'error' ? '×' : toast.tone === 'warning' ? '!' : 'i'}
-              </span>
-              <div className="toast-message">
-                <strong className="toast-tone-label">
-                  {toast.tone === 'success' ? 'Success' : toast.tone === 'error' ? 'Failed' : toast.tone === 'warning' ? 'Warning' : 'Information'}
-                </strong>
-                <span className="toast-copy">{toast.message}</span>
-              </div>
-              <button className="toast-close toast-dismiss" type="button" aria-label="Dismiss notification" onClick={() => dismiss(toast.id)}>×</button>
-              <span className="toast-progress" aria-hidden="true" />
-            </div>
-          ))}
-        </div>
-      </div>
     </ToastContext.Provider>
   );
 }

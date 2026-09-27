@@ -21,6 +21,8 @@ class GlassListTile extends StatelessWidget {
     this.onTap,
     this.showChevron = true,
     this.borderColor,
+    this.active = false,
+    this.activeColor = AppColors.cyan,
     this.padding = const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
   });
 
@@ -40,55 +42,74 @@ class GlassListTile extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showChevron;
   final Color? borderColor;
+  final bool active;
+  final Color activeColor;
   final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
     final effectiveTrailing = trailing ??
         (onTap != null && showChevron
-            ? const Icon(Icons.chevron_right_rounded, color: AppColors.chevron, size: 22)
+            ? const Icon(Icons.chevron_right_rounded,
+                color: AppColors.chevron, size: 22)
             : null);
 
-    return GlassCard(
-      onTap: onTap,
-      padding: padding,
-      borderRadius: AppRadii.row,
-      borderColor: borderColor,
-      child: Row(
-        children: [
-          if (leading != null)
-            leading!
-          else if (icon != null)
-            IconWell(icon: icon!, color: iconColor),
-          if (leading != null || icon != null) const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: AppTextStyles.subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+    return Container(
+      decoration: active
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadii.row),
+              boxShadow: [
+                BoxShadow(
+                  color: activeColor.withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  spreadRadius: 1,
                 ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 3),
+              ],
+            )
+          : null,
+      child: GlassCard(
+        onTap: onTap,
+        padding: padding,
+        borderRadius: AppRadii.row,
+        borderColor: active ? activeColor.withValues(alpha: 0.5) : borderColor,
+        fill:
+            active ? Color.lerp(AppColors.glassFill, activeColor, 0.07) : null,
+        child: Row(
+          children: [
+            if (leading != null)
+              leading!
+            else if (icon != null)
+              IconWell(icon: icon!, color: iconColor),
+            if (leading != null || icon != null) const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   Text(
-                    subtitle!,
-                    style: AppTextStyles.caption,
-                    maxLines: 2,
+                    title,
+                    style: AppTextStyles.subtitle,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle!,
+                      style: AppTextStyles.caption,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-          if (effectiveTrailing != null) ...[
-            const SizedBox(width: 10),
-            effectiveTrailing,
+            if (effectiveTrailing != null) ...[
+              const SizedBox(width: 10),
+              effectiveTrailing,
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -109,11 +130,23 @@ class IconWell extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColors.iconWell,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF252B4A), AppColors.iconWell],
+        ),
         shape: BoxShape.circle,
         border: Border.all(color: AppColors.hairline),
+        boxShadow: [
+          BoxShadow(
+            color: (color ?? AppColors.cyan).withValues(alpha: 0.12),
+            blurRadius: 10,
+            spreadRadius: -2,
+          ),
+        ],
       ),
-      child: Icon(icon, size: size * 0.5, color: color ?? AppColors.iconPrimary),
+      child:
+          Icon(icon, size: size * 0.5, color: color ?? AppColors.iconPrimary),
     );
   }
 }

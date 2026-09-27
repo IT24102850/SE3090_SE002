@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
@@ -56,7 +57,13 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       leading: leading,
       iconTheme: const IconThemeData(color: AppColors.iconPrimary),
       actionsIconTheme: const IconThemeData(color: AppColors.iconPrimary),
-      title: titleWidget ?? (title == null ? null : Text(title!, style: AppTextStyles.title)),
+      systemOverlayStyle: const SystemUiOverlayStyle(
+        statusBarColor: Color(0xFF101943),
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      title: titleWidget ??
+          (title == null ? null : Text(title!, style: AppTextStyles.title)),
       actions: actions,
       bottom: bottom,
       // ClipRect bounds the blur to the bar; without it the filter samples the
@@ -66,8 +73,17 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
           filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
           child: const DecoratedBox(
             decoration: BoxDecoration(
-              color: AppColors.chromeFill,
-              border: Border(bottom: BorderSide(color: AppColors.hairline, width: 1)),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xCC101943),
+                  Color(0xB51C1B4A),
+                  Color(0xA80B2A4A),
+                ],
+              ),
+              border: Border(
+                  bottom: BorderSide(color: AppColors.hairline, width: 1)),
             ),
             child: SizedBox.expand(),
           ),

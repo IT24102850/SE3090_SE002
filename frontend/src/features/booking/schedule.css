@@ -1,0 +1,117 @@
+/* Multi-Branch Schedule and Booking Types.
+ *
+ * Both pages borrow the Reservations page's language wholesale — the same
+ * `.rsv` two-column frame, the same gradient KPI strip, the same card and
+ * toolbar shells — so the Scheduling section reads as one product rather
+ * than three. Only what those two pages genuinely need that Reservations
+ * does not is defined here: the gantt board, and the service catalogue's
+ * card grid. */
+
+/* ── Day navigator ──────────────────────────────────────────── */
+/* Replaces the raw <input type="date">, which was the loudest unfinished
+   thing on the page: a browser control that matches nothing around it. */
+.sch-daynav { display: flex; align-items: center; gap: 8px; }
+.sch-daynav-date { display: flex; flex-direction: column; align-items: center; min-width: 168px; padding: 6px 14px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); cursor: pointer; }
+.sch-daynav-date:hover { border-color: var(--color-primary); }
+.sch-daynav-date strong { font-size: .92rem; font-weight: 800; letter-spacing: -.01em; }
+.sch-daynav-date span { font-size: .68rem; color: var(--color-text-muted); }
+.sch-daynav-date input { position: absolute; opacity: 0; width: 0; height: 0; }
+.sch-step { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); color: var(--color-text-secondary); cursor: pointer; font-size: 1rem; }
+.sch-step:hover { background: var(--hover-tint); color: var(--color-text); border-color: var(--color-primary); }
+
+/* ── Gantt board ────────────────────────────────────────────── */
+.sch-board { overflow: hidden; }
+.sch-board-head { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--color-border); }
+.sch-board-title { margin: 0; font-size: .95rem; font-weight: 800; }
+.sch-board-sub { margin: 2px 0 0; font-size: .74rem; color: var(--color-text-muted); }
+.sch-load { flex: none; width: 120px; }
+.sch-load-track { height: 6px; border-radius: 99px; background: var(--color-surface-muted); overflow: hidden; }
+.sch-load-fill { height: 100%; border-radius: 99px; background: var(--gradient-brand); }
+.sch-load-label { margin-top: 4px; font-size: .66rem; color: var(--color-text-muted); text-align: right; }
+
+.sch-grid { position: relative; }
+.sch-hours { display: grid; grid-template-columns: 190px 1fr; border-bottom: 1px solid var(--color-border-strong); background: var(--color-surface-muted); }
+.sch-hours-track { display: grid; }
+.sch-hours-col { padding: 7px 0 7px 6px; font-size: .64rem; font-weight: 700; letter-spacing: .04em; color: var(--color-text-muted); border-left: 1px solid var(--color-border); }
+.sch-row { display: grid; grid-template-columns: 190px 1fr; border-bottom: 1px solid var(--color-border); }
+.sch-row:last-child { border-bottom: 0; }
+.sch-row:hover { background: var(--hover-tint); }
+.sch-row-label { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 10px 14px; border-right: 1px solid var(--color-border); min-width: 0; }
+.sch-row-name { font-size: .82rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sch-row-meta { font-size: .68rem; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sch-track { position: relative; min-height: 52px; background-image: repeating-linear-gradient(to right, var(--color-border) 0 1px, transparent 1px var(--sch-hour, 8.33%)); }
+.sch-bar {
+  position: absolute; top: 8px; bottom: 8px; display: flex; align-items: center; gap: 5px;
+  padding: 0 8px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .28);
+  font-size: .7rem; font-weight: 700; color: #fff; cursor: pointer; overflow: hidden; white-space: nowrap;
+  box-shadow: 0 6px 14px -8px rgba(10, 15, 29, .6); transition: transform .12s, box-shadow .12s, filter .12s;
+}
+.sch-bar:hover { transform: translateY(-1px); filter: brightness(1.08); box-shadow: 0 10px 20px -8px rgba(10, 15, 29, .7); z-index: 3; }
+.sch-bar i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, .85); flex: none; }
+/* A booking that has run its course recedes, so the live board reads first. */
+.sch-bar.is-done { opacity: .58; }
+.sch-bar.is-dropped { opacity: .4; text-decoration: line-through; }
+/* Two bookings on one resource at one time: the board must show the clash,
+   not hide one behind the other. */
+.sch-bar.is-clash { border-color: var(--color-critical); box-shadow: 0 0 0 2px var(--color-critical-soft); }
+.sch-now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--color-critical); z-index: 2; pointer-events: none; }
+.sch-now::before { content: ''; position: absolute; top: -3px; left: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--color-critical); }
+.sch-rowempty { display: grid; place-items: center; font-size: .72rem; color: var(--color-text-muted); }
+
+.sch-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--color-border); font-size: .72rem; color: var(--color-text-secondary); }
+.sch-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sch-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* ── Ranked list in the rail ────────────────────────────────── */
+.sch-rank { padding: 6px 18px 14px; }
+.sch-rank-row { padding: 9px 0; border-bottom: 1px solid var(--color-border); }
+.sch-rank-row:last-child { border-bottom: 0; }
+.sch-rank-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.sch-rank-name { font-size: .82rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sch-rank-value { font-size: .74rem; font-weight: 800; color: var(--color-primary); white-space: nowrap; }
+.sch-rank-track { margin-top: 6px; height: 5px; border-radius: 99px; background: var(--color-surface-muted); overflow: hidden; }
+.sch-rank-fill { height: 100%; border-radius: 99px; background: var(--gradient-brand); }
+.sch-rank-sub { margin-top: 3px; font-size: .68rem; color: var(--color-text-muted); }
+
+/* ── Booking types catalogue ────────────────────────────────── */
+/* A service is a thing a customer picks, so it is shown as a card with its
+   own colour, not as a row in a table that could be anything. */
+.svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.svc {
+  position: relative; overflow: hidden; display: flex; flex-direction: column;
+  border: 1px solid var(--color-border); border-radius: 18px; background: var(--color-surface);
+  box-shadow: var(--shadow-sm); transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.svc:hover { transform: translateY(-3px); box-shadow: 0 18px 34px -20px rgba(10, 15, 29, .5); border-color: var(--svc, var(--color-primary)); }
+.svc.is-retired { opacity: .62; }
+.svc-top { position: relative; padding: 18px 18px 14px; }
+/* A wash of the service's own colour, so a wall of cards is scannable by
+   hue before a single word is read. */
+.svc-top::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, var(--svc) 0%, transparent 72%); opacity: .14; pointer-events: none; }
+.svc-head { position: relative; display: flex; align-items: flex-start; gap: 12px; }
+.svc-badge { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 14px; color: #fff; font-size: 1.1rem; font-weight: 800; background: var(--svc); box-shadow: 0 8px 18px -10px var(--svc); }
+.svc-name { margin: 0; font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
+.svc-desc { margin: 4px 0 0; font-size: .76rem; color: var(--color-text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.svc-flags { position: relative; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.svc-flag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 99px; font-size: .68rem; font-weight: 700; background: var(--color-surface-muted); color: var(--color-text-secondary); }
+.svc-flag.is-on { color: var(--color-warning); background: var(--color-warning-soft); }
+.svc-flag.is-good { color: var(--color-good); background: var(--color-good-soft); }
+.svc-specs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--color-border); }
+.svc-spec { padding: 11px 12px; text-align: center; border-right: 1px solid var(--color-border); }
+.svc-spec:last-child { border-right: 0; }
+.svc-spec b { display: block; font-size: .88rem; font-weight: 800; letter-spacing: -.02em; }
+.svc-spec span { font-size: .64rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted); }
+.svc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--color-border); background: var(--color-surface-muted); }
+.svc-usage { font-size: .7rem; color: var(--color-text-muted); }
+.svc-actions { display: flex; gap: 4px; }
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .sch-hours, .sch-row { grid-template-columns: 140px 1fr; }
+}
+@media (max-width: 720px) {
+  .sch-hours, .sch-row { grid-template-columns: 110px 1fr; }
+  .sch-row-label { padding: 8px 10px; }
+  .sch-daynav-date { min-width: 130px; }
+  .svc-grid { grid-template-columns: 1fr; }
+}

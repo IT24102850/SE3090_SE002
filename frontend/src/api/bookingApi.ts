@@ -5,6 +5,7 @@ import type {
   AgentWorkflow,
   AvailabilityDay,
   DepartureBoard,
+  DepartureForecast,
   DepartureManifest,
   ExcursionKpis,
   RescheduleOption,
@@ -16,6 +17,24 @@ import type {
   AvailabilitySearchResult,
   AvailableSlotsResponse,
   Booking,
+  ClinicAlert,
+  ClinicFlow,
+  ClinicOverview,
+  ClinicOverviewParams,
+  ClinicReminders,
+  GymAttendance,
+  SchoolOverview,
+  SchoolOverviewParams,
+  SchoolGradebook,
+  SchoolStudentDetail,
+  SchoolToday,
+  GymLive,
+  GymOverview,
+  GymOverviewParams,
+  RestaurantInventory,
+  RestaurantLive,
+  RestaurantOverview,
+  RestaurantOverviewParams,
   BookingType,
   Branch,
   ConflictPair,
@@ -77,10 +96,19 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
   return result;
 };
 
+/* Every booking write also leaves a trail in the notification centre - the
+ * customer's confirmation and the desk's tenant-wide copy - so a write that
+ * does not invalidate these leaves the bell showing a stale count until its
+ * next poll. Spread into each booking mutation's invalidatesTags. */
+const NOTIFICATION_TAGS = [
+  { type: 'Notification' as const, id: 'LIST' },
+  { type: 'Notification' as const, id: 'COUNT' },
+];
+
 export const bookingApi = createApi({
   reducerPath: 'bookingApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification', 'Departure', 'Sighting', 'Weather', 'Safety'],
+  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification', 'Departure', 'Sighting', 'Weather', 'Safety', 'RestaurantInventory'],
   endpoints: (builder) => ({
     // ── Branches ──────────────────────────────────────────
     getBranches: builder.query<Branch[], { tenantId: string }>({
@@ -227,7 +255,7 @@ export const bookingApi = createApi({
       }
     >({
       query: (body) => ({ url: '/bookings', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     updateBooking: builder.mutation<unknown, { id: string; body: Partial<Booking> }>({
       query: ({ id, body }) => ({ url: `/bookings/${id}`, method: 'PUT', body }),
@@ -239,15 +267,15 @@ export const bookingApi = createApi({
     }),
     rescheduleBooking: builder.mutation<unknown, { id: string; newStartTime: string; newEndTime: string }>({
       query: ({ id, ...body }) => ({ url: `/bookings/${id}/reschedule`, method: 'PUT', body }),
-      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }],
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     cancelBooking: builder.mutation<void, string>({
       query: (id) => ({ url: `/bookings/${id}/cancel`, method: 'PUT' }),
-      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     updateBookingStatus: builder.mutation<unknown, { id: string; status: string }>({
       query: ({ id, status }) => ({ url: `/bookings/${id}/status`, method: 'PUT', body: { status } }),
-      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Booking', id: 'MINE' }],
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Booking', id: 'MINE' }, ...NOTIFICATION_TAGS],
     }),
     sendReminder: builder.mutation<{ message: string }, { id: string; channel: string }>({
       query: ({ id, channel }) => ({ url: `/bookings/${id}/remind`, method: 'POST', body: { channel } }),
@@ -264,7 +292,7 @@ export const bookingApi = createApi({
     }),
     bulkSchedule: builder.mutation<any, { tenantId: string; bookings: any[] }>({
       query: (body) => ({ url: '/bookings/bulk-schedule', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     createRecurringBooking: builder.mutation<
       | { totalRequested: number; created: number; skippedConflicts: number }
@@ -276,7 +304,7 @@ export const bookingApi = createApi({
       }
     >({
       query: (body) => ({ url: '/bookings/recurring', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     // FR-AS8: the logged-in doctor/staff member's own schedule.
     getMySchedule: builder.query<Booking[], { date?: string } | void>({
@@ -285,7 +313,67 @@ export const bookingApi = createApi({
     }),
     checkInBooking: builder.mutation<{ message: string }, string>({
       query: (id) => ({ url: `/bookings/${id}/checkin`, method: 'POST' }),
-      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
+    }),
+    /* Spec 2.5's "revenue per slot": which hour of the day earns, not which
+       resource earns. `tz` is minutes east of UTC so the hours are the
+       operator's own clock, matching the dashboards' convention. */
+    getRevenuePerSlot: builder.query<
+      {
+        totalRevenue: number; totalBookings: number; averagePerBooking: number; forgoneRevenue: number;
+        busiestHour: number | null; richestHour: number | null;
+        slots: { hour: number; label: string; bookings: number; earnedBookings: number; lostBookings: number; guests: number; revenue: number; averageValue: number; forgoneRevenue: number }[];
+      },
+      { tenantId: string; from: string; to: string; branchId?: string; tz?: number }
+    >({
+      query: (params) => ({ url: '/bookings/reports/revenue-per-slot', params }),
+    }),
+    /* Spec 2.3's AvailabilitySlots, made real: a business can now hold its
+       capacity rather than only compute it. */
+    getAvailabilitySlots: builder.query<
+      {
+        total: number; booked: number; free: number; utilisationPercent: number;
+        days: { date: string; total: number; booked: number;
+          slots: { id: string; date: string; startTime: string; endTime: string; isBooked: boolean; bookingId: string | null }[] }[];
+      },
+      { id: string; from: string; to: string; onlyFree?: boolean }
+    >({
+      query: ({ id, ...params }) => ({ url: `/resources/${id}/availability-slots`, params }),
+      providesTags: (_r, _e, { id }) => [{ type: 'ResourceSchedule', id: `slots-${id}` }],
+    }),
+    generateAvailabilitySlots: builder.mutation<
+      { created: number; skipped: number; days: number },
+      { id: string; from: string; to: string; slotMinutes: number }
+    >({
+      query: ({ id, ...body }) => ({ url: `/resources/${id}/availability-slots/generate`, method: 'POST', body }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'ResourceSchedule', id: `slots-${id}` }],
+    }),
+    deleteAvailabilitySlots: builder.mutation<
+      { removed: number; keptBecauseBooked: number },
+      { id: string; from: string; to: string }
+    >({
+      query: ({ id, ...params }) => ({ url: `/resources/${id}/availability-slots`, method: 'DELETE', params }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'ResourceSchedule', id: `slots-${id}` }],
+    }),
+
+    /* Spec 2.3's RecurringPatterns, previously write-only. */
+    getRecurringSeries: builder.query<
+      {
+        items: {
+          patternId: string; anchorBookingId: string; title: string | null;
+          resourceName: string | null; bookingTypeName: string | null; colorHex: string | null;
+          frequency: string; daysOfWeek: number[]; endDate: string; startTime: string;
+          total: number; remaining: number; cancelled: number; isActive: boolean;
+        }[];
+      },
+      { tenantId: string }
+    >({
+      query: (params) => ({ url: '/bookings/series', params }),
+      providesTags: [{ type: 'Booking', id: 'SERIES' }],
+    }),
+    cancelRecurringSeries: builder.mutation<{ cancelled: number }, string>({
+      query: (patternId) => ({ url: `/bookings/series/${patternId}`, method: 'DELETE' }),
+      invalidatesTags: [{ type: 'Booking', id: 'SERIES' }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     getNoShowStats: builder.query<
       { total: number; noShows: number; completed: number; cancelled: number; noShowRate: number; utilizationRate: number },
@@ -371,6 +459,13 @@ export const bookingApi = createApi({
     >({
       query: (params) => ({ url: '/departures/weather', params: params ?? undefined }),
       providesTags: [{ type: 'Weather', id: 'LIST' }],
+    }),
+    // Open-Meteo forecast for one departure. Fetched on demand rather than
+    // polled: it is a third-party call, and a board showing twelve sailings
+    // should not make twelve of them on a timer.
+    getDepartureForecast: builder.query<DepartureForecast, string>({
+      query: (departureId) => ({ url: `/departures/${departureId}/forecast` }),
+      providesTags: (_r, _e, id) => [{ type: 'Weather', id }],
     }),
     recordWeather: builder.mutation<
       WeatherObservation,
@@ -511,6 +606,106 @@ export const bookingApi = createApi({
       query: (params) => ({ url: '/reports/excursions/channel-split', params }),
     }),
 
+    // ── Clinic operations dashboard ─────────────────────
+    // All four carry the Booking LIST tag: a check-in, a status change or
+    // a reminder sent from the flow board invalidates that tag already, so
+    // the waiting room and the alerts refresh without extra wiring.
+    getClinicOverview: builder.query<ClinicOverview, ClinicOverviewParams | void>({
+      query: (params) => ({ url: '/reports/clinic/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getClinicFlow: builder.query<ClinicFlow, { on?: string; branchId?: string; resourceId?: string } | void>({
+      query: (params) => ({ url: '/reports/clinic/flow', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getClinicAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string } | void>({
+      query: (params) => ({ url: '/reports/clinic/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getClinicReminders: builder.query<ClinicReminders, { withinHours?: number; branchId?: string } | void>({
+      query: (params) => ({ url: '/reports/clinic/reminders', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
+    // ── Restaurant operations dashboard ─────────────────
+    // Same tagging as the clinic: Booking LIST so an order moved along the
+    // feed refreshes the KPIs, kitchen board and alerts. Inventory carries
+    // its own tag so logging waste refreshes only the stock panel.
+    getRestaurantOverview: builder.query<RestaurantOverview, RestaurantOverviewParams | void>({
+      query: (params) => ({ url: '/reports/restaurant/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+    getRestaurantLive: builder.query<RestaurantLive, { on?: string; branchId?: string; resourceId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/restaurant/live', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getRestaurantAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/restaurant/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+    getRestaurantInventory: builder.query<RestaurantInventory, { from?: string; to?: string; branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/restaurant/inventory', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+    logInventoryWaste: builder.mutation<unknown, { id: string; quantity: number; reason?: string; notes?: string; reference?: string }>({
+      query: ({ id, ...body }) => ({ url: `/inventory/${id}/waste`, method: 'POST', body }),
+      invalidatesTags: [{ type: 'RestaurantInventory', id: 'LIST' }],
+    }),
+
+    // ── Gym / fitness operations dashboard ──────────────
+    getGymOverview: builder.query<GymOverview, GymOverviewParams | void>({
+      query: (params) => ({ url: '/reports/gym/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getGymLive: builder.query<GymLive, { branchId?: string; resourceId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/gym/live', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getGymAttendance: builder.query<GymAttendance, { from?: string; to?: string; branchId?: string; resourceId?: string; search?: string; method?: string; page?: number; pageSize?: number; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/gym/attendance', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getGymAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/gym/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
+    // ── School / tuition-centre dashboard ───────────────
+    // Marking attendance or entering a grade invalidates Booking LIST, so
+    // the timetable, KPIs and at-risk list refresh together.
+    getSchoolOverview: builder.query<SchoolOverview, SchoolOverviewParams | void>({
+      query: (params) => ({ url: '/reports/school/overview', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    getSchoolToday: builder.query<SchoolToday, { on?: string; branchId?: string; resourceId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/school/today', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    getSchoolStudent: builder.query<SchoolStudentDetail, { id: string; from?: string; to?: string; tz?: number }>({
+      query: ({ id, ...params }) => ({ url: `/reports/school/students/${id}`, params }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getSchoolGradebook: builder.query<SchoolGradebook, { from?: string; to?: string; branchId?: string; bookingTypeId?: string; grade?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/school/gradebook', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    getSchoolAlerts: builder.query<{ asOf: string; alerts: ClinicAlert[] }, { branchId?: string; tz?: number } | void>({
+      query: (params) => ({ url: '/reports/school/alerts', params: params ?? undefined }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    markSchoolAttendance: builder.mutation<unknown, { bookingId: string; mark: string; points?: number | null; note?: string | null }>({
+      query: (body) => ({ url: '/reports/school/attendance', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+    approveSchoolUser: builder.mutation<unknown, { userId: string; role?: string }>({
+      query: (body) => ({ url: '/reports/school/approve', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Staff', id: 'LIST' }],
+    }),
+    gradeSchoolAssessment: builder.mutation<unknown, { bookingId: string; score: number | null; maxScore?: number | null; feedback?: string | null }>({
+      query: (body) => ({ url: '/reports/school/grade', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
     // ── Resources ─────────────────────────────────────────
     getResources: builder.query<
       PagedResult<Resource>,
@@ -592,6 +787,23 @@ export const bookingApi = createApi({
     }),
 
     // ── Agent workflows (FR-B12: planner propose/approve/apply) ───────────
+    // ── Customer side (mirrors the Flutter customer screens) ──
+    getMyWorkflows: builder.query<AgentWorkflow[], void>({
+      query: () => '/agent/workflow/mine',
+      providesTags: [{ type: 'Workflow', id: 'MINE' }],
+    }),
+    findAndBook: builder.mutation<
+      { workflowId: string; status: string; bookingId?: string | null; message?: string | null },
+      { objective: string; dateFrom?: string; dateTo?: string; extraConstraints?: Record<string, unknown> }
+    >({
+      query: (body) => ({ url: '/agent/find-and-book', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Workflow', id: 'MINE' }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
+    }),
+    getUnavailableRanges: builder.query<{ startTime: string; endTime: string }[], { resourceId: string; from: string; to: string }>({
+      query: (params) => ({ url: '/bookings/unavailable-ranges', params }),
+      providesTags: [{ type: 'Booking', id: 'LIST' }],
+    }),
+
     getWorkflows: builder.query<AgentWorkflow[], { tenantId: string; status?: string }>({
       query: (params) => ({ url: '/agent/workflow', params }),
       providesTags: (result) =>
@@ -606,6 +818,25 @@ export const bookingApi = createApi({
       query: (body) => ({ url: '/agent/workflow/propose', method: 'POST', body }),
       invalidatesTags: [{ type: 'Workflow', id: 'LIST' }],
     }),
+    // Schedule Copilot (spec 2.7): runs the four-agent workflow and returns
+    // the stored workflow together with the agents' full trace.
+    planSchedule: builder.mutation<
+      { workflow: AgentWorkflow; trace: unknown },
+      {
+        tenantId: string;
+        objective: string;
+        bookingTypeId: string;
+        dateFrom: string;
+        dateTo: string;
+        targetCount: number;
+        resourceIds?: string[];
+        priorityRules?: string[];
+        branchId?: string;
+      }
+    >({
+      query: (body) => ({ url: '/agent/workflow/plan-schedule', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Workflow', id: 'LIST' }, ...NOTIFICATION_TAGS],
+    }),
     approveWorkflow: builder.mutation<{ message: string }, string>({
       query: (id) => ({ url: `/agent/workflow/${id}/approve`, method: 'POST' }),
       invalidatesTags: (_r, _e, id) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }],
@@ -616,7 +847,7 @@ export const bookingApi = createApi({
     }),
     applyWorkflow: builder.mutation<{ message: string; created: number; skipped: number }, string>({
       query: (id) => ({ url: `/agent/workflow/${id}/apply`, method: 'POST' }),
-      invalidatesTags: (_r, _e, id) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: (_r, _e, id) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     reviseWorkflow: builder.mutation<AgentWorkflow, { id: string; plan: { steps: unknown[]; estimatedRevenueImpact: number } }>({
       query: ({ id, plan }) => ({ url: `/agent/workflow/${id}/revise`, method: 'POST', body: { plan } }),
@@ -669,7 +900,13 @@ export const {
   useLazyGetAvailableSlotsQuery,
   useGetConflictsQuery,
   useBulkScheduleMutation,
+  useGetAvailabilitySlotsQuery,
+  useGenerateAvailabilitySlotsMutation,
+  useDeleteAvailabilitySlotsMutation,
+  useGetRecurringSeriesQuery,
+  useCancelRecurringSeriesMutation,
   useGetNoShowStatsQuery,
+  useGetRevenuePerSlotQuery,
   useGetDepartureBoardQuery,
   useGetDepartureManifestQuery,
   useCreateDepartureMutation,
@@ -680,6 +917,8 @@ export const {
   useGetRescheduleOptionsQuery,
   useBulkRescheduleDepartureMutation,
   useGetWeatherQuery,
+  useGetDepartureForecastQuery,
+  useLazyGetDepartureForecastQuery,
   useRecordWeatherMutation,
   useGetSafetyPanelQuery,
   useGetSightingsQuery,
@@ -691,6 +930,30 @@ export const {
   useSetBookingTicketsMutation,
   useSetBookingWaiverMutation,
   useGetExcursionKpisQuery,
+  useGetClinicOverviewQuery,
+  useGetClinicFlowQuery,
+  useGetClinicAlertsQuery,
+  useGetClinicRemindersQuery,
+  useGetRestaurantOverviewQuery,
+  useGetRestaurantLiveQuery,
+  useGetRestaurantAlertsQuery,
+  useGetRestaurantInventoryQuery,
+  useLogInventoryWasteMutation,
+  useGetGymOverviewQuery,
+  useGetGymLiveQuery,
+  useGetGymAttendanceQuery,
+  useGetGymAlertsQuery,
+  useGetSchoolOverviewQuery,
+  useGetSchoolTodayQuery,
+  useGetSchoolStudentQuery,
+  useGetSchoolAlertsQuery,
+  useGetSchoolGradebookQuery,
+  useMarkSchoolAttendanceMutation,
+  useGradeSchoolAssessmentMutation,
+  useApproveSchoolUserMutation,
+  useGetMyWorkflowsQuery,
+  useFindAndBookMutation,
+  useGetUnavailableRangesQuery,
   useGetRevenueByTicketTypeQuery,
   useGetPerDepartureReportQuery,
   useGetWeatherCancellationReportQuery,
@@ -711,6 +974,7 @@ export const {
   useGetStaffUsersQuery,
   useGetWorkflowsQuery,
   useProposeScheduleMutation,
+  usePlanScheduleMutation,
   useApproveWorkflowMutation,
   useRejectWorkflowMutation,
   useApplyWorkflowMutation,

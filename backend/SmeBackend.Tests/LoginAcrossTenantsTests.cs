@@ -16,6 +16,7 @@ public class LoginAcrossTenantsTests
     private sealed class StubJwtService : IJwtService
     {
         public string GenerateAccessToken(User user) => "stub";
+        public string GeneratePlatformAccessToken(User user, string jti, DateTime expiresAt) => "stub";
         public string GenerateRefreshToken() => "stub";
         public ClaimsPrincipal? ValidateToken(string token) => null;
     }
@@ -42,7 +43,7 @@ public class LoginAcrossTenantsTests
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("nandana2004"), CreatedAt = DateTime.UtcNow.AddDays(-2),
         });
         await db.SaveChangesAsync();
-        return new AuthController(db, new StubJwtService());
+        return new AuthController(db, new StubJwtService(), new CustomerAccountService(db));
     }
 
     private static async Task<Guid?> LoginTenant(AuthController controller, string password)

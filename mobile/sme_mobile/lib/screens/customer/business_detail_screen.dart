@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/public_tenant_model.dart';
 import '../../models/resource_model.dart';
 import '../../models/tourism_subtype.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/booking_providers.dart';
 import '../../providers/tenant_profile_provider.dart';
 import '../../theme/app_theme.dart';
@@ -25,9 +26,62 @@ class _BusinessDetailScreenState extends ConsumerState<BusinessDetailScreen> {
   String? _selectedBranchId;
   bool _branchInitialized = false;
 
+  // A customer's account is global, but their token is scoped to one
+  // business at a time and everything below (branches, resources, slots)
+  // is filtered by it. So, before the first tenant-scoped request fires,
+  // swap to a token for this business - creating the membership if this
+  // is their first visit. Staff and admins never hit this path.
+  bool _joining = false;
+  String? _joinError;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = ref.read(authProvider).user;
+    if (user != null && user.role == 'Customer' && user.tenantId != widget.tenant.id) {
+      _joining = true;
+      Future.microtask(_join);
+    }
+  }
+
+  Future<void> _join() async {
+    final ok = await ref.read(authProvider.notifier).joinBusiness(widget.tenant.id);
+    if (!mounted) return;
+    setState(() {
+      _joining = false;
+      _joinError = ok ? null : 'Could not open this business right now.';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final tenant = widget.tenant;
+    if (_joining || _joinError != null) {
+      return AppBackgroundScaffold(
+        appBar: GlassAppBar(title: tenant.businessName),
+        child: Center(
+          child: _joinError == null
+              ? const CircularProgressIndicator()
+              : Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_joinError!, textAlign: TextAlign.center, style: AppTextStyles.bodyMuted),
+                      const SizedBox(height: 16),
+                      TextButton(
+                        onPressed: () {
+                          setState(() { _joining = true; _joinError = null; });
+                          _join();
+                        },
+                        child: const Text('Try again'),
+                      ),
+                    ],
+                  ),
+                ),
+        ),
+      );
+    }
     final branchesAsync = ref.watch(branchesProvider(tenant.id));
 
     // Tourism tenants with a resolved sub-type get the themed dashboard
