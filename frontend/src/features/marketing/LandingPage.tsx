@@ -439,39 +439,7 @@ export default function LandingPage() {
       </header>
 
       <main>
-        {/* =========================================================
-            HERO SECTION WITH DYNAMIC CONTROL DECK
-           ========================================================= */}
-        <section className="lp-home-hero">
-          <div className="lp-home-shell lp-home-hero-grid">
-            <div className="lp-home-hero-copy">
-              {/* Live Streaming Ticker Banner */}
-              <div className="lp-live-ticker-banner">
-                <span className="lp-sonar-ping">
-                  <span className="lp-sonar-wave" />
-                  <span className="lp-sonar-dot" />
-                </span>
-                <span className="lp-live-ticker-label">LIVE FEED · {liveTime}</span>
-                <span className="lp-live-ticker-sep">·</span>
-                <span className="lp-live-ticker-event" key={liveEventIndex}>
-                  <strong>{liveEvents[liveEventIndex].title}</strong> <span className="lp-live-branch-tag">({liveEvents[liveEventIndex].branch})</span> — <span className="lp-live-badge-val">{liveEvents[liveEventIndex].amount}</span>
-                </span>
-              </div>
-
-              <div className="lp-hero-pill-badge">
-                <span className="lp-pill-indicator" />
-                <span>UNIFY 3.0 · REAL-TIME CLOUD OS</span>
-                <span className="lp-pill-divider">·</span>
-                <span className="lp-pill-highlight">Multi-Branch Telemetry</span>
-              </div>
-
-              <h1>
-                Run your business in one calm, <em>beautiful rhythm.</em>
-              </h1>
-
-              <p className="lp-home-lede">
-                Unify combines reservations, inventory telemetry, smart shift handovers, and customer billing into one synchronized operating system your entire team will love using every day.
-              </p>
+        {/* ==================================================              </p>
 
               <div className="lp-home-hero-actions">
                 <Link className="lp-home-primary" to="/register">
@@ -799,22 +767,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* =========================================================
-            BENTO GRID: CORE SYSTEM ARCHITECTURE
-           ========================================================= */}
-        <div id="solutions" />
-        <section className="lp-bento-section" id="bento-grid">
-          <div className="lp-home-shell">
-            <div className="lp-home-section-head">
-              <span className="lp-home-section-kicker">BUILT FOR ZERO CHAOS</span>
-              <div className="lp-home-intro-row">
-                <h2>
-                  One unified system.<br />
-                  <em>Six interlocking superpowers.</em>
-                </h2>
-                <p>
-                  No more chasing WhatsApp messages, misplaced inventory ledgers, or accidental double-bookings. Unify connects every branch, member, and customer in real time.
-                </p>
+        {/* ==================================================                </p>
               </div>
             </div>
 
@@ -995,187 +948,12 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* =========================================================
-            INTERACTIVE LIVE SANDBOX / FEATURE LAB
-           ========================================================= */}
-        <section className="lp-interactive-lab-section" id="interactive-lab">
-          <div className="lp-home-shell">
-            <div className="lp-home-section-head">
-              <span className="lp-home-section-kicker">HANDS-ON SIMULATOR</span>
-              <div className="lp-home-intro-row">
-                <h2>
-                  Try the engine.<br />
-                  <em>Directly in your browser.</em>
-                </h2>
-                <p>
-                  Drag the stock level slider below to see how Unify's automated intelligence detects thresholds and drafts purchase orders in real time.
-                </p>
-              </div>
-            </div>
-
-            <div className="lp-lab-container">
-              <div className="lp-lab-controls">
-                <div className="lp-lab-slider-block">
-                  <div className="lp-lab-slider-top">
-                    <label htmlFor="stock-slider">
-                      <strong>Simulate Item Inventory Count:</strong>
-                      <span className="lp-slider-val-badge">{stockLevel} units remaining</span>
-                    </label>
-                    <span className="lp-threshold-label">Threshold: 25 units</span>
-                  </div>
-                  <input
-                    id="stock-slider"
-                    type="range"
-                    min="5"
-                    max="100"
-                    value={stockLevel}
-                    onChange={(e) => setStockLevel(Number(e.target.value))}
-                    className="lp-interactive-slider"
-                  />
-                  <div className="lp-slider-legend">
-                    <span>Critical (&lt; 25)</span>
-                    <span>Reorder Point (25 - 40)</span>
-                    <span>Healthy (40 - 100)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Reactive System Output Card */}
-              <div className={`lp-lab-output-card ${stockLevel < 25 ? 'is-warning' : 'is-healthy'}`}>
-                <div className="lp-lab-output-header">
-                  <div className="lp-lab-indicator">
-                    <span className={`lp-pulse-dot ${stockLevel < 25 ? 'is-red' : 'is-green'}`} />
-                    <b>
-                      {stockLevel < 25
-                        ? 'CRITICAL STOCK ALERT · AUTOMATED RESTOCK ACTIVE'
-                        : 'STOCK HEALTHY · NO ACTION REQUIRED'}
-                    </b>
-                  </div>
-                  <span className="lp-telemetry-tag">Simulated Telemetry</span>
-                </div>
-
-                <div className="lp-lab-output-body">
-                  {stockLevel < 25 ? (
-                    <div className="lp-lab-alert-content">
-                      <div className="lp-alert-badge">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
-                        <span>Stock below threshold (25 units)</span>
-                      </div>
-                      <h4>Automated Purchase Order Generated!</h4>
-                      <p>
-                        PO #9928 for <strong>50 new units</strong> drafted to primary supplier <em>Lanka Marine &amp; Gear Co.</em> with standard delivery terms.
-                      </p>
-                      <div className="lp-alert-actions">
-                        <span className="lp-status-tag is-pending">Auto-Queued for Dispatch</span>
-                        <span className="lp-time-stamp">Triggered in 12ms</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="lp-lab-calm-content">
-                      <h4>Stock Telemetry In Equilibrium</h4>
-                      <p>
-                        Current inventory of {stockLevel} units satisfies all confirmed reservations for the next 14 business days.
-                      </p>
-                      <div className="lp-alert-actions">
-                        <span className="lp-status-tag">Optimal Balance</span>
-                        <span className="lp-time-stamp">Real-time Telemetry Normal</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+        {/* ==================================================              </div>
             </div>
           </div>
         </section>
 
-        {/* =========================================================
-            ROI & TIME SAVINGS CALCULATOR
-           ========================================================= */}
-        <section className="lp-roi-section" id="roi-calculator">
-          <div className="lp-home-shell">
-            <div className="lp-roi-card">
-              <div className="lp-roi-copy">
-                <span className="lp-home-section-kicker">PROVEN VALUE</span>
-                <h2>
-                  Calculate your team's<br />
-                  <em>monthly time &amp; cash savings.</em>
-                </h2>
-                <p>
-                  See how quickly replacing fragmented spreadsheets, WhatsApp threads, and duplicate entry pays for itself.
-                </p>
-
-                <div className="lp-roi-sliders">
-                  <div className="lp-roi-input-group">
-                    <div className="lp-roi-input-head">
-                      <label htmlFor="team-size-slider">Total Team &amp; Floor Staff:</label>
-                      <b>{teamSize} members</b>
-                    </div>
-                    <input
-                      id="team-size-slider"
-                      type="range"
-                      min="2"
-                      max="40"
-                      value={teamSize}
-                      onChange={(e) => setTeamSize(Number(e.target.value))}
-                      className="lp-interactive-slider"
-                    />
-                  </div>
-
-                  <div className="lp-roi-input-group">
-                    <div className="lp-roi-input-head">
-                      <label htmlFor="appointments-slider">Weekly Bookings / Orders:</label>
-                      <b>{weeklyAppointments} / week</b>
-                    </div>
-                    <input
-                      id="appointments-slider"
-                      type="range"
-                      min="20"
-                      max="500"
-                      step="10"
-                      value={weeklyAppointments}
-                      onChange={(e) => setWeeklyAppointments(Number(e.target.value))}
-                      className="lp-interactive-slider"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="lp-roi-results">
-                <div className="lp-roi-metric-big">
-                  <small>ESTIMATED HOURS SAVED MONTHLY</small>
-                  <strong>{hoursSavedPerMonth} hrs</strong>
-                  <span>Eliminating repetitive scheduling &amp; admin</span>
-                </div>
-
-                <div className="lp-roi-metric-big is-green">
-                  <small>VALUE SAVED &amp; PROTECTED</small>
-                  <strong>LKR {estimatedSavings.toLocaleString()}</strong>
-                  <span>From zero double-bookings &amp; lost inventory</span>
-                </div>
-
-                <div className="lp-roi-stress-bar">
-                  <div className="lp-stress-head">
-                    <span>Operational Peace of Mind:</span>
-                    <b>98% Calm</b>
-                  </div>
-                  <div className="lp-stress-track">
-                    <div className="lp-stress-fill" />
-                  </div>
-                </div>
-
-                <Link to="/register" className="lp-home-primary lp-roi-cta">
-                  <span>Start saving {hoursSavedPerMonth} hours/month</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* =========================================================
-            INDUSTRY SPECIFIC BLUEPRINT SHOWCASE
-           ========================================================= */}
-        <section className="lp-home-industries" id="built-for-you">
+        {/* ==================================================        <section className="lp-home-industries" id="built-for-you">
           <div className="lp-home-shell">
             <div className="lp-home-industries-head">
               <div>
@@ -1282,119 +1060,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* =========================================================
-            COMPARISON: THE OLD WAY VS UNIFY OS
-           ========================================================= */}
-        <section className="lp-comparison-section">
-          <div className="lp-home-shell">
-            <div className="lp-home-section-head" style={{ textAlign: 'center' }}>
-              <span className="lp-home-section-kicker">THE CONTRAST</span>
-              <h2>
-                Why high-growth businesses<br />
-                <em>switch to Unify.</em>
-              </h2>
-            </div>
-
-            <div className="lp-comparison-grid">
-              {/* Old Way */}
-              <div className="lp-compare-card is-old">
-                <div className="lp-compare-header">
-                  <span className="lp-compare-badge is-bad">THE FRAGMENTED WAY</span>
-                  <h3>Scattered Tools &amp; Anxiety</h3>
-                </div>
-                <ul className="lp-compare-list">
-                  <li>
-                    <span className="lp-cross">✕</span>
-                    <span>Reservations trapped in WhatsApp screenshots and paper diaries</span>
-                  </li>
-                  <li>
-                    <span className="lp-cross">✕</span>
-                    <span>Accidental double-bookings causing embarrassing client moments</span>
-                  </li>
-                  <li>
-                    <span className="lp-cross">✕</span>
-                    <span>Surprise stockouts discovered right in front of paying customers</span>
-                  </li>
-                  <li>
-                    <span className="lp-cross">✕</span>
-                    <span>Managers stuck working 15+ hours of tedious weekend administrative chores</span>
-                  </li>
-                </ul>
-              </div>
-
-              {/* The Unify Way */}
-              <div className="lp-compare-card is-new">
-                <div className="lp-compare-glow" />
-                <div className="lp-compare-header">
-                  <span className="lp-compare-badge is-good">THE UNIFY OS WAY</span>
-                  <h3>Calm, Automated Clarity</h3>
-                </div>
-                <ul className="lp-compare-list">
-                  <li>
-                    <span className="lp-check">✓</span>
-                    <span>One live single source of truth across all branches and floors</span>
-                  </li>
-                  <li>
-                    <span className="lp-check">✓</span>
-                    <span>Conflict-free scheduling engine with instant customer SMS confirmations</span>
-                  </li>
-                  <li>
-                    <span className="lp-check">✓</span>
-                    <span>Live inventory telemetry with automated low-stock purchase orders</span>
-                  </li>
-                  <li>
-                    <span className="lp-check">✓</span>
-                    <span>Executive clarity, instant QR check-ins, and relaxed Monday mornings</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* =========================================================
-            TESTIMONIALS & SOCIAL PROOF
-           ========================================================= */}
-        <section className="lp-testimonials-section">
-          <div className="lp-home-shell">
-            <div className="lp-home-section-head">
-              <span className="lp-home-section-kicker">VERIFIED OUTCOMES</span>
-              <div className="lp-home-intro-row">
-                <h2>
-                  Loved by teams on the ground,<br />
-                  <em>trusted by business owners.</em>
-                </h2>
-                <p>
-                  Read how real hospitality, healthcare, tourism, and boutique operators transformed their daily rhythm with Unify.
-                </p>
-              </div>
-            </div>
-
-            <div className="lp-testimonials-grid">
-              {testimonials.map((t) => (
-                <div className="lp-testimonial-card" key={t.author}>
-                  <div className="lp-testimonial-top">
-                    <div className="lp-stars">★★★★★</div>
-                    <span className="lp-metric-pill">{t.metric}</span>
-                  </div>
-                  <p className="lp-quote">"{t.quote}"</p>
-                  <div className="lp-author-row">
-                    <div className="lp-author-avatar">{t.author.charAt(0)}</div>
-                    <div>
-                      <strong>{t.author}</strong>
-                      <small>{t.role} · {t.company}</small>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* =========================================================
-            STREAMING REAL-TIME TELEMETRY FEED
-           ========================================================= */}
-        <section className="lp-home-pulse">
+        {/* ==================================================        <section className="lp-home-pulse">
           <div className="lp-home-shell lp-home-pulse-grid">
             <div className="lp-pulse-copy-block">
               <p className="lp-home-section-kicker">SYNCHRONIZED OPERATIONS</p>
@@ -1502,10 +1168,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* =========================================================
-            FREQUENTLY ASKED QUESTIONS
-           ========================================================= */}
-        <section className="lp-home-faq" id="faq">
+        {/* ==================================================        <section className="lp-home-faq" id="faq">
           <div className="lp-home-shell lp-home-faq-grid">
             <div>
               <p className="lp-home-section-kicker">CLEAR ANSWERS</p>
@@ -1567,10 +1230,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* =========================================================
-            CONVERSION CLOSING BANNER
-           ========================================================= */}
-        <section className="lp-home-close">
+        {/* ==================================================        <section className="lp-home-close">
           <div className="lp-home-close-glow" aria-hidden="true" />
           <div className="lp-home-shell lp-close-content">
             <span className="lp-close-kicker">YOUR NEXT CALM MONDAY STARTS TODAY</span>
@@ -1596,10 +1256,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* =========================================================
-          FOOTER
-         ========================================================= */}
-      <footer className="lp-home-footer">
+      {/* ==================================================      <footer className="lp-home-footer">
         <div className="lp-home-shell">
           <div className="lp-home-footer-main">
             <Link className="lp-home-brand" to="/">
