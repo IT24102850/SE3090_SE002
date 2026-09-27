@@ -171,6 +171,12 @@ public sealed class PurchaseOrdersController(
             return ValidationProblem(ModelState);
         }
 
+        if (!string.Equals(status, "Draft", StringComparison.Ordinal))
+        {
+            ModelState.AddModelError("status", "New purchase orders must start as Draft and be submitted for review.");
+            return ValidationProblem(ModelState);
+        }
+
         if (await db.PurchaseOrders.IgnoreQueryFilters()
             .AnyAsync(order => order.TenantId == tenantId && order.Number == number, cancellationToken))
         {
@@ -293,13 +299,26 @@ public sealed class PurchaseOrdersController(
             return ValidationProblem(ModelState);
         }
 
+        if (!IsAllowedStatusTransition(order.Status, status))
+        {
+            return Conflict(new { message = $"A purchase order cannot move from {order.Status} to {status}." });
+        }
+
+        if (string.Equals(status, "Placed", StringComparison.Ordinal) &&
+            (!IsMobileApprovalClient() ||
+             (!User.IsInRole(UserRole.Admin.ToString()) && !User.IsInRole(UserRole.Manager.ToString()))))
+        {
+            return Forbid();
+        }
+
         order.Status = status;
         order.UpdatedAt = DateTime.UtcNow;
         if (string.Equals(status, "Received", StringComparison.OrdinalIgnoreCase))
         {
             await ReceiveInventoryAsync(order, tenantId, cancellationToken);
         }
-        NotificationHelper.Queue(db, tenantId, null, "PurchaseOrderUpdated", "Purchase order updated", $"{order.Number} moved to {status}.");
+        var actor = User.FindFirst("fullName")?.Value ?? User.Identity?.Name ?? "An authorized user";
+        NotificationHelper.Queue(db, tenantId, null, "PurchaseOrderUpdated", "Purchase order updated", $"{order.Number} moved to {status} by {actor}.");
 
         await db.SaveChangesAsync(cancellationToken);
 
@@ -470,6 +489,28 @@ public sealed class PurchaseOrdersController(
 
     private void AddStatusValidationError() =>
         ModelState.AddModelError("status", $"Status must be one of: {string.Join(", ", AllowedStatuses)}.");
+
+    private bool IsMobileApprovalClient() =>
+        string.Equals(
+            User.FindFirst(InventoryAccessHandler.ClientPlatformClaimType)?.Value,
+            "mobile",
+            StringComparison.Ordinal) &&
+        !Request.Headers.ContainsKey("Origin");
+
+    private static bool IsAllowedStatusTransition(string current, string next)
+    {
+        if (string.Equals(next, "Cancelled", StringComparison.Ordinal))
+            return current is "Draft" or "InReview" or "Placed" or "InTransit";
+
+        return current switch
+        {
+            "Draft" => next == "InReview",
+            "InReview" => next == "Placed",
+            "Placed" => next == "InTransit",
+            "InTransit" => next == "Received",
+            _ => false,
+        };
+    }
 }
 
 public sealed record PurchaseOrderListResponse(

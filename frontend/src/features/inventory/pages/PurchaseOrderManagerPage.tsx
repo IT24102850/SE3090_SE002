@@ -1010,7 +1010,11 @@ export function PurchaseOrderManagerPage() {
                 </dl>
 
                 <div className="po-actions">
-                  {nextStatus(selected.status) && (
+                  {selected.status === 'InReview' ? (
+                    <p className="cell-sub" role="status">
+                      Manager approval is available only in the mobile app. Web users cannot place orders awaiting review.
+                    </p>
+                  ) : nextStatus(selected.status) && (
                     <button type="button" className="btn btn-primary" onClick={() => advanceStatus(selected)} disabled={statusSavingId !== null}>
                       {statusSavingId === selected.id ? 'Saving…' : `Advance to ${statusLabels[nextStatus(selected.status)!]}`}
                     </button>

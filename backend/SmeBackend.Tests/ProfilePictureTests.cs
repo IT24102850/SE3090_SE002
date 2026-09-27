@@ -18,6 +18,7 @@ public class ProfilePictureTests
     private sealed class StubJwtService : IJwtService
     {
         public string GenerateAccessToken(User user) => "stub";
+        public string GenerateMobileAccessToken(User user) => "mobile-stub";
         public string GeneratePlatformAccessToken(User user, string jti, DateTime expiresAt) => "stub";
         public string GenerateRefreshToken() => "stub";
         public ClaimsPrincipal? ValidateToken(string token) => null;

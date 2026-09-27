@@ -23,7 +23,7 @@ class AuthRepository {
   }
 
   Future<AuthSession> login(String email, String password) async {
-    final endpoint = Uri.parse('$_apiBaseUrl/api/auth/login');
+    final endpoint = Uri.parse('$_apiBaseUrl/api/auth/mobile/login');
     try {
       final response = await http
           .post(

@@ -597,6 +597,10 @@ body:has(.inventory-scope) .app-shell::after,
   .inventory-scope .donut-wrap { grid-template-columns: 1fr; }
   .inventory-scope .analytics-split { grid-template-columns: 1fr; }
   .inventory-scope .chart-box-donut { height: 210px; }
+  /* Mobile: PO approve/advance actions – stretch buttons to fill the panel width */
+  .inventory-scope .po-actions { flex-direction: column; gap: .5rem; }
+  .inventory-scope .po-actions .btn { width: 100%; min-height: 44px; justify-content: center; }
+  .inventory-scope .po-detail-panel .detail-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 560px) {
   .inventory-scope .workflow-hero { padding: 1.15rem; }

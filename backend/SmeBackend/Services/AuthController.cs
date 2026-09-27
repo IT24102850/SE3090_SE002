@@ -64,6 +64,21 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
     {
+        return await Authenticate(dto, mobileClient: false);
+    }
+
+    [HttpPost("mobile/login")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResponseDto>> MobileLogin([FromBody] LoginDto dto)
+    {
+        if (Request.Headers.ContainsKey("Origin"))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Mobile sign-in is not available from a web browser." });
+
+        return await Authenticate(dto, mobileClient: true);
+    }
+
+    private async Task<ActionResult<AuthResponseDto>> Authenticate(LoginDto dto, bool mobileClient)
+    {
         // Login happens before a tenant is known, so tenant query filters
         // cannot be applied until the user's tenant has been resolved.
         //
@@ -98,7 +113,9 @@ public class AuthController : ControllerBase
         if (!user.Tenant.IsActive)
             return Unauthorized(new { message = "Tenant is inactive" });
 
-        var token = _jwtService.GenerateAccessToken(user);
+        var token = mobileClient
+            ? _jwtService.GenerateMobileAccessToken(user)
+            : _jwtService.GenerateAccessToken(user);
         var refreshToken = _jwtService.GenerateRefreshToken();
 
         return Ok(new AuthResponseDto

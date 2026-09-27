@@ -10,6 +10,7 @@ public sealed class InventoryAccessHandler : AuthorizationHandler<InventoryAcces
     public const string TenantIdClaimType = "tenantId";
     public const string BranchIdClaimType = "branchId";
     public const string ComponentClaimType = "component";
+    public const string ClientPlatformClaimType = "clientPlatform";
 
     protected override Task HandleRequirementAsync(
         AuthorizationHandlerContext context,

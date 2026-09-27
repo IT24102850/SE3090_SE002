@@ -122,6 +122,30 @@ public sealed class InventoryController(
             totalPages));
     }
 
+    [HttpGet("categories")]
+    [ProducesResponseType(typeof(IReadOnlyList<InventoryCategoryOptionResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<InventoryCategoryOptionResponse>>> GetCategories(
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+        var branchId = ResolveBranchScope(null);
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService,
+                InventoryAuthorizationPolicies.InventoryRead,
+                tenantId,
+                branchId))
+            return Forbid();
+
+        var categories = await db.InventoryCategories
+            .AsNoTracking()
+            .OrderBy(category => category.Name)
+            .Select(category => new InventoryCategoryOptionResponse(category.Id, category.Name))
+            .ToListAsync(cancellationToken);
+        return Ok(categories);
+    }
+
     [HttpGet("low-stock")]
     [ProducesResponseType(typeof(InventoryListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -828,6 +852,8 @@ public sealed record InventoryListResponse(
     int PageSize,
     int TotalCount,
     int TotalPages);
+
+public sealed record InventoryCategoryOptionResponse(Guid Id, string Name);
 
 public sealed record InventoryItemResponse(
     Guid Id,
