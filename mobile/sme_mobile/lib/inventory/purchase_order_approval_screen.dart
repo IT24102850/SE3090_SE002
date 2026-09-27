@@ -29,6 +29,7 @@ class PurchaseOrderApprovalScreen extends StatefulWidget {
 class _PurchaseOrderApprovalScreenState
     extends State<PurchaseOrderApprovalScreen> {
   List<_PurchaseOrder> _orders = [];
+  List<_PurchaseOrder> _previousApprovals = [];
   bool _loading = true;
   String? _error;
   StreamSubscription? _notifSub;
@@ -71,33 +72,45 @@ class _PurchaseOrderApprovalScreenState
       _error = null;
     });
     try {
-      // Fetch all orders in one call — the approval desk shows every open
-      // (non-terminal) order: Draft, InReview, Placed, and InTransit.
-      // Filtering client-side avoids multiple round-trips and ensures that
-      // any order not yet Received or Cancelled is always visible.
-      final response =
-          await widget.client.get('/api/purchase-orders?pageSize=100');
-      if (response.statusCode != 200) {
-        throw StateError(_apiError(response.body, response.statusCode));
-      }
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final allOrders = ((data['items'] as List?) ?? const [])
-          .whereType<Map<String, dynamic>>()
-          .map(_PurchaseOrder.fromJson)
-          .toList();
+      final orderData = <Map<String, dynamic>>[];
+      var page = 1;
+      var totalPages = 1;
+      do {
+        final response = await widget.client
+            .get('/api/purchase-orders?page=$page&pageSize=100');
+        if (response.statusCode != 200) {
+          throw StateError(_apiError(response.body, response.statusCode));
+        }
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        orderData.addAll(
+          ((data['items'] as List?) ?? const [])
+              .whereType<Map<String, dynamic>>(),
+        );
+        if (page == 1) {
+          totalPages = (data['totalPages'] as num?)?.toInt() ?? 1;
+        }
+        page++;
+      } while (page <= totalPages);
 
-      // Keep only open (non-terminal) orders and deduplicate by id.
-      const terminal = {'Received', 'Cancelled'};
       final seen = <String>{};
-      final openOrders = allOrders.where((o) {
-        if (terminal.contains(o.status)) return false;
-        return seen.add(o.id);
-      }).toList()
+      final allOrders = orderData
+          .map(_PurchaseOrder.fromJson)
+          .where((order) => seen.add(order.id))
+          .toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+      const approvedStatuses = {'Placed', 'InTransit', 'Received'};
+      final previousApprovals = allOrders
+          .where((order) => approvedStatuses.contains(order.status))
+          .toList();
+      const terminal = {'Received', 'Cancelled'};
+      final openOrders =
+          allOrders.where((order) => !terminal.contains(order.status)).toList();
 
       if (!mounted) return;
       setState(() {
         _orders = openOrders;
+        _previousApprovals = previousApprovals;
       });
       if (showSuccess) {
         showAppNotification(
@@ -139,6 +152,7 @@ class _PurchaseOrderApprovalScreenState
     setState(() {
       _error = message;
       _orders = const [];
+      _previousApprovals = const [];
     });
     showAppNotification(message, tone: AppNotificationTone.error);
   }
@@ -167,7 +181,12 @@ class _PurchaseOrderApprovalScreenState
       if (!mounted) return;
       setState(() {
         order.status = 'Placed';
+        order.updatedAt = DateTime.now().toUtc().toIso8601String();
         order.approving = false;
+        _previousApprovals = [
+          ..._previousApprovals.where((item) => item.id != order.id),
+          order,
+        ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       });
       showAppNotification(
         '${order.number} successfully authorized and marked as Placed.',
@@ -207,7 +226,9 @@ class _PurchaseOrderApprovalScreenState
         throw StateError(_approvalApiError(response.body, response.statusCode));
       }
       if (!mounted) return;
-      setState(() => _orders.removeWhere((item) => item.id == order.id));
+      setState(() {
+        _orders.removeWhere((item) => item.id == order.id);
+      });
       showAppNotification(
         '${order.number} has been rejected and cancelled.',
         tone: AppNotificationTone.warning,
@@ -241,6 +262,8 @@ class _PurchaseOrderApprovalScreenState
         return _orders
             .where((o) => o.status == 'Placed' || o.status == 'InTransit')
             .toList();
+      case 'previous':
+        return _previousApprovals;
       default:
         return _orders;
     }
@@ -258,6 +281,9 @@ class _PurchaseOrderApprovalScreenState
           const SizedBox(width: 8),
           _buildFilterChip(
               'active', 'Placed & In Transit ($_inFulfillmentCount)'),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+              'previous', 'Previous Approvals (${_previousApprovals.length})'),
         ],
       ),
     );
@@ -333,7 +359,9 @@ class _PurchaseOrderApprovalScreenState
                           ? 'AWAITING APPROVAL DECISION'
                           : _selectedFilter == 'active'
                               ? 'ACTIVE ORDERS IN FULFILLMENT'
-                              : 'OPEN PURCHASE ORDERS',
+                              : _selectedFilter == 'previous'
+                                  ? 'PREVIOUS APPROVAL DECISIONS'
+                                  : 'OPEN PURCHASE ORDERS',
                       trailing: Text('${_filteredOrders.length} Orders',
                           style: AppTextStyles.caption
                               .copyWith(color: AppColors.cyan)),
@@ -348,7 +376,9 @@ class _PurchaseOrderApprovalScreenState
                             ? 'No purchase orders are currently pending review or approval.'
                             : _selectedFilter == 'active'
                                 ? 'No placed or in-transit orders currently active.'
-                                : 'No open purchase orders found.',
+                                : _selectedFilter == 'previous'
+                                    ? 'No previous purchase approval decisions found.'
+                                    : 'No open purchase orders found.',
                       )
                     else
                       ..._filteredOrders.map((order) => _buildOrderCard(order)),
@@ -832,7 +862,7 @@ class _PurchaseOrder {
   final double amount;
   final int lineItems;
   String status;
-  final String updatedAt;
+  String updatedAt;
   final List<_PurchaseOrderLine> items;
   bool approving = false;
 
