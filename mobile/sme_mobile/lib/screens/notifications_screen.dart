@@ -25,12 +25,7 @@ class NotificationsScreen extends ConsumerWidget {
             onRetry: () => ref.invalidate(notificationsProvider),
           ),
           data: (items) {
-            if (items.isEmpty) {
-              return const EmptyState(
-                icon: Icons.notifications_none_rounded,
-                message: 'Nothing here yet.',
-              );
-            }
+            final unreadCount = items.where((item) => !item.isRead).length;
 
             return RefreshIndicator(
               color: AppColors.cyan,
@@ -40,13 +35,30 @@ class NotificationsScreen extends ConsumerWidget {
                 ref.invalidate(unreadNotificationCountProvider);
               },
               child: ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                itemCount: items.length,
+                itemCount: items.isEmpty ? 2 : items.length + 1,
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (context, i) => _NotificationTile(
-                  notification: items[i],
-                  index: i,
-                ),
+                itemBuilder: (context, i) {
+                  if (i == 0) {
+                    return _LiveUpdatesBanner(unreadCount: unreadCount);
+                  }
+                  if (items.isEmpty) {
+                    return const SizedBox(
+                      height: 300,
+                      child: EmptyState(
+                        icon: Icons.notifications_none_rounded,
+                        message:
+                            'Nothing here yet. New updates will appear automatically.',
+                      ),
+                    );
+                  }
+                  return _NotificationTile(
+                    key: ValueKey(items[i - 1].id),
+                    notification: items[i - 1],
+                    index: i - 1,
+                  );
+                },
               ),
             );
           },
@@ -56,10 +68,92 @@ class NotificationsScreen extends ConsumerWidget {
   }
 }
 
+class _LiveUpdatesBanner extends StatelessWidget {
+  final int unreadCount;
+
+  const _LiveUpdatesBanner({required this.unreadCount});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
+      borderRadius: AppRadii.row,
+      borderColor: AppColors.cyan.withValues(alpha: 0.38),
+      fill: AppColors.cyan.withValues(alpha: 0.07),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: AppColors.success,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.success.withValues(alpha: 0.45),
+                  blurRadius: 9,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 11),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'LIVE UPDATES',
+                  style: TextStyle(
+                    color: AppColors.cyan,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'Automatically checks every 15 seconds',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (unreadCount > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.magenta.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(
+                  color: AppColors.magenta.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Text(
+                '$unreadCount unread',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _NotificationTile extends ConsumerWidget {
   final AppNotification notification;
   final int index;
-  const _NotificationTile({required this.notification, required this.index});
+  const _NotificationTile({
+    super.key,
+    required this.notification,
+    required this.index,
+  });
 
   Future<void> _handleTap(BuildContext context, WidgetRef ref) async {
     if (notification.isRead) return;

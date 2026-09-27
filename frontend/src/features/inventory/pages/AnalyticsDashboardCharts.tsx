@@ -43,9 +43,12 @@ type InventoryItem = {
   quantity: number;
   reorderLevel: number;
   unitCost?: number;
+  category?: string;
+  categoryId?: string;
+  description?: string;
   status: string;
 };
-type InventoryListResponse = { items: InventoryItem[]; totalCount: number };
+type InventoryListResponse = { items: InventoryItem[]; totalCount: number; totalPages: number };
 
 type Slot<T> = { status: 'loading' } | { status: 'ready'; value: T } | { status: 'failed'; error: string };
 const loading = { status: 'loading' } as const;
@@ -116,6 +119,55 @@ function buildTableRows(report: InventoryUsageReport) {
   }));
 }
 
+async function apiGetAllInventory(token: string | null): Promise<InventoryListResponse> {
+  const items: InventoryItem[] = [];
+  const itemIds = new Set<string>();
+  let page = 1;
+  let expectedCount: number | undefined;
+  let expectedPages: number | undefined;
+  do {
+    const result = await apiGet<InventoryListResponse>(
+      `/api/inventory?page=${page}&pageSize=100`,
+      token,
+    );
+    if (
+      !Array.isArray(result.items) ||
+      !Number.isSafeInteger(result.totalCount) ||
+      result.totalCount < 0 ||
+      !Number.isSafeInteger(result.totalPages) ||
+      result.totalPages < 0 ||
+      result.totalPages !== Math.ceil(result.totalCount / 100)
+    ) {
+      throw new Error('Inventory response has invalid items or pagination totals.');
+    }
+    if (
+      (expectedCount !== undefined && expectedCount !== result.totalCount) ||
+      (expectedPages !== undefined && expectedPages !== result.totalPages)
+    ) {
+      throw new Error('Inventory changed while loading. Refresh to capture a complete snapshot.');
+    }
+    expectedCount ??= result.totalCount;
+    expectedPages ??= result.totalPages;
+    for (const item of result.items) {
+      if (!item || typeof item.id !== 'string' || !item.id.trim()) {
+        throw new Error('Inventory response contains an item without a valid ID.');
+      }
+      if (itemIds.has(item.id)) {
+        throw new Error('Inventory pages contain duplicate items. Refresh to capture a complete snapshot.');
+      }
+      itemIds.add(item.id);
+    }
+    items.push(...result.items);
+    page += 1;
+  } while (page <= (expectedPages ?? 0));
+
+  if (items.length !== expectedCount) {
+    throw new Error(`Loaded ${items.length} of ${expectedCount} inventory items. Refresh to capture the complete snapshot.`);
+  }
+
+  return { items, totalCount: expectedCount ?? 0, totalPages: expectedPages ?? 0 };
+}
+
 /* ── sub-components ─────────────────────────────────────────────────────── */
 function PanelError({ error, onRetry }: { error: string; onRetry: () => void }) {
   return (
@@ -171,22 +223,22 @@ export function AnalyticsDashboardPage() {
 
   const [range, setRange] = useState<DateRange>('30d');
   const [usage, setUsage] = useState<Slot<InventoryUsageReport>>(loading);
-  const [lowStock, setLowStock] = useState<Slot<InventoryListResponse>>(loading);
+  const [inventory, setInventory] = useState<Slot<InventoryListResponse>>(loading);
 
   const load = useCallback(async (showMsg = false) => {
     setUsage(loading);
-    setLowStock(loading);
+    setInventory(loading);
     const dateParams = buildDateParams(range);
-    const [movementResult, stockResult] = await Promise.allSettled([
+    const [movementResult, inventoryResult] = await Promise.allSettled([
       apiGet<InventoryUsageReport>(`/api/reports/inventory-usage?${dateParams}`, token),
-      apiGet<InventoryListResponse>('/api/inventory/low-stock?pageSize=100', token),
+      apiGetAllInventory(token),
     ]);
     const movementSlot = settle(movementResult);
-    const stockSlot = settle(stockResult);
+    const inventorySlot = settle(inventoryResult);
     setUsage(movementSlot);
-    setLowStock(stockSlot);
+    setInventory(inventorySlot);
     if (showMsg) {
-      if (movementSlot.status === 'ready' && stockSlot.status === 'ready') {
+      if (movementSlot.status === 'ready' && inventorySlot.status === 'ready') {
         notify(`Analytics refreshed — ${dateRangeLabel(range)}.`, 'success');
       } else {
         notify('Some data could not be refreshed. Check the panels below.', 'warning');
@@ -197,34 +249,77 @@ export function AnalyticsDashboardPage() {
   useEffect(() => { void load(); }, [load]);
 
   /* derived */
-  const anyLoading = usage.status === 'loading' || lowStock.status === 'loading';
-  const failedCount = [usage, lowStock].filter(s => s.status === 'failed').length;
+  const anyLoading = usage.status === 'loading' || inventory.status === 'loading';
+  const failedCount = [usage, inventory].filter(s => s.status === 'failed').length;
 
   const allRows = useMemo(() =>
     usage.status === 'ready' ? buildTableRows(usage.value) : [], [usage]);
 
   const chartRows = useMemo(() => allRows.slice(0, 8), [allRows]);
 
-  const stockItems = lowStock.status === 'ready' ? lowStock.value.items : [];
-  const reorderCount = lowStock.status === 'ready' ? lowStock.value.totalCount : null;
+  const stockItems = inventory.status === 'ready'
+    ? inventory.value.items.filter(item => item.quantity <= 0 || item.quantity <= item.reorderLevel)
+    : [];
+  const reorderCount = inventory.status === 'ready' ? stockItems.length : null;
+  const inventoryItems = inventory.status === 'ready' ? inventory.value.items : [];
+
+  const inventoryStats = useMemo(() => {
+    const categoryLabels = new Set<string>();
+    let inStock = 0;
+    let low = 0;
+    let out = 0;
+    let units = 0;
+    let value = 0;
+    let costedItems = 0;
+    for (const item of inventoryItems) {
+      units += item.quantity;
+      if (item.quantity <= 0) out += 1;
+      else if (item.quantity <= item.reorderLevel) low += 1;
+      else inStock += 1;
+      if (item.category?.trim()) categoryLabels.add(item.category.trim().toLowerCase());
+      if (typeof item.unitCost === 'number') {
+        value += item.quantity * item.unitCost;
+        costedItems += 1;
+      }
+    }
+    return {
+      items: inventory.status === 'ready' ? inventory.value.totalCount : 0,
+      units,
+      value,
+      costedItems,
+      categoryCount: categoryLabels.size,
+      uncategorized: inventoryItems.filter(item => !item.category?.trim()).length,
+      inStock,
+      low,
+      out,
+    };
+  }, [inventory]);
+
+  const categoryValueData = useMemo(() => {
+    const groups = new Map<string, number>();
+    for (const item of inventoryItems) {
+      const category = item.category?.trim() || 'Uncategorised';
+      if (typeof item.unitCost !== 'number') continue;
+      groups.set(category, (groups.get(category) ?? 0) + item.quantity * item.unitCost);
+    }
+    return [...groups.entries()]
+      .map(([name, categoryValue]) => ({ name, value: categoryValue }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+  }, [inventory]);
 
   const movementCount = usage.status === 'ready'
     ? usage.value.items.reduce((t, i) => t + i.movementCount, 0) : null;
 
   /* stock health pie */
   const healthData = useMemo(() => {
-    if (lowStock.status !== 'ready') return [];
-    const inStock = Math.max(0, (lowStock.value.totalCount > 0 ? 0 : 1));
-    const low = stockItems.filter(i => i.status === 'LowStock').length;
-    const out = stockItems.filter(i => i.status === 'OutOfStock').length;
-    const ok = stockItems.length - low - out;
+    if (inventory.status !== 'ready') return [];
     return [
-      { name: 'Healthy', value: ok, color: '#17ae83' },
-      { name: 'Low stock', value: low, color: '#e2a126' },
-      { name: 'Out of stock', value: out, color: '#e44e63' },
+      { name: 'In stock', value: inventoryStats.inStock, color: '#17ae83' },
+      { name: 'Low stock', value: inventoryStats.low, color: '#e2a126' },
+      { name: 'Out of stock', value: inventoryStats.out, color: '#e44e63' },
     ].filter(d => d.value > 0);
-    void inStock;
-  }, [lowStock, stockItems]);
+  }, [inventory.status, inventoryStats]);
 
   /* net movement trend (top 5 items) */
   const trendData = useMemo(() => chartRows.slice(0, 5).map(r => ({
@@ -232,11 +327,17 @@ export function AnalyticsDashboardPage() {
     net: r.net,
   })), [chartRows]);
 
-  /* LKR cost estimate */
-  const totalCostEstimate = useMemo(() => {
-    if (lowStock.status !== 'ready') return null;
-    return stockItems.reduce((sum, i) => sum + (i.quantity * (i.unitCost ?? 0)), 0);
-  }, [lowStock, stockItems]);
+  const sortedStockItems = useMemo(() => [...stockItems].sort((a, b) => {
+    if (a.quantity <= 0 && b.quantity > 0) return -1;
+    if (b.quantity <= 0 && a.quantity > 0) return 1;
+    const aCoverage = a.reorderLevel > 0 ? a.quantity / a.reorderLevel : 1;
+    const bCoverage = b.reorderLevel > 0 ? b.quantity / b.reorderLevel : 1;
+    return aCoverage - bCoverage;
+  }), [stockItems]);
+
+  const healthyShare = inventory.status === 'ready' && inventoryStats.items > 0
+    ? inventoryStats.inStock / inventoryStats.items
+    : 0;
 
   return (
     <div className="page inventory-analytics-page">
@@ -255,8 +356,8 @@ export function AnalyticsDashboardPage() {
         <div className="inventory-analytics-hero-content">
           <div>
             <p className="eyebrow">INVENTORY INTELLIGENCE / ANALYTICS</p>
-            <h1>Inventory Analytics</h1>
-            <p>See what moved, what needs replenishing, and where stock is building up.</p>
+            <h1>Your stock, in focus</h1>
+            <p>One complete view of stock on hand, value, movement and items needing attention.</p>
           </div>
           <div className="inventory-analytics-hero-actions">
             {/* Date range picker */}
@@ -293,54 +394,113 @@ export function AnalyticsDashboardPage() {
                 ? `${failedCount} data source${failedCount > 1 ? 's' : ''} need attention`
                 : 'Live inventory data'}
           </span>
-          <span>Movements and reorder levels · Read only</span>
+          <span>Snapshot covers all accessible items · date range filters activity only</span>
         </div>
       </header>
 
-      {/* ── KPI METRICS ── */}
-      <section className="inventory-analytics-metrics" aria-label="Inventory movement summary">
-        <Metric
-          label="Units issued"
-          value={usage.status === 'ready' ? compact(usage.value.totalIssuedQuantity) : '—'}
-          detail="Used or transferred out"
-          tone="violet"
-          icon="movement"
-        />
-        <Metric
-          label="Units received"
-          value={usage.status === 'ready' ? compact(usage.value.totalReceivedQuantity) : '—'}
-          detail="Added to inventory"
-          tone="teal"
-          icon="inventory"
-        />
-        <Metric
-          label="Net stock movement"
-          value={usage.status === 'ready'
-            ? `${usage.value.netQuantity > 0 ? '+' : ''}${compact(usage.value.netQuantity)}`
-            : '—'}
-          detail="Received minus issued"
-          tone="blue"
-          icon="workflow"
-        />
-        <Metric
-          label="Below reorder level"
-          value={reorderCount == null ? '—' : compact(reorderCount)}
-          detail="Items to review"
-          tone="amber"
-          icon="alert"
-        />
+      <section className="inventory-analytics-overview" aria-label="Whole inventory snapshot">
+        <div className="inventory-analytics-section-heading">
+          <div>
+            <p className="eyebrow">WHOLE INVENTORY</p>
+            <h2>Stock at a glance</h2>
+          </div>
+          <span>Current stock · all accessible items</span>
+        </div>
+        <div className="inventory-analytics-metrics inventory-analytics-snapshot">
+          <Metric
+            label="Items tracked"
+            value={inventory.status === 'ready' ? compact(inventoryStats.items) : '—'}
+            detail={`${compact(inventoryStats.categoryCount)} categories represented`}
+            tone="blue"
+            icon="inventory"
+          />
+          <Metric
+            label="Units on hand"
+            value={inventory.status === 'ready' ? compact(inventoryStats.units) : '—'}
+            detail="Across all loaded items"
+            tone="teal"
+            icon="workflow"
+          />
+          <Metric
+            label="Estimated stock value"
+            value={inventory.status === 'ready' ? lkr(inventoryStats.value) : '—'}
+            detail={`${compact(inventoryStats.costedItems)} items with unit cost`}
+            tone="violet"
+            icon="chart"
+          />
+          <Metric
+            label="Reorder alerts"
+            value={inventory.status === 'ready' ? compact(reorderCount ?? 0) : '—'}
+            detail={`${compact(inventoryStats.low)} low · ${compact(inventoryStats.out)} out of stock`}
+            tone="amber"
+            icon="alert"
+          />
+        </div>
+        <div className="inventory-analytics-health">
+          <div className="inventory-analytics-health-copy">
+            <span className="inventory-analytics-health-icon"><Icon name="workflow" size={17} /></span>
+            <span><strong>Healthy stock</strong><small>Above reorder level</small></span>
+          </div>
+          <div
+            className="inventory-analytics-health-track"
+            role="progressbar"
+            aria-label="Items above reorder level"
+            aria-valuemin={0}
+            aria-valuemax={inventory.status === 'ready' ? inventoryStats.items : 0}
+            aria-valuenow={inventory.status === 'ready' ? inventoryStats.inStock : 0}
+          >
+            <span style={{ width: `${healthyShare * 100}%` }} />
+          </div>
+          <strong className="inventory-analytics-health-count">
+            {inventory.status === 'ready'
+              ? `${compact(inventoryStats.inStock)} / ${compact(inventoryStats.items)}`
+              : '—'}
+          </strong>
+        </div>
       </section>
 
-      {/* ── COST HIGHLIGHT (when data available) ── */}
-      {totalCostEstimate != null && totalCostEstimate > 0 && (
-        <div className="inventory-analytics-cost-banner panel">
-          <span className="inventory-analytics-cost-icon"><Icon name="inventory" size={17} /></span>
-          <span>
-            Estimated on-hand stock value: <strong>{lkr(totalCostEstimate)}</strong>
-          </span>
-          <span className="inventory-analytics-cost-note">Based on items with unit cost recorded</span>
+      {/* ── PERIOD MOVEMENT METRICS ── */}
+      <section className="inventory-analytics-movement-summary" aria-label={`Inventory movement summary for ${dateRangeLabel(range)}`}>
+        <div className="inventory-analytics-section-heading">
+          <div>
+            <p className="eyebrow">PERIOD ACTIVITY</p>
+            <h2>Movement summary</h2>
+          </div>
+          <span>{dateRangeLabel(range)} · changes during this period</span>
         </div>
-      )}
+        <div className="inventory-analytics-metrics">
+          <Metric
+            label="Units issued"
+            value={usage.status === 'ready' ? compact(usage.value.totalIssuedQuantity) : '—'}
+            detail="Used or transferred out"
+            tone="violet"
+            icon="movement"
+          />
+          <Metric
+            label="Units received"
+            value={usage.status === 'ready' ? compact(usage.value.totalReceivedQuantity) : '—'}
+            detail="Added to inventory"
+            tone="teal"
+            icon="inventory"
+          />
+          <Metric
+            label="Net stock movement"
+            value={usage.status === 'ready'
+              ? `${usage.value.netQuantity > 0 ? '+' : ''}${compact(usage.value.netQuantity)}`
+              : '—'}
+            detail="Received minus issued"
+            tone="blue"
+            icon="workflow"
+          />
+          <Metric
+            label="Movement records"
+            value={movementCount == null ? '—' : compact(movementCount)}
+            detail="Recorded events in this period"
+            tone="amber"
+            icon="movement"
+          />
+        </div>
+      </section>
 
       {/* ── MAIN CHARTS GRID ── */}
       <section className="inventory-analytics-grid">
@@ -397,18 +557,19 @@ export function AnalyticsDashboardPage() {
             </div>
             <span className="inventory-analytics-panel-icon warning"><Icon name="alert" size={18} /></span>
           </div>
-          {lowStock.status === 'failed' ? (
-            <PanelError error={lowStock.error} onRetry={() => void load()} />
-          ) : lowStock.status === 'loading' ? (
+          {inventory.status === 'failed' ? (
+            <PanelError error={inventory.error} onRetry={() => void load()} />
+          ) : inventory.status === 'loading' ? (
             <PanelSkeleton rows={5} />
           ) : stockItems.length === 0 ? (
             <PanelEmpty>All listed inventory is above its reorder level.</PanelEmpty>
           ) : (
             <div className="inventory-reorder-list">
-              {stockItems.slice(0, 7).map(item => {
+              {sortedStockItems.slice(0, 7).map(item => {
                 const fill = item.reorderLevel > 0
                   ? Math.min(100, Math.round((item.quantity / item.reorderLevel) * 100))
                   : 0;
+                const status = item.quantity <= 0 ? 'OutOfStock' : 'LowStock';
                 return (
                   <div className="inventory-reorder-item" key={item.id}>
                     <div className="inventory-reorder-copy">
@@ -416,7 +577,7 @@ export function AnalyticsDashboardPage() {
                         <strong>{item.name}</strong>
                         <small>{item.sku}</small>
                       </div>
-                      <Badge tone={statusTone(item.status)}>
+                      <Badge tone={statusTone(status)}>
                         {item.quantity} / {item.reorderLevel}
                       </Badge>
                     </div>
@@ -426,14 +587,14 @@ export function AnalyticsDashboardPage() {
                     >
                       <span
                         style={{ width: `${fill}%` }}
-                        className={item.quantity === 0 ? 'is-empty' : 'is-low'}
+                        className={item.quantity <= 0 ? 'is-empty' : 'is-low'}
                       />
                     </div>
                   </div>
                 );
               })}
-              {reorderCount != null && reorderCount > stockItems.length && (
-                <p className="inventory-reorder-more">+{reorderCount - stockItems.length} more items need review</p>
+              {reorderCount != null && reorderCount > 7 && (
+                <p className="inventory-reorder-more">+{reorderCount - 7} more items need review</p>
               )}
             </div>
           )}
@@ -488,13 +649,13 @@ export function AnalyticsDashboardPage() {
             <div>
               <p className="eyebrow">STOCK HEALTH</p>
               <h2>Status Distribution</h2>
-              <p>Low-stock items that need reorder attention.</p>
+              <p>Distribution across the complete accessible inventory.</p>
             </div>
             <span className="inventory-analytics-panel-icon"><Icon name="chart" size={18} /></span>
           </div>
-          {lowStock.status === 'failed' ? (
-            <PanelError error={lowStock.error} onRetry={() => void load()} />
-          ) : lowStock.status === 'loading' ? (
+          {inventory.status === 'failed' ? (
+            <PanelError error={inventory.error} onRetry={() => void load()} />
+          ) : inventory.status === 'loading' ? (
             <PanelSkeleton rows={3} />
           ) : healthData.length === 0 ? (
             <PanelEmpty>No stock health data available.</PanelEmpty>
@@ -507,9 +668,9 @@ export function AnalyticsDashboardPage() {
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    innerRadius={48}
+                    cy="48%"
+                    outerRadius={84}
+                    innerRadius={58}
                     paddingAngle={3}
                   >
                     {healthData.map((entry, idx) => (
@@ -520,6 +681,45 @@ export function AnalyticsDashboardPage() {
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
+            </div>
+          )}
+        </article>
+
+        <article className="panel inventory-analytics-panel inventory-category-value-panel">
+          <div className="inventory-analytics-panel-head">
+            <div>
+              <p className="eyebrow">CATEGORY VALUE</p>
+              <h2>Where stock value sits</h2>
+              <p>On-hand value by saved category, for items with unit cost.</p>
+            </div>
+            <span className="inventory-analytics-panel-icon"><Icon name="inventory" size={18} /></span>
+          </div>
+          {inventory.status === 'failed' ? (
+            <PanelError error={inventory.error} onRetry={() => void load()} />
+          ) : inventory.status === 'loading' ? (
+            <PanelSkeleton rows={4} />
+          ) : categoryValueData.length === 0 ? (
+            <PanelEmpty>No category valuation is available yet.</PanelEmpty>
+          ) : (
+            <div className="inventory-category-value-chart">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={categoryValueData} layout="vertical" margin={{ top: 4, right: 18, left: 8, bottom: 4 }}>
+                  <CartesianGrid stroke={chart.grid} horizontal={false} />
+                  <XAxis type="number" tickLine={false} axisLine={false} tick={axisTick} tickFormatter={compact} />
+                  <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={axisTick} width={104} />
+                  <Tooltip
+                    contentStyle={chart.tooltip}
+                    itemStyle={chart.tooltipItem}
+                    formatter={(value) => lkr(Number(value))}
+                  />
+                  <Bar dataKey="value" name="On-hand value" fill={chart.series.blue ?? '#4b73dc'} radius={[0, 7, 7, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          {inventory.status === 'ready' && inventoryStats.uncategorized > 0 && (
+            <div className="inventory-category-value-note">
+              {compact(inventoryStats.uncategorized)} items have no saved category and are grouped as Uncategorised.
             </div>
           )}
         </article>
