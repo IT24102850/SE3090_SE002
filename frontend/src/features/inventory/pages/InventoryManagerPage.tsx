@@ -29,6 +29,7 @@ type StockRow = {
 
 type StockForm = Omit<StockRow, 'sku'>;
 type SupplierOption = { id: string; name: string; leadTimeDays: number | null };
+type InventoryCategoryOption = { id: string; name: string };
 
 const PAGE_SIZE = 5;
 
@@ -86,9 +87,28 @@ function parseCsvRow(line: string): string[] {
   return values;
 }
 
-function displayCategory(category: string | null | undefined, itemName: string) {
-  if (category?.trim()) return category.trim();
+function displayCategory(category: string | null | undefined, itemName: string, availableCategories: InventoryCategoryOption[] = []) {
+  const storedCategory = category?.trim();
+  const genericCategory = storedCategory && /^(other|other items|general|uncategorized|supplies)$/i.test(storedCategory);
+  if (storedCategory && !genericCategory) return storedCategory;
   const normalized = itemName.toLowerCase();
+  const healthcareRules: Array<[RegExp, RegExp, RegExp]> = [
+    [/\b(pharmaceutical|medicine|medication|tablet|capsule|drug|pharma|vaccine|antibiotic|paracetamol|syrup|ointment)\b/i, /pharma|medicine|medication|drug/i, /suppl|general|other/i],
+    [/\b(glove|mask|gown|apron|face shield|respirator|protective equipment|ppe)\b/i, /ppe|protective/i, /suppl|general|other/i],
+    [/\b(syringe|needle|bandage|gauze|cotton|thermometer|stethoscope|iv set|surgical|wound|medical|first aid|test kit|specimen)\b/i, /medical|clinical/i, /suppl|equipment|general|other/i],
+    [/\b(paper|pen|stationery|office|folder|printer)\b/i, /office|stationery|admin/i, /suppl|general|other/i],
+  ];
+  for (const [itemPattern, categoryPattern, fallbackPattern] of healthcareRules) {
+    if (itemPattern.test(normalized)) {
+      const match = availableCategories.find((option) => categoryPattern.test(option.name))
+        ?? availableCategories.find((option) => fallbackPattern.test(option.name));
+      if (match) return match.name;
+    }
+  }
+  if (storedCategory) return storedCategory;
+  if (availableCategories.length) {
+    return availableCategories.find((option) => /other|general|misc/i.test(option.name))?.name ?? 'Uncategorized';
+  }
   if (/(laptop|computer|usb|printer|electronic|tech)/.test(normalized)) return 'Technology';
   if (/(paper|cabinet|marker|stationery|office|desk|chair)/.test(normalized)) return 'Office essentials';
   if (/(water|rice|food|beverage|coffee|sugar|milk|provision)/.test(normalized)) return 'Provisions';
@@ -133,6 +153,7 @@ function ItemModal({
   onSave,
   saving,
   suppliers,
+  categories: inventoryCategories,
 }: {
   title: string;
   initial: StockForm;
@@ -140,6 +161,7 @@ function ItemModal({
   onSave: (form: StockForm) => void;
   saving: boolean;
   suppliers: SupplierOption[];
+  categories: InventoryCategoryOption[];
 }) {
   const [form, setForm] = useState(initial);
   const [error, setError] = useState('');
@@ -153,6 +175,10 @@ function ItemModal({
     event.preventDefault();
     if (!form.item.trim()) {
       setError('Item name is required.');
+      return;
+    }
+    if (inventoryCategories.length && !form.categoryId) {
+      setError('Choose a category for this inventory item.');
       return;
     }
     if (!form.unit.trim()) {
@@ -191,8 +217,23 @@ function ItemModal({
             </label>
             <label className="form-field">
               Category
-              <select value={form.category} onChange={(event) => update('category', event.target.value)}>
-                {categoryOptions.map((option) => <option key={option}>{option}</option>)}
+              <select
+                value={inventoryCategories.length ? (form.categoryId ?? '') : form.category}
+                onChange={(event) => {
+                  const selected = inventoryCategories.find((option) => option.id === event.target.value);
+                  setForm((previous) => ({
+                    ...previous,
+                    category: selected?.name ?? event.target.value,
+                    categoryId: selected?.id,
+                  }));
+                }}
+              >
+                {inventoryCategories.length
+                  ? <>
+                    <option value="">Uncategorized — choose a category</option>
+                    {inventoryCategories.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                  </>
+                  : categoryOptions.map((option) => <option key={option}>{option}</option>)}
               </select>
             </label>
             <label className="form-field">
@@ -251,6 +292,7 @@ export function InventoryManagerPage() {
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState<StockRow[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [inventoryCategories, setInventoryCategories] = useState<InventoryCategoryOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -267,10 +309,10 @@ export function InventoryManagerPage() {
   const categoryFilterOptions = useMemo(() => [
     categories[0],
     ...Array.from(new Set([
-      ...categoryOptions,
+      ...(inventoryCategories.length ? inventoryCategories.map((option) => option.name) : categoryOptions),
       ...items.map((row) => row.category),
     ].filter((value) => value && value !== categories[0]))).sort((a, b) => a.localeCompare(b)),
-  ], [items]);
+  ], [inventoryCategories, items]);
 
   const filtered = useMemo(() => {
     const queryLower = query.trim().toLowerCase();
@@ -316,7 +358,7 @@ export function InventoryManagerPage() {
 
   const editingItem = modal?.mode === 'edit' ? items.find((row) => row.sku === modal.sku) : undefined;
 
-  async function loadInventory(): Promise<boolean> {
+  async function loadInventory(categoryOptionsForItems = inventoryCategories): Promise<boolean> {
     setLoading(true);
     setLoadError('');
     try {
@@ -340,7 +382,7 @@ export function InventoryManagerPage() {
         id: item.id,
         sku: item.sku,
         item: item.name,
-        category: displayCategory(item.category, item.name),
+        category: displayCategory(item.category, item.name, categoryOptionsForItems),
         unit: item.unit ?? 'unit',
         categoryId: item.categoryId ?? undefined,
         unitId: item.unitId ?? undefined,
@@ -402,7 +444,8 @@ export function InventoryManagerPage() {
         const cols = parseCsvRow(lines[i]);
         if (!cols[0]) continue;
         const name = cols[0];
-        const category = cols[2] || categoryOptions[0];
+        const category = cols[2] || inventoryCategories[0]?.name || categoryOptions[0];
+        const categoryId = inventoryCategories.find((option) => option.name.toLowerCase() === category.toLowerCase())?.id;
         const qty = Number(cols[3]) || 0;
         const unit = cols[4] || 'unit';
         const reorder = Number(cols[5]) || 10;
@@ -415,6 +458,7 @@ export function InventoryManagerPage() {
             name,
             sku,
             description: `${category} (${unit})`,
+            categoryId: categoryId ?? null,
             quantity: qty,
             reorderLevel: reorder,
             unitCost: price,
@@ -444,7 +488,24 @@ export function InventoryManagerPage() {
   }
 
   useEffect(() => {
-    void loadInventory();
+    let active = true;
+    async function loadCategoriesAndInventory() {
+      let options: InventoryCategoryOption[] = [];
+      try {
+        const response = await fetch('/api/inventory/categories', {
+          headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' },
+        });
+        if (!response.ok) throw new Error(`Inventory categories request failed (${response.status})`);
+        const result = await response.json();
+        options = Array.isArray(result) ? result : [];
+        if (active) setInventoryCategories(options);
+      } catch (error) {
+        console.error(error);
+      }
+      if (active) await loadInventory(options);
+    }
+    void loadCategoriesAndInventory();
+    return () => { active = false; };
   }, [token]);
 
   useEffect(() => {
@@ -478,7 +539,7 @@ export function InventoryManagerPage() {
           name: form.item,
           sku: existing?.sku ?? nextSku(items),
           description: null,
-          categoryId: existing?.categoryId ?? null,
+          categoryId: form.categoryId ?? existing?.categoryId ?? null,
           unitId: existing?.unitId ?? null,
           branchId: existing?.branchId ?? user?.branchId ?? null,
           ...(existing ? {} : { quantity: form.qty }),
@@ -743,12 +804,13 @@ export function InventoryManagerPage() {
         <ItemModal
           title={modal.mode === 'add' ? 'Add inventory item' : 'Edit inventory item'}
           initial={modal.mode === 'edit' && editingItem
-            ? { item: editingItem.item, category: editingItem.category, unit: editingItem.unit, price: editingItem.price, qty: editingItem.qty, reorder: editingItem.reorder, owner: editingItem.owner, supplierId: editingItem.supplierId }
-            : emptyForm}
+            ? { item: editingItem.item, category: editingItem.category, categoryId: editingItem.categoryId, unit: editingItem.unit, price: editingItem.price, qty: editingItem.qty, reorder: editingItem.reorder, owner: editingItem.owner, supplierId: editingItem.supplierId }
+            : { ...emptyForm, category: inventoryCategories[0]?.name ?? categoryOptions[0], categoryId: inventoryCategories[0]?.id }}
           onClose={() => setModal(null)}
           onSave={handleSave}
           saving={saving}
           suppliers={suppliers}
+          categories={inventoryCategories}
         />
       )}
 

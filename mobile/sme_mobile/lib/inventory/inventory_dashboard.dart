@@ -1156,7 +1156,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                 value: '${summary.pendingOrders}',
                 icon: Icons.assignment_late_rounded,
                 accentColor: const Color(0xFFB28CFF),
-                subLabel: 'In-review orders',
+                subLabel: 'Open orders',
               ),
             ),
           ],
@@ -2028,12 +2028,17 @@ class InventoryDashboardRepository {
 
   Future<int> _loadPendingOrders() async {
     final response =
-        await _client.get('/api/purchase-orders?status=InReview&pageSize=1');
+        await _client.get('/api/purchase-orders?pageSize=100');
     if (response.statusCode != 200) {
       throw Exception('Purchase order request failed');
     }
     final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return (data['totalCount'] as num?)?.toInt() ?? 0;
+    final items = (data['items'] as List?) ?? const [];
+    const terminal = {'Received', 'Cancelled'};
+    return items.where((o) {
+      final status = (o is Map ? o['status'] : null)?.toString() ?? '';
+      return !terminal.contains(status);
+    }).length;
   }
 }
 

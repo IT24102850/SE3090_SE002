@@ -43,7 +43,8 @@ class _PurchaseOrderApprovalScreenState
                     event['status'] == 'approved')) {
               // refresh list on main isolate
               if (mounted) {
-                showAppNotification('Agent placed or updated a purchase order.',
+                showAppNotification(
+                    'Agent submitted a purchase order for mobile approval.',
                     tone: AppNotificationTone.info);
                 _load();
               }
@@ -109,25 +110,50 @@ class _PurchaseOrderApprovalScreenState
   }
 
   Future<void> _approve(_PurchaseOrder order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Approve purchase order?'),
+        content: Text(
+          'Place ${order.number} for LKR ${order.amount.toStringAsFixed(2)}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Review later'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Approve and place'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted || order.approving) return;
+
     setState(() => order.approving = true);
     try {
       final response = await widget.client.put(
           '/api/purchase-orders/${order.id}/status',
           body: {'status': 'Placed'});
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception();
+        throw StateError(response.statusCode == 403
+            ? 'Approval was denied. Sign out and back in on mobile, and confirm your Manager or Administrator role.'
+            : 'Purchase orders API returned ${response.statusCode}.');
       }
       if (!mounted) return;
       setState(() => _orders.removeWhere((item) => item.id == order.id));
       showAppNotification('${order.number} approved and marked as placed.',
           tone: AppNotificationTone.success);
-    } catch (_) {
+    } catch (error) {
       // An approval the server did not record is not an approval. The order
       // stays in the queue with its button re-enabled.
       if (mounted) {
         setState(() => order.approving = false);
         showAppNotification(
-            'Approval could not be completed while the API is unavailable.',
+            error is StateError
+                ? error.message.toString()
+                : 'Approval could not be completed while the API is unavailable.',
             tone: AppNotificationTone.error);
       }
     }

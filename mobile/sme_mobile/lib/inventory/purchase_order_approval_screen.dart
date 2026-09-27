@@ -32,6 +32,7 @@ class _PurchaseOrderApprovalScreenState
   bool _loading = true;
   String? _error;
   StreamSubscription? _notifSub;
+  String _selectedFilter = 'pending';
 
   @override
   void initState() {
@@ -70,19 +71,33 @@ class _PurchaseOrderApprovalScreenState
       _error = null;
     });
     try {
-      final response = await widget.client
-          .get('/api/purchase-orders?status=InReview&pageSize=100');
+      // Fetch all orders in one call — the approval desk shows every open
+      // (non-terminal) order: Draft, InReview, Placed, and InTransit.
+      // Filtering client-side avoids multiple round-trips and ensures that
+      // any order not yet Received or Cancelled is always visible.
+      final response =
+          await widget.client.get('/api/purchase-orders?pageSize=100');
       if (response.statusCode != 200) {
-        throw StateError(
-            'Purchase orders API returned ${response.statusCode}.');
+        throw StateError(_apiError(response.body, response.statusCode));
       }
       final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final allOrders = ((data['items'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(_PurchaseOrder.fromJson)
+          .toList();
+
+      // Keep only open (non-terminal) orders and deduplicate by id.
+      const terminal = {'Received', 'Cancelled'};
+      final seen = <String>{};
+      final openOrders = allOrders.where((o) {
+        if (terminal.contains(o.status)) return false;
+        return seen.add(o.id);
+      }).toList()
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
       if (!mounted) return;
       setState(() {
-        _orders = ((data['items'] as List?) ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .map(_PurchaseOrder.fromJson)
-            .toList();
+        _orders = openOrders;
       });
       if (showSuccess) {
         showAppNotification(
@@ -99,6 +114,24 @@ class _PurchaseOrderApprovalScreenState
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  String _apiError(String body, int statusCode) {
+    try {
+      final payload = jsonDecode(body);
+      if (payload is Map<String, dynamic>) {
+        final message = payload['message'] ?? payload['title'];
+        if (message is String && message.trim().isNotEmpty) return message;
+      }
+    } catch (_) {}
+    return 'Purchase orders API returned $statusCode.';
+  }
+
+  String _approvalApiError(String body, int statusCode) {
+    if (statusCode == 403) {
+      return 'Approval was denied. Sign out and back in on the mobile app to refresh approval access, and confirm your Manager or Administrator role.';
+    }
+    return _apiError(body, statusCode);
   }
 
   void _fail(String message) {
@@ -129,19 +162,22 @@ class _PurchaseOrderApprovalScreenState
         body: {'status': 'Placed'},
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception();
+        throw StateError(_approvalApiError(response.body, response.statusCode));
       }
       if (!mounted) return;
-      setState(() => _orders.removeWhere((item) => item.id == order.id));
+      setState(() {
+        order.status = 'Placed';
+        order.approving = false;
+      });
       showAppNotification(
         '${order.number} successfully authorized and marked as Placed.',
         tone: AppNotificationTone.success,
       );
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() => order.approving = false);
         showAppNotification(
-          'Approval could not be completed. Please retry.',
+          'Approval could not be completed. ${error is StateError ? error.message : 'Please retry.'}',
           tone: AppNotificationTone.error,
         );
       }
@@ -168,7 +204,7 @@ class _PurchaseOrderApprovalScreenState
         body: {'status': 'Cancelled'},
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception();
+        throw StateError(_approvalApiError(response.body, response.statusCode));
       }
       if (!mounted) return;
       setState(() => _orders.removeWhere((item) => item.id == order.id));
@@ -176,11 +212,11 @@ class _PurchaseOrderApprovalScreenState
         '${order.number} has been rejected and cancelled.',
         tone: AppNotificationTone.warning,
       );
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() => order.approving = false);
         showAppNotification(
-          'Could not reject order. Please retry.',
+          'Could not reject order. ${error is StateError ? error.message : 'Please retry.'}',
           tone: AppNotificationTone.error,
         );
       }
@@ -189,6 +225,72 @@ class _PurchaseOrderApprovalScreenState
 
   double get _totalQueueAmount =>
       _orders.fold(0.0, (acc, item) => acc + item.amount);
+
+  int get _pendingApprovalCount =>
+      _orders.where((o) => o.status == 'InReview').length;
+
+  int get _inFulfillmentCount => _orders
+      .where((o) => o.status == 'Placed' || o.status == 'InTransit')
+      .length;
+
+  List<_PurchaseOrder> get _filteredOrders {
+    switch (_selectedFilter) {
+      case 'pending':
+        return _orders.where((o) => o.status == 'InReview').toList();
+      case 'active':
+        return _orders
+            .where((o) => o.status == 'Placed' || o.status == 'InTransit')
+            .toList();
+      default:
+        return _orders;
+    }
+  }
+
+  Widget _buildFilterChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildFilterChip('all', 'All Open (${_orders.length})'),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+              'pending', 'Needs Approval ($_pendingApprovalCount)'),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+              'active', 'Placed & In Transit ($_inFulfillmentCount)'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String key, String label) {
+    final isSelected = _selectedFilter == key;
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () => setState(() => _selectedFilter = key),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.cyan.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppColors.cyan : AppColors.glassBorder,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppTextStyles.caption.copyWith(
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            color: isSelected ? AppColors.cyan : AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -216,7 +318,10 @@ class _PurchaseOrderApprovalScreenState
                   children: [
                     // Executive Header Card
                     _buildExecutiveSummary(),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 14),
+
+                    _buildFilterChips(),
+                    const SizedBox(height: 16),
 
                     if (_error != null) ...[
                       ErrorState(message: _error!, onRetry: _load),
@@ -224,22 +329,29 @@ class _PurchaseOrderApprovalScreenState
                     ],
 
                     SectionHeader(
-                      'AWAITING EXECUTIVE DECISION',
-                      trailing: Text('${_orders.length} Orders',
+                      _selectedFilter == 'pending'
+                          ? 'AWAITING APPROVAL DECISION'
+                          : _selectedFilter == 'active'
+                              ? 'ACTIVE ORDERS IN FULFILLMENT'
+                              : 'OPEN PURCHASE ORDERS',
+                      trailing: Text('${_filteredOrders.length} Orders',
                           style: AppTextStyles.caption
                               .copyWith(color: AppColors.cyan)),
                     ),
                     const SizedBox(height: 12),
 
-                    if (_orders.isEmpty && _error == null)
-                      const EmptyState(
+                    if (_filteredOrders.isEmpty && _error == null)
+                      EmptyState(
                         icon: Icons.task_alt_rounded,
                         title: 'All caught up!',
-                        message:
-                            'No purchase orders are currently pending review or approval.',
+                        message: _selectedFilter == 'pending'
+                            ? 'No purchase orders are currently pending review or approval.'
+                            : _selectedFilter == 'active'
+                                ? 'No placed or in-transit orders currently active.'
+                                : 'No open purchase orders found.',
                       )
                     else
-                      ..._orders.map((order) => _buildOrderCard(order)),
+                      ..._filteredOrders.map((order) => _buildOrderCard(order)),
                   ],
                 ),
         ),
@@ -361,7 +473,7 @@ class _PurchaseOrderApprovalScreenState
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${_orders.length} Orders Pending',
+                  '${_orders.length} Open Orders',
                   maxLines: 2,
                   textAlign: TextAlign.center,
                   style: AppTextStyles.caption.copyWith(
@@ -378,11 +490,19 @@ class _PurchaseOrderApprovalScreenState
   }
 
   Widget _buildOrderCard(_PurchaseOrder order) {
+    // Colours and labels for every open status.
+    final (statusColor, statusLabel) = switch (order.status) {
+      'Draft' => (AppColors.cyan, 'DRAFT'),
+      'InReview' => (const Color(0xFFFBBF24), 'IN REVIEW'),
+      'Placed' => (const Color(0xFFA78BFA), 'PLACED'),
+      'InTransit' => (const Color(0xFF60A5FA), 'IN TRANSIT'),
+      _ => (AppColors.textMuted, order.status.toUpperCase()),
+    };
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       child: InventoryPanel(
         padding: const EdgeInsets.all(18),
-        borderColor: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+        borderColor: statusColor.withValues(alpha: 0.35),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -391,15 +511,15 @@ class _PurchaseOrderApprovalScreenState
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                    color: statusColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+                    border:
+                        Border.all(color: statusColor.withValues(alpha: 0.3)),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.receipt_long_rounded,
                     size: 22,
-                    color: Color(0xFFF59E0B),
+                    color: statusColor,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -431,10 +551,10 @@ class _PurchaseOrderApprovalScreenState
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                    color: statusColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                    border:
+                        Border.all(color: statusColor.withValues(alpha: 0.4)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -442,16 +562,16 @@ class _PurchaseOrderApprovalScreenState
                       Container(
                         width: 6,
                         height: 6,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFF59E0B),
+                        decoration: BoxDecoration(
+                          color: statusColor,
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Text(
-                        'IN REVIEW',
+                      Text(
+                        statusLabel,
                         style: TextStyle(
-                          color: Color(0xFFFBBF24),
+                          color: statusColor,
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.5,
@@ -531,46 +651,159 @@ class _PurchaseOrderApprovalScreenState
             ),
             const SizedBox(height: 16),
 
-            // Action Buttons
-            if (widget.canApprove) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: GhostButton(
-                      label: 'Reject',
-                      icon: Icons.close_rounded,
-                      color: const Color(0xFFF43F5E),
-                      height: 46,
-                      onPressed: order.approving ? null : () => _reject(order),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: NeonButton(
-                      label: order.approving
-                          ? 'Authorizing...'
-                          : 'Approve & Place',
-                      isLoading: order.approving,
-                      icon: Icons.check_circle_rounded,
-                      height: 46,
-                      onPressed: order.approving ? null : () => _approve(order),
-                    ),
-                  ),
-                ],
-              ),
-            ] else ...[
+            if (order.items.isNotEmpty) ...[
+              Text('ORDER ITEMS',
+                  style: AppTextStyles.label.copyWith(
+                    color: AppColors.textSecondary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                  )),
+              const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.glassFill,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.glassBorder),
+                ),
+                child: Column(
+                  children: [
+                    ...order.items.take(3).map((item) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(children: [
+                            Expanded(
+                                child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.caption.copyWith(
+                                        color: AppColors.textPrimary,
+                                        fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 2),
+                                Text(
+                                    '${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity} × LKR ${item.unitPrice.toStringAsFixed(2)}',
+                                    style: AppTextStyles.caption.copyWith(
+                                        color: AppColors.textMuted,
+                                        fontSize: 11)),
+                              ],
+                            )),
+                            const SizedBox(width: 8),
+                            Text('LKR ${item.lineTotal.toStringAsFixed(2)}',
+                                style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.w700)),
+                          ]),
+                        )),
+                    if (order.items.length > 3)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('+ ${order.items.length - 3} more items',
+                              style: AppTextStyles.caption.copyWith(
+                                  color: AppColors.cyan,
+                                  fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Action Buttons — only shown for orders that can still be approved/rejected.
+            // Placed and InTransit orders are already past the approval gate.
+            if (order.status == 'InReview') ...[
+              if (widget.canApprove) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: GhostButton(
+                        label: 'Reject',
+                        icon: Icons.close_rounded,
+                        color: const Color(0xFFF43F5E),
+                        height: 46,
+                        onPressed:
+                            order.approving ? null : () => _reject(order),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: NeonButton(
+                        label: order.approving
+                            ? 'Authorizing...'
+                            : 'Approve & Place',
+                        isLoading: order.approving,
+                        icon: Icons.check_circle_rounded,
+                        height: 46,
+                        onPressed:
+                            order.approving ? null : () => _approve(order),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    'Approvals are restricted to Managers & Administrators.',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.textMuted),
+                  ),
+                ),
+              ],
+            ] else if (order.status == 'Draft') ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
+                  color: Colors.white.withValues(alpha: 0.04),
                   borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.glassBorder),
                 ),
                 child: Text(
-                  'Approvals are restricted to Managers & Administrators.',
+                  'Draft order — it must be submitted for review before a mobile approval decision.',
+                  textAlign: TextAlign.center,
                   style: AppTextStyles.caption
                       .copyWith(color: AppColors.textMuted),
+                ),
+              ),
+            ] else ...[
+              // Order is already past the approval step — show informational banner.
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.glassBorder),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 15, color: AppColors.textMuted),
+                    const SizedBox(width: 7),
+                    Text(
+                      order.status == 'Placed'
+                          ? 'Order has been placed — awaiting shipment.'
+                          : 'Order is in transit — no action required.',
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.textMuted),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -589,12 +822,18 @@ class _PurchaseOrder {
     this.branch,
     this.amount = 0,
     this.lineItems = 1,
+    this.status = 'Draft',
+    this.updatedAt = '',
+    this.items = const [],
   });
 
   final String id, number;
   final String? supplier, branch;
   final double amount;
   final int lineItems;
+  String status;
+  final String updatedAt;
+  final List<_PurchaseOrderLine> items;
   bool approving = false;
 
   factory _PurchaseOrder.fromJson(Map<String, dynamic> json) => _PurchaseOrder(
@@ -602,11 +841,42 @@ class _PurchaseOrder {
         number: '${json['number']}',
         supplier: json['supplier'] as String?,
         branch: json['branch'] as String?,
+        status: json['status'] as String? ?? 'Draft',
+        updatedAt:
+            json['updatedAt'] as String? ?? json['createdAt'] as String? ?? '',
         amount: (json['amount'] as num?)?.toDouble() ??
             (json['totalAmount'] as num?)?.toDouble() ??
             0,
         lineItems: (json['lineItems'] as num?)?.toInt() ??
             (json['items'] as List?)?.length ??
             1,
+        items: ((json['items'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(_PurchaseOrderLine.fromJson)
+            .toList(),
+      );
+}
+
+class _PurchaseOrderLine {
+  const _PurchaseOrderLine({
+    required this.name,
+    required this.quantity,
+    required this.unitPrice,
+    required this.lineTotal,
+  });
+
+  final String name;
+  final double quantity;
+  final double unitPrice;
+  final double lineTotal;
+
+  factory _PurchaseOrderLine.fromJson(Map<String, dynamic> json) =>
+      _PurchaseOrderLine(
+        name: json['itemName'] as String? ??
+            json['description'] as String? ??
+            'Purchase item',
+        quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
+        unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0,
+        lineTotal: (json['lineTotal'] as num?)?.toDouble() ?? 0,
       );
 }
