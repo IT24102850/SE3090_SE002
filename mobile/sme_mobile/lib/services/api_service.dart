@@ -6,14 +6,21 @@ import 'secure_storage_service.dart';
 /// Central HTTP client for the ASP.NET Core backend.
 /// Automatically attaches JWT from secure storage on every request.
 class ApiService {
-  // Android's emulator networking sandboxes "localhost" to the emulator
-  // itself, not the host machine - 10.0.2.2 is the documented alias back to
-  // the host. Every other target (iOS simulator, Windows/web/physical
-  // device on the same network as a manually-set host) keeps using
-  // localhost as before.
-  // - Physical device:   http://<your-lan-ip>:5298/api
-  // - Deployed:          https://your-api.railway.app/api
+  /// Where the API lives, overridable at build time:
+  ///
+  ///   flutter build apk --dart-define=API_BASE_URL=https://your-api/api
+  ///   flutter run        --dart-define=API_BASE_URL=http://192.168.1.5:5298/api
+  ///
+  /// This matters for a real phone. The defaults below are development
+  /// addresses: 10.0.2.2 is the Android *emulator's* documented alias back
+  /// to the host machine, and means nothing on a physical device - an
+  /// installed APK built without an override cannot reach any server and
+  /// fails every request with "server is not responding". A distributable
+  /// build must pass the deployed HTTPS URL.
+  static const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+
   static String get baseUrl {
+    if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
     if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5298/api';
     return 'http://localhost:5298/api';
   }
