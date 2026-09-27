@@ -24,7 +24,7 @@ services:
       - key: Jwt__Audience
         value: SmeBackendUsers
       - key: AgentService__BaseUrl
-        value: http://localhost:8001
+        value: https://sme-agentic-ai.onrender.com
       - key: AgentService__InternalToken
         sync: false
       - key: Cloudinary__CloudName
@@ -33,3 +33,17 @@ services:
         sync: false
       - key: Cloudinary__ApiSecret
         sync: false
+  - type: web
+    name: sme-agentic-ai
+    runtime: docker
+    rootDir: agentic-ai-service
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AGENT_SERVICE_INTERNAL_TOKEN
+        sync: false
+      - key: BACKEND_API_BASE_URL
+        value: https://sme-backend-lxsp.onrender.com/api

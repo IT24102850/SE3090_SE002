@@ -45,7 +45,7 @@ public sealed class BillingPlannerService : IBillingPlannerService
     {
         _config = config;
         _logger = logger;
-        var baseUrl = config["AgentService:BaseUrl"] ?? "http://localhost:8001";
+        var baseUrl = config["AgentService:BaseUrl"] ?? "https://sme-agentic-ai.onrender.com";
         http.BaseAddress = new Uri(baseUrl);
         http.Timeout = TimeSpan.FromSeconds(config.GetValue("AgentService:TimeoutSeconds", 60));
         _http = http;
@@ -87,8 +87,8 @@ public sealed class BillingPlannerService : IBillingPlannerService
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             _logger.LogWarning(ex, "Billing copilot unreachable at {BaseAddress}{Path}", _http.BaseAddress, path);
-            return (default, $"Could not reach the billing copilot at {_http.BaseAddress}. Start the agent service " +
-                             $"(uvicorn main:app --port 8001) and retry. {ex.Message}");
+            return (default, $"Could not reach the deployed billing copilot at {_http.BaseAddress}. " +
+                $"Verify the agent service is running and retry. {ex.Message}");
         }
 
         // Every outcome of a run - a model plan, the deterministic fallback, a
