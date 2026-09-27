@@ -15,6 +15,133 @@ namespace SmeBackend.Tests;
 public class InventoryControllerTests
 {
     [Fact]
+    public async Task GetCategories_WhenLegacyTenantHasNoCatalog_SeedsBusinessCategories()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        db.Tenants.Add(new Tenant { Id = tenantId, Name = "Clinic", BusinessType = "clinic" });
+        await db.SaveChangesAsync();
+        db.InventoryCategories.RemoveRange(db.InventoryCategories);
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.GetCategories(CancellationToken.None);
+
+        var categories = Assert.IsType<OkObjectResult>(result.Result).Value
+            as IReadOnlyList<InventoryCategoryOptionResponse>;
+        Assert.NotNull(categories);
+        Assert.Contains(categories, category => category.Name == "Medical Supplies");
+        Assert.Contains(categories, category => category.Name == "Pharmaceuticals");
+        Assert.Equal(4, categories.Count);
+    }
+
+    [Fact]
+    public async Task CreateInventory_WhenCategoryNameIsProvidedWithoutId_CreatesAndAssignsCategory()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        db.Tenants.Add(new Tenant { Id = tenantId, Name = "Clinic", BusinessType = "clinic" });
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.CreateInventory(
+            new CreateInventoryRequest(
+                "Portable ECG",
+                "ECG-001",
+                null,
+                null,
+                null,
+                null,
+                Category: "Diagnostic Equipment"),
+            CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result).Value
+            as InventoryItemResponse;
+        Assert.NotNull(created);
+        Assert.Equal("Diagnostic Equipment", created.Category);
+        Assert.NotNull(created.CategoryId);
+        Assert.Contains(db.InventoryCategories, category =>
+            category.Id == created.CategoryId && category.Name == "Diagnostic Equipment");
+    }
+
+    [Fact]
+    public async Task UpdateInventoryItem_WhenCategoryNameIsProvidedWithoutId_AssignsCategory()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        var item = new InventoryItem
+        {
+            TenantId = tenantId,
+            Name = "Portable ECG",
+            Sku = "ECG-002",
+            IsActive = true,
+        };
+        db.InventoryItems.Add(item);
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.UpdateInventoryItem(
+            item.Id,
+            new UpdateInventoryRequest(
+                item.Name,
+                item.Sku,
+                null,
+                null,
+                null,
+                null,
+                Category: "Diagnostic Equipment"),
+            CancellationToken.None);
+
+        var updated = Assert.IsType<OkObjectResult>(result.Result).Value
+            as InventoryItemResponse;
+        Assert.NotNull(updated);
+        Assert.Equal("Diagnostic Equipment", updated.Category);
+        Assert.NotNull(updated.CategoryId);
+    }
+
+    [Fact]
     public async Task GetInventory_WhenTenantIdMissing_ReturnsUnauthorized()
     {
         var db = CreateDbContext();
