@@ -1,10 +1,20 @@
+import 'dart:io' show Platform;
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'secure_storage_service.dart';
 
 /// Central HTTP client for the ASP.NET Core backend.
 /// Automatically attaches JWT from secure storage on every request.
 class ApiService {
 
+
+  static String get baseUrl => _dio.options.baseUrl;
+
+  static set baseUrl(String url) {
+    var u = url.trim();
+    if (u.endsWith('/')) u = u.substring(0, u.length - 1);
+    _dio.options.baseUrl = u;
+  }
 
   static final Dio _dio = Dio(
     BaseOptions(
