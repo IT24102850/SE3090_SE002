@@ -2197,3 +2197,88 @@ body:has(.inventory-scope) .app-content::after {
     animation: none !important;
   }
 }
+
+.inventory-scope .branch-overview-page .branch-comparison-toolbar {
+  padding: .85rem 1.1rem;
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-primary-soft) 28%, var(--color-surface));
+}
+.inventory-scope .branch-directory-pulse {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .65rem;
+  padding: .9rem 1.1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.inventory-scope .branch-directory-pulse > div {
+  display: flex;
+  min-width: 0;
+  gap: .65rem;
+  align-items: center;
+  padding: .7rem .8rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: .8rem;
+}
+.inventory-scope .branch-directory-pulse-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  place-items: center;
+  color: #5269d9;
+  background: color-mix(in srgb, #5269d9 12%, var(--color-surface));
+  border-radius: .65rem;
+  font-size: .85rem;
+  font-weight: 850;
+}
+.inventory-scope .branch-directory-pulse > div > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: .15rem;
+}
+.inventory-scope .branch-directory-pulse small,
+.inventory-scope .category-stock-total small {
+  color: var(--color-text-muted);
+  font-size: .57rem;
+  font-weight: 850;
+  letter-spacing: .09em;
+}
+.inventory-scope .branch-directory-pulse strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: .92rem;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inventory-scope .branch-directory-pulse-units { color: #0b8e9e; background: color-mix(in srgb, #0b8e9e 12%, var(--color-surface)); }
+.inventory-scope .branch-directory-pulse-risk { color: #c17a08; background: color-mix(in srgb, #e2a126 14%, var(--color-surface)); }
+.inventory-scope .branch-directory-pulse-value { color: #118b62; background: color-mix(in srgb, #17ae83 13%, var(--color-surface)); font-size: .52rem; }
+.inventory-scope .branch-directory-pulse > .has-risk { border-color: color-mix(in srgb, #e2a126 42%, var(--color-border)); }
+.inventory-scope .branch-directory-pulse > .has-risk .branch-directory-pulse-risk { color: #bd6c00; background: color-mix(in srgb, #e2a126 21%, var(--color-surface)); }
+.inventory-scope .branch-overview-page .category-stock-head { padding: .9rem 1rem; }
+.inventory-scope .branch-overview-page .category-stock-total { display: grid; gap: .15rem; justify-items: end; }
+.inventory-scope .branch-overview-page .category-stock-total > strong { color: var(--category-accent); font-size: .95rem; font-variant-numeric: tabular-nums; }
+.inventory-scope .branch-category-warning { margin: .65rem 1.1rem 0; padding: .65rem .8rem; color: #825800; background: color-mix(in srgb, #e2a126 12%, var(--color-surface)); border: 1px solid color-mix(in srgb, #e2a126 30%, var(--color-border)); border-radius: .65rem; font-size: .76rem; }
+.inventory-scope .branch-item-category { display: block; margin-top: .2rem; color: var(--color-text-muted); font-size: .68rem; font-weight: 550; }
+.inventory-scope .branch-overview-page .branch-item-sku { padding: .18rem .35rem; color: var(--color-text-secondary); background: var(--color-surface-muted, color-mix(in srgb, var(--color-border) 36%, var(--color-surface))); border-radius: .35rem; font-size: .72rem; }
+.inventory-scope .branch-stock-status { display: inline-flex; align-items: center; padding: .24rem .5rem; border: 1px solid transparent; border-radius: 999px; font-size: .68rem; font-weight: 800; }
+.inventory-scope .branch-stock-status::before { width: .38rem; height: .38rem; margin-right: .35rem; content: ''; background: currentColor; border-radius: 50%; }
+.inventory-scope .branch-stock-status.is-ok { color: #08764f; background: rgba(23,174,131,.1); border-color: rgba(23,174,131,.2); }
+.inventory-scope .branch-stock-status.is-low { color: #986000; background: rgba(226,161,38,.12); border-color: rgba(226,161,38,.24); }
+.inventory-scope .branch-stock-status.is-out { color: #b52e42; background: rgba(228,78,99,.1); border-color: rgba(228,78,99,.22); }
+.inventory-scope .branch-overview-page .comparison-table-wrap .data-table { min-width: 1040px; }
+@media (max-width: 900px) {
+  .inventory-scope .branch-directory-pulse { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .inventory-scope .branch-overview-page .comparison-heading { align-items: flex-start; padding: .9rem; }
+  .inventory-scope .branch-overview-page .comparison-count { white-space: normal; }
+  .inventory-scope .branch-overview-page .branch-comparison-toolbar { align-items: stretch; padding: .75rem; }
+  .inventory-scope .branch-overview-page .branch-comparison-toolbar > * { width: 100%; }
+  .inventory-scope .branch-directory-pulse { gap: .45rem; padding: .7rem; }
+  .inventory-scope .branch-directory-pulse > div { gap: .45rem; padding: .6rem; }
+  .inventory-scope .branch-directory-pulse-icon { width: 1.75rem; height: 1.75rem; }
+  .inventory-scope .branch-directory-pulse strong { font-size: .8rem; }
+}
