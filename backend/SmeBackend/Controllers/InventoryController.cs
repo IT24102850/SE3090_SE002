@@ -138,6 +138,20 @@ public sealed class InventoryController(
                 branchId))
             return Forbid();
 
+        if (!await db.InventoryCategories.IgnoreQueryFilters()
+                .AnyAsync(category => category.TenantId == tenantId, cancellationToken))
+        {
+            var tenant = await db.Tenants.IgnoreQueryFilters()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(candidate => candidate.Id == tenantId && candidate.IsActive, cancellationToken);
+            if (tenant is not null)
+            {
+                db.InventoryCategories.AddRange(DefaultInventoryCatalog.CategoriesFor(tenant.BusinessType)
+                    .Select(name => new InventoryCategory { TenantId = tenantId, Name = name }));
+                await db.SaveChangesAsync(cancellationToken);
+            }
+        }
+
         var categories = await db.InventoryCategories
             .AsNoTracking()
             .OrderBy(category => category.Name)
@@ -346,10 +360,11 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
-        if (request.CategoryId.HasValue &&
-            !await db.InventoryCategories.AnyAsync(category => category.Id == request.CategoryId.Value, cancellationToken))
+        var categoryId = request.CategoryId.HasValue || !string.IsNullOrWhiteSpace(request.Category)
+            ? await ResolveCategoryIdAsync(tenantId, request.CategoryId, request.Category, cancellationToken)
+            : item.CategoryId;
+        if (ModelState.ErrorCount > 0)
         {
-            ModelState.AddModelError("categoryId", "The category does not exist for this tenant.");
             return ValidationProblem(ModelState);
         }
 
@@ -370,7 +385,7 @@ public sealed class InventoryController(
         item.Name = name;
         item.Sku = sku;
         item.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
-        item.CategoryId = request.CategoryId ?? item.CategoryId;
+        item.CategoryId = categoryId;
         item.UnitId = request.UnitId ?? item.UnitId;
         item.BranchId = request.BranchId ?? item.BranchId;
         if (request.SupplierId.HasValue) item.SupplierId = request.SupplierId;
@@ -702,11 +717,10 @@ public sealed class InventoryController(
             return Conflict(new { message = $"An item with SKU '{sku}' already exists." });
         }
 
-        if (request.CategoryId.HasValue &&
-            !await db.InventoryCategories.AnyAsync(
-                category => category.Id == request.CategoryId.Value, cancellationToken))
+        var categoryId = await ResolveCategoryIdAsync(
+            tenantId, request.CategoryId, request.Category, cancellationToken);
+        if (ModelState.ErrorCount > 0)
         {
-            ModelState.AddModelError("categoryId", "The category does not exist for this tenant.");
             return ValidationProblem(ModelState);
         }
 
@@ -752,7 +766,7 @@ public sealed class InventoryController(
             Name = name,
             Sku = sku,
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
-            CategoryId = request.CategoryId,
+            CategoryId = categoryId,
             UnitId = request.UnitId,
             BranchId = branchId,
             SupplierId = request.SupplierId,
@@ -778,6 +792,44 @@ public sealed class InventoryController(
 
     private bool TryGetTenantId(out Guid tenantId) =>
         Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out tenantId);
+
+    private async Task<Guid?> ResolveCategoryIdAsync(
+        Guid tenantId,
+        Guid? categoryId,
+        string? categoryName,
+        CancellationToken cancellationToken)
+    {
+        if (categoryId.HasValue)
+        {
+            if (await db.InventoryCategories.AnyAsync(
+                    category => category.Id == categoryId.Value && category.TenantId == tenantId,
+                    cancellationToken))
+            {
+                return categoryId;
+            }
+
+            ModelState.AddModelError("categoryId", "The category does not exist for this tenant.");
+            return null;
+        }
+
+        var normalizedName = categoryName?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            return null;
+        }
+
+        var existingCategory = await db.InventoryCategories.FirstOrDefaultAsync(
+            category => category.TenantId == tenantId && category.Name.ToLower() == normalizedName.ToLower(),
+            cancellationToken);
+        if (existingCategory is not null)
+        {
+            return existingCategory.Id;
+        }
+
+        var newCategory = new InventoryCategory { TenantId = tenantId, Name = normalizedName };
+        db.InventoryCategories.Add(newCategory);
+        return newCategory.Id;
+    }
 
     private Guid? ResolveBranchScope(Guid? requestedBranchId)
     {
@@ -898,7 +950,8 @@ public sealed record CreateInventoryRequest(
     decimal Quantity = 0,
     decimal ReorderLevel = 0,
     decimal? UnitCost = null,
-    Guid? SupplierId = null);
+    Guid? SupplierId = null,
+    string? Category = null);
 
 public sealed record UpdateInventoryRequest(
     string? Name,
@@ -910,7 +963,8 @@ public sealed record UpdateInventoryRequest(
     decimal ReorderLevel = 0,
     decimal? UnitCost = null,
     Guid? SupplierId = null,
-    bool ClearSupplier = false);
+    bool ClearSupplier = false,
+    string? Category = null);
 
 public sealed record AdjustInventoryRequest(
     decimal Quantity,

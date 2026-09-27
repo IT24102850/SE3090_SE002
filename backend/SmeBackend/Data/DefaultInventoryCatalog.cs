@@ -28,7 +28,7 @@ internal static class DefaultInventoryCatalog
         }
     }
 
-    private static string[] CategoriesFor(string businessType) => businessType.Trim().ToLowerInvariant() switch
+    public static string[] CategoriesFor(string businessType) => businessType.Trim().ToLowerInvariant() switch
     {
         "restaurant" or "cafe" or "bakery" => ["Ingredients", "Beverages", "Packaging", "Cleaning Supplies"],
         "clinic" or "pharmacy" or "healthcare" or "health care" or "hospital" or "medical" or "dental" => ["Medical Supplies", "Pharmaceuticals", "PPE", "Office Supplies"],
