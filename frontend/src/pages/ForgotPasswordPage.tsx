@@ -6,7 +6,7 @@ import { useToast } from '../shared/components/Toast';
 import '../features/marketing/landing.css';
 import './signup.css';
 
-/* ── Interactive Particle Canvas ─────────────────────────────── */
+/* Interactive particle canvas */
 function ParticleCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
@@ -65,7 +65,7 @@ export default function ForgotPasswordPage() {
   const initialEmail = searchParams.get('email') || '';
   const initialCode = searchParams.get('code') || '';
 
-  const [step, setStep] = useState<'request' | 'verify' | 'success'>(initialCode ? 'verify' : 'request');
+  const [step, setStep] = useState<'request' | 'verify' | 'password' | 'success'>(initialCode ? 'verify' : 'request');
   const [email, setEmail] = useState(initialEmail);
   const [code, setCode] = useState(initialCode);
   const [newPassword, setNewPassword] = useState('');
@@ -73,6 +73,7 @@ export default function ForgotPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [codeFeedback, setCodeFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('unify-home-theme');
@@ -113,6 +114,7 @@ export default function ForgotPasswordPage() {
       }, { timeout: 20000 });
       show(res.data.message || 'If the address is registered and email delivery is configured, a code will arrive shortly.', 'success');
       setCode('');
+      setCodeFeedback(null);
       setResendCooldown(60);
       setStep('verify');
     } catch (err: unknown) {
@@ -123,6 +125,34 @@ export default function ForgotPasswordPage() {
       } else {
         show('Unable to process password reset. Please try again.', 'error');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (code.trim().length !== 6) {
+      setCodeFeedback({ type: 'error', message: 'Enter all 6 digits from the email.' });
+      return;
+    }
+
+    setLoading(true);
+    setCodeFeedback(null);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/auth/verify-reset-code`, {
+        email: email.trim(),
+        code: code.trim(),
+      }, { timeout: 20000 });
+      setCodeFeedback({ type: 'success', message: res.data.message || 'Code verified. Choose a new password.' });
+      show('Code verified. You can now choose a new password.', 'success');
+      setStep('password');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.message
+        ? err.response.data.message
+        : 'We could not verify that code. Check it and try again.';
+      setCodeFeedback({ type: 'error', message });
+      show(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -347,136 +377,59 @@ export default function ForgotPasswordPage() {
 
             {step === 'verify' && (
               <div className="lp-auth-step-anim">
-                <h1 id="recovery-title">Enter verification code</h1>
+                <h1 id="recovery-title">Check your email</h1>
                 <p className="lp-auth-subtext">
-                  If this address is registered and email delivery is configured, a 6-digit code will arrive at <strong>{email}</strong>. Check your inbox and enter it below with your new password.
+                  Enter the 6-digit code sent to <strong>{email}</strong>. We’ll verify it first, then let you choose a new password.
                 </p>
-
-                <form onSubmit={handleResetPassword} noValidate>
+                <form onSubmit={handleVerifyCode} noValidate>
                   <div className="lp-auth-field">
                     <label htmlFor="recovery-code">6-digit verification code</label>
                     <div className="lp-auth-input-wrap">
-                      <span className="lp-auth-input-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                        </svg>
-                      </span>
-                      <input
-                        id="recovery-code"
-                        className="lp-auth-input lp-code-input"
-                        type="text"
-                        maxLength={6}
-                        placeholder="123456"
-                        value={code}
-                        onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                        required
-                        autoFocus
-                      />
+                      <span className="lp-auth-input-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg></span>
+                      <input id="recovery-code" className="lp-auth-input lp-code-input" type="text" maxLength={6} inputMode="numeric" autoComplete="one-time-code" placeholder="123456" value={code} onChange={(e) => { setCode(e.target.value.replace(/\D/g, '')); setCodeFeedback(null); }} required autoFocus />
                     </div>
                   </div>
-
-                  <div className="lp-auth-field">
-                    <label htmlFor="new-password">New password</label>
-                    <div className="lp-auth-input-wrap">
-                      <span className="lp-auth-input-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                        </svg>
-                      </span>
-                      <input
-                        id="new-password"
-                        className="lp-auth-input"
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="At least 6 characters"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        required
-                      />
-                      <button
-                        type="button"
-                        className="lp-auth-eye-btn"
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        title={showPassword ? 'Hide password' : 'Show password'}
-                      >
-                        {showPassword ? (
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                            <line x1="1" y1="1" x2="23" y2="23" />
-                          </svg>
-                        ) : (
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                            <circle cx="12" cy="12" r="3" />
-                          </svg>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="lp-auth-field">
-                    <label htmlFor="confirm-password">Confirm new password</label>
-                    <div className="lp-auth-input-wrap">
-                      <span className="lp-auth-input-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      </span>
-                      <input
-                        id="confirm-password"
-                        className="lp-auth-input"
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="Re-enter new password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-
+                  {codeFeedback && <p role="status" aria-live="polite" className={`lp-auth-subtext ${codeFeedback.type === 'error' ? 'lp-error-text' : 'lp-success-text'}`}>{codeFeedback.type === 'success' ? 'Verified: ' : 'Code issue: '}{codeFeedback.message}</p>}
                   <div className="lp-auth-options-row">
-                    <button
-                      type="button"
-                      disabled={resendCooldown > 0 || loading}
-                      className="lp-resend-btn"
-                      onClick={handleRequestReset}
-                    >
-                      {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
-                    </button>
-                    <button
-                      type="button"
-                      className="lp-auth-hint-link"
-                      onClick={() => setStep('request')}
-                    >
-                      Change email
-                    </button>
+                    <button type="button" disabled={resendCooldown > 0 || loading} className="lp-resend-btn" onClick={handleRequestReset}>{resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}</button>
+                    <button type="button" className="lp-auth-hint-link" onClick={() => setStep('request')}>Change email</button>
                   </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="lp-auth-submit-btn lp-btn-shine"
-                  >
-                    {loading ? (
-                      <>
-                        <span className="lp-spinner" />
-                        <span>Updating credentials…</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Reset Password &amp; Sign In</span>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <line x1="5" y1="12" x2="19" y2="12" />
-                          <polyline points="12 5 19 12 12 19" />
-                        </svg>
-                      </>
-                    )}
+                  <button type="submit" disabled={loading} className="lp-auth-submit-btn lp-btn-shine">
+                    {loading ? <><span className="lp-spinner" /><span>Checking code…</span></> : <><span>Verify Code</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg></>}
                   </button>
                 </form>
               </div>
             )}
 
+            {step === 'password' && (
+              <div className="lp-auth-step-anim">
+                <h1 id="recovery-title">Choose a new password</h1>
+                <p className="lp-auth-subtext"><strong className="lp-success-text">Email verified.</strong> Set a new password for <strong>{email}</strong>.</p>
+                <form onSubmit={handleResetPassword} noValidate>
+                  <div className="lp-auth-field">
+                    <label htmlFor="new-password">New password</label>
+                    <div className="lp-auth-input-wrap">
+                      <span className="lp-auth-input-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg></span>
+                      <input id="new-password" className="lp-auth-input" type={showPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="At least 6 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                      <button type="button" className="lp-auth-eye-btn" onClick={() => setShowPassword((prev) => !prev)} title={showPassword ? 'Hide password' : 'Show password'} aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                        {showPassword ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 0-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="lp-auth-field">
+                    <label htmlFor="confirm-password">Confirm new password</label>
+                    <div className="lp-auth-input-wrap">
+                      <span className="lp-auth-input-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12" /></svg></span>
+                      <input id="confirm-password" className="lp-auth-input" type={showPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="Re-enter new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading} className="lp-auth-submit-btn lp-btn-shine">
+                    {loading ? <><span className="lp-spinner" /><span>Updating password…</span></> : <><span>Save New Password</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg></>}
+                  </button>
+                </form>
+                <button type="button" className="lp-auth-hint-link" onClick={() => setStep('verify')}>Back to code</button>
+              </div>
+            )}
             {step === 'success' && (
               <div className="lp-auth-step-anim lp-success-card">
                 <div className="lp-success-icon-wrap">
