@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 using SmeBackend.Data;
 using SmeBackend.DTOs;
 using SmeBackend.Models;
@@ -16,13 +17,15 @@ public class AuthController : ControllerBase
     private readonly IJwtService _jwtService;
     private readonly ICustomerAccountService _customers;
     private readonly IPasswordResetManager _passwordReset;
+    private readonly IMobileExternalAuthService _externalAuth;
 
-    public AuthController(AppDbContext context, IJwtService jwtService, ICustomerAccountService customers, IPasswordResetManager passwordReset)
+    public AuthController(AppDbContext context, IJwtService jwtService, ICustomerAccountService customers, IPasswordResetManager passwordReset, IMobileExternalAuthService externalAuth)
     {
         _context = context;
         _jwtService = jwtService;
         _customers = customers;
         _passwordReset = passwordReset;
+        _externalAuth = externalAuth;
     }
 
     // Public customer self-registration. Creates one global customer
@@ -246,6 +249,89 @@ public class AuthController : ControllerBase
         return Ok(new
         {
             message = "If the address is registered and email delivery is configured, a 6-digit verification code will arrive shortly."
+        });
+    }
+
+    /// <summary>
+    /// Verifies a native provider token and signs in an existing account, or
+    /// creates a customer account on first sign-in.
+    /// </summary>
+    [HttpPost("mobile/external-login")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResponseDto>> MobileExternalLogin(
+        [FromBody] MobileExternalLoginDto dto,
+        CancellationToken cancellationToken)
+    {
+        if (Request.Headers.ContainsKey("Origin"))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Provider sign-in is only available in the mobile app." });
+
+        ExternalIdentity identity;
+        try
+        {
+            identity = await _externalAuth.GetVerifiedIdentityAsync(
+                dto.Provider, dto.IdToken, dto.AccessToken, cancellationToken);
+        }
+        catch (ExternalAuthException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
+        var email = identity.Email.Trim().ToLowerInvariant();
+        if (dto.TenantId is { } requestedTenantId)
+        {
+            var tenant = await _context.Tenants.IgnoreQueryFilters().AsNoTracking()
+                .FirstOrDefaultAsync(item => item.Id == requestedTenantId, cancellationToken);
+            if (tenant == null || !tenant.IsActive || CustomerAccountService.IsReserved(tenant.BusinessType))
+                return BadRequest(new { message = "This business is not available for customer sign-up." });
+        }
+        var matches = await _context.Users
+            .IgnoreQueryFilters()
+            .Include(u => u.Tenant)
+            .Where(u => u.Email.ToLower() == email)
+            .ToListAsync(cancellationToken);
+
+        var accountIds = matches
+            .Select(user => user.LinkedAccountId ?? user.Id)
+            .Distinct()
+            .ToList();
+        if (accountIds.Count > 1)
+        {
+            return Conflict(new { message = "This email belongs to more than one workspace account. Sign in with your password to choose the correct account." });
+        }
+
+        User user;
+        if (accountIds.Count == 0)
+        {
+            var randomPassword = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+            user = await _customers.RegisterAsync(email, randomPassword, identity.DisplayName, string.Empty, dto.TenantId, null);
+            user.ProfilePictureUrl = identity.PictureUrl;
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            var accountId = accountIds[0];
+            user = matches.FirstOrDefault(candidate => candidate.Id == accountId)
+                ?? matches.First(candidate => candidate.LinkedAccountId == accountId);
+
+            if (user.Role == UserRole.SuperAdmin || !user.IsActive || !user.Tenant.IsActive)
+                return Unauthorized(new { message = "This account is unavailable for mobile sign-in." });
+
+            if (dto.TenantId is { } tenantId && user.Role == UserRole.Customer)
+            {
+                var membership = await _customers.JoinAsync(user.Id, tenantId);
+                if (membership == null)
+                    return BadRequest(new { message = "Could not join this business with your customer account." });
+                user = membership;
+            }
+        }
+
+        var token = _jwtService.GenerateMobileAccessToken(user);
+        return Ok(new AuthResponseDto
+        {
+            AccessToken = token,
+            RefreshToken = _jwtService.GenerateRefreshToken(),
+            ExpiresAt = DateTime.UtcNow.AddHours(2),
+            User = MapToUserDto(user)
         });
     }
 

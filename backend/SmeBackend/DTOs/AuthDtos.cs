@@ -90,6 +90,18 @@ public class LoginDto
     public string Password { get; set; } = string.Empty;
 }
 
+public class MobileExternalLoginDto
+{
+    [Required]
+    public string Provider { get; set; } = string.Empty;
+
+    public string? IdToken { get; set; }
+
+    public string? AccessToken { get; set; }
+
+    public Guid? TenantId { get; set; }
+}
+
 public class AuthResponseDto
 {
     public string AccessToken { get; set; } = string.Empty;

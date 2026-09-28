@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 import '../services/secure_storage_service.dart';
+import '../services/social_auth_service.dart';
 
 // ─────────────────────────────────────────────────────────
 // Auth State
@@ -126,6 +127,64 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return false;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Something went wrong. Please try again.');
+      return false;
+    }
+  }
+
+  /// POST /api/auth/mobile/external-login. Provider tokens are checked by
+  /// the API before an account is created or a mobile session is issued.
+  Future<bool> socialLogin(
+    String provider,
+    SocialCredential credential, {
+    String? tenantId,
+  }) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final response = await ApiService.dio.post(
+        '/auth/mobile/external-login',
+        data: {
+          'provider': provider,
+          if (credential.idToken != null) 'idToken': credential.idToken,
+          if (credential.accessToken != null)
+            'accessToken': credential.accessToken,
+          if (tenantId != null) 'tenantId': tenantId,
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      final accessToken =
+          data['accessToken'] as String? ?? data['token'] as String?;
+      if (accessToken == null || accessToken.isEmpty) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'The server returned an invalid sign-in response.',
+        );
+        return false;
+      }
+      final userMap = data['user'] as Map<String, dynamic>? ?? data;
+      final user = User.fromJson(userMap);
+      await SecureStorageService.saveToken(accessToken);
+      await SecureStorageService.saveUser(jsonEncode(user.toJson()));
+      final refresh = data['refreshToken'] as String?;
+      if (refresh != null) await SecureStorageService.saveRefreshToken(refresh);
+      state = AuthState(
+        user: user,
+        token: accessToken,
+        isLoading: false,
+        isInitialized: true,
+        isProfileComplete: true,
+      );
+      return true;
+    } on DioException catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _extractError(e) ?? 'Could not sign in with $provider.',
+      );
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Something went wrong. Please try again.',
+      );
       return false;
     }
   }

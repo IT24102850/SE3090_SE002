@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../services/social_auth_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/ui/ui.dart';
 import '../../widgets/unify_auth/orbit_hero.dart';
@@ -89,13 +90,32 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
     );
   }
 
-  void _showComingSoon([String? provider]) {
+  Future<void> _handleSocialSignIn(String provider) async {
+    if (provider == 'Apple') {
+      _showSocialMessage(
+        'Apple sign-in requires an Apple Developer account and app registration.',
+      );
+      return;
+    }
+    try {
+      final credential = await SocialAuthService.signIn(provider);
+      if (!mounted) return;
+      await ref.read(authProvider.notifier).socialLogin(provider, credential);
+    } on SocialAuthException catch (error) {
+      _showSocialMessage(error.message);
+    } catch (_) {
+      _showSocialMessage('$provider sign-in was cancelled or could not start.');
+    }
+  }
+
+  void _showSocialMessage(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(
-            provider == null ? 'Coming soon' : '$provider sign-in — coming soon',
+            message,
           ),
           backgroundColor: AppColors.inputFill,
           behavior: SnackBarBehavior.floating,
@@ -208,7 +228,8 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                             child: LayoutBuilder(
                               builder: (context, slack) {
                                 final size = math.min(
-                                  math.min(slack.maxHeight - 8, slack.maxWidth * 0.82),
+                                  math.min(slack.maxHeight - 8,
+                                      slack.maxWidth * 0.82),
                                   340.0,
                                 );
                                 if (size < _minHeroSize) {
@@ -297,7 +318,6 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
               style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
             ),
             SizedBox(height: 24 * gap),
-
             NeonInputField(
               label: 'Email',
               hintText: 'name@company.com',
@@ -309,7 +329,6 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
               validator: _validateEmail,
             ),
             SizedBox(height: 18 * gap),
-
             NeonInputField(
               label: 'Password',
               hintText: '••••••••',
@@ -321,20 +340,17 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
               validator: _validatePassword,
               onFieldSubmitted: (_) => _handleSignIn(),
             ),
-
             if (auth.error != null) ...[
               SizedBox(height: 14 * gap),
               _ErrorBanner(message: auth.error!),
             ],
             SizedBox(height: 22 * gap),
-
             NeonButton(
               label: 'Sign In',
               isLoading: auth.isLoading,
               onPressed: _handleSignIn,
             ),
             SizedBox(height: 14 * gap),
-
             Center(
               child: _TextLink(
                 onTap: _openPasswordRecovery,
@@ -349,7 +365,6 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
               ),
             ),
             SizedBox(height: 18 * gap),
-
             const Center(
               child: Text(
                 'Or continue with',
@@ -357,8 +372,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
               ),
             ),
             SizedBox(height: 14 * gap),
-
-            SocialSignInRow(onProviderTap: _showComingSoon),
+            SocialSignInRow(onProviderTap: _handleSocialSignIn),
             SizedBox(height: 20 * gap),
 
             // Both ways in on one row. There are two kinds of sign-up now -
