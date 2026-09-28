@@ -14,6 +14,7 @@ import '../../widgets/unify_auth/unify_wordmark.dart';
 import '../customer/book_business_list_screen.dart';
 import '../register_screen.dart';
 import '../customer/customer_register_screen.dart';
+import 'password_recovery_screen.dart';
 
 /// The app's first screen for a signed-out visitor: sign in to Unify —
 /// Enterprise Management System.
@@ -75,6 +76,16 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
   void _openBrowse() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const BookBusinessListScreen()),
+    );
+  }
+
+  void _openPasswordRecovery() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PasswordRecoveryScreen(
+          initialEmail: _emailController.text.trim(),
+        ),
+      ),
     );
   }
 
@@ -326,7 +337,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
 
             Center(
               child: _TextLink(
-                onTap: () => _showComingSoon('Password reset'),
+                onTap: _openPasswordRecovery,
                 child: const Text(
                   'Forgot Password?',
                   style: TextStyle(
