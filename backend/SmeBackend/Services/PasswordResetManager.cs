@@ -95,8 +95,8 @@ public class PasswordResetManager : IPasswordResetManager
         var subject = $"Your Unify Password Reset Code: {code}";
 
         // 1. Try SendGrid if configured
-        var sendGridKey = _config["Integrations:SendGrid:ApiKey"] ?? Environment.GetEnvironmentVariable("SENDGRID_API_KEY");
-        var sendGridFrom = _config["Integrations:SendGrid:FromEmail"] ?? Environment.GetEnvironmentVariable("SENDGRID_FROM_EMAIL");
+        var sendGridKey = GetConfiguredValue("Integrations:SendGrid:ApiKey", "SENDGRID_API_KEY");
+        var sendGridFrom = GetConfiguredValue("Integrations:SendGrid:FromEmail", "SENDGRID_FROM_EMAIL");
         if (!string.IsNullOrWhiteSpace(sendGridKey) && !string.IsNullOrWhiteSpace(sendGridFrom))
         {
             try
@@ -115,15 +115,15 @@ public class PasswordResetManager : IPasswordResetManager
         }
 
         // 2. Try Standard SMTP (e.g. Gmail, Brevo, Outlook, etc.)
-        var smtpHost = _config["Smtp:Host"] ?? Environment.GetEnvironmentVariable("SMTP_HOST") ?? "smtp.gmail.com";
-        var smtpPortStr = _config["Smtp:Port"] ?? Environment.GetEnvironmentVariable("SMTP_PORT") ?? "587";
+        var smtpHost = GetConfiguredValue("Smtp:Host", "SMTP_HOST") ?? "smtp.gmail.com";
+        var smtpPortStr = GetConfiguredValue("Smtp:Port", "SMTP_PORT") ?? "587";
         _ = int.TryParse(smtpPortStr, out var smtpPort);
         if (smtpPort == 0) smtpPort = 587;
 
-        var smtpUser = _config["Smtp:User"] ?? Environment.GetEnvironmentVariable("SMTP_USER");
-        var smtpPass = _config["Smtp:Password"] ?? Environment.GetEnvironmentVariable("SMTP_PASSWORD") ?? Environment.GetEnvironmentVariable("SMTP_PASS");
-        var fromEmail = _config["Smtp:FromEmail"] ?? Environment.GetEnvironmentVariable("SMTP_FROM") ?? smtpUser;
-        var fromName = _config["Smtp:FromName"] ?? "Unify Workspace";
+        var smtpUser = GetConfiguredValue("Smtp:User", "SMTP_USER");
+        var smtpPass = GetConfiguredValue("Smtp:Password", "SMTP_PASSWORD", "SMTP_PASS");
+        var fromEmail = GetConfiguredValue("Smtp:FromEmail", "SMTP_FROM") ?? smtpUser;
+        var fromName = GetConfiguredValue("Smtp:FromName") ?? "Unify Workspace";
 
         if (!string.IsNullOrWhiteSpace(smtpHost) && !string.IsNullOrWhiteSpace(smtpUser) && !string.IsNullOrWhiteSpace(smtpPass))
         {
@@ -140,7 +140,7 @@ public class PasswordResetManager : IPasswordResetManager
 
                 using var mail = new MailMessage
                 {
-                    From = new MailAddress(fromEmail ?? smtpUser, fromName),
+                    From = new MailAddress(fromEmail ?? smtpUser!, fromName),
                     Subject = subject,
                     Body = htmlBody,
                     IsBodyHtml = true
@@ -159,8 +159,8 @@ public class PasswordResetManager : IPasswordResetManager
         }
 
         _logger.LogWarning(
-            "[NO EMAIL PROVIDER CONFIGURED] Neither SMTP nor SendGrid credentials have been provided in appsettings.json or environment variables. " +
-            "Please configure 'Smtp:User' and 'Smtp:Password' in appsettings.json to send real emails to {Email}.",
+            "[NO EMAIL PROVIDER CONFIGURED] No SMTP or SendGrid sender credentials were found in configuration or environment variables. " +
+            "Configure SMTP_USER and SMTP_PASSWORD (or the corresponding Smtp settings) to send reset emails to {Email}.",
             toEmail);
         return false;
     }
@@ -182,6 +182,26 @@ public class PasswordResetManager : IPasswordResetManager
         var client = _httpClientFactory.CreateClient();
         using var response = await client.SendAsync(request);
         return response.IsSuccessStatusCode;
+    }
+
+    private string? GetConfiguredValue(string key, params string[] environmentVariableNames)
+    {
+        var configuredValue = _config[key];
+        if (!string.IsNullOrWhiteSpace(configuredValue))
+        {
+            return configuredValue;
+        }
+
+        foreach (var variableName in environmentVariableNames)
+        {
+            var environmentValue = Environment.GetEnvironmentVariable(variableName);
+            if (!string.IsNullOrWhiteSpace(environmentValue))
+            {
+                return environmentValue;
+            }
+        }
+
+        return null;
     }
 
     private static string BuildResetEmailHtml(string code) =>
