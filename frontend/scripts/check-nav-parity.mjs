@@ -20,7 +20,7 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
  * owner's console, which has its own shell and sign-in (its sub-routes carry
  * a slash and are not matched by the route regex below at all). */
 const NOT_IN_NAV = new Set([
-  '/', '/login', '/register', '/unauthorized', '/profile', '/admin', '/legacy-dashboard', '/platform',
+  '/', '/login', '/register', '/forgot-password', '/reset-password', '/unauthorized', '/profile', '/admin', '/legacy-dashboard', '/platform',
 ]);
 
 const routes = [...read('src/App.tsx').matchAll(/path="(\/[a-z0-9-]*)"/g)].map((m) => m[1]);
