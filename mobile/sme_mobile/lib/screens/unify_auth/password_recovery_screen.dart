@@ -4,10 +4,6 @@ import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
-import '../../widgets/ui/app_background.dart';
-import '../../widgets/ui/glass_card.dart';
-import '../../widgets/ui/neon_button.dart';
-import '../../widgets/ui/neon_input_field.dart';
 import '../../widgets/ui/ui.dart';
 
 /// Email-code password recovery, matching the web flow:
@@ -281,8 +277,9 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                               maxLines: 1,
                               autofillHints: const [AutofillHints.oneTimeCode],
                               onChanged: (_) {
-                                if (_messageIsError)
+                                if (_messageIsError) {
                                   setState(() => _message = null);
+                                }
                               },
                             ),
                             const SizedBox(height: 18),
