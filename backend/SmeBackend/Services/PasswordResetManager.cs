@@ -147,7 +147,8 @@ public class PasswordResetManager : IPasswordResetManager
                 };
                 mail.To.Add(toEmail);
 
-                await client.SendMailAsync(mail);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                await client.SendMailAsync(mail, timeout.Token);
                 _logger.LogInformation("[SMTP EMAIL SENT] Successfully sent verification email to {Email} via {Host}:{Port}", toEmail, smtpHost, smtpPort);
                 return true;
             }
@@ -180,7 +181,8 @@ public class PasswordResetManager : IPasswordResetManager
         request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
         var client = _httpClientFactory.CreateClient();
-        using var response = await client.SendAsync(request);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var response = await client.SendAsync(request, timeout.Token);
         return response.IsSuccessStatusCode;
     }
 

@@ -110,7 +110,7 @@ export default function ForgotPasswordPage() {
     try {
       const res = await axios.post(`${API_BASE_URL}/auth/forgot-password`, {
         email: email.trim(),
-      });
+      }, { timeout: 20000 });
       show(res.data.message || 'If the address is registered and email delivery is configured, a code will arrive shortly.', 'success');
       setCode('');
       setResendCooldown(60);
@@ -118,6 +118,8 @@ export default function ForgotPasswordPage() {
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response?.data?.message) {
         show(err.response.data.message, 'error');
+      } else if (axios.isAxiosError(err) && (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT')) {
+        show('The email server took too long to respond. Please try again shortly.', 'error');
       } else {
         show('Unable to process password reset. Please try again.', 'error');
       }
