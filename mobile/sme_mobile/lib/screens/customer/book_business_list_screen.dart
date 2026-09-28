@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/public_tenant_model.dart';
-import '../../providers/auth_provider.dart';
 import '../../providers/public_tenant_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/route_transitions.dart';
 import '../../widgets/ui/ui.dart';
-import '../login_screen.dart';
 import 'business_detail_screen.dart';
-import 'customer_register_screen.dart';
 
 class BookBusinessListScreen extends ConsumerStatefulWidget {
   const BookBusinessListScreen({super.key});
@@ -32,90 +29,129 @@ class _BookBusinessListScreenState
   }
 
   void _onTenantTap(PublicTenant tenant) {
-    final isAuthenticated = ref.read(authProvider).isAuthenticated;
-    if (isAuthenticated) {
-      Navigator.of(context)
-          .push(slideFadeRoute(BusinessDetailScreen(tenant: tenant)));
-      return;
-    }
-    _showSignInPrompt(tenant);
-  }
-
-  void _showSignInPrompt(PublicTenant tenant) {
-    showModalBottomSheet(
+    final visual = BusinessTypeVisual.of(tenant.businessType);
+    showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.overlaySurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadii.pill)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.magenta.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        color: AppColors.magenta.withValues(alpha: 0.4)),
-                  ),
-                  child: const Icon(Icons.lock_outline_rounded,
-                      color: AppColors.magenta, size: 28),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  'Sign in to book with ${tenant.businessName}',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.title.copyWith(fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Create a free account or sign in to see availability and book instantly.',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.bodyMuted.copyWith(fontSize: 13),
-                ),
-                const SizedBox(height: 24),
-                NeonButton(
-                  label: 'Sign In',
-                  height: 48,
-                  onPressed: () {
-                    Navigator.pop(sheetContext);
-                    Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const LoginScreen()));
-                  },
-                ),
-                const SizedBox(height: 10),
-                GhostButton(
-                  label: 'Create Account',
-                  height: 48,
-                  onPressed: () async {
-                    Navigator.pop(sheetContext);
-                    final signedUp = await Navigator.of(context).push<bool>(
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              CustomerRegisterScreen(tenant: tenant)),
-                    );
-                    // Signed up as this tenant's customer — continue straight
-                    // into their business page instead of dropping back to the list.
-                    if (signedUp == true && mounted) {
-                      Navigator.of(context).push(
-                          slideFadeRoute(BusinessDetailScreen(tenant: tenant)));
-                    }
-                  },
-                ),
-              ],
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          decoration: BoxDecoration(
+            color: AppColors.overlaySurface,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppRadii.card),
             ),
+            border: Border.all(color: AppColors.glassBorder),
           ),
-        );
-      },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.textMuted,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: visual.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: visual.color.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: Icon(visual.icon, color: visual.color, size: 28),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tenant.businessName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.title.copyWith(fontSize: 18),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          tenant.businessType,
+                          style: AppTextStyles.caption.copyWith(
+                            color: visual.color,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Text(
+                _businessPreview(tenant.businessType),
+                style: AppTextStyles.bodyMuted.copyWith(height: 1.45),
+              ),
+              const SizedBox(height: 18),
+              const _PreviewStep(
+                number: '1',
+                label: 'Explore services and options',
+              ),
+              const SizedBox(height: 10),
+              const _PreviewStep(
+                number: '2',
+                label: 'Choose what works for you',
+              ),
+              const SizedBox(height: 10),
+              const _PreviewStep(
+                number: '3',
+                label: 'Book when you are ready',
+              ),
+              const SizedBox(height: 22),
+              NeonButton(
+                label: 'Explore business',
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.of(context).push(
+                    slideFadeRoute(BusinessDetailScreen(tenant: tenant)),
+                  );
+                },
+              ),
+              const SizedBox(height: 4),
+            ],
+          ),
+        ),
+      ),
     );
   }
+
+  String _businessPreview(String type) => switch (type) {
+        'Clinic' =>
+          'Find care, explore available services, and choose an appointment that suits you.',
+        'Restaurant' =>
+          'Explore dining options and find the right experience for your visit.',
+        'Gym' =>
+          'Discover facilities and sessions, then plan a visit at your convenience.',
+        'School' =>
+          'Explore learning services and find the right program for your needs.',
+        'RealEstate' =>
+          'Explore property services and connect with the team about your next move.',
+        'Tourism' =>
+          'Discover experiences and find a tour or activity for your next trip.',
+        _ =>
+          'Explore what this business offers, choose a service, and book when you are ready.',
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -286,58 +322,139 @@ class _TenantCard extends StatelessWidget {
     return GlassCard(
       onTap: onTap,
       borderRadius: AppRadii.row,
-      padding: const EdgeInsets.all(14),
-      child: Row(
+      padding: EdgeInsets.zero,
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: AppColors.iconWell,
-              borderRadius: BorderRadius.circular(AppRadii.control),
-              border: Border.all(color: visual.color.withValues(alpha: 0.45)),
+          if (tenant.coverImageUrl?.trim().isNotEmpty == true)
+            Image.network(
+              tenant.coverImageUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: AppColors.heroGradientFor(visual.color),
+                ),
+              ),
+            )
+          else
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: AppColors.heroGradientFor(visual.color),
+              ),
             ),
-            child: Icon(visual.icon, color: visual.color, size: 26),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0x99050514), Color(0xCC050514)],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+            ),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.all(9),
+            child: Row(
               children: [
-                Text(
-                  tenant.businessName,
-                  style: AppTextStyles.subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                // The type pill carries the business hue, which is why this
-                // row is built by hand rather than as a GlassListTile.
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  width: 40,
+                  height: 40,
+                  clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    color: visual.color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
+                    color: AppColors.iconWell,
+                    borderRadius: BorderRadius.circular(AppRadii.control),
                     border:
-                        Border.all(color: visual.color.withValues(alpha: 0.35)),
+                        Border.all(color: visual.color.withValues(alpha: 0.45)),
                   ),
-                  child: Text(
-                    tenant.businessType,
-                    style: AppTextStyles.caption.copyWith(
-                      fontSize: 11,
-                      color: visual.color,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  child: tenant.logoUrl?.trim().isNotEmpty == true
+                      ? Image.network(
+                          tenant.logoUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                            visual.icon,
+                            color: visual.color,
+                            size: 21,
+                          ),
+                        )
+                      : Icon(visual.icon, color: visual.color, size: 21),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tenant.businessName,
+                        style: AppTextStyles.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: visual.color.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: visual.color.withValues(alpha: 0.45)),
+                        ),
+                        child: Text(
+                          tenant.businessType,
+                          style: AppTextStyles.caption.copyWith(
+                            fontSize: 10,
+                            color: visual.color,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const Icon(Icons.chevron_right_rounded,
+                    color: AppColors.textPrimary, size: 20),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded,
-              color: AppColors.chevron, size: 22),
         ],
       ),
     );
   }
+}
+
+class _PreviewStep extends StatelessWidget {
+  const _PreviewStep({required this.number, required this.label});
+
+  final String number;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Container(
+            width: 25,
+            height: 25,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.cyan.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.cyan.withValues(alpha: 0.32)),
+            ),
+            child: Text(
+              number,
+              style: const TextStyle(
+                color: AppColors.cyan,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Text(label, style: AppTextStyles.body.copyWith(fontSize: 13)),
+          ),
+        ],
+      );
 }

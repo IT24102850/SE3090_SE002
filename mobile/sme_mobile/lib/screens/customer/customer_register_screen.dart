@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/public_tenant_model.dart';
 import '../../providers/auth_provider.dart';
-import '../../services/social_auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/ui/ui.dart';
-import '../../widgets/unify_auth/social_sign_in_row.dart';
 
 /// FR-C1: customer self-registration — the counterpart to [RegisterScreen],
 /// which is business onboarding and creates a brand new tenant. This screen
@@ -59,35 +57,6 @@ class _CustomerRegisterScreenState
       // straight back to whoever pushed this screen (the "book with X" flow).
       Navigator.of(context).pop(true);
     }
-  }
-
-  Future<void> _handleSocialSignIn(String provider) async {
-    if (provider == 'Apple') {
-      _showMessage(
-          'Apple sign-in requires an Apple Developer account and app registration.');
-      return;
-    }
-    try {
-      final credential = await SocialAuthService.signIn(provider);
-      if (!mounted) return;
-      final success = await ref
-          .read(authProvider.notifier)
-          .socialLogin(provider, credential, tenantId: widget.tenant?.id);
-      if (success && mounted) {
-        Navigator.of(context).pop(true);
-      }
-    } on SocialAuthException catch (error) {
-      _showMessage(error.message);
-    } catch (_) {
-      _showMessage('$provider sign-in was cancelled or could not start.');
-    }
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -170,10 +139,6 @@ class _CustomerRegisterScreenState
                         isLoading: auth.isLoading,
                         onPressed: auth.isLoading ? null : _handleRegister,
                       ),
-                      const SizedBox(height: 16),
-                      const Center(child: Text('Or sign up with')),
-                      const SizedBox(height: 14),
-                      SocialSignInRow(onProviderTap: _handleSocialSignIn),
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: auth.isLoading

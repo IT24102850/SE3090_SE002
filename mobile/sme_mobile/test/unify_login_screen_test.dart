@@ -38,7 +38,9 @@ void main() {
     expect(find.text('PASSWORD'), findsOneWidget);
     expect(find.text('Sign In'), findsOneWidget);
     expect(find.text('Forgot Password?'), findsOneWidget);
-    expect(find.text('Or continue with'), findsOneWidget);
+    expect(find.text('Or continue with'), findsNothing);
+    expect(find.text('Google'), findsNothing);
+    expect(find.text('Apple'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -127,12 +129,4 @@ void main() {
     expect(passwordField().obscureText, isFalse);
   });
 
-  testWidgets('social buttons report that they are not wired up yet', (tester) async {
-    await pumpLogin(tester);
-
-    await tester.tap(find.byIcon(Icons.apple));
-    await tester.pump();
-
-    expect(find.textContaining('coming soon'), findsOneWidget);
-  });
 }

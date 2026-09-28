@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,7 +45,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     if (!auth.isInitialized) {
       home = const _SplashScreen();
     } else if (!auth.isAuthenticated) {
-      home = const UnifyLoginScreen();
+      home = const WelcomeFlowScreen();
     } else if (!auth.isProfileComplete) {
       home = const ProfileSetupScreen();
     } else {

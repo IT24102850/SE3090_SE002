@@ -81,13 +81,13 @@ class ApiService {
           },
           onError: (DioException error, handler) async {
             if (error.response?.statusCode == 401) {
-              // Token expired / invalid → clear storage, then tell the app so
+              // Token expired / invalid → clear the account session, then tell the app so
               // it can send the user back to the login screen. Guarded so a
               // burst of concurrent 401s (a screen fires several requests at
               // once) only tears the session down once.
               if (!_sessionExpiring) {
                 _sessionExpiring = true;
-                await SecureStorageService.clearAll();
+                await SecureStorageService.clearSession();
                 try {
                   onUnauthorized?.call();
                 } finally {

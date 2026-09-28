@@ -47,7 +47,45 @@ class SecureStorageService {
     await _storage.delete(key: _userKey);
   }
 
-  // ── Clear everything (logout) ──────────────────────────
+  // ── PIN & Biometrics ──────────────────────────────────
+  static const _pinKey = 'security_pin';
+  static const _biometricsKey = 'biometrics_enabled';
+
+  static Future<void> savePin(String pin) async {
+    await _storage.write(key: _pinKey, value: pin);
+  }
+
+  static Future<String?> getPin() async {
+    return _storage.read(key: _pinKey);
+  }
+
+  static Future<bool> hasPin() async {
+    final pin = await _storage.read(key: _pinKey);
+    return pin != null && pin.isNotEmpty;
+  }
+
+  static Future<void> deletePin() async {
+    await _storage.delete(key: _pinKey);
+  }
+
+  /// Clears the account session while preserving this device's Quick PIN.
+  /// After the next email sign-in, the PIN can unlock the saved session again.
+  static Future<void> clearSession() async {
+    await _storage.delete(key: _tokenKey);
+    await _storage.delete(key: _userKey);
+    await _storage.delete(key: _refreshTokenKey);
+  }
+
+  static Future<void> setBiometricsEnabled(bool enabled) async {
+    await _storage.write(key: _biometricsKey, value: enabled ? 'true' : 'false');
+  }
+
+  static Future<bool> isBiometricsEnabled() async {
+    final val = await _storage.read(key: _biometricsKey);
+    return val == 'true' || val == null; // default enabled
+  }
+
+  // ── Clear everything (corrupt storage / reset) ─────────
   static Future<void> clearAll() async {
     await _storage.deleteAll();
   }
