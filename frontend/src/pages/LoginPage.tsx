@@ -5,6 +5,7 @@ import { loginUser, clearError } from '../store/authSlice';
 import { AppDispatch, RootState } from '../store/store';
 import { useToast } from '../shared/components/Toast';
 import '../features/marketing/landing.css';
+import './auth-enhanced.css';
 
 /* ── Interactive Particle Canvas ─────────────────────────────── */
 function ParticleCanvas() {

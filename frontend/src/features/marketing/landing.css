@@ -1620,6 +1620,15 @@ html[data-unify-theme='dark'] .su {
   color: var(--lp-text-primary);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
+.lp-home-theme-toggle .lp-theme-btn.is-active {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.32);
+}
+html[data-unify-theme='dark'] .lp-home-theme-toggle .lp-theme-btn.is-active {
+  background: #1d4ed8;
+  color: #ffffff;
+}
 
 .lp-home-nav-actions {
   display: flex;
