@@ -138,6 +138,7 @@ builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBacken
 builder.Services.AddHttpClient<SmeBackend.Services.IPushNotificationSender, SmeBackend.Services.FcmPushNotificationSender>();
 builder.Services.AddScoped<SmeBackend.Services.ICloudinaryImageService, SmeBackend.Services.CloudinaryImageService>();
 builder.Services.AddSingleton<SmeBackend.Services.IPasswordResetManager, SmeBackend.Services.PasswordResetManager>();
+builder.Services.AddScoped<SmeBackend.Services.IMobileExternalAuthService, SmeBackend.Services.MobileExternalAuthService>();
 // Billing & payments engine (component 3). Integrations (Stripe, PayPal,
 // SendGrid, Twilio) share one named HttpClient; each falls back to an honest
 // "simulated" result when its credentials are not configured.
