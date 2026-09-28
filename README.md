@@ -13,6 +13,24 @@
 - **Database:** PostgreSQL (Supabase/Railway)
 - **Deployment:** Railway (API + DB), Vercel (React), Local APK (Flutter)
 
+## Password reset email
+The forgot-password flow sends a six-digit code through Gmail SMTP or SendGrid.
+For Gmail, enable 2-Step Verification on the sender account and create an
+App Password. Configure the backend environment (never commit the App Password):
+
+```text
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-sender@gmail.com
+SMTP_PASSWORD=your-16-character-google-app-password
+SMTP_FROM=your-sender@gmail.com
+```
+
+Set these variables in the environment that runs `SmeBackend` (for local
+development, user secrets are also suitable). The reset request response is
+deliberately generic; a code is only accepted after the mail provider accepts
+the email. Check backend logs for delivery errors without exposing the code.
+
 ## Sub-type dashboards
 The tenant admin dashboard adapts to what the business actually does. A
 registry keyed on `Tenant.SubType` supplies each of the 12 tourism

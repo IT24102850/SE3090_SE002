@@ -15,12 +15,14 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IJwtService _jwtService;
     private readonly ICustomerAccountService _customers;
+    private readonly IPasswordResetManager _passwordReset;
 
-    public AuthController(AppDbContext context, IJwtService jwtService, ICustomerAccountService customers)
+    public AuthController(AppDbContext context, IJwtService jwtService, ICustomerAccountService customers, IPasswordResetManager passwordReset)
     {
         _context = context;
         _jwtService = jwtService;
         _customers = customers;
+        _passwordReset = passwordReset;
     }
 
     // Public customer self-registration. Creates one global customer
@@ -222,6 +224,68 @@ public class AuthController : ControllerBase
             await _customers.PropagatePasswordAsync(user.Id, user.PasswordHash);
 
         return Ok(new { message = "Password changed." });
+    }
+
+    /// <summary>
+    /// Requests a password reset email/code.
+    /// </summary>
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
+    {
+        var email = dto.Email.Trim().ToLowerInvariant();
+        var exists = await _context.Users
+            .IgnoreQueryFilters()
+            .AnyAsync(u => u.Email.ToLower() == email && u.IsActive && u.Role != UserRole.SuperAdmin);
+
+        if (exists)
+        {
+            await _passwordReset.GenerateResetCodeAsync(email);
+        }
+
+        return Ok(new
+        {
+            message = "If the address is registered and email delivery is configured, a 6-digit verification code will arrive shortly."
+        });
+    }
+
+    /// <summary>
+    /// Verifies the 6-digit reset code and sets a new password.
+    /// </summary>
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+    {
+        var email = dto.Email.Trim().ToLowerInvariant();
+        var valid = _passwordReset.VerifyAndConsumeCode(email, dto.Code);
+        if (!valid)
+        {
+            return BadRequest(new { message = "Invalid or expired reset code. Please request a new code." });
+        }
+
+        var users = await _context.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.Email.ToLower() == email && u.IsActive && u.Role != UserRole.SuperAdmin)
+            .ToListAsync();
+
+        if (users.Count == 0)
+        {
+            return BadRequest(new { message = "Account not found." });
+        }
+
+        var newHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+        foreach (var user in users)
+        {
+            user.PasswordHash = newHash;
+            user.UpdatedAt = DateTime.UtcNow;
+            if (user.Role == UserRole.Customer)
+            {
+                await _customers.PropagatePasswordAsync(user.Id, newHash);
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "Password has been successfully reset! You can now sign in with your new credentials." });
     }
 
     private static UserResponseDto MapToUserDto(User user) => new()

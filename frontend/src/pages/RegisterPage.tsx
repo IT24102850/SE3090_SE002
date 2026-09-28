@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../api/apiBaseUrl';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, useRef, type ReactNode } from 'react';
 import axios from 'axios';
 import { useDispatch } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
@@ -10,6 +10,60 @@ import { initializeAuth } from '../store/authSlice';
 import type { AppDispatch } from '../store/store';
 import '../features/marketing/landing.css';
 import './signup.css';
+
+/* ── Interactive Particle Canvas ─────────────────────────────── */
+function ParticleCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const particles: { x: number; y: number; r: number; dx: number; dy: number; alpha: number }[] = [];
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    for (let i = 0; i < 40; i++) {
+      particles.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        r: Math.random() * 2.2 + 0.6,
+        dx: (Math.random() - 0.5) * 0.35,
+        dy: (Math.random() - 0.5) * 0.35,
+        alpha: Math.random() * 0.45 + 0.15,
+      });
+    }
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of particles) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(37,99,235,${p.alpha})`;
+        ctx.fill();
+        p.x += p.dx;
+        p.y += p.dy;
+        if (p.x < 0 || p.x > canvas.width) p.dx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.dy *= -1;
+      }
+      animRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => {
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(animRef.current);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="lp-particle-canvas" aria-hidden="true" />;
+}
 
 type Mode = 'business' | 'customer';
 
@@ -293,6 +347,7 @@ export default function RegisterPage() {
 
   return (
     <main className="lp lp-home su">
+      <ParticleCanvas />
       {/* Background Ambient Orbs */}
       <div className="lp-auth-mesh" aria-hidden="true">
         <div className="lp-auth-orb-1" />
@@ -710,7 +765,7 @@ export default function RegisterPage() {
               )}
 
               <div className="su-actions">
-                <button type="submit" className="su-submit" disabled={loading}>
+                <button type="submit" className="su-submit lp-btn-shine" disabled={loading}>
                   {loading ? (
                     <>
                       <span className="lp-spinner" />
@@ -738,7 +793,7 @@ export default function RegisterPage() {
 
         {/* ── Art / Showcase Half ─────────────────────────── */}
         <aside className="su-art" aria-label="Unify Platform Features">
-          <div className="su-art-photo-frame">
+          <div className="su-art-photo-frame lp-float-card">
             <img
               src="/landing/services.jpg"
               alt="Modern team collaborating on scheduling and operations"
