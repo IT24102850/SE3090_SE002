@@ -66,6 +66,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (token != null && token.isNotEmpty && userJson != null) {
         final user =
             User.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
+        // A configured quick PIN locks the cached session between launches.
+        // Keep the credentials in secure storage; unlockWithPin restores them.
+        if (await SecureStorageService.hasPin()) {
+          state = const AuthState(isInitialized: true);
+          return;
+        }
         state = AuthState(
           user: user,
           token: token,
@@ -139,6 +145,80 @@ class AuthNotifier extends StateNotifier<AuthState> {
           isLoading: false, error: 'Something went wrong. Please try again.');
       return false;
     }
+  }
+
+  /// Quick unlock using hardware-secured PIN.
+  /// Validates against the user's stored PIN in [SecureStorageService].
+  Future<bool> unlockWithPin(String pin) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+
+    final storedPin = await SecureStorageService.getPin();
+    if (storedPin != null && storedPin.isNotEmpty && storedPin != pin) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Incorrect security PIN. Please try again.',
+      );
+      return false;
+    }
+
+    if (storedPin == null || storedPin.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'No Quick PIN is set up. Sign in with your work email, then set one in Security.',
+      );
+      return false;
+    }
+
+    // Restore the authenticated session from SecureStorageService
+    final savedToken = await SecureStorageService.getToken();
+    final savedUserJson = await SecureStorageService.getUser();
+    if (savedToken != null && savedToken.isNotEmpty && savedUserJson != null) {
+      try {
+        final user =
+            User.fromJson(jsonDecode(savedUserJson) as Map<String, dynamic>);
+        state = AuthState(
+          user: user,
+          token: savedToken,
+          isLoading: false,
+          isInitialized: true,
+          isProfileComplete: true,
+        );
+        return true;
+      } catch (_) {}
+    }
+
+    state = state.copyWith(
+      isLoading: false,
+      error: 'There is no saved session to unlock. Sign in with your work email; your PIN will be kept for next time.',
+    );
+    return false;
+  }
+
+  /// Quick unlock using device Biometrics (Face ID / Fingerprint).
+  Future<bool> unlockWithBiometrics() async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    final savedToken = await SecureStorageService.getToken();
+    final savedUserJson = await SecureStorageService.getUser();
+    if (savedToken != null && savedToken.isNotEmpty && savedUserJson != null) {
+      try {
+        final user =
+            User.fromJson(jsonDecode(savedUserJson) as Map<String, dynamic>);
+        state = AuthState(
+          user: user,
+          token: savedToken,
+          isLoading: false,
+          isInitialized: true,
+          isProfileComplete: true,
+        );
+        return true;
+      } catch (_) {}
+    }
+
+    state = state.copyWith(
+      isLoading: false,
+      error: 'Please sign in with your work email first to activate biometrics.',
+    );
+    return false;
   }
 
   /// POST /api/auth/mobile/external-login. Provider tokens are checked by
@@ -422,9 +502,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Clear secure storage + reset state
+  /// Explicit sign out clears the session and this device's Quick PIN.
   Future<void> logout() async {
     await SecureStorageService.clearAll();
+    state = const AuthState(isInitialized: true);
+  }
+
+  /// Return to the lock screen while keeping the saved session for PIN unlock.
+  /// Without a configured PIN, fall back to a full sign out.
+  Future<void> lock() async {
+    if (!await SecureStorageService.hasPin()) {
+      await SecureStorageService.clearAll();
+    }
     state = const AuthState(isInitialized: true);
   }
 

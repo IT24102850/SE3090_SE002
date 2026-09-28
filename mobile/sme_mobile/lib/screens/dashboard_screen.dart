@@ -24,6 +24,7 @@ import 'customer/book_business_list_screen.dart';
 import 'customer/my_bookings_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
+import 'security_pin_screen.dart';
 import 'staff/check_in_scanner_screen.dart';
 import 'staff/my_schedule_screen.dart';
 import '../inventory/authenticated_api_client.dart';
@@ -63,21 +64,20 @@ class DashboardScreen extends ConsumerWidget {
         actions: [
           const _NotificationBellAction(),
           IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
+            icon: const Icon(Icons.lock_outline_rounded),
+            tooltip: 'Lock app',
             onPressed: () async {
               final confirmed = await showAppConfirmation(
                 context: context,
-                title: 'Log out of Unify?',
+                title: 'Lock Unify?',
                 message:
-                    'Are you sure you want to log out? You will need to sign in again to access your account.',
-                confirmLabel: 'Log Out',
-                icon: Icons.logout_rounded,
-                accent: AppColors.danger,
-                isDestructive: true,
+                    'Your saved session will stay on this device. Unlock it with your Quick PIN or sign in with your work email.',
+                confirmLabel: 'Lock App',
+                icon: Icons.lock_rounded,
+                accent: AppColors.cyan,
               );
               if (!confirmed || !context.mounted) return;
-              await ref.read(authProvider.notifier).logout();
+              await ref.read(authProvider.notifier).lock();
               // MyApp automatically routes back to the landing screen.
             },
           ),
@@ -444,7 +444,7 @@ class _DashboardDrawer extends ConsumerWidget {
                   ),
                 ],
                 if (user.role != 'Customer')
-                  const _DrawerSectionLabel(label: 'INVENTORY & INSIGHTS'),
+                  const _DrawerSectionLabel(label: 'MANAGE INVENTORY'),
                 if (user.role != 'Customer')
                   _DrawerItem(
                     icon: Icons.inventory_2_outlined,
@@ -581,8 +581,37 @@ class _DashboardDrawer extends ConsumerWidget {
                   },
                 ),
                 _DrawerItem(
+                  icon: Icons.lock_outline_rounded,
+                  label: 'Security & PIN',
+                  accent: AppColors.cyan,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context)
+                        .push(slideFadeRoute(const SecurityPinScreen()));
+                  },
+                ),
+                _DrawerItem(
+                  icon: Icons.lock_outline_rounded,
+                  label: 'Lock App',
+                  accent: AppColors.cyan,
+                  onTap: () async {
+                    final confirmed = await showAppConfirmation(
+                      context: context,
+                      title: 'Lock Unify?',
+                      message:
+                          'Your saved session will stay protected on this device. Unlock it with your Quick PIN or work email.',
+                      confirmLabel: 'Lock App',
+                      icon: Icons.lock_rounded,
+                      accent: AppColors.cyan,
+                    );
+                    if (!confirmed || !context.mounted) return;
+                    Navigator.pop(context);
+                    await ref.read(authProvider.notifier).lock();
+                  },
+                ),
+                _DrawerItem(
                   icon: Icons.logout,
-                  label: 'Logout',
+                  label: 'Sign Out',
                   iconColor: AppColors.danger,
                   labelColor: AppColors.danger,
                   accent: AppColors.danger,
@@ -590,10 +619,10 @@ class _DashboardDrawer extends ConsumerWidget {
                   onTap: () async {
                     final confirmed = await showAppConfirmation(
                       context: context,
-                      title: 'Log out of Unify?',
+                      title: 'Sign out of Unify?',
                       message:
-                          'Are you sure you want to log out? You will need to sign in again to access your account.',
-                      confirmLabel: 'Log Out',
+                          'This clears the saved session and Quick PIN from this device. You will need your work email and password to sign in again.',
+                      confirmLabel: 'Sign Out',
                       icon: Icons.logout_rounded,
                       accent: AppColors.danger,
                       isDestructive: true,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,7 +7,7 @@ import 'inventory/app_notifications.dart';
 import 'models/notification_model.dart';
 import 'providers/auth_provider.dart';
 import 'providers/notification_providers.dart';
-import 'screens/unify_auth/unify_login_screen.dart';
+import 'screens/unify_auth/welcome_flow_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/profile_setup_screen.dart';
 import 'services/push_notification_service.dart';
@@ -62,9 +63,9 @@ class _MyAppState extends ConsumerState<MyApp> {
         showAppNotification(
           signedIn
               ? 'Welcome back, $name!'
-              : 'You have been signed out safely. See you next time!',
+              : 'You are back at the secure sign-in screen. Use your Quick PIN or work email to continue.',
           tone: AppNotificationTone.success,
-          title: signedIn ? 'Great to see you!' : 'See you soon!',
+          title: signedIn ? 'Great to see you!' : 'Session secured',
           duration: const Duration(seconds: 5),
         );
       });
@@ -74,11 +75,11 @@ class _MyAppState extends ConsumerState<MyApp> {
     if (!auth.isInitialized) {
       home = const _SplashScreen();
     } else if (!auth.isAuthenticated) {
-      home = const UnifyLoginScreen();
+      home = const WelcomeFlowScreen();
     } else if (!auth.isProfileComplete) {
       home = const ProfileSetupScreen();
     } else {
-      home = const DashboardScreen();
+      home = const DashboardEntryAnimation(child: DashboardScreen());
     }
 
     final homeKey = ValueKey<String>(
@@ -106,17 +107,90 @@ class _MyAppState extends ConsumerState<MyApp> {
         child: child ?? const SizedBox.shrink(),
       ),
       home: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 460),
-        reverseDuration: const Duration(milliseconds: 280),
+        // Dashboard entry: elastic depth-reveal that pairs with the VFX overlay.
+        // Auth-out: swift dissolve so the lock screen snaps back crisply.
+        duration: const Duration(milliseconds: 900),
+        reverseDuration: const Duration(milliseconds: 900),
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.985, end: 1.0).animate(animation),
-            child: child,
-          ),
-        ),
+        transitionBuilder: (child, animation) {
+          final isDashboard = child.key == const ValueKey<String>('dashboard');
+          if (isDashboard) {
+            if (animation.status == AnimationStatus.reverse) {
+              // Logout: soften the dashboard, then let it drift down and
+              // recede as the welcome screen comes back into view.
+              final exit = CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeInOutCubic,
+              );
+              return AnimatedBuilder(
+                animation: exit,
+                child: child,
+                builder: (context, child) {
+                  final progress = exit.value;
+                  final retreat = 1 - progress;
+                  return Opacity(
+                    opacity: progress,
+                    child: Transform.translate(
+                      offset: Offset(0, retreat * 34),
+                      child: Transform.scale(
+                        scale: 0.94 + progress * 0.06,
+                        child: ImageFiltered(
+                          imageFilter: ui.ImageFilter.blur(
+                            sigmaX: retreat * 5,
+                            sigmaY: retreat * 5,
+                          ),
+                          child: child,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+            }
+
+            // Elastic spring scale: starts deep (0.82), overshoots and settles.
+            final scaleCurve = CurvedAnimation(
+              parent: animation,
+              curve: Curves.elasticOut,
+              reverseCurve: Curves.easeInCubic,
+            );
+            final fadeCurve = CurvedAnimation(
+              parent: animation,
+              curve: const Interval(0.0, 0.45, curve: Curves.easeOut),
+              reverseCurve: Curves.easeIn,
+            );
+            return FadeTransition(
+              opacity: fadeCurve,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.045),
+                  end: Offset.zero,
+                ).animate(CurvedAnimation(
+                  parent: animation,
+                  curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
+                )),
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.82, end: 1.0).animate(scaleCurve),
+                  child: child,
+                ),
+              ),
+            );
+          }
+          // Auth / login screen transition: simple fade + slight scale-out.
+          final eased = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: eased,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 1.04, end: 1.0).animate(eased),
+              child: child,
+            ),
+          );
+        },
         child: KeyedSubtree(key: homeKey, child: home),
       ),
     );

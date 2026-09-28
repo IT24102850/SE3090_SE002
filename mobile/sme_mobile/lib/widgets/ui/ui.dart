@@ -8,6 +8,7 @@
 library;
 
 export 'app_background.dart';
+export 'dashboard_entry_animation.dart';
 export 'app_feedback.dart';
 export 'ghost_button.dart';
 export 'glass_app_bar.dart';
