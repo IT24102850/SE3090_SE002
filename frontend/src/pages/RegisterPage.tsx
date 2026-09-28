@@ -10,6 +10,7 @@ import { initializeAuth } from '../store/authSlice';
 import type { AppDispatch } from '../store/store';
 import '../features/marketing/landing.css';
 import './signup.css';
+import './auth-enhanced.css';
 
 /* ── Interactive Particle Canvas ─────────────────────────────── */
 function ParticleCanvas() {

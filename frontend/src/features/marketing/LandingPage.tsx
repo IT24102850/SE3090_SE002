@@ -1,7 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { scrollToId } from './scroll/useSmoothScroll';
 import './landing.css';
+import './landing-enhanced.css';
 
 interface Industry {
   id: string;
@@ -21,33 +22,33 @@ const industries: Industry[] = [
     name: 'Tourism & Trips',
     badge: 'EXPERIENCE & TOURS',
     image: '/landing/tourism.jpg',
-    imageAlt: 'A luxury travel catamaran cruise sailing on turquoise tropical ocean water with guests enjoying the tour',
-    headline: 'Keep every experience and slot on schedule.',
+    imageAlt: 'A luxury catamaran sailing on turquoise ocean water with guests enjoying the tour',
+    headline: 'Keep every experience, charter, and slot on schedule.',
     description: 'Coordinate excursions, vessel capacities, instructor schedules, and guest gear rentals with zero double-bookings.',
     stats: { label: 'Slot Utilization', value: '98.5%' },
-    details: ['Capacity management', 'Equipment rental tracking', 'Instructor assignments', 'Automated confirmations'],
+    details: ['Vessel capacity guard', 'Gear & wetsuit rental tracking', 'Instructor schedule sync', 'Instant SMS check-ins'],
   },
   {
     id: 'hospitality',
     name: 'Hospitality & Stays',
     badge: 'HOTELS & RESORTS',
-    image: '/landing/homestay.jpg',
-    imageAlt: 'A tropical coastal boutique homestay framed by palm trees',
-    headline: 'Make every guest check-in feel effortless.',
+    image: '/landing/hospitality.jpg',
+    imageAlt: 'A boutique hotel courtyard in Mirissa with a swimming pool, tropical plants, and villa rooms',
+    headline: 'Make every guest check-in feel completely effortless.',
     description: 'Keep room turnover, housekeeping tasks, guest preferences, and multi-branch calendars perfectly in sync.',
     stats: { label: 'Turnaround Time', value: '-35 min' },
-    details: ['Room & villa calendar', 'Housekeeping dispatch', 'Guest dietary & notes', 'Payment & folio tracking'],
+    details: ['Room & villa calendar', 'Housekeeping dispatch board', 'Guest dietary & VIP notes', 'Automated folio & payments'],
   },
   {
     id: 'health',
     name: 'Health & Wellness',
     badge: 'CLINICS & SPAS',
-    image: '/landing/health-wellness.jpg',
-    imageAlt: 'A bright, welcoming wellness clinic and therapy reception studio',
-    headline: 'Give every client session a calmer rhythm.',
+    image: '/landing/clinic.jpg',
+    imageAlt: 'A physician in a white coat and stethoscope consulting with a patient in a medical office',
+    headline: 'Give every client treatment a calm, clinical rhythm.',
     description: 'Bring practitioner schedules, treatment room allocation, recurring appointments, and consumable supplies together.',
     stats: { label: 'Patient Retention', value: '+42%' },
-    details: ['Practitioner schedules', 'Treatment room booking', 'Automated SMS reminders', 'Consumables inventory'],
+    details: ['Practitioner roster sync', 'Treatment room reservation', 'Automated WhatsApp reminders', 'Medical consumables tracking'],
   },
   {
     id: 'retail',
@@ -55,10 +56,10 @@ const industries: Industry[] = [
     badge: 'SHOPS & COMMERCE',
     image: '/landing/retail.jpg',
     imageAlt: 'An artisanal retail boutique with curated merchandise displays and checkout desk',
-    headline: 'Total clarity across shop floor and back-office.',
+    headline: 'Total clarity across shop floor and back-office stock.',
     description: 'Track fast-moving inventory, trigger low-stock purchase orders, manage staff shifts, and review sales trends in seconds.',
     stats: { label: 'Stock Accuracy', value: '99.9%' },
-    details: ['Live barcode & SKU count', 'Low stock auto-orders', 'Staff shift schedules', 'Multi-location inventory'],
+    details: ['Live barcode & SKU count', 'Low stock auto-orders', 'Staff shift schedules', 'Multi-location transfer logs'],
   },
   {
     id: 'education',
@@ -67,9 +68,9 @@ const industries: Industry[] = [
     image: '/landing/education.jpg',
     imageAlt: 'An interactive creative training workshop and learning studio in an open loft',
     headline: 'Make room for deeper focus and better teaching.',
-    description: 'Manage class timetables, student enrollments, room capacities, and materials without administrative clutter.',
+    description: 'Manage class timetables, student enrollments, room capacities, and course materials without administrative clutter.',
     stats: { label: 'Admin Hours Saved', value: '18 hrs/wk' },
-    details: ['Batch enrollments', 'Instructor timetables', 'Materials distribution', 'Attendance check-in'],
+    details: ['Batch student enrollments', 'Instructor timetables', 'Materials distribution', 'QR attendance check-in'],
   },
   {
     id: 'services',
@@ -77,41 +78,77 @@ const industries: Industry[] = [
     badge: 'AGENCIES & STUDIOS',
     image: '/landing/services.jpg',
     imageAlt: 'A modern collaborative consulting and client strategy studio with glass partitions',
-    headline: 'Stay aligned on every project and milestone.',
+    headline: 'Stay aligned on every project, client, and milestone.',
     description: 'Provide clients with frictionless booking, assign consultants by skill, track billable engagements, and automate follow-ups.',
     stats: { label: 'Client Satisfaction', value: '4.9 / 5.0' },
-    details: ['Client appointment booking', 'Resource utilization', 'Deliverable milestones', 'Automated follow-ups'],
+    details: ['Client appointment booking', 'Consultant utilization', 'Deliverable milestones', 'Automated follow-ups'],
   },
 ];
 
-const features = [
+interface BranchData {
+  name: string;
+  location: string;
+  bookingsToday: number;
+  availableSlots: number;
+  teamOnDuty: number;
+  stockHealth: string;
+  nextEvent: { time: string; title: string; assignee: string };
+}
+
+const branches: Record<string, BranchData> = {
+  colombo: {
+    name: 'Colombo Central HQ',
+    location: 'Flagship Hub · Ward Place',
+    bookingsToday: 34,
+    availableSlots: 4,
+    teamOnDuty: 16,
+    stockHealth: '98.2% Optimal',
+    nextEvent: { time: '09:30 AM', title: 'VIP Catamaran Cruise — 12 Guests', assignee: 'Sarah W. (Lead)' },
+  },
+  kandy: {
+    name: 'Kandy Hillside Studio',
+    location: 'Boutique Branch · Peradeniya',
+    bookingsToday: 19,
+    availableSlots: 8,
+    teamOnDuty: 9,
+    stockHealth: '100% Synced',
+    nextEvent: { time: '10:15 AM', title: 'Ayurveda Wellness Session', assignee: 'Dr. David K.' },
+  },
+  galle: {
+    name: 'Galle Coastal Villa',
+    location: 'Resort Station · Fort Ramparts',
+    bookingsToday: 26,
+    availableSlots: 2,
+    teamOnDuty: 12,
+    stockHealth: '94.6% Auto-Restocking',
+    nextEvent: { time: '11:00 AM', title: 'Sunset Surf & Reef Expedition', assignee: 'Marcus P.' },
+  },
+};
+
+const testimonials = [
   {
-    icon: 'calendar',
-    title: 'Bookings that stay clear',
-    text: 'Real-time multi-branch availability, conflict-free scheduling, and automated guest confirmations in one unified view.',
-    tone: 'mint',
-    tag: 'SCHEDULING',
+    quote: 'Unify completely replaced 4 fragmented tools: WhatsApp booking groups, paper shift charts, and two messy spreadsheets. Our villa turnaround dropped by 35 minutes.',
+    author: 'Sunil Weerakkody',
+    role: 'Managing Director',
+    company: 'Ceylon Coastal Stays (3 Branches)',
+    metric: '-35 min turnaround',
+    rating: 5,
   },
   {
-    icon: 'team',
-    title: 'Your team in harmony',
-    text: 'Smart roster management, clear shift assignments, instant role handovers, and check-in tracking with zero ambiguity.',
-    tone: 'blue',
-    tag: 'PEOPLE',
+    quote: 'Our dive center runs 6 daily catamaran excursions. In 8 months of using Unify, we have had exactly zero double-bookings and never run out of oxygen regulators.',
+    author: 'Dilshan Silva',
+    role: 'Operations & Safety Lead',
+    company: 'Mirissa Blue Water Expeditions',
+    metric: '100% conflict-free',
+    rating: 5,
   },
   {
-    icon: 'inventory',
-    title: 'Stock without surprises',
-    text: 'Live inventory telemetry, automated low-stock reorder triggers, purchase order workflows, and supplier audit trails.',
-    tone: 'coral',
-    tag: 'INVENTORY',
-  },
-  {
-    icon: 'insights',
-    title: 'Intelligence that clicks',
-    text: 'Real-time executive metrics, revenue forecasting, capacity analytics, and actionable alerts without messy spreadsheets.',
-    tone: 'violet',
-    tag: 'ANALYTICS',
+    quote: 'The automated stock re-order feature is magic. As soon as clinical serums or consumable kits drop below 20 units, the system drafts the PO before we even notice.',
+    author: 'Dr. Ananya Jayawardene',
+    role: 'Founder & Head Clinician',
+    company: 'Aura Wellness Medical Spa',
+    metric: '18 hrs saved/wk',
+    rating: 5,
   },
 ];
 
@@ -146,6 +183,19 @@ function FeatureIcon({ name }: { name: string }) {
         <circle cx="19" cy="9" r="2" />
       </>
     ),
+    shield: (
+      <>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        <path d="m9 12 2 2 4-4" />
+      </>
+    ),
+    bot: (
+      <>
+        <rect x="3" y="11" width="18" height="10" rx="2" />
+        <circle cx="12" cy="5" r="2" />
+        <path d="M12 7v4M8 15h.01M16 15h.01" />
+      </>
+    ),
   };
 
   return (
@@ -158,7 +208,7 @@ function FeatureIcon({ name }: { name: string }) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {paths[name]}
+      {paths[name] || paths.calendar}
     </svg>
   );
 }
@@ -207,179 +257,6 @@ function IndustryIcon({ id }: { id: string }) {
   return icons[id] || null;
 }
 
-function InteractiveDashboardPreview() {
-  const [activeTab, setActiveTab] = useState<'schedule' | 'inventory' | 'team'>('schedule');
-
-  return (
-    <div className="lp-home-dash" aria-label="Interactive Unify Workspace Preview">
-      <div className="lp-home-dash-top">
-        <div className="lp-home-dash-title">
-          <span className="lp-home-dash-logo">U</span>
-          <strong>Unify Workspace</strong>
-          <span className="lp-home-dash-env">MAIN BRANCH · LIVE</span>
-        </div>
-        <div className="lp-home-dash-live-badge">
-          <span className="lp-pulse-dot" />
-          <span>CONNECTED</span>
-        </div>
-      </div>
-
-      <div className="lp-home-dash-content">
-        <aside className="lp-home-dash-nav">
-          <button
-            type="button"
-            className={activeTab === 'schedule' ? 'is-active' : ''}
-            onClick={() => setActiveTab('schedule')}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="3" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
-            <span>Overview</span>
-          </button>
-          <button
-            type="button"
-            className={activeTab === 'inventory' ? 'is-active' : ''}
-            onClick={() => setActiveTab('inventory')}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5M3 17l9 5 9-5" /></svg>
-            <span>Inventory</span>
-          </button>
-          <button
-            type="button"
-            className={activeTab === 'team' ? 'is-active' : ''}
-            onClick={() => setActiveTab('team')}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="7" r="4" /><path d="M2 21v-2a6 6 0 0 1 12 0v2M16 3.13a4 4 0 0 1 0 7.75M22 21v-2a4 4 0 0 0-3-3.87" /></svg>
-            <span>Roster</span>
-          </button>
-        </aside>
-
-        <section className="lp-home-dash-view">
-          <div className="lp-home-dash-header-bar">
-            <div>
-              <small>ACTIVE WORKSPACE</small>
-              <h4>Operational Rhythm</h4>
-            </div>
-            <span className="lp-badge-sync">All systems synced</span>
-          </div>
-
-          <div className="lp-home-metrics">
-            <div className="lp-metric-card">
-              <small>TODAY'S BOOKINGS</small>
-              <div className="lp-metric-val">
-                <b>28</b>
-                <span className="lp-trend-up">+14% vs avg</span>
-              </div>
-            </div>
-            <div className="lp-metric-card">
-              <small>AVAILABLE SLOTS</small>
-              <div className="lp-metric-val">
-                <b>06</b>
-                <span className="lp-trend-neutral">Optimized</span>
-              </div>
-            </div>
-            <div className="lp-metric-card">
-              <small>TEAM ON DUTY</small>
-              <div className="lp-metric-val">
-                <b>14</b>
-                <span className="lp-trend-good">100% In Sync</span>
-              </div>
-            </div>
-          </div>
-
-          {activeTab === 'schedule' && (
-            <div className="lp-home-agenda">
-              <div className="lp-home-agenda-title">
-                <b>Upcoming Schedule</b>
-                <span className="lp-view-link">Real-time view</span>
-              </div>
-              <div className="lp-agenda-item">
-                <span className="lp-time">09:30</span>
-                <span className="lp-agenda-dot is-cyan" />
-                <div className="lp-agenda-info">
-                  <b>VIP Client Session — 8 attendees</b>
-                  <small>Main Floor · Assigned: Sarah W.</small>
-                </div>
-                <span className="lp-status-tag">Confirmed</span>
-              </div>
-              <div className="lp-agenda-item">
-                <span className="lp-time">11:15</span>
-                <span className="lp-agenda-dot is-amber" />
-                <div className="lp-agenda-info">
-                  <b>Shift Roster Handover & Briefing</b>
-                  <small>Operations Studio · Full Team</small>
-                </div>
-                <span className="lp-status-tag is-pending">Next Up</span>
-              </div>
-              <div className="lp-agenda-item">
-                <span className="lp-time">14:00</span>
-                <span className="lp-agenda-dot is-violet" />
-                <div className="lp-agenda-info">
-                  <b>Group Experience Booking — 16 Guests</b>
-                  <small>South Wing · Assigned: Marcus K.</small>
-                </div>
-                <span className="lp-status-tag">Prepared</span>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'inventory' && (
-            <div className="lp-home-agenda">
-              <div className="lp-home-agenda-title">
-                <b>Stock Status & Reorders</b>
-                <span className="lp-view-link">Automated POs</span>
-              </div>
-              <div className="lp-agenda-item">
-                <span className="lp-time">SKU-402</span>
-                <span className="lp-agenda-dot is-cyan" />
-                <div className="lp-agenda-info">
-                  <b>Premium Equipment Kit (Batch A)</b>
-                  <small>In Stock: 142 units · Reorder threshold: 30</small>
-                </div>
-                <span className="lp-status-tag">Healthy</span>
-              </div>
-              <div className="lp-agenda-item">
-                <span className="lp-time">SKU-891</span>
-                <span className="lp-agenda-dot is-amber" />
-                <div className="lp-agenda-info">
-                  <b>Essential Consumables Pack</b>
-                  <small>In Stock: 8 units · Auto-PO #6719 Sent</small>
-                </div>
-                <span className="lp-status-tag is-pending">In Transit</span>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'team' && (
-            <div className="lp-home-agenda">
-              <div className="lp-home-agenda-title">
-                <b>Staff Roster & Roles</b>
-                <span className="lp-view-link">14 On Duty</span>
-              </div>
-              <div className="lp-agenda-item">
-                <span className="lp-time">Lead</span>
-                <span className="lp-agenda-dot is-cyan" />
-                <div className="lp-agenda-info">
-                  <b>Sarah Wickramasinghe</b>
-                  <small>Manager Role · Checked in at 08:15 AM</small>
-                </div>
-                <span className="lp-status-tag">Active</span>
-              </div>
-              <div className="lp-agenda-item">
-                <span className="lp-time">Staff</span>
-                <span className="lp-agenda-dot is-cyan" />
-                <div className="lp-agenda-info">
-                  <b>David Perera & 12 others</b>
-                  <small>Client Specialists · 0 handover delays</small>
-                </div>
-                <span className="lp-status-tag">On Track</span>
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  );
-}
-
 export default function LandingPage() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('unify-home-theme');
@@ -388,6 +265,52 @@ export default function LandingPage() {
   });
 
   const [selectedIndustry, setSelectedIndustry] = useState(0);
+  const [activeBranch, setActiveBranch] = useState<'colombo' | 'kandy' | 'galle'>('colombo');
+  const [activeDashTab, setActiveDashTab] = useState<'schedule' | 'inventory' | 'team' | 'ai'>('schedule');
+
+  // Interactive Live Sandbox State
+  const [stockLevel, setStockLevel] = useState<number>(38);
+  const [simulatedBookings, setSimulatedBookings] = useState<number>(14);
+  const [justBooked, setJustBooked] = useState<boolean>(false);
+
+  // Interactive ROI Calculator State
+  const [teamSize, setTeamSize] = useState<number>(8);
+  const [weeklyAppointments, setWeeklyAppointments] = useState<number>(120);
+
+  // Interactive Telemetry Filter
+  const [pulseFilter, setPulseFilter] = useState<'all' | 'booking' | 'stock' | 'team' | 'finance'>('all');
+
+  // Live ticking clock for living page feel
+  const [liveTime, setLiveTime] = useState<string>(() => {
+    return new Date().toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  });
+
+  // Auto-rotating live streaming operations events
+  const [liveEventIndex, setLiveEventIndex] = useState<number>(0);
+  const liveEvents = useMemo(() => [
+    { time: 'Just now', title: 'Lagoon Safari VIP Confirmed', branch: 'Colombo HQ', amount: 'LKR 45,000' },
+    { time: '4s ago', title: 'Morning Shift Handover Completed', branch: 'Kandy Studio', amount: '12 Staff Active' },
+    { time: '9s ago', title: 'Auto-PO #8492 Dispatched to Supplier', branch: 'Galle Coast', amount: '50 Units Restocked' },
+    { time: '15s ago', title: 'Ayurveda Spa Package Settled', branch: 'Kandy Studio', amount: 'LKR 82,500' },
+    { time: '22s ago', title: 'Catamaran Sunset Cruise Booked', branch: 'Colombo HQ', amount: 'LKR 160,000' },
+    { time: '30s ago', title: 'Villa 104 Express Check-in Finished', branch: 'Galle Coast', amount: 'QR Verified' },
+  ], []);
+
+  useEffect(() => {
+    const clockTimer = setInterval(() => {
+      setLiveTime(new Date().toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }, 1000);
+    const eventTimer = setInterval(() => {
+      setLiveEventIndex((prev) => (prev + 1) % liveEvents.length);
+    }, 3600);
+    return () => {
+      clearInterval(clockTimer);
+      clearInterval(eventTimer);
+    };
+  }, [liveEvents.length]);
+
+  // FAQ Accordion State
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   useEffect(() => {
     document.documentElement.dataset.unifyTheme = theme;
@@ -401,6 +324,23 @@ export default function LandingPage() {
     setTheme(newTheme);
   };
 
+  const branch = branches[activeBranch];
+
+  // Calculated ROI values in LKR
+  const hoursSavedPerMonth = useMemo(() => {
+    return Math.round(teamSize * 6.2 + weeklyAppointments * 0.18);
+  }, [teamSize, weeklyAppointments]);
+
+  const estimatedSavings = useMemo(() => {
+    return Math.round(hoursSavedPerMonth * 3800 + weeklyAppointments * 1650);
+  }, [hoursSavedPerMonth, weeklyAppointments]);
+
+  const handleSimulateBooking = () => {
+    setSimulatedBookings((prev) => prev + 1);
+    setJustBooked(true);
+    setTimeout(() => setJustBooked(false), 2400);
+  };
+
   return (
     <div className="lp lp-home">
       {/* Dynamic Background Glow Orbs */}
@@ -408,28 +348,38 @@ export default function LandingPage() {
         <div className="lp-mesh-orb lp-mesh-orb-1" />
         <div className="lp-mesh-orb lp-mesh-orb-2" />
         <div className="lp-mesh-orb lp-mesh-orb-3" />
+        <div className="lp-grid-pattern-overlay" />
       </div>
 
       {/* Floating Glass Navigation */}
       <header className="lp-home-nav">
         <nav className="lp-home-shell lp-nav-inner" aria-label="Primary Navigation">
           <Link className="lp-home-brand" to="/">
-            <img src="/unify-logo.svg" alt="Unify Logo" />
+            <div className="lp-brand-logo-wrap">
+              <img src="/unify-logo.svg" alt="Unify Logo" />
+              <span className="lp-logo-glow-dot" />
+            </div>
             <div className="lp-brand-text">
               <span className="lp-brand-name">unify</span>
-              <small className="lp-brand-tagline">OPERATIONS · SIMPLIFIED</small>
+              <small className="lp-brand-tagline">OPERATIONS · OS</small>
             </div>
           </Link>
 
           <div className="lp-home-nav-links">
             <button type="button" onClick={() => scrollToId('solutions')}>
-              Solutions
+              Platform
             </button>
-            <button type="button" onClick={() => scrollToId('how-it-works')}>
-              How it works
+            <button type="button" onClick={() => scrollToId('bento-grid')}>
+              Capabilities
+            </button>
+            <button type="button" onClick={() => scrollToId('interactive-lab')}>
+              Live Sandbox
             </button>
             <button type="button" onClick={() => scrollToId('built-for-you')}>
               Industries
+            </button>
+            <button type="button" onClick={() => scrollToId('roi-calculator')}>
+              ROI Tool
             </button>
             <button type="button" onClick={() => scrollToId('faq')}>
               FAQ
@@ -437,7 +387,7 @@ export default function LandingPage() {
           </div>
 
           <div className="lp-nav-right">
-            {/* Interactive Animated Theme Switcher */}
+            {/* Interactive Theme Switcher */}
             <div className="lp-home-theme-toggle" role="radiogroup" aria-label="Theme mode selector">
               <button
                 type="button"
@@ -489,59 +439,78 @@ export default function LandingPage() {
       </header>
 
       <main>
-        {/* HERO SECTION */}
+        {/* =========================================================
+            HERO SECTION WITH DYNAMIC CONTROL DECK
+           ========================================================= */}
         <section className="lp-home-hero">
           <div className="lp-home-shell lp-home-hero-grid">
             <div className="lp-home-hero-copy">
+              {/* Live Streaming Ticker Banner */}
+              <div className="lp-live-ticker-banner">
+                <span className="lp-sonar-ping">
+                  <span className="lp-sonar-wave" />
+                  <span className="lp-sonar-dot" />
+                </span>
+                <span className="lp-live-ticker-label">LIVE FEED · {liveTime}</span>
+                <span className="lp-live-ticker-sep">·</span>
+                <span className="lp-live-ticker-event" key={liveEventIndex}>
+                  <strong>{liveEvents[liveEventIndex].title}</strong> <span className="lp-live-branch-tag">({liveEvents[liveEventIndex].branch})</span> — <span className="lp-live-badge-val">{liveEvents[liveEventIndex].amount}</span>
+                </span>
+              </div>
+
               <div className="lp-hero-pill-badge">
                 <span className="lp-pill-indicator" />
-                <span>UNIFIED BUSINESS OS</span>
+                <span>UNIFY 3.0 · REAL-TIME CLOUD OS</span>
                 <span className="lp-pill-divider">·</span>
-                <span className="lp-pill-highlight">Multi-Branch Ready</span>
+                <span className="lp-pill-highlight">Multi-Branch Telemetry</span>
               </div>
 
               <h1>
-                Make the busy<br />
-                feel <em>beautiful.</em>
+                Run your business in one calm, <em>beautiful rhythm.</em>
               </h1>
 
               <p className="lp-home-lede">
-                Unify turns reservations, team shifts, inventory tracking, and client handovers into one calm, delightful operating system your entire business will love.
+                Unify combines reservations, inventory telemetry, smart shift handovers, and customer billing into one synchronized operating system your entire team will love using every day.
               </p>
 
               <div className="lp-home-hero-actions">
                 <Link className="lp-home-primary" to="/register">
-                  <span>Create your workspace</span>
+                  <span>Create your workspace free</span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                 </Link>
                 <button
                   type="button"
                   className="lp-hero-ghost-btn"
-                  onClick={() => scrollToId('solutions')}
+                  onClick={() => scrollToId('interactive-lab')}
                 >
-                  <span>Explore features</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 13l5 5 5-5M7 6l5 5 5-5" /></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polygon points="10 8 16 12 10 16 10 8" /></svg>
+                  <span>Explore Live Sandbox</span>
                 </button>
               </div>
 
               <div className="lp-home-trust">
                 <div className="lp-home-avatars">
-                  <span title="Colombo Diving Center">C</span>
-                  <span title="Villa Ceylon">V</span>
-                  <span title="Kandy Wellness Studio">K</span>
-                  <span title="Artisan Store Colombo">A</span>
-                  <span className="lp-avatar-plus">+</span>
+                  <span title="Colombo Marine Hub">C</span>
+                  <span title="Villa Ceylon Boutique">V</span>
+                  <span title="Kandy Wellness Clinic">K</span>
+                  <span title="Artisan Loft Studio">A</span>
+                  <span className="lp-avatar-plus">+500</span>
                 </div>
-                <p>
-                  <b>Trusted by 450+ modern businesses.</b>
-                  <br />
-                  <span>No credit card required · Full setup in 2 minutes</span>
-                </p>
+                <div>
+                  <div className="lp-trust-stars">
+                    ★★★★★ <span>4.9 / 5.0 Rating</span>
+                  </div>
+                  <p>
+                    <b>Trusted by 500+ modern multi-branch teams.</b><br />
+                    <span>Instant setup in 2 minutes · No credit card required</span>
+                  </p>
+                </div>
               </div>
             </div>
 
+            {/* HERO VISUAL: MULTI-BRANCH SIMULATOR DECK */}
             <div className="lp-home-visual">
-              {/* High Quality Authentic Photography Showcase */}
+              {/* Photo Showcase in Background */}
               <div className="lp-home-photo-card">
                 <img
                   src="/landing/operations-hub.jpg"
@@ -561,190 +530,668 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Dynamic Interactive Mini Dashboard */}
-              <InteractiveDashboardPreview />
+              {/* Floating Live Badges */}
+              <div className="lp-floating-metric-chip lp-chip-left">
+                <div className="lp-chip-dot is-cyan" />
+                <div>
+                  <strong>0 Overlaps Guard</strong>
+                  <small>Automated conflict detection</small>
+                </div>
+              </div>
+
+              <div className="lp-floating-metric-chip lp-chip-right">
+                <div className="lp-chip-dot is-emerald" />
+                <div>
+                  <strong>99.98% Telemetry</strong>
+                  <small>Live sync across 3 branches</small>
+                </div>
+              </div>
+
+              {/* Main Interactive Command Center */}
+              <div className="lp-home-dash" aria-label="Interactive Operations Simulator">
+                {/* Simulator Header & Branch Selector */}
+                <div className="lp-home-dash-top">
+                  <div className="lp-home-dash-title">
+                    <span className="lp-home-dash-logo">U</span>
+                    <strong>Command Deck</strong>
+                    <div className="lp-branch-selector-pill">
+                      {(['colombo', 'kandy', 'galle'] as const).map((b) => (
+                        <button
+                          key={b}
+                          type="button"
+                          className={`lp-branch-chip ${activeBranch === b ? 'is-selected' : ''}`}
+                          onClick={() => setActiveBranch(b)}
+                        >
+                          {b === 'colombo' ? 'Colombo HQ' : b === 'kandy' ? 'Kandy Studio' : 'Galle Coast'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="lp-home-dash-live-badge">
+                    <span className="lp-pulse-dot" />
+                    <span>{branch.stockHealth}</span>
+                  </div>
+                </div>
+
+                <div className="lp-home-dash-content">
+                  {/* Left Tab Switcher */}
+                  <aside className="lp-home-dash-nav">
+                    <button
+                      type="button"
+                      className={activeDashTab === 'schedule' ? 'is-active' : ''}
+                      onClick={() => setActiveDashTab('schedule')}
+                    >
+                      <FeatureIcon name="calendar" />
+                      <span>Schedule</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={activeDashTab === 'inventory' ? 'is-active' : ''}
+                      onClick={() => setActiveDashTab('inventory')}
+                    >
+                      <FeatureIcon name="inventory" />
+                      <span>Inventory</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={activeDashTab === 'team' ? 'is-active' : ''}
+                      onClick={() => setActiveDashTab('team')}
+                    >
+                      <FeatureIcon name="team" />
+                      <span>Staff Roster</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={activeDashTab === 'ai' ? 'is-active' : ''}
+                      onClick={() => setActiveDashTab('ai')}
+                    >
+                      <FeatureIcon name="bot" />
+                      <span>AI Copilot</span>
+                    </button>
+                  </aside>
+
+                  {/* Right View Panel */}
+                  <section className="lp-home-dash-view">
+                    <div className="lp-home-dash-header-bar">
+                      <div>
+                        <small>{branch.location}</small>
+                        <h4>{branch.name}</h4>
+                      </div>
+                      <span className="lp-badge-sync">All Nodes Connected</span>
+                    </div>
+
+                    {/* Metric Cards */}
+                    <div className="lp-home-metrics">
+                      <div className="lp-metric-card">
+                        <small>TODAY'S BOOKINGS</small>
+                        <div className="lp-metric-val">
+                          <b>{branch.bookingsToday + simulatedBookings - 14}</b>
+                          <span className="lp-trend-up">+18% pace</span>
+                        </div>
+                      </div>
+                      <div className="lp-metric-card">
+                        <small>OPEN CAPACITY</small>
+                        <div className="lp-metric-val">
+                          <b>0{branch.availableSlots}</b>
+                          <span className="lp-trend-neutral">Optimized</span>
+                        </div>
+                      </div>
+                      <div className="lp-metric-card">
+                        <small>ON DUTY</small>
+                        <div className="lp-metric-val">
+                          <b>{branch.teamOnDuty}</b>
+                          <span className="lp-trend-good">Active Sync</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dynamic Tab Body */}
+                    {activeDashTab === 'schedule' && (
+                      <div className="lp-home-agenda">
+                        <div className="lp-home-agenda-title">
+                          <b>Today's Operational Flow</b>
+                          <button
+                            type="button"
+                            className="lp-sim-btn"
+                            onClick={handleSimulateBooking}
+                          >
+                            {justBooked ? '✓ Slot Reserved!' : '+ Simulate Booking'}
+                          </button>
+                        </div>
+                        <div className="lp-agenda-item">
+                          <span className="lp-time">{branch.nextEvent.time}</span>
+                          <span className="lp-agenda-dot is-cyan" />
+                          <div className="lp-agenda-info">
+                            <b>{branch.nextEvent.title}</b>
+                            <small>{branch.nextEvent.assignee}</small>
+                          </div>
+                          <span className="lp-status-tag">Confirmed</span>
+                        </div>
+                        <div className="lp-agenda-item">
+                          <span className="lp-time">12:30 PM</span>
+                          <span className="lp-agenda-dot is-amber" />
+                          <div className="lp-agenda-info">
+                            <b>Midday Shift Handover & Room Prep</b>
+                            <small>All team stations · Checklist auto-verified</small>
+                          </div>
+                          <span className="lp-status-tag is-pending">Next Up</span>
+                        </div>
+                        <div className="lp-agenda-item">
+                          <span className="lp-time">03:45 PM</span>
+                          <span className="lp-agenda-dot is-violet" />
+                          <div className="lp-agenda-info">
+                            <b>Premium Group Booking — 14 Attendees</b>
+                            <small>Main Facility · Automated invoice settled</small>
+                          </div>
+                          <span className="lp-status-tag">Prepared</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeDashTab === 'inventory' && (
+                      <div className="lp-home-agenda">
+                        <div className="lp-home-agenda-title">
+                          <b>Stock Telemetry & Auto-Purchase Orders</b>
+                          <span className="lp-view-link">Zero Stockouts</span>
+                        </div>
+                        <div className="lp-agenda-item">
+                          <span className="lp-time">SKU-402</span>
+                          <span className="lp-agenda-dot is-cyan" />
+                          <div className="lp-agenda-info">
+                            <b>Specialist Equipment & Rental Units</b>
+                            <small>148 Units in stock · Threshold: 30 · Healthy</small>
+                          </div>
+                          <span className="lp-status-tag">Optimal</span>
+                        </div>
+                        <div className="lp-agenda-item">
+                          <span className="lp-time">SKU-891</span>
+                          <span className="lp-agenda-dot is-amber" />
+                          <div className="lp-agenda-info">
+                            <b>Essential Consumable Packs (Batch B)</b>
+                            <small>12 Units left · Auto-PO #8492 triggered to supplier</small>
+                          </div>
+                          <span className="lp-status-tag is-pending">Auto-Restock</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeDashTab === 'team' && (
+                      <div className="lp-home-agenda">
+                        <div className="lp-home-agenda-title">
+                          <b>Live Shift Roster & Handovers</b>
+                          <span className="lp-view-link">{branch.teamOnDuty} Members Active</span>
+                        </div>
+                        <div className="lp-agenda-item">
+                          <span className="lp-time">Shift Lead</span>
+                          <span className="lp-agenda-dot is-cyan" />
+                          <div className="lp-agenda-info">
+                            <b>Sarah Wickramasinghe</b>
+                            <small>Manager Role · Mobile check-in 08:12 AM</small>
+                          </div>
+                          <span className="lp-status-tag">On Floor</span>
+                        </div>
+                        <div className="lp-agenda-item">
+                          <span className="lp-time">Specialists</span>
+                          <span className="lp-agenda-dot is-cyan" />
+                          <div className="lp-agenda-info">
+                            <b>David Perera, Marcus K. & 7 others</b>
+                            <small>Clean handover completed · 0 communication lag</small>
+                          </div>
+                          <span className="lp-status-tag">In Sync</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeDashTab === 'ai' && (
+                      <div className="lp-home-agenda">
+                        <div className="lp-home-agenda-title">
+                          <b>Unify AI Copilot Suggestions</b>
+                          <span className="lp-view-link">Real-time Insights</span>
+                        </div>
+                        <div className="lp-agenda-item">
+                          <span className="lp-time">AI Plan</span>
+                          <span className="lp-agenda-dot is-violet" />
+                          <div className="lp-agenda-info">
+                            <b>Saturday Afternoon Demand Surge</b>
+                            <small>Predicts +35% booking request. Suggests opening 3 additional slots.</small>
+                          </div>
+                          <span className="lp-status-tag is-ai">Approved</span>
+                        </div>
+                        <div className="lp-agenda-item">
+                          <span className="lp-time">Auto-PO</span>
+                          <span className="lp-agenda-dot is-cyan" />
+                          <div className="lp-agenda-info">
+                            <b>Supplies Reorder Cost Optimization</b>
+                            <small>Consolidated 2 supplier shipments into single invoice, saving LKR 18,500.</small>
+                          </div>
+                          <span className="lp-status-tag">Applied</span>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Continuous Capability Marquee */}
           <div className="lp-home-ticker" aria-label="Unify workspace capabilities">
             <div className="lp-ticker-track">
-              <span className="lp-ticker-pill">
-                <b /> REAL-TIME ENGINE
-              </span>
-              <span>CALENDAR & SLOTS</span>
-              <i />
-              <span>TEAM ROSTERS</span>
-              <i />
-              <span>INVENTORY TELEMETRY</span>
-              <i />
-              <span>PURCHASE ORDERS</span>
-              <i />
-              <span>CLIENT CARDS</span>
-              <i />
-              <span>MULTI-BRANCH DISPATCH</span>
-              <i />
-              <span>EXECUTIVE ANALYTICS</span>
-              <i />
-              <span className="lp-ticker-pill">
-                <b /> REAL-TIME ENGINE
-              </span>
-              <span>CALENDAR & SLOTS</span>
-              <i />
-              <span>TEAM ROSTERS</span>
-              <i />
-              <span>INVENTORY TELEMETRY</span>
-              <i />
-              <span>PURCHASE ORDERS</span>
-              <i />
-              <span>CLIENT CARDS</span>
-              <i />
-              <span>MULTI-BRANCH DISPATCH</span>
-              <i />
-              <span>EXECUTIVE ANALYTICS</span>
-              <i />
+              <span className="lp-ticker-pill"><b /> REAL-TIME ENGINE</span>
+              <span>CALENDAR & SLOTS</span><i />
+              <span>TEAM ROSTERS</span><i />
+              <span>INVENTORY TELEMETRY</span><i />
+              <span>AUTOMATED PURCHASE ORDERS</span><i />
+              <span>QR CHECK-INS</span><i />
+              <span>MULTI-BRANCH DISPATCH</span><i />
+              <span>EXECUTIVE ANALYTICS</span><i />
+              <span>DIGITAL INVOICING</span><i />
+              <span className="lp-ticker-pill"><b /> REAL-TIME ENGINE</span>
+              <span>CALENDAR & SLOTS</span><i />
+              <span>TEAM ROSTERS</span><i />
+              <span>INVENTORY TELEMETRY</span><i />
+              <span>AUTOMATED PURCHASE ORDERS</span><i />
+              <span>QR CHECK-INS</span><i />
+              <span>MULTI-BRANCH DISPATCH</span><i />
+              <span>EXECUTIVE ANALYTICS</span><i />
+              <span>DIGITAL INVOICING</span>
             </div>
           </div>
         </section>
 
-        {/* 4 CORE VALUE PILLARS (SOLUTIONS) */}
-        <section className="lp-home-intro" id="solutions">
+        {/* =========================================================
+            BENTO GRID: CORE SYSTEM ARCHITECTURE
+           ========================================================= */}
+        <div id="solutions" />
+        <section className="lp-bento-section" id="bento-grid">
           <div className="lp-home-shell">
             <div className="lp-home-section-head">
-              <p className="lp-home-section-kicker">DESIGNED FOR SEAMLESS FLOW</p>
+              <span className="lp-home-section-kicker">BUILT FOR ZERO CHAOS</span>
               <div className="lp-home-intro-row">
                 <h2>
-                  Everything speaks.<br />
-                  <em>Nothing falls through.</em>
+                  One unified system.<br />
+                  <em>Six interlocking superpowers.</em>
                 </h2>
                 <p>
-                  When your appointment book, inventory ledger, and team shifts talk to each other in real time, everyone can stop chasing updates and focus on what customers actually remember.
+                  No more chasing WhatsApp messages, misplaced inventory ledgers, or accidental double-bookings. Unify connects every branch, member, and customer in real time.
                 </p>
               </div>
             </div>
 
-            <div className="lp-home-feature-grid">
-              {features.map((feature, index) => (
-                <article className={`lp-home-feature is-${feature.tone}`} key={feature.title}>
-                  <div className="lp-feature-card-glow" />
-                  <div className="lp-feature-top">
-                    <span className="lp-feature-tag">{feature.tag}</span>
-                    <span className="lp-home-feature-num">0{index + 1}</span>
+            <div className="lp-bento-grid">
+              {/* Bento Card 1 (Wide): Calendar Engine */}
+              <div className="lp-bento-card lp-bento-wide">
+                <div className="lp-bento-card-bg-glow is-blue" />
+                <div className="lp-bento-card-content">
+                  <div className="lp-bento-header">
+                    <span className="lp-bento-tag">CORE SCHEDULING</span>
+                    <div className="lp-bento-icon is-blue">
+                      <FeatureIcon name="calendar" />
+                    </div>
                   </div>
-                  <div className="lp-home-feature-icon">
-                    <FeatureIcon name={feature.icon} />
-                  </div>
-                  <h3>{feature.title}</h3>
-                  <p>{feature.text}</p>
-                  <button
-                    type="button"
-                    className="lp-feature-explore-btn"
-                    onClick={() => scrollToId('built-for-you')}
-                  >
-                    <span>See workflow</span>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-                  </button>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* STORY / OPERATIONS ARCHITECTURE */}
-        <section className="lp-home-story" id="how-it-works">
-          <div className="lp-home-shell lp-home-story-grid">
-            <div className="lp-home-story-image-wrap">
-              <div className="lp-story-photo-frame">
-                <img
-                  src="/landing/homestay.jpg"
-                  alt="A welcoming coastal boutique homestay surrounded by lush palms"
-                  loading="lazy"
-                />
-                <div className="lp-story-floating-stat lp-stat-top">
-                  <div className="lp-stat-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5" /></svg>
-                  </div>
-                  <div>
-                    <strong>99.4% Fulfillment</strong>
-                    <small>Zero missed guest requests</small>
+                  <h3>Smart Multi-Branch Booking & Slot Engine</h3>
+                  <p>
+                    Handle walk-ins, phone reservations, and web bookings across every branch with real-time slot conflict prevention and automated customer SMS alerts.
+                  </p>
+                  <div className="lp-bento-calendar-preview">
+                    <div className="lp-bento-timeline-bar">
+                      <span className="lp-time-marker">09:00</span>
+                      <span className="lp-time-marker">11:00</span>
+                      <span className="lp-time-marker">01:00</span>
+                      <span className="lp-time-marker">03:00</span>
+                      <span className="lp-time-marker">05:00</span>
+                    </div>
+                    <div className="lp-bento-slot-row">
+                      <div className="lp-bento-slot is-filled" style={{ width: '45%' }}>
+                        <span>Catamaran Excursion (8 Pax)</span>
+                      </div>
+                      <div className="lp-bento-slot is-open" style={{ width: '25%' }}>
+                        <span>Open Slot</span>
+                      </div>
+                      <div className="lp-bento-slot is-filled-purple" style={{ width: '30%' }}>
+                        <span>Private Charter VIP</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              </div>
 
-                <div className="lp-story-floating-stat lp-stat-bottom">
-                  <div className="lp-stat-dot-pulse" />
-                  <div>
-                    <strong>Live Inventory Linked</strong>
-                    <small>Auto-PO triggered when stock &lt; 20%</small>
+              {/* Bento Card 2: Inventory Telemetry */}
+              <div className="lp-bento-card">
+                <div className="lp-bento-card-bg-glow is-amber" />
+                <div className="lp-bento-card-content">
+                  <div className="lp-bento-header">
+                    <span className="lp-bento-tag">INVENTORY</span>
+                    <div className="lp-bento-icon is-amber">
+                      <FeatureIcon name="inventory" />
+                    </div>
+                  </div>
+                  <h3>Predictive Stock & Auto-PO</h3>
+                  <p>
+                    Set min-stock thresholds. When supplies run low, Unify automatically drafts purchase orders to authorized suppliers.
+                  </p>
+                  <div className="lp-bento-stock-gauge">
+                    <div className="lp-gauge-header">
+                      <span>Diving Regulators</span>
+                      <b>14 left</b>
+                    </div>
+                    <div className="lp-gauge-track">
+                      <div className="lp-gauge-fill is-alert" style={{ width: '28%' }} />
+                    </div>
+                    <small className="lp-gauge-note">⚡ Auto-PO #9042 Drafted &amp; Ready</small>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bento Card 3: Team Roster */}
+              <div className="lp-bento-card">
+                <div className="lp-bento-card-bg-glow is-emerald" />
+                <div className="lp-bento-card-content">
+                  <div className="lp-bento-header">
+                    <span className="lp-bento-tag">PEOPLE & ROSTER</span>
+                    <div className="lp-bento-icon is-emerald">
+                      <FeatureIcon name="team" />
+                    </div>
+                  </div>
+                  <h3>Shift Handover & Mobile Check-in</h3>
+                  <p>
+                    Staff view assignments on their phones, scan arrival QR codes, and log handover notes in under 60 seconds.
+                  </p>
+                  <div className="lp-bento-roster-pill">
+                    <div className="lp-roster-avatar">S</div>
+                    <div>
+                      <b>Morning Lead Checked In</b>
+                      <small>08:14 AM · 0 delay incidents</small>
+                    </div>
+                    <span className="lp-pill-ok">Synced</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bento Card 4: Customer Self-Service Portal */}
+              <div className="lp-bento-card">
+                <div className="lp-bento-card-bg-glow is-cyan" />
+                <div className="lp-bento-card-content">
+                  <div className="lp-bento-header">
+                    <span className="lp-bento-tag">GUEST PORTAL</span>
+                    <div className="lp-bento-icon is-cyan">
+                      <FeatureIcon name="calendar" />
+                    </div>
+                  </div>
+                  <h3>Embeddable Booking & QR Pass</h3>
+                  <p>
+                    Drop a 2-line booking widget into your existing website. Customers get instant confirmation cards and digital QR passes.
+                  </p>
+                  <div className="lp-bento-qr-widget">
+                    <div className="lp-qr-fake-box">
+                      <div className="lp-qr-pixels" />
+                      <small>Scan to Check In</small>
+                    </div>
+                    <div className="lp-qr-details">
+                      <b>VIP Pass #8819</b>
+                      <span>Confirmed for 2 Guests</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bento Card 5: AI Planner */}
+              <div className="lp-bento-card">
+                <div className="lp-bento-card-bg-glow is-violet" />
+                <div className="lp-bento-card-content">
+                  <div className="lp-bento-header">
+                    <span className="lp-bento-tag">INTELLIGENCE</span>
+                    <div className="lp-bento-icon is-violet">
+                      <FeatureIcon name="bot" />
+                    </div>
+                  </div>
+                  <h3>AI Operations Copilot</h3>
+                  <p>
+                    Smart forecasting flags upcoming demand peaks, rebalances staff schedules, and optimizes supply purchasing schedules.
+                  </p>
+                  <div className="lp-bento-ai-bubble">
+                    <span className="lp-ai-sparkle">✨</span>
+                    <p>
+                      "Predicted +25% weekend bookings for Kandy branch. Suggesting 2 extra team slots."
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bento Card 6 (Wide): Financial Invoicing & Payments */}
+              <div className="lp-bento-card lp-bento-wide">
+                <div className="lp-bento-card-bg-glow is-blue" />
+                <div className="lp-bento-card-content">
+                  <div className="lp-bento-header">
+                    <span className="lp-bento-tag">BILLING & FINANCE</span>
+                    <div className="lp-bento-icon is-blue">
+                      <FeatureIcon name="insights" />
+                    </div>
+                  </div>
+                  <h3>Automated Invoicing, Payment Gateways &amp; Insurance Claims</h3>
+                  <p>
+                    Generate branded PDF invoices, track card payments via Stripe &amp; local gateways, manage customer subscriptions, and trace insurance claims effortlessly.
+                  </p>
+                  <div className="lp-bento-finance-strip">
+                    <div className="lp-finance-item">
+                      <small>TOTAL PROCESSED</small>
+                      <b>LKR 4,820,000</b>
+                      <span className="lp-trend-up">+24% vs last month</span>
+                    </div>
+                    <div className="lp-finance-item">
+                      <small>SETTLEMENT SPEED</small>
+                      <b>Instant</b>
+                      <span className="lp-trend-good">0 reconciliation errors</span>
+                    </div>
+                    <div className="lp-finance-item">
+                      <small>INVOICE ACCURACY</small>
+                      <b>100%</b>
+                      <span className="lp-trend-neutral">Auto-matched to bookings</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
+        </section>
 
-            <div className="lp-home-story-copy">
-              <p className="lp-home-section-kicker">BUILT AROUND NATURAL HABITS</p>
-              <h2>
-                Start simple.<br />
-                <em>Scale effortlessly.</em>
-              </h2>
-              <p className="lp-story-lede">
-                Tell Unify what kind of business you operate. We tailor the terminology, booking rules, inventory units, and staff permissions to how your days already flow.
-              </p>
+        {/* =========================================================
+            INTERACTIVE LIVE SANDBOX / FEATURE LAB
+           ========================================================= */}
+        <section className="lp-interactive-lab-section" id="interactive-lab">
+          <div className="lp-home-shell">
+            <div className="lp-home-section-head">
+              <span className="lp-home-section-kicker">HANDS-ON SIMULATOR</span>
+              <div className="lp-home-intro-row">
+                <h2>
+                  Try the engine.<br />
+                  <em>Directly in your browser.</em>
+                </h2>
+                <p>
+                  Drag the stock level slider below to see how Unify's automated intelligence detects thresholds and drafts purchase orders in real time.
+                </p>
+              </div>
+            </div>
 
-              <ol className="lp-story-steps">
-                <li>
-                  <span className="lp-step-num">01</span>
-                  <div className="lp-step-body">
-                    <strong>Pick your industry blueprint</strong>
-                    <small>Pre-configured workflows tailored for clinics, dive hubs, boutique stays, retail, and academies.</small>
+            <div className="lp-lab-container">
+              <div className="lp-lab-controls">
+                <div className="lp-lab-slider-block">
+                  <div className="lp-lab-slider-top">
+                    <label htmlFor="stock-slider">
+                      <strong>Simulate Item Inventory Count:</strong>
+                      <span className="lp-slider-val-badge">{stockLevel} units remaining</span>
+                    </label>
+                    <span className="lp-threshold-label">Threshold: 25 units</span>
                   </div>
-                </li>
-                <li>
-                  <span className="lp-step-num">02</span>
-                  <div className="lp-step-body">
-                    <strong>Invite your staff with clean roles</strong>
-                    <small>Staff only see the shifts and tasks they own; managers see real-time branch oversight.</small>
+                  <input
+                    id="stock-slider"
+                    type="range"
+                    min="5"
+                    max="100"
+                    value={stockLevel}
+                    onChange={(e) => setStockLevel(Number(e.target.value))}
+                    className="lp-interactive-slider"
+                  />
+                  <div className="lp-slider-legend">
+                    <span>Critical (&lt; 25)</span>
+                    <span>Reorder Point (25 - 40)</span>
+                    <span>Healthy (40 - 100)</span>
                   </div>
-                </li>
-                <li>
-                  <span className="lp-step-num">03</span>
-                  <div className="lp-step-body">
-                    <strong>Run every day with complete calm</strong>
-                    <small>Take online reservations, automate stock replenishment, and track revenue without chaos.</small>
-                  </div>
-                </li>
-              </ol>
+                </div>
+              </div>
 
-              <div className="lp-story-cta-row">
-                <Link to="/register" className="lp-home-primary">
-                  <span>Start your workspace</span>
+              {/* Reactive System Output Card */}
+              <div className={`lp-lab-output-card ${stockLevel < 25 ? 'is-warning' : 'is-healthy'}`}>
+                <div className="lp-lab-output-header">
+                  <div className="lp-lab-indicator">
+                    <span className={`lp-pulse-dot ${stockLevel < 25 ? 'is-red' : 'is-green'}`} />
+                    <b>
+                      {stockLevel < 25
+                        ? 'CRITICAL STOCK ALERT · AUTOMATED RESTOCK ACTIVE'
+                        : 'STOCK HEALTHY · NO ACTION REQUIRED'}
+                    </b>
+                  </div>
+                  <span className="lp-telemetry-tag">Simulated Telemetry</span>
+                </div>
+
+                <div className="lp-lab-output-body">
+                  {stockLevel < 25 ? (
+                    <div className="lp-lab-alert-content">
+                      <div className="lp-alert-badge">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+                        <span>Stock below threshold (25 units)</span>
+                      </div>
+                      <h4>Automated Purchase Order Generated!</h4>
+                      <p>
+                        PO #9928 for <strong>50 new units</strong> drafted to primary supplier <em>Lanka Marine &amp; Gear Co.</em> with standard delivery terms.
+                      </p>
+                      <div className="lp-alert-actions">
+                        <span className="lp-status-tag is-pending">Auto-Queued for Dispatch</span>
+                        <span className="lp-time-stamp">Triggered in 12ms</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="lp-lab-calm-content">
+                      <h4>Stock Telemetry In Equilibrium</h4>
+                      <p>
+                        Current inventory of {stockLevel} units satisfies all confirmed reservations for the next 14 business days.
+                      </p>
+                      <div className="lp-alert-actions">
+                        <span className="lp-status-tag">Optimal Balance</span>
+                        <span className="lp-time-stamp">Real-time Telemetry Normal</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* =========================================================
+            ROI & TIME SAVINGS CALCULATOR
+           ========================================================= */}
+        <section className="lp-roi-section" id="roi-calculator">
+          <div className="lp-home-shell">
+            <div className="lp-roi-card">
+              <div className="lp-roi-copy">
+                <span className="lp-home-section-kicker">PROVEN VALUE</span>
+                <h2>
+                  Calculate your team's<br />
+                  <em>monthly time &amp; cash savings.</em>
+                </h2>
+                <p>
+                  See how quickly replacing fragmented spreadsheets, WhatsApp threads, and duplicate entry pays for itself.
+                </p>
+
+                <div className="lp-roi-sliders">
+                  <div className="lp-roi-input-group">
+                    <div className="lp-roi-input-head">
+                      <label htmlFor="team-size-slider">Total Team &amp; Floor Staff:</label>
+                      <b>{teamSize} members</b>
+                    </div>
+                    <input
+                      id="team-size-slider"
+                      type="range"
+                      min="2"
+                      max="40"
+                      value={teamSize}
+                      onChange={(e) => setTeamSize(Number(e.target.value))}
+                      className="lp-interactive-slider"
+                    />
+                  </div>
+
+                  <div className="lp-roi-input-group">
+                    <div className="lp-roi-input-head">
+                      <label htmlFor="appointments-slider">Weekly Bookings / Orders:</label>
+                      <b>{weeklyAppointments} / week</b>
+                    </div>
+                    <input
+                      id="appointments-slider"
+                      type="range"
+                      min="20"
+                      max="500"
+                      step="10"
+                      value={weeklyAppointments}
+                      onChange={(e) => setWeeklyAppointments(Number(e.target.value))}
+                      className="lp-interactive-slider"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="lp-roi-results">
+                <div className="lp-roi-metric-big">
+                  <small>ESTIMATED HOURS SAVED MONTHLY</small>
+                  <strong>{hoursSavedPerMonth} hrs</strong>
+                  <span>Eliminating repetitive scheduling &amp; admin</span>
+                </div>
+
+                <div className="lp-roi-metric-big is-green">
+                  <small>VALUE SAVED &amp; PROTECTED</small>
+                  <strong>LKR {estimatedSavings.toLocaleString()}</strong>
+                  <span>From zero double-bookings &amp; lost inventory</span>
+                </div>
+
+                <div className="lp-roi-stress-bar">
+                  <div className="lp-stress-head">
+                    <span>Operational Peace of Mind:</span>
+                    <b>98% Calm</b>
+                  </div>
+                  <div className="lp-stress-track">
+                    <div className="lp-stress-fill" />
+                  </div>
+                </div>
+
+                <Link to="/register" className="lp-home-primary lp-roi-cta">
+                  <span>Start saving {hoursSavedPerMonth} hours/month</span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                 </Link>
-                <Link to="/login" className="lp-story-secondary-link">
-                  Already have an account? Sign in
-                </Link>
               </div>
             </div>
           </div>
         </section>
 
-        {/* INDUSTRY SPECIFIC SHOWCASE WITH DEDICATED PHOTOGRAPHY */}
+        {/* =========================================================
+            INDUSTRY SPECIFIC BLUEPRINT SHOWCASE
+           ========================================================= */}
         <section className="lp-home-industries" id="built-for-you">
           <div className="lp-home-shell">
             <div className="lp-home-industries-head">
               <div>
-                <p className="lp-home-section-kicker">FITS EXACTLY HOW YOU WORK</p>
+                <p className="lp-home-section-kicker">TAILORED FOR YOUR BUSINESS</p>
                 <h2>
                   One powerful engine.<br />
-                  <em>Your exact business.</em>
+                  <em>Configured for your exact workflow.</em>
                 </h2>
               </div>
               <p>
-                Select your industry below to see how Unify configures terminology, reservation constraints, inventory telemetry, and shift handovers specifically for your team.
+                Select your industry below to see how Unify adapts its terminology, booking rules, inventory units, and shift handovers to how your business already operates.
               </p>
             </div>
 
             <div className="lp-home-industry-showcase">
-              {/* Tab Selector */}
+              {/* Tab Selector List */}
               <div className="lp-home-industry-list" role="tablist" aria-label="Select industry workspace">
                 {industries.map((industry, index) => {
                   const isActive = index === selectedIndustry;
@@ -835,7 +1282,118 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* REAL-TIME OPERATIONS PULSE */}
+        {/* =========================================================
+            COMPARISON: THE OLD WAY VS UNIFY OS
+           ========================================================= */}
+        <section className="lp-comparison-section">
+          <div className="lp-home-shell">
+            <div className="lp-home-section-head" style={{ textAlign: 'center' }}>
+              <span className="lp-home-section-kicker">THE CONTRAST</span>
+              <h2>
+                Why high-growth businesses<br />
+                <em>switch to Unify.</em>
+              </h2>
+            </div>
+
+            <div className="lp-comparison-grid">
+              {/* Old Way */}
+              <div className="lp-compare-card is-old">
+                <div className="lp-compare-header">
+                  <span className="lp-compare-badge is-bad">THE FRAGMENTED WAY</span>
+                  <h3>Scattered Tools &amp; Anxiety</h3>
+                </div>
+                <ul className="lp-compare-list">
+                  <li>
+                    <span className="lp-cross">✕</span>
+                    <span>Reservations trapped in WhatsApp screenshots and paper diaries</span>
+                  </li>
+                  <li>
+                    <span className="lp-cross">✕</span>
+                    <span>Accidental double-bookings causing embarrassing client moments</span>
+                  </li>
+                  <li>
+                    <span className="lp-cross">✕</span>
+                    <span>Surprise stockouts discovered right in front of paying customers</span>
+                  </li>
+                  <li>
+                    <span className="lp-cross">✕</span>
+                    <span>Managers stuck working 15+ hours of tedious weekend administrative chores</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* The Unify Way */}
+              <div className="lp-compare-card is-new">
+                <div className="lp-compare-glow" />
+                <div className="lp-compare-header">
+                  <span className="lp-compare-badge is-good">THE UNIFY OS WAY</span>
+                  <h3>Calm, Automated Clarity</h3>
+                </div>
+                <ul className="lp-compare-list">
+                  <li>
+                    <span className="lp-check">✓</span>
+                    <span>One live single source of truth across all branches and floors</span>
+                  </li>
+                  <li>
+                    <span className="lp-check">✓</span>
+                    <span>Conflict-free scheduling engine with instant customer SMS confirmations</span>
+                  </li>
+                  <li>
+                    <span className="lp-check">✓</span>
+                    <span>Live inventory telemetry with automated low-stock purchase orders</span>
+                  </li>
+                  <li>
+                    <span className="lp-check">✓</span>
+                    <span>Executive clarity, instant QR check-ins, and relaxed Monday mornings</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* =========================================================
+            TESTIMONIALS & SOCIAL PROOF
+           ========================================================= */}
+        <section className="lp-testimonials-section">
+          <div className="lp-home-shell">
+            <div className="lp-home-section-head">
+              <span className="lp-home-section-kicker">VERIFIED OUTCOMES</span>
+              <div className="lp-home-intro-row">
+                <h2>
+                  Loved by teams on the ground,<br />
+                  <em>trusted by business owners.</em>
+                </h2>
+                <p>
+                  Read how real hospitality, healthcare, tourism, and boutique operators transformed their daily rhythm with Unify.
+                </p>
+              </div>
+            </div>
+
+            <div className="lp-testimonials-grid">
+              {testimonials.map((t) => (
+                <div className="lp-testimonial-card" key={t.author}>
+                  <div className="lp-testimonial-top">
+                    <div className="lp-stars">★★★★★</div>
+                    <span className="lp-metric-pill">{t.metric}</span>
+                  </div>
+                  <p className="lp-quote">"{t.quote}"</p>
+                  <div className="lp-author-row">
+                    <div className="lp-author-avatar">{t.author.charAt(0)}</div>
+                    <div>
+                      <strong>{t.author}</strong>
+                      <small>{t.role} · {t.company}</small>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* =========================================================
+            STREAMING REAL-TIME TELEMETRY FEED
+           ========================================================= */}
         <section className="lp-home-pulse">
           <div className="lp-home-shell lp-home-pulse-grid">
             <div className="lp-pulse-copy-block">
@@ -864,57 +1422,89 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="lp-home-pulse-visual" aria-label="Illustration of a synchronized business day">
+            <div className="lp-home-pulse-visual" aria-label="Streaming Operations Feed">
               <div className="lp-pulse-card-header">
                 <div className="lp-pulse-live-indicator">
                   <span className="lp-pulse-dot" />
-                  <b>STREAMING TELEMETRY</b>
+                  <b>STREAMING TELEMETRY FEED</b>
                 </div>
-                <small>Real-time system events</small>
+                <div className="lp-pulse-filters">
+                  <button
+                    type="button"
+                    className={`lp-pulse-filter-btn ${pulseFilter === 'all' ? 'is-active' : ''}`}
+                    onClick={() => setPulseFilter('all')}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    className={`lp-pulse-filter-btn ${pulseFilter === 'booking' ? 'is-active' : ''}`}
+                    onClick={() => setPulseFilter('booking')}
+                  >
+                    Bookings
+                  </button>
+                  <button
+                    type="button"
+                    className={`lp-pulse-filter-btn ${pulseFilter === 'stock' ? 'is-active' : ''}`}
+                    onClick={() => setPulseFilter('stock')}
+                  >
+                    Stock
+                  </button>
+                </div>
               </div>
 
               <div className="lp-pulse-stream">
-                <div className="lp-stream-item">
-                  <time>08:45 AM</time>
-                  <div className="lp-stream-bubble is-cyan">
-                    <b>Online Booking Confirmed</b>
-                    <p>Party of 4 booked Sunset Lagoon Safari · Slots updated</p>
+                {(pulseFilter === 'all' || pulseFilter === 'booking') && (
+                  <div className="lp-stream-item">
+                    <time>08:45 AM</time>
+                    <div className="lp-stream-bubble is-cyan">
+                      <b>Online Booking Confirmed</b>
+                      <p>Party of 4 booked Sunset Lagoon Safari · Slots updated in Colombo &amp; Galle</p>
+                    </div>
+                    <span className="lp-stream-badge">Auto</span>
                   </div>
-                  <span className="lp-stream-badge">Auto</span>
-                </div>
+                )}
 
-                <div className="lp-stream-item">
-                  <time>10:15 AM</time>
-                  <div className="lp-stream-bubble is-green">
-                    <b>Morning Shift Handover Completed</b>
-                    <p>8 staff checked in on mobile · 0 maintenance blockers</p>
+                {(pulseFilter === 'all' || pulseFilter === 'team') && (
+                  <div className="lp-stream-item">
+                    <time>10:15 AM</time>
+                    <div className="lp-stream-bubble is-green">
+                      <b>Morning Shift Handover Completed</b>
+                      <p>8 staff checked in via mobile QR · 0 maintenance blockers noted</p>
+                    </div>
+                    <span className="lp-stream-badge is-verified">Verified</span>
                   </div>
-                  <span className="lp-stream-badge is-verified">Verified</span>
-                </div>
+                )}
 
-                <div className="lp-stream-item">
-                  <time>11:30 AM</time>
-                  <div className="lp-stream-bubble is-amber">
-                    <b>Automated Stock Alert Handled</b>
-                    <p>Diving Oxygen regulators reached threshold · PO-6719 dispatched</p>
+                {(pulseFilter === 'all' || pulseFilter === 'stock') && (
+                  <div className="lp-stream-item">
+                    <time>11:30 AM</time>
+                    <div className="lp-stream-bubble is-amber">
+                      <b>Automated Stock Alert Handled</b>
+                      <p>Diving Oxygen regulators reached threshold · PO-6719 dispatched</p>
+                    </div>
+                    <span className="lp-stream-badge">Stock</span>
                   </div>
-                  <span className="lp-stream-badge">Stock</span>
-                </div>
+                )}
 
-                <div className="lp-stream-item">
-                  <time>01:15 PM</time>
-                  <div className="lp-stream-bubble is-violet">
-                    <b>Daily Revenue Target Achieved</b>
-                    <p>LKR 285,000 processed across cards &amp; online portal</p>
+                {(pulseFilter === 'all' || pulseFilter === 'finance') && (
+                  <div className="lp-stream-item">
+                    <time>01:15 PM</time>
+                    <div className="lp-stream-bubble is-violet">
+                      <b>Daily Revenue Target Achieved</b>
+                      <p>LKR 285,000 processed across online portal &amp; floor card terminals</p>
+                    </div>
+                    <span className="lp-stream-badge is-verified">Settled</span>
                   </div>
-                  <span className="lp-stream-badge is-verified">Synced</span>
-                </div>
+                )}
               </div>
             </div>
           </div>
         </section>
 
-        {/* FREQUENTLY ASKED QUESTIONS */}
+        {/* =========================================================
+            FREQUENTLY ASKED QUESTIONS
+           ========================================================= */}
         <section className="lp-home-faq" id="faq">
           <div className="lp-home-shell lp-home-faq-grid">
             <div>
@@ -927,59 +1517,59 @@ export default function LandingPage() {
                 Everything you need to know about setting up Unify for your business. We believe great software should never require a month-long training program.
               </p>
               <div className="lp-faq-help-box">
-                <strong>Need a custom setup?</strong>
-                <p>Our team assists with your initial catalog import and staff training.</p>
+                <strong>Need a customized onboarding?</strong>
+                <p>Our specialists assist with your historical catalog migration, staff training, and branch hardware setup.</p>
                 <a href="mailto:support@unify.work" className="lp-faq-contact-btn">
-                  Talk to a specialist →
+                  Talk to an onboarding specialist →
                 </a>
               </div>
             </div>
 
             <div className="lp-home-faq-list">
-              <details open>
-                <summary>
-                  <span>Can I try Unify without entering a credit card?</span>
-                  <span className="lp-faq-toggle">+</span>
-                </summary>
-                <p>
-                  Yes, absolutely. You can create your workspace, add your team members, configure your inventory, and test online bookings completely free. You only select a plan when you are ready to process live business.
-                </p>
-              </details>
-
-              <details>
-                <summary>
-                  <span>How does Unify handle multiple physical branches?</span>
-                  <span className="lp-faq-toggle">+</span>
-                </summary>
-                <p>
-                  Unify is natively built for multi-branch operations. You can switch between branches with one tap, view stock balances across all locations, transfer items between stores, and assign staff to specific schedules.
-                </p>
-              </details>
-
-              <details>
-                <summary>
-                  <span>Does Unify support mobile phones for on-the-floor staff?</span>
-                  <span className="lp-faq-toggle">+</span>
-                </summary>
-                <p>
-                  Yes! We have native mobile apps for iOS and Android where team members can view their shifts, check in attendees via QR code, accept inventory shipments, and submit purchase orders right from the floor.
-                </p>
-              </details>
-
-              <details>
-                <summary>
-                  <span>Can my customers book appointments directly online?</span>
-                  <span className="lp-faq-toggle">+</span>
-                </summary>
-                <p>
-                  Yes. You get a dedicated public booking link, embeddable widget for your existing website, and automated email/SMS confirmations that automatically sync with your staff calendar.
-                </p>
-              </details>
+              {[
+                {
+                  q: 'Can I try Unify without entering a credit card?',
+                  a: 'Yes, absolutely. You can create your workspace, invite your staff members, configure your inventory, and test online bookings completely free with no credit card required.',
+                },
+                {
+                  q: 'How does Unify handle multiple physical branches?',
+                  a: 'Unify is natively built for multi-branch operations. You can switch between branches with one tap, view stock balances across all locations, transfer items between stores, and assign staff to specific schedules.',
+                },
+                {
+                  q: 'Does Unify support mobile phones for floor staff?',
+                  a: 'Yes! We have native mobile apps for iOS and Android where team members can view their shifts, check in attendees via QR code, accept inventory shipments, and submit purchase orders right from the floor.',
+                },
+                {
+                  q: 'Can my customers book appointments directly online?',
+                  a: 'Yes. You get a dedicated public booking link, embeddable widget for your existing website, and automated email/SMS confirmations that automatically sync with your staff calendar.',
+                },
+                {
+                  q: 'How does the automated inventory re-ordering work?',
+                  a: 'You define a reorder point for any item or consumable. When stock falls below that number, Unify immediately drafts a Purchase Order for your review, or can automatically dispatch it to approved suppliers.',
+                },
+              ].map((item, idx) => {
+                const isOpen = openFaq === idx;
+                return (
+                  <div
+                    key={item.q}
+                    className={`lp-faq-item ${isOpen ? 'is-open' : ''}`}
+                    onClick={() => setOpenFaq(isOpen ? null : idx)}
+                  >
+                    <div className="lp-faq-q">
+                      <span>{item.q}</span>
+                      <span className="lp-faq-toggle">{isOpen ? '−' : '+'}</span>
+                    </div>
+                    {isOpen && <p className="lp-faq-a">{item.a}</p>}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
 
-        {/* CONVERSION CLOSING BANNER */}
+        {/* =========================================================
+            CONVERSION CLOSING BANNER
+           ========================================================= */}
         <section className="lp-home-close">
           <div className="lp-home-close-glow" aria-hidden="true" />
           <div className="lp-home-shell lp-close-content">
@@ -989,11 +1579,11 @@ export default function LandingPage() {
               <em>Love the flow.</em>
             </h2>
             <p className="lp-close-lede">
-              Join hundreds of businesses that have replaced fragmented spreadsheets and missed handovers with one unified, calm workspace.
+              Join hundreds of modern businesses that have replaced fragmented spreadsheets and missed handovers with one unified, calm workspace.
             </p>
             <div className="lp-close-action-row">
               <Link to="/register" className="lp-home-primary lp-close-cta">
-                <span>Start building your workspace for free</span>
+                <span>Start building your workspace free</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
               </Link>
             </div>
@@ -1006,7 +1596,9 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* FOOTER */}
+      {/* =========================================================
+          FOOTER
+         ========================================================= */}
       <footer className="lp-home-footer">
         <div className="lp-home-shell">
           <div className="lp-home-footer-main">
@@ -1029,9 +1621,11 @@ export default function LandingPage() {
           <div className="lp-home-footer-links">
             <div>
               <b>Platform</b>
-              <button type="button" onClick={() => scrollToId('solutions')}>Solutions</button>
-              <button type="button" onClick={() => scrollToId('how-it-works')}>How it works</button>
+              <button type="button" onClick={() => scrollToId('solutions')}>Platform</button>
+              <button type="button" onClick={() => scrollToId('bento-grid')}>Capabilities</button>
+              <button type="button" onClick={() => scrollToId('interactive-lab')}>Live Sandbox</button>
               <button type="button" onClick={() => scrollToId('built-for-you')}>Industries</button>
+              <button type="button" onClick={() => scrollToId('roi-calculator')}>ROI Tool</button>
               <button type="button" onClick={() => scrollToId('faq')}>FAQ</button>
             </div>
 
@@ -1047,7 +1641,7 @@ export default function LandingPage() {
           <div className="lp-home-footer-bottom">
             <span>© {new Date().getFullYear()} Unify Systems Ltd. All rights reserved.</span>
             <span className="lp-footer-uptime">
-              <i /> All cloud nodes operational
+              <i /> All cloud nodes operational · 99.98% Telemetry
             </span>
             <div className="lp-footer-legal">
               <a href="#privacy">Privacy</a>

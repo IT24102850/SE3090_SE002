@@ -8,6 +8,8 @@ no permission needed, attribution appreciated but not required.
 |---|---|---|
 | dive-centre.jpg | Sebastian Pena Lambarri | https://unsplash.com/photos/7i5HMCGupVw |
 | homestay.jpg    | Eirik Skarstein          | https://unsplash.com/photos/47Lp325ZaSA |
+| hospitality.jpg | Zoshua Colah              | https://unsplash.com/photos/a-swimming-pool-area-with-lounge-chairs-and-umbrellas-xD-D4WKNVXg |
+| clinic.jpg      | Vitaly Gariev             | https://unsplash.com/photos/doctor-consults-with-patient-in-medical-office-iyeUwItlIPk |
 | team-screen.jpg | Vitaly Gariev            | https://unsplash.com/photos/UikYLDQj9_I |
 
 They illustrate the hero copy - "a dive centre and a homestay" - and render
