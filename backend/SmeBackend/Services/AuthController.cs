@@ -250,7 +250,24 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Verifies the 6-digit reset code and sets a new password.
+    /// Verifies the 6-digit reset code before showing the new-password form.
+    /// The code remains valid for the final reset request.
+    /// </summary>
+    [HttpPost("verify-reset-code")]
+    [AllowAnonymous]
+    public IActionResult VerifyResetCode([FromBody] VerifyResetCodeDto dto)
+    {
+        var email = dto.Email.Trim().ToLowerInvariant();
+        if (!_passwordReset.VerifyCode(email, dto.Code))
+        {
+            return BadRequest(new { message = "That code is incorrect or expired. Check the email and try again, or request a new code." });
+        }
+
+        return Ok(new { message = "Code verified. You can now choose a new password." });
+    }
+
+    /// <summary>
+    /// Resets the password using the verified email code.
     /// </summary>
     [HttpPost("reset-password")]
     [AllowAnonymous]

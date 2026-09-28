@@ -11,6 +11,7 @@ namespace SmeBackend.Services;
 public interface IPasswordResetManager
 {
     Task<bool> GenerateResetCodeAsync(string email);
+    bool VerifyCode(string email, string code);
     bool VerifyAndConsumeCode(string email, string code);
 }
 
@@ -57,6 +58,12 @@ public class PasswordResetManager : IPasswordResetManager
     }
 
     public bool VerifyAndConsumeCode(string email, string code)
+        => CheckCode(email, code, consume: true);
+
+    public bool VerifyCode(string email, string code)
+        => CheckCode(email, code, consume: false);
+
+    private bool CheckCode(string email, string code, bool consume)
     {
         var cleanEmail = email.Trim();
         var cleanCode = code.Trim();
@@ -80,7 +87,10 @@ public class PasswordResetManager : IPasswordResetManager
 
         if (string.Equals(entry.Code, cleanCode, StringComparison.Ordinal))
         {
-            _entries.TryRemove(cleanEmail, out _);
+            if (consume)
+            {
+                _entries.TryRemove(cleanEmail, out _);
+            }
             return true;
         }
 
@@ -92,7 +102,7 @@ public class PasswordResetManager : IPasswordResetManager
     private async Task<bool> SendRealEmailAsync(string toEmail, string code)
     {
         var htmlBody = BuildResetEmailHtml(code);
-        var subject = $"Your Unify Password Reset Code: {code}";
+        var subject = "Your Unify password reset code";
 
         // 1. Try SendGrid if configured
         var sendGridKey = GetConfiguredValue("Integrations:SendGrid:ApiKey", "SENDGRID_API_KEY");
@@ -212,128 +222,36 @@ public class PasswordResetManager : IPasswordResetManager
 <head>
   <meta charset=""utf-8"" />
   <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"" />
-  <title>Password Reset Code</title>
+  <meta name=""color-scheme"" content=""light"" />
+  <title>Your Unify security code</title>
   <style>
-    body {{
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      background-color: #f0f4f9;
-      margin: 0;
-      padding: 32px 16px;
-      color: #0f172a;
-    }}
-    .container {{
-      max-width: 520px;
-      margin: 0 auto;
-      background: #ffffff;
-      border-radius: 20px;
-      padding: 40px 32px;
-      border: 1px solid #e2e8f0;
-      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
-    }}
-    .brand {{
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 28px;
-    }}
-    .brand-name {{
-      font-size: 24px;
-      font-weight: 800;
-      letter-spacing: -0.04em;
-      color: #2563eb;
-    }}
-    .badge {{
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: 0.12em;
-      padding: 3px 8px;
-      border-radius: 999px;
-      background: rgba(37, 99, 235, 0.1);
-      color: #2563eb;
-    }}
-    h1 {{
-      font-size: 22px;
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      color: #0f172a;
-      margin: 0 0 12px;
-    }}
-    p {{
-      font-size: 15px;
-      line-height: 1.6;
-      color: #475569;
-      margin: 0 0 16px;
-    }}
-    .code-container {{
-      background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
-      border: 2px dashed #10b981;
-      border-radius: 16px;
-      padding: 24px;
-      text-align: center;
-      margin: 28px 0;
-    }}
-    .code-label {{
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: #059669;
-      margin-bottom: 8px;
-    }}
-    .code-value {{
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 38px;
-      font-weight: 900;
-      letter-spacing: 8px;
-      color: #047857;
-      margin: 0;
-      user-select: all;
-    }}
-    .security-note {{
-      font-size: 13px;
-      color: #64748b;
-      line-height: 1.55;
-      background: #f8fafc;
-      border-radius: 10px;
-      padding: 14px;
-      border-left: 3px solid #2563eb;
-    }}
-    .footer {{
-      margin-top: 36px;
-      padding-top: 24px;
-      border-top: 1px solid #f1f5f9;
-      font-size: 12px;
-      color: #94a3b8;
-      text-align: center;
-      line-height: 1.6;
-    }}
+    body {{ margin:0; padding:32px 14px; background:#eef3ff; color:#14213d; font-family:Arial,Helvetica,sans-serif; }}
+    .shell {{ max-width:560px; margin:0 auto; background:#fff; border:1px solid #dce5f5; border-radius:24px; overflow:hidden; box-shadow:0 20px 60px rgba(29,62,122,.12); }}
+    .top {{ padding:28px 36px; background:linear-gradient(125deg,#10234b,#1e4da2 68%,#2878e8); color:#fff; }}
+    .brand {{ font-size:25px; font-weight:800; letter-spacing:-1.2px; }}
+    .brand-mark {{ display:inline-block; margin-right:9px; width:28px; height:28px; line-height:28px; text-align:center; border-radius:9px; background:#fff; color:#2464d5; font-size:17px; }}
+    .eyebrow {{ margin-top:23px; color:#b9d4ff; font-size:10px; font-weight:700; letter-spacing:2px; }}
+    .content {{ padding:36px; }}
+    h1 {{ margin:0 0 12px; font-size:27px; letter-spacing:-.8px; color:#14213d; }}
+    p {{ margin:0 0 18px; color:#596b87; font-size:15px; line-height:1.7; }}
+    .code-card {{ margin:26px 0; padding:22px; text-align:center; border:1px solid #dce8ff; border-radius:17px; background:linear-gradient(135deg,#f4f8ff,#edf4ff); }}
+    .code-label {{ color:#63799e; font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; }}
+    .code-value {{ margin:10px 0 2px; color:#1e56c5; font-family:Consolas,monospace; font-size:39px; font-weight:800; letter-spacing:9px; }}
+    .expiry {{ margin-top:8px; color:#687b99; font-size:12px; }}
+    .notice {{ padding:14px 16px; border-left:3px solid #3b82f6; border-radius:8px; background:#f6f8fc; color:#586b87; font-size:13px; line-height:1.6; }}
+    .footer {{ padding:20px 36px 25px; border-top:1px solid #edf1f7; color:#8794aa; font-size:11px; line-height:1.7; text-align:center; }}
+    @media(max-width:480px) {{ body {{padding:16px 10px}} .top,.content {{padding:26px 22px}} .footer {{padding:18px 22px}} .code-value {{font-size:34px;letter-spacing:7px}} }}
   </style>
 </head>
 <body>
-  <div class=""container"">
-    <div class=""brand"">
-      <span class=""brand-name"">unify</span>
-      <span class=""badge"">WORKSPACE</span>
+  <div class=""shell"">
+    <div class=""top""><div class=""brand""><span class=""brand-mark"">u</span>unify</div><div class=""eyebrow"">ACCOUNT SECURITY · PASSWORD RESET</div></div>
+    <div class=""content""><h1>Your reset code is ready</h1>
+      <p>We received a request to change the password for your Unify account. Enter this one-time code in the recovery page to verify it’s you.</p>
+      <div class=""code-card""><div class=""code-label"">Your verification code</div><div class=""code-value"">{code}</div><div class=""expiry"">Expires in 15 minutes</div></div>
+      <div class=""notice""><strong>Keep this code private.</strong> Unify support will never ask you to share it. If you didn’t request a reset, ignore this message; your password has not changed.</div>
     </div>
-    <h1>Reset your password</h1>
-    <p>Hello,</p>
-    <p>We received a request to reset your password for your Unify account. Use the verification code below to verify your identity and set a new password:</p>
-
-    <div class=""code-container"">
-      <div class=""code-label"">Your 6-Digit Code</div>
-      <div class=""code-value"">{code}</div>
-    </div>
-
-    <div class=""security-note"">
-      <strong>Security notice:</strong> This code is valid for <strong>15 minutes</strong>. Never share this code with anyone. Unify support will never ask for your verification code.
-    </div>
-
-    <p style=""margin-top: 20px; font-size: 14px;"">If you didn't request a password reset, you can safely ignore this email. Your current password remains unchanged.</p>
-
-    <div class=""footer"">
-      &copy; {DateTime.UtcNow.Year} Unify Systems Ltd. All rights reserved.<br />
-      Bank-grade encryption &bull; Real-time operations platform
-    </div>
+    <div class=""footer"">Sent by Unify Workspace<br />Automated account security message · {DateTime.UtcNow.Year}</div>
   </div>
 </body>
 </html>";

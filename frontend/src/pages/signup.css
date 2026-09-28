@@ -826,3 +826,11 @@ html[data-unify-theme='dark'] .lp-dev-code-banner strong {
 .su-toggle button {
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+.lp-success-text {
+  color: #07835f;
+}
+
+.lp-error-text {
+  color: #c2413b;
+}
