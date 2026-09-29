@@ -359,6 +359,8 @@ public sealed class PurchaseOrdersController(
                 continue;
             }
 
+            var previousQuantity = inventoryItem.Quantity;
+            var previousCost = inventoryItem.UnitCost;
             // Inventory SKUs are tenant-unique, so receiving moves the selected
             // catalog item into the PO's branch. If it was catalogued under
             // another branch, the received quantity becomes that branch's stock.
@@ -367,7 +369,16 @@ public sealed class PurchaseOrdersController(
             inventoryItem.Quantity = movedFromAnotherBranch
                 ? remainingQuantity
                 : inventoryItem.Quantity + remainingQuantity;
-            inventoryItem.UnitCost = orderItem.UnitPrice;
+            inventoryItem.UnitCost = movedFromAnotherBranch || previousQuantity <= 0
+                ? orderItem.UnitPrice
+                : previousCost.HasValue
+                    ? decimal.Round(
+                        (previousQuantity * previousCost.Value +
+                         remainingQuantity * orderItem.UnitPrice) /
+                        inventoryItem.Quantity,
+                        2,
+                        MidpointRounding.AwayFromZero)
+                    : null;
             orderItem.ReceivedQuantity += remainingQuantity;
 
             db.StockMovements.Add(new StockMovement

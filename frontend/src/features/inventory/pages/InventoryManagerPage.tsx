@@ -21,7 +21,8 @@ type StockRow = {
   item: string;
   category: string;
   unit: string;
-  price: number;
+  costPrice: number | null;
+  sellingPrice: number | null;
   qty: number;
   reorder: number;
   owner: string;
@@ -48,7 +49,8 @@ const emptyForm: StockForm = {
   item: '',
   category: categoryOptions[0],
   unit: '',
-  price: 0,
+  costPrice: null,
+  sellingPrice: null,
   qty: 0,
   reorder: 10,
   owner: '',
@@ -189,8 +191,17 @@ function ItemModal({
       setError('Owner is required.');
       return;
     }
-    if (form.price < 0 || form.qty < 0 || form.reorder < 0) {
-      setError('Price, quantity, and reorder level must be zero or greater.');
+    if ((form.costPrice ?? 0) < 0 ||
+        (form.sellingPrice ?? 0) < 0 ||
+        form.qty < 0 ||
+        form.reorder < 0) {
+      setError('Prices, quantity, and reorder level must be zero or greater.');
+      return;
+    }
+    if (form.costPrice != null &&
+        form.sellingPrice != null &&
+        form.sellingPrice <= form.costPrice) {
+      setError('Selling price must be greater than unit cost to make a profit.');
       return;
     }
     setConfirmOpen(true);
@@ -241,8 +252,12 @@ function ItemModal({
               <input value={form.unit} onChange={(event) => update('unit', event.target.value)} placeholder="e.g. kg, bag, pack" />
             </label>
             <label className="form-field">
-              Unit price (LKR)
-              <input type="number" min={0} step={1} value={form.price || ''} onChange={(event) => update('price', Number(event.target.value))} />
+              Unit cost (LKR)
+              <input type="number" min={0} step="0.01" value={form.costPrice ?? ''} onChange={(event) => update('costPrice', event.target.value === '' ? null : Number(event.target.value))} />
+            </label>
+            <label className="form-field">
+              Selling price (LKR)
+              <input type="number" min={0} step="0.01" value={form.sellingPrice ?? ''} onChange={(event) => update('sellingPrice', event.target.value === '' ? null : Number(event.target.value))} />
             </label>
             <label className="form-field">
               Quantity on hand
@@ -264,6 +279,13 @@ function ItemModal({
               </select>
             </label>
           </div>
+          {form.costPrice != null &&
+            form.sellingPrice != null &&
+            form.sellingPrice > form.costPrice && (
+              <p className="modal-hint" aria-live="polite">
+                Gross profit per unit: {formatPrice(form.sellingPrice - form.costPrice)}
+              </p>
+            )}
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save item'}</button>
@@ -351,7 +373,7 @@ export function InventoryManagerPage() {
     const total = items.reduce((sum, row) => sum + row.qty, 0);
     const low = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Low stock').length;
     const out = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Out of stock').length;
-    const value = items.reduce((sum, row) => sum + row.qty * row.price, 0);
+    const value = items.reduce((sum, row) => sum + row.qty * (row.costPrice ?? 0), 0);
     const categories = new Set(items.map((row) => row.category).filter(Boolean)).size;
     return { items: items.length, total, low, out, value, categories };
   }, [items]);
@@ -388,7 +410,8 @@ export function InventoryManagerPage() {
         unitId: item.unitId ?? undefined,
         branchId: item.branchId ?? undefined,
         supplierId: item.supplierId ?? undefined,
-        price: Number(item.unitCost ?? 0),
+        costPrice: item.unitCost == null ? null : Number(item.unitCost),
+        sellingPrice: item.sellingPrice == null ? null : Number(item.sellingPrice),
         qty: Number(item.quantity ?? 0),
         reorder: Number(item.reorderLevel ?? 0),
         owner: item.branch ?? 'Inventory Admin',
@@ -410,9 +433,9 @@ export function InventoryManagerPage() {
       notify('No inventory items to export.', 'warning');
       return;
     }
-    const header = 'Item,SKU,Category,On Hand,Unit,Reorder Level,Unit Price (LKR),Owner';
+    const header = 'Item,SKU,Category,On Hand,Unit,Reorder Level,Unit Cost (LKR),Selling Price (LKR),Owner';
     const lines = items.map(r =>
-      [r.item, r.sku, r.category, r.qty, r.unit, r.reorder, r.price, r.owner]
+      [r.item, r.sku, r.category, r.qty, r.unit, r.reorder, r.costPrice ?? '', r.sellingPrice ?? '', r.owner]
         .map(v => `"${String(v).replace(/"/g, '""')}"`)
         .join(',')
     );
@@ -449,7 +472,11 @@ export function InventoryManagerPage() {
         const qty = Number(cols[3]) || 0;
         const unit = cols[4] || 'unit';
         const reorder = Number(cols[5]) || 10;
-        const price = Number(cols[6]) || 0;
+        const costPrice = Number(cols[6]) || 0;
+        const importedSellingPrice = Number(cols[7]);
+        const sellingPrice = cols[7] && Number.isFinite(importedSellingPrice)
+          ? importedSellingPrice
+          : null;
         const sku = nextSku(stagedItems);
         const res = await fetch('/api/inventory', {
           method: 'POST',
@@ -462,13 +489,14 @@ export function InventoryManagerPage() {
             category,
             quantity: qty,
             reorderLevel: reorder,
-            unitCost: price,
+            unitCost: costPrice,
+            sellingPrice,
             branchId: user?.branchId ?? null,
           }),
         });
         if (res.ok) {
           createdCount++;
-          stagedItems.push({ sku, item: name, category, unit, price, qty, reorder, owner: 'Inventory Admin' });
+          stagedItems.push({ sku, item: name, category, unit, costPrice, sellingPrice, qty, reorder, owner: 'Inventory Admin' });
         } else {
           failedCount++;
         }
@@ -546,7 +574,8 @@ export function InventoryManagerPage() {
           branchId: existing?.branchId ?? user?.branchId ?? null,
           ...(existing ? {} : { quantity: form.qty }),
           reorderLevel: form.reorder,
-          unitCost: form.price,
+          unitCost: form.costPrice,
+          sellingPrice: form.sellingPrice,
           supplierId: form.supplierId ?? null,
           ...(existing ? { clearSupplier: !form.supplierId } : {}),
         }),
@@ -727,7 +756,7 @@ export function InventoryManagerPage() {
           <div className="table-wrap">
             <table className="data-table">
               <thead>
-                <tr><th>Item</th><th>Category</th><th>On hand</th><th>Stock level</th><th>Unit price</th><th>Status</th><th>Actions</th></tr>
+                <tr><th>Item</th><th>Category</th><th>On hand</th><th>Stock level</th><th>Unit cost</th><th>Selling price</th><th>Status</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {paged.map((row) => {
@@ -741,7 +770,8 @@ export function InventoryManagerPage() {
                       <td><span className="category-pill">{row.category}</span></td>
                       <td><span className="qty">{row.qty}</span> <span className="cell-sub">{row.unit}</span></td>
                       <td><StockLevelBar qty={row.qty} reorder={row.reorder} /></td>
-                      <td className="amount">{formatPrice(row.price)}</td>
+                      <td className="amount">{row.costPrice == null ? 'Not set' : formatPrice(row.costPrice)}</td>
+                      <td className="amount">{row.sellingPrice == null ? 'Not set' : formatPrice(row.sellingPrice)}</td>
                       <td><Badge tone={statusTone[rowStatus]}>{rowStatus}</Badge></td>
                       <td>
                         <div className="row-actions">
@@ -754,7 +784,7 @@ export function InventoryManagerPage() {
                   );
                 })}
                 {paged.length === 0 && (
-                  <tr><td colSpan={7} className="empty-state"><div className="inventory-manager-empty"><strong>{items.length === 0 ? 'Your catalogue is ready for its first item' : 'No items match these filters'}</strong><span>{items.length === 0 ? 'Add an item to start tracking quantity, reorder levels, and stock value.' : 'Try another search or clear the active filters.'}</span>{items.length === 0 ? <button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'add' })}>Add first item</button> : hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); }}>Clear filters</button> : null}</div></td></tr>
+                  <tr><td colSpan={8} className="empty-state"><div className="inventory-manager-empty"><strong>{items.length === 0 ? 'Your catalogue is ready for its first item' : 'No items match these filters'}</strong><span>{items.length === 0 ? 'Add an item to start tracking quantity, reorder levels, and stock value.' : 'Try another search or clear the active filters.'}</span>{items.length === 0 ? <button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'add' })}>Add first item</button> : hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); }}>Clear filters</button> : null}</div></td></tr>
                 )}
               </tbody>
             </table>
@@ -806,7 +836,7 @@ export function InventoryManagerPage() {
         <ItemModal
           title={modal.mode === 'add' ? 'Add inventory item' : 'Edit inventory item'}
           initial={modal.mode === 'edit' && editingItem
-            ? { item: editingItem.item, category: editingItem.category, categoryId: editingItem.categoryId, unit: editingItem.unit, price: editingItem.price, qty: editingItem.qty, reorder: editingItem.reorder, owner: editingItem.owner, supplierId: editingItem.supplierId }
+            ? { item: editingItem.item, category: editingItem.category, categoryId: editingItem.categoryId, unit: editingItem.unit, costPrice: editingItem.costPrice, sellingPrice: editingItem.sellingPrice, qty: editingItem.qty, reorder: editingItem.reorder, owner: editingItem.owner, supplierId: editingItem.supplierId }
             : { ...emptyForm, category: inventoryCategories[0]?.name ?? categoryOptions[0], categoryId: inventoryCategories[0]?.id }}
           onClose={() => setModal(null)}
           onSave={handleSave}

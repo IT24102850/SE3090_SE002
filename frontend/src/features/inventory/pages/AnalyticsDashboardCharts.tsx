@@ -43,11 +43,15 @@ type SalesActivityItem = {
   amount: number;
   quantity: number;
   items: string[];
+  costOfGoodsSold: number | null;
+  grossProfit: number | null;
 };
 type SalesActivityReport = {
   salesCount: number;
   totalRevenue: number;
   averageSale: number;
+  costOfGoodsSold: number | null;
+  grossProfit: number | null;
   recentSales: SalesActivityItem[];
 };
 type InventoryItem = {
@@ -564,6 +568,28 @@ export function AnalyticsDashboardPage() {
             icon="workflow"
           />
           <Metric
+            label="Cost of goods sold"
+            value={sales.status === 'ready' && sales.value.costOfGoodsSold != null
+              ? lkr(sales.value.costOfGoodsSold)
+              : '—'}
+            detail={sales.status === 'ready' && sales.value.costOfGoodsSold == null
+              ? 'Set unit costs to calculate'
+              : 'Recorded cost of sold stock'}
+            tone="amber"
+            icon="inventory"
+          />
+          <Metric
+            label="Gross profit"
+            value={sales.status === 'ready' && sales.value.grossProfit != null
+              ? lkr(sales.value.grossProfit)
+              : '—'}
+            detail={sales.status === 'ready' && sales.value.grossProfit == null
+              ? 'Cost data is incomplete'
+              : 'Sales revenue minus stock cost'}
+            tone="green"
+            icon="chart"
+          />
+          <Metric
             label="Average sale"
             value={sales.status === 'ready' ? lkr(sales.value.averageSale) : '—'}
             detail="Average value per sale"
@@ -597,6 +623,7 @@ export function AnalyticsDashboardPage() {
                     <th>Items sold</th>
                     <th>Quantity</th>
                     <th>Reference</th>
+                    <th className="inventory-sales-profit-heading">Gross profit</th>
                     <th className="inventory-sales-amount-heading">Sale total</th>
                   </tr>
                 </thead>
@@ -609,6 +636,9 @@ export function AnalyticsDashboardPage() {
                       </td>
                       <td>{sale.quantity > 0 ? compact(sale.quantity) : '—'}</td>
                       <td><span className="cell-sub">{sale.reference}</span></td>
+                      <td className="inventory-sales-profit">
+                        {sale.grossProfit == null ? 'Cost data missing' : lkr(sale.grossProfit)}
+                      </td>
                       <td className="inventory-sales-amount">{lkr(sale.amount)}</td>
                     </tr>
                   ))}

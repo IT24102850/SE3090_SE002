@@ -827,7 +827,7 @@ const _quickActionImages = <String, String>{
   'Process walk-ins':
       'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=400&q=60',
   'Inventory dashboard':
-      'https://th.bing.com/th/id/OIP.f339Mfff1xtyBJelmSCekQHaEO?w=312&h=180&c=7&r=0&o=7&dpr=1.3&pid=1.7&rm=3',
+      'https://th.bing.com/th/id/OIP.v1H3kKPUl5tEIGHuHqxEBAHaE7?w=261&h=180&c=7&r=0&o=7&dpr=1.3&pid=1.7&rm=3',
   'Stock movements':
       'https://images.unsplash.com/photo-1494412651409-8963ce7935a7?auto=format&fit=crop&w=400&q=60',
   'Physical stock count':

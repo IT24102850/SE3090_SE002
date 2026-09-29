@@ -47,7 +47,7 @@ void main() {
 
     expect(find.byKey(const Key('sale-unit-price-display')), findsOneWidget);
     expect(find.byKey(const Key('sale-unit-price-field')), findsNothing);
-    expect(find.text('LKR 80.00'), findsNWidgets(2));
+    expect(find.text('LKR 120.00'), findsNWidgets(2));
 
     await tester.enterText(find.byType(TextField).at(0), '2');
     await tester.tap(find.text('Record sale'));
@@ -55,13 +55,17 @@ void main() {
 
     expect(find.text('Confirm sale'), findsWidgets);
     expect(find.byKey(const Key('sale-confirmation-dialog')), findsOneWidget);
-    expect(find.text('LKR 160.00'), findsNWidgets(2));
+    expect(find.text('LKR 240.00'), findsNWidgets(2));
     expect(find.text('Remaining stock'), findsOneWidget);
     expect(adapter.recordedSale, isNull);
     await tester.tap(find.text('Confirm sale').last);
     await tester.pumpAndSettle();
 
-    expect(adapter.recordedSale, {'quantity': 2.0, 'unitPrice': 80.0});
+    expect(adapter.recordedSale, {
+      'quantity': 2.0,
+      'expectedSellingPrice': 120.0,
+      'expectedUnitCost': 80.0,
+    });
     expect(
       adapter.requestedPaths,
       contains('/api/inventory/${_SalesApiAdapter.itemId}/sell'),
@@ -215,6 +219,7 @@ class _SalesApiAdapter implements HttpClientAdapter {
             'unit': 'kg',
             'reorderLevel': 2,
             'unitCost': 80,
+            'sellingPrice': 120,
             'branch': 'Main branch',
             'branchId': 'bcf51a09-74f3-4697-bfd6-f508c7770302',
           },
@@ -227,6 +232,7 @@ class _SalesApiAdapter implements HttpClientAdapter {
             'unit': 'kg',
             'reorderLevel': 2,
             'unitCost': 80,
+            'sellingPrice': 120,
             'branch': 'Main branch',
           },
         ],
@@ -246,13 +252,21 @@ class _SalesApiAdapter implements HttpClientAdapter {
       });
     }
 
+    if (uri.path == '/api/reports/sales-activity') {
+      return _jsonResponse({'grossProfit': 200});
+    }
+
     if (uri.path.endsWith('/sell')) {
       recordedSale = Map<String, dynamic>.from(options.data as Map);
       if (failSale) {
         return _jsonResponse(saleFailureBody, saleFailureStatus);
       }
       remainingQuantity -= (recordedSale!['quantity'] as num).toDouble();
-      return _jsonResponse({'remainingQuantity': remainingQuantity});
+      return _jsonResponse({
+        'remainingQuantity': remainingQuantity,
+        'amount': 240,
+        'grossProfit': 80,
+      });
     }
 
     return _jsonResponse({'message': 'Unexpected endpoint: ${uri.path}'}, 404);

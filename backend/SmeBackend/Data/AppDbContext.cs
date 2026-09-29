@@ -437,6 +437,7 @@ public class AppDbContext : DbContext
             entity.Property(item => item.Quantity).HasPrecision(18, 3);
             entity.Property(item => item.ReorderLevel).HasPrecision(18, 3);
             entity.Property(item => item.UnitCost).HasPrecision(18, 2);
+            entity.Property(item => item.SellingPrice).HasPrecision(18, 2);
             entity.HasOne(item => item.Category)
                 .WithMany()
                 .HasForeignKey(item => item.CategoryId)

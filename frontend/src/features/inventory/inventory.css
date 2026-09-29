@@ -863,6 +863,7 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .inventory-analytics-metric.metric-teal { --metric-accent: #0DAB9A; }
 .inventory-scope .inventory-analytics-metric.metric-blue { --metric-accent: #3478E5; }
 .inventory-scope .inventory-analytics-metric.metric-amber { --metric-accent: #D98A12; }
+.inventory-scope .inventory-analytics-metric.metric-green { --metric-accent: #15966F; }
 .inventory-scope .inventory-analytics-metric-icon { display: grid; grid-row: span 3; place-items: center; width: 2.35rem; height: 2.35rem; color: var(--metric-accent); border-radius: .75rem; background: color-mix(in srgb, var(--metric-accent) 13%, var(--color-surface)); }
 .inventory-scope .inventory-analytics-metric-label { color: var(--color-text-secondary); font-size: .7rem; font-weight: 750; }
 .inventory-scope .inventory-analytics-metric strong { margin-top: .15rem; color: var(--color-text); font-size: 1.45rem; letter-spacing: -.04em; line-height: 1.1; }
@@ -2459,13 +2460,16 @@ body:has(.inventory-scope) .app-content::after {
   border: 1px solid var(--color-border);
   border-radius: .85rem;
 }
-.inventory-scope .inventory-sales-activity-table-wrap .data-table { min-width: 690px; }
+.inventory-scope .inventory-sales-activity-table-wrap .data-table { min-width: 850px; }
 .inventory-scope .inventory-sales-activity-table-wrap .data-table th { white-space: nowrap; }
 .inventory-scope .inventory-sales-activity-table-wrap .data-table tbody tr { transition: background .16s ease; }
 .inventory-scope .inventory-sales-activity-table-wrap .data-table tbody tr:hover { background: color-mix(in srgb, var(--color-primary) 5%, transparent); }
 .inventory-scope .inventory-sales-amount,
-.inventory-scope .inventory-sales-amount-heading { text-align: right; }
+.inventory-scope .inventory-sales-amount-heading,
+.inventory-scope .inventory-sales-profit,
+.inventory-scope .inventory-sales-profit-heading { text-align: right; }
 .inventory-scope .inventory-sales-amount { color: var(--color-success, #17ae83); font-weight: 750; white-space: nowrap; }
+.inventory-scope .inventory-sales-profit { color: var(--color-primary); font-weight: 700; white-space: nowrap; }
 .inventory-scope .inventory-analytics-disclaimer { text-align: left; }
 @media (max-width: 840px) {
   .inventory-scope .inventory-analytics-hero-foot > span:last-child { margin-left: 0; }
