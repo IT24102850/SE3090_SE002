@@ -10,6 +10,14 @@ import 'secure_storage_service.dart';
 class ApiService {
   static String get baseUrl => _dio.options.baseUrl;
 
+  /// The server root without the trailing /api, for URLs the *browser* opens
+  /// rather than the app calling - such as the page a payment gateway sends
+  /// the customer back to after a hosted checkout.
+  static String get origin {
+    final url = baseUrl;
+    return url.endsWith('/api') ? url.substring(0, url.length - 4) : url;
+  }
+
   static set baseUrl(String url) {
     _dio.options.baseUrl = _normaliseBaseUrl(url);
   }
