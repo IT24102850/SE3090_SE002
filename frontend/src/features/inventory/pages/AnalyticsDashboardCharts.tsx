@@ -525,6 +525,8 @@ export function AnalyticsDashboardPage() {
 
       {/* ── HERO ── */}
       <header className="inventory-analytics-hero panel">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
+        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="inventory-analytics-orbit" aria-hidden="true">
           <span className="inventory-analytics-orbit-inner" />
           <span className="inventory-analytics-orbit-dot" />

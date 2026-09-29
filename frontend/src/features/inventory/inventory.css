@@ -1111,7 +1111,7 @@ body:has(.inventory-scope) .app-shell::after,
 
 /* Inventory workflows added to the web shell. */
 .inventory-scope .sales-page { display: grid; gap: 1rem; }
-.inventory-scope .sales-hero { display: flex; gap: 1.25rem; align-items: center; justify-content: space-between; padding: 1.5rem 1.7rem; color: #f2fbff; background: linear-gradient(120deg, #122039, #203b5e 68%, #17675e); border: 1px solid rgba(64, 185, 170, .25); border-radius: 1rem; box-shadow: 0 18px 40px rgba(14,25,55,.18); }
+.inventory-scope .sales-hero { display: flex; gap: 1.25rem; align-items: center; justify-content: space-between; min-height: 218px; padding: 1.5rem 1.7rem; color: #f2fbff; background: linear-gradient(120deg, #122039, #203b5e 68%, #17675e); border: 1px solid rgba(64, 185, 170, .25); border-radius: 1rem; box-shadow: 0 18px 40px rgba(14,25,55,.18); }
 .inventory-scope .sales-hero h1 { margin: .25rem 0 .4rem; color: #fff; font-size: 1.8rem; line-height: 1.15; letter-spacing: -.025em; }
 .inventory-scope .sales-hero .workflow-hero-copy > p:last-child { max-width: 42rem; margin: 0; color: #d5e4ef; font-size: .98rem; line-height: 1.55; }
 .inventory-scope .sales-hero .eyebrow { color: #84e6d1; }
@@ -1198,7 +1198,7 @@ body:has(.inventory-scope) .app-shell::after,
 @media (max-width: 760px) {
   .inventory-scope .sales-stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inventory-scope .sales-form { grid-template-columns: minmax(0, 1fr); padding: .95rem; }
-  .inventory-scope .sales-hero { align-items: flex-start; flex-direction: column; padding: 1.15rem; }
+  .inventory-scope .sales-hero { min-height: 0; align-items: flex-start; flex-direction: column; padding: 1.15rem; }
   .inventory-scope .sales-hero .page-actions { width: 100%; }
   .inventory-scope .sales-hero .page-actions .btn { width: 100%; min-height: 44px; }
   .inventory-scope .sales-receipt-paper-header, .inventory-scope .sales-receipt-toolbar { align-items: stretch; flex-direction: column; }
@@ -2115,7 +2115,7 @@ body:has(.inventory-scope) .app-content::after {
   content: none !important;
   animation: none !important;
 }
-.inventory-scope :is(.inventory-manager-hero, .suppliers-hero, .stocksense-hero) > .inventory-hero-sheen {
+.inventory-scope :is(.inventory-manager-hero, .suppliers-hero, .purchase-orders-hero, .branch-overview-hero, .inventory-analytics-hero, .stocksense-hero, .movement-hero, .workflow-hero) > .inventory-hero-sheen {
   position: absolute;
   z-index: 3;
   top: -25%;
@@ -2124,10 +2124,81 @@ body:has(.inventory-scope) .app-content::after {
   width: 24%;
   pointer-events: none;
   opacity: 0;
-  background: linear-gradient(105deg, transparent 8%, rgba(255,255,255,.08) 34%, rgba(240,247,255,.62) 50%, rgba(255,255,255,.08) 66%, transparent 92%);
+  background: linear-gradient(105deg, transparent 8%, rgba(255,255,255,.045) 34%, rgba(240,247,255,.34) 50%, rgba(255,255,255,.045) 66%, transparent 92%);
   transform: skewX(-18deg);
   animation: inventory-universal-hero-sheen 5.2s ease-in-out infinite;
 }
+.inventory-scope .sales-hero > .inventory-hero-sheen {
+  width: 40%;
+  background: linear-gradient(105deg, transparent 6%, rgba(255,255,255,.16) 32%, rgba(223,255,250,.78) 50%, rgba(255,255,255,.16) 68%, transparent 94%);
+  animation: sales-hero-visible-sheen 4.4s ease-in-out infinite;
+}
+@keyframes sales-hero-visible-sheen {
+  0%, 12% { left: -34%; opacity: 0; }
+  19% { opacity: .95; }
+  62%, 100% { left: 122%; opacity: 0; }
+}
+.inventory-scope :is(.inventory-manager-hero, .suppliers-hero, .purchase-orders-hero, .branch-overview-hero, .inventory-analytics-hero, .stocksense-hero, .movement-hero, .workflow-hero) > .inventory-hero-ambient {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: 12%;
+  width: clamp(150px, 20vw, 220px);
+  aspect-ratio: 1;
+  pointer-events: none;
+  opacity: .4;
+  border: 1px solid rgba(177, 225, 255, .2);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(125, 236, 221, .13), transparent 68%);
+  box-shadow: 0 0 0 14px rgba(177, 225, 255, .035), 0 0 0 30px rgba(177, 225, 255, .025), inset 0 0 22px rgba(125, 236, 221, .07);
+  transform: translateY(-50%);
+  animation: inventory-hero-orbit 34s linear infinite;
+}
+.inventory-scope .sales-hero > .inventory-hero-ambient {
+  opacity: .88;
+  border-color: rgba(177, 245, 233, .48);
+  background: radial-gradient(circle, rgba(125, 236, 221, .3), transparent 70%);
+  box-shadow: 0 0 0 16px rgba(180, 238, 255, .08), 0 0 0 34px rgba(180, 238, 255, .055), inset 0 0 32px rgba(125, 236, 221, .17);
+  animation-duration: 24s;
+}
+.inventory-scope .sales-hero > .inventory-hero-ambient::before,
+.inventory-scope .sales-hero > .inventory-hero-ambient::after {
+  border-color: rgba(151, 255, 229, .38);
+}
+.inventory-scope .inventory-hero-ambient::before,
+.inventory-scope .inventory-hero-ambient::after {
+  position: absolute;
+  inset: 13%;
+  content: '';
+  border: 1px solid rgba(125, 236, 221, .2);
+  border-radius: 50%;
+}
+.inventory-scope .inventory-hero-ambient::before {
+  transform: rotate(42deg) scaleX(.66);
+}
+.inventory-scope .inventory-hero-ambient::after {
+  transform: rotate(-42deg) scaleX(.66);
+}
+.inventory-scope .inventory-hero-ambient > i {
+  position: absolute;
+  top: 15%;
+  right: 17%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a5f3e5;
+  box-shadow: 0 0 12px 3px rgba(105, 235, 215, .32);
+  animation: inventory-hero-orbit-pulse 3.8s ease-in-out infinite;
+}
+.inventory-scope .sales-hero > .inventory-hero-ambient > i {
+  width: 11px;
+  height: 11px;
+  background: #d1fff6;
+  box-shadow: 0 0 21px 7px rgba(105, 255, 225, .68);
+  animation-duration: 2.8s;
+}
+@keyframes inventory-hero-orbit { to { transform: translateY(-50%) rotate(360deg); } }
+@keyframes inventory-hero-orbit-pulse { 0%, 100% { opacity: .55; transform: scale(.78); } 50% { opacity: 1; transform: scale(1.18); } }
 
 /* Stock movement is an operational timeline: give its lead card a cooler
    blue-violet field and a crisp cyan edge, with the same restrained motion. */
@@ -2153,7 +2224,9 @@ body:has(.inventory-scope) .app-content::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .inventory-scope .inventory-hero-sheen { animation: none !important; }
+  .inventory-scope .inventory-hero-sheen,
+  .inventory-scope .inventory-hero-ambient,
+  .inventory-scope .inventory-hero-ambient > i { animation: none !important; }
   .inventory-scope :is(.inventory-manager-hero, .suppliers-hero, .purchase-orders-hero, .branch-overview-hero, .inventory-analytics-hero, .stocksense-hero, .movement-hero, .workflow-hero)::after {
     animation: none !important;
   }

@@ -124,6 +124,7 @@ export function SuppliersPage() {
     <div className="page suppliers-page">
       <header className="suppliers-hero">
         <span className="inventory-hero-sheen" aria-hidden="true" />
+        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="suppliers-hero-copy">
           <p className="suppliers-eyebrow"><span aria-hidden="true">◈</span> INVENTORY PARTNERS</p>
           <h1>Supplier directory</h1>

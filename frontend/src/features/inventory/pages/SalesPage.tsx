@@ -252,6 +252,8 @@ export function SalesPage() {
   return (
     <div className="page sales-page">
       <header className="workflow-hero sales-hero">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
+        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="workflow-hero-copy">
           <p className="eyebrow">OPERATIONS / INVENTORY</p>
           <h1>Sales</h1>

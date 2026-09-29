@@ -650,6 +650,7 @@ export function InventoryManagerPage() {
     <div className="page inventory-manager-page">
       <header className="inventory-manager-hero">
         <span className="inventory-hero-sheen" aria-hidden="true" />
+        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="inventory-manager-hero-copy">
           <p className="inventory-manager-eyebrow"><span aria-hidden="true">◆</span> INVENTORY CONTROL CENTER</p>
           <h1>Inventory manager</h1>

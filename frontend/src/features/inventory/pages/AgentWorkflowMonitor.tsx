@@ -233,6 +233,8 @@ export function AgentWorkflowMonitorPage() {
   return (
     <div className="page">
       <header className="page-head workflow-page-head workflow-hero">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
+        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="workflow-hero-copy">
           <p className="eyebrow">AUTOMATION / WORKFLOWS</p>
           <h1>Agent Workflow Monitor</h1>

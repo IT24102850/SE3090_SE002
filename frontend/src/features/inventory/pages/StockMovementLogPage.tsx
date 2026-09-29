@@ -238,6 +238,8 @@ export function StockMovementLogPage() {
   return (
     <div className="page stock-movement-page">
       <header className="movement-hero">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
+        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="movement-hero-copy">
           <p className="movement-eyebrow"><span aria-hidden="true">↗</span> OPERATIONS / STOCK ACTIVITY</p>
           <h1>Stock movements</h1>

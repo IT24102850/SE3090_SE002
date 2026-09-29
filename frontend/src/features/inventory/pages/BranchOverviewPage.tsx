@@ -201,6 +201,8 @@ export function BranchOverviewPage() {
   return (
     <div className="page branch-overview-page">
       <header className="branch-overview-hero">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
+        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="branch-overview-hero-copy">
           <p className="branch-overview-eyebrow"><span aria-hidden="true">✣</span> INVENTORY / NETWORK</p>
           <h1>Branch overview</h1>

@@ -1291,6 +1291,8 @@ export function PurchaseOrderManagerPage() {
   return (
     <div className="page purchase-orders-page">
       <header className="purchase-orders-hero">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
+        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="purchase-orders-hero-copy">
           <p className="purchase-orders-eyebrow"><span aria-hidden="true">↗</span> INVENTORY / PROCUREMENT</p>
           <h1>Purchase orders</h1>
