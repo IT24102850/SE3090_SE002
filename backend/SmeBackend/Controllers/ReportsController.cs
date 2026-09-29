@@ -160,6 +160,103 @@ public sealed class ReportsController(
             buckets.Any(bucket => bucket.Revenue > 0) ? null : "No sales were recorded for the selected reporting window."));
     }
 
+    [HttpGet("sales-activity")]
+    public async Task<ActionResult<SalesActivityReportResponse>> GetSalesActivity(
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] Guid? branchId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+        branchId = ResolveBranchScope(branchId);
+
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService,
+                InventoryAuthorizationPolicies.InventoryRead,
+                tenantId,
+                branchId))
+        {
+            return Forbid();
+        }
+
+        var range = NormalizeRange(from, to);
+        if (range is null)
+        {
+            AddDateRangeValidationError();
+            return ValidationProblem(ModelState);
+        }
+
+        var salesQuery = db.Sales
+            .AsNoTracking()
+            .Where(sale =>
+                sale.TenantId == tenantId &&
+                sale.OccurredAt >= range.Value.From &&
+                sale.OccurredAt < range.Value.ToExclusive);
+        if (branchId.HasValue)
+        {
+            salesQuery = salesQuery.Where(sale => sale.BranchId == branchId.Value);
+        }
+
+        var salesCount = await salesQuery.CountAsync(cancellationToken);
+        var totalRevenue = await salesQuery.SumAsync(sale => (decimal?)sale.Amount, cancellationToken) ?? 0;
+        var recentSales = await salesQuery
+            .OrderByDescending(sale => sale.OccurredAt)
+            .ThenByDescending(sale => sale.Id)
+            .Take(10)
+            .Select(sale => new
+            {
+                sale.Id,
+                sale.Reference,
+                sale.OccurredAt,
+                sale.Amount,
+            })
+            .ToListAsync(cancellationToken);
+
+        var references = recentSales.Select(sale => sale.Reference).ToList();
+        var saleMovements = await (
+            from movement in db.StockMovements.AsNoTracking()
+            join item in db.InventoryItems.AsNoTracking()
+                on movement.InventoryItemId equals item.Id
+            where movement.TenantId == tenantId &&
+                  movement.MovementType == "Sale" &&
+                  movement.Reference != null &&
+                  (!branchId.HasValue || movement.BranchId == branchId.Value) &&
+                  references.Contains(movement.Reference)
+            select new
+            {
+                movement.Reference,
+                ItemName = item.Name,
+                Quantity = Math.Abs(movement.Quantity),
+            }).ToListAsync(cancellationToken);
+        var movementsByReference = saleMovements
+            .GroupBy(movement => movement.Reference!)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var recent = recentSales.Select(sale =>
+        {
+            var lines = movementsByReference.GetValueOrDefault(sale.Reference) ?? [];
+            return new SalesActivityItemResponse(
+                sale.Id,
+                sale.Reference,
+                sale.OccurredAt,
+                sale.Amount,
+                lines.Sum(line => line.Quantity),
+                lines.Select(line => line.ItemName).Distinct().ToList());
+        }).ToList();
+
+        return Ok(new SalesActivityReportResponse(
+            range.Value.From,
+            range.Value.ToInclusive,
+            branchId,
+            salesCount,
+            totalRevenue,
+            salesCount == 0 ? 0 : totalRevenue / salesCount,
+            recent));
+    }
+
     [HttpGet("patient-count")]
     public async Task<ActionResult<PatientCountReportResponse>> GetPatientCount(
         [FromQuery] DateTime? from = null,
@@ -315,6 +412,24 @@ public sealed record RevenueBucketResponse(
     DateTime Date,
     string Label,
     decimal Revenue);
+
+public sealed record SalesActivityReportResponse(
+    DateTime From,
+    DateTime To,
+    Guid? BranchId,
+    int SalesCount,
+    decimal TotalRevenue,
+    decimal AverageSale,
+    IReadOnlyList<SalesActivityItemResponse> RecentSales);
+
+public sealed record SalesActivityItemResponse(
+    Guid Id,
+    string Reference,
+    DateTime OccurredAt,
+    decimal Amount,
+    decimal Quantity,
+    IReadOnlyList<string> Items);
+
 
 public sealed record PatientCountReportResponse(
     DateTime From,

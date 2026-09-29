@@ -439,6 +439,131 @@ public sealed class InventoryController(
         return NoContent();
     }
 
+    [HttpPost("{id:guid}/sell")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(RecordInventorySaleResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<RecordInventorySaleResponse>> RecordInventorySale(
+        Guid id,
+        RecordInventorySaleRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+
+        var item = await LoadItemAsync(id, cancellationToken);
+        if (item is null) return NotFound();
+        if (!await RequireItemAccessAsync(
+                InventoryAuthorizationPolicies.InventoryWrite,
+                item,
+                cancellationToken))
+            return Forbid();
+
+        if (request.Quantity <= 0)
+        {
+            ModelState.AddModelError("quantity", "Sale quantity must be greater than zero.");
+            return ValidationProblem(ModelState);
+        }
+        if (decimal.Round(request.Quantity, 3) != request.Quantity)
+        {
+            ModelState.AddModelError("quantity", "Sale quantity can have up to three decimal places.");
+            return ValidationProblem(ModelState);
+        }
+        if (request.UnitPrice < 0)
+        {
+            ModelState.AddModelError("unitPrice", "Unit sale price cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+        if (decimal.Round(request.UnitPrice, 2) != request.UnitPrice)
+        {
+            ModelState.AddModelError("unitPrice", "Unit sale price can have up to two decimal places.");
+            return ValidationProblem(ModelState);
+        }
+        if (!item.BranchId.HasValue)
+            return Conflict(new { message = "Sales require the item to be assigned to a branch." });
+        if (item.Quantity < request.Quantity)
+            return Conflict(new { message = $"Only {item.Quantity} unit(s) of '{item.Name}' are available." });
+
+        var now = DateTime.UtcNow;
+        var reference = string.IsNullOrWhiteSpace(request.Reference)
+            ? $"SALE-{now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}"
+            : request.Reference.Trim();
+        if (reference.Length > 100)
+        {
+            ModelState.AddModelError("reference", "Sale reference cannot exceed 100 characters.");
+            return ValidationProblem(ModelState);
+        }
+        const decimal maximumSaleAmount = 9_999_999_999_999_999.99m;
+        if (request.UnitPrice > maximumSaleAmount / request.Quantity)
+        {
+            ModelState.AddModelError("unitPrice", "Sale total exceeds the supported amount.");
+            return ValidationProblem(ModelState);
+        }
+        var amount = decimal.Round(request.Quantity * request.UnitPrice, 2, MidpointRounding.AwayFromZero);
+        if (amount > maximumSaleAmount)
+        {
+            ModelState.AddModelError("unitPrice", "Sale total exceeds the supported amount.");
+            return ValidationProblem(ModelState);
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var updatedItems = await db.InventoryItems
+            .Where(candidate =>
+                candidate.Id == item.Id &&
+                candidate.BranchId == item.BranchId &&
+                candidate.Quantity >= request.Quantity)
+            .ExecuteUpdateAsync(updates => updates
+                .SetProperty(candidate => candidate.Quantity,
+                    candidate => candidate.Quantity - request.Quantity)
+                .SetProperty(candidate => candidate.UpdatedAt, now), cancellationToken);
+        if (updatedItems == 0)
+        {
+            return Conflict(new { message = "Stock changed before the sale could be saved. Refresh and try again." });
+        }
+
+        var remainingQuantity = await db.InventoryItems
+            .AsNoTracking()
+            .Where(candidate => candidate.Id == item.Id)
+            .Select(candidate => candidate.Quantity)
+            .SingleAsync(cancellationToken);
+        var notes = $"Sale of {request.Quantity} {item.Name} at {request.UnitPrice} each.";
+        db.Sales.Add(new Sale
+        {
+            TenantId = tenantId,
+            BranchId = item.BranchId.Value,
+            OccurredAt = now,
+            Amount = amount,
+            Reference = reference,
+        });
+        db.StockMovements.Add(new StockMovement
+        {
+            TenantId = tenantId,
+            InventoryItemId = item.Id,
+            BranchId = item.BranchId.Value,
+            MovementType = "Sale",
+            Quantity = -request.Quantity,
+            UnitCost = item.UnitCost,
+            Reference = reference,
+            Notes = notes.Length <= 2000 ? notes : notes[..2000],
+            OccurredAt = now,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return Ok(new RecordInventorySaleResponse(
+            reference,
+            item.Id,
+            item.Name,
+            request.Quantity,
+            request.UnitPrice,
+            amount,
+            remainingQuantity,
+            now));
+    }
+
     [HttpPost("{id:guid}/adjust")]
     [Consumes("application/json")]
     [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
@@ -926,6 +1051,21 @@ public sealed record InventoryItemResponse(
     decimal? UnitCost,
     string Status,
     DateTime CreatedAt);
+
+public sealed record RecordInventorySaleRequest(
+    decimal Quantity,
+    decimal UnitPrice,
+    string? Reference = null);
+
+public sealed record RecordInventorySaleResponse(
+    string Reference,
+    Guid InventoryItemId,
+    string ItemName,
+    decimal Quantity,
+    decimal UnitPrice,
+    decimal Amount,
+    decimal RemainingQuantity,
+    DateTime OccurredAt);
 
 public sealed record InventoryMovementResponse(
     Guid Id,

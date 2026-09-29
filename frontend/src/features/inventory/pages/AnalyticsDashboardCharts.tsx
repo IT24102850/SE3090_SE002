@@ -36,6 +36,20 @@ type InventoryUsageReport = {
   netQuantity: number;
   items: InventoryUsageItem[];
 };
+type SalesActivityItem = {
+  id: string;
+  reference: string;
+  occurredAt: string;
+  amount: number;
+  quantity: number;
+  items: string[];
+};
+type SalesActivityReport = {
+  salesCount: number;
+  totalRevenue: number;
+  averageSale: number;
+  recentSales: SalesActivityItem[];
+};
 type InventoryItem = {
   id: string;
   name: string;
@@ -86,6 +100,18 @@ function statusTone(status: string): BadgeTone {
 
 function dateRangeLabel(r: DateRange) {
   return r === '7d' ? 'Last 7 days' : r === '30d' ? 'Last 30 days' : 'Last 90 days';
+}
+
+function saleDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Date unavailable'
+    : date.toLocaleString('en-LK', {
+        day: 'numeric',
+        month: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
 }
 
 function buildDateParams(range: DateRange): string {
@@ -224,21 +250,30 @@ export function AnalyticsDashboardPage() {
   const [range, setRange] = useState<DateRange>('30d');
   const [usage, setUsage] = useState<Slot<InventoryUsageReport>>(loading);
   const [inventory, setInventory] = useState<Slot<InventoryListResponse>>(loading);
+  const [sales, setSales] = useState<Slot<SalesActivityReport>>(loading);
 
   const load = useCallback(async (showMsg = false) => {
     setUsage(loading);
     setInventory(loading);
+    setSales(loading);
     const dateParams = buildDateParams(range);
-    const [movementResult, inventoryResult] = await Promise.allSettled([
+    const [movementResult, inventoryResult, salesResult] = await Promise.allSettled([
       apiGet<InventoryUsageReport>(`/api/reports/inventory-usage?${dateParams}`, token),
       apiGetAllInventory(token),
+      apiGet<SalesActivityReport>(`/api/reports/sales-activity?${dateParams}`, token),
     ]);
     const movementSlot = settle(movementResult);
     const inventorySlot = settle(inventoryResult);
+    const salesSlot = settle(salesResult);
     setUsage(movementSlot);
     setInventory(inventorySlot);
+    setSales(salesSlot);
     if (showMsg) {
-      if (movementSlot.status === 'ready' && inventorySlot.status === 'ready') {
+      if (
+        movementSlot.status === 'ready' &&
+        inventorySlot.status === 'ready' &&
+        salesSlot.status === 'ready'
+      ) {
         notify(`Analytics refreshed — ${dateRangeLabel(range)}.`, 'success');
       } else {
         notify('Some data could not be refreshed. Check the panels below.', 'warning');
@@ -249,8 +284,8 @@ export function AnalyticsDashboardPage() {
   useEffect(() => { void load(); }, [load]);
 
   /* derived */
-  const anyLoading = usage.status === 'loading' || inventory.status === 'loading';
-  const failedCount = [usage, inventory].filter(s => s.status === 'failed').length;
+  const anyLoading = usage.status === 'loading' || inventory.status === 'loading' || sales.status === 'loading';
+  const failedCount = [usage, inventory, sales].filter(s => s.status === 'failed').length;
 
   const allRows = useMemo(() =>
     usage.status === 'ready' ? buildTableRows(usage.value) : [], [usage]);
@@ -500,6 +535,88 @@ export function AnalyticsDashboardPage() {
             icon="movement"
           />
         </div>
+      </section>
+
+      <section
+        className="inventory-analytics-sales-summary"
+        aria-label={`Sales summary for ${dateRangeLabel(range)}`}
+      >
+        <div className="inventory-analytics-section-heading">
+          <div>
+            <p className="eyebrow">SALES ACTIVITY</p>
+            <h2>What’s happening in sales</h2>
+          </div>
+          <span>{dateRangeLabel(range)} · recorded sales</span>
+        </div>
+        <div className="inventory-analytics-metrics">
+          <Metric
+            label="Sales recorded"
+            value={sales.status === 'ready' ? compact(sales.value.salesCount) : '—'}
+            detail="Completed sales in this period"
+            tone="blue"
+            icon="chart"
+          />
+          <Metric
+            label="Sales revenue"
+            value={sales.status === 'ready' ? lkr(sales.value.totalRevenue) : '—'}
+            detail="Revenue from recorded sales"
+            tone="teal"
+            icon="workflow"
+          />
+          <Metric
+            label="Average sale"
+            value={sales.status === 'ready' ? lkr(sales.value.averageSale) : '—'}
+            detail="Average value per sale"
+            tone="violet"
+            icon="inventory"
+          />
+        </div>
+        <article className="panel inventory-analytics-panel inventory-sales-activity-panel">
+          <div className="inventory-analytics-panel-head">
+            <div>
+              <p className="eyebrow">RECENTLY RECORDED</p>
+              <h2>Recent sales</h2>
+              <p>The latest completed sales within the selected date range.</p>
+            </div>
+            <span className="inventory-analytics-panel-icon">
+              <Icon name="chart" size={18} />
+            </span>
+          </div>
+          {sales.status === 'failed' ? (
+            <PanelError error={sales.error} onRetry={() => void load()} />
+          ) : sales.status === 'loading' ? (
+            <PanelSkeleton rows={4} />
+          ) : sales.value.recentSales.length === 0 ? (
+            <PanelEmpty>No sales have been recorded in this period.</PanelEmpty>
+          ) : (
+            <div className="table-wrap inventory-sales-activity-table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Items sold</th>
+                    <th>Quantity</th>
+                    <th>Reference</th>
+                    <th className="inventory-sales-amount-heading">Sale total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sales.value.recentSales.map(sale => (
+                    <tr key={sale.id}>
+                      <td>{saleDate(sale.occurredAt)}</td>
+                      <td>
+                        <strong>{sale.items.length ? sale.items.join(', ') : 'Recorded sale'}</strong>
+                      </td>
+                      <td>{sale.quantity > 0 ? compact(sale.quantity) : '—'}</td>
+                      <td><span className="cell-sub">{sale.reference}</span></td>
+                      <td className="inventory-sales-amount">{lkr(sale.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </article>
       </section>
 
       {/* ── MAIN CHARTS GRID ── */}
