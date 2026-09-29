@@ -44,7 +44,8 @@ public class LoginAcrossTenantsTests
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("nandana2004"), CreatedAt = DateTime.UtcNow.AddDays(-2),
         });
         await db.SaveChangesAsync();
-        return new AuthController(db, new StubJwtService(), new CustomerAccountService(db));
+        return new AuthController(db, new StubJwtService(), new CustomerAccountService(db),
+            new StubPasswordResetManager(), new StubMobileExternalAuthService());
     }
 
     private static async Task<Guid?> LoginTenant(AuthController controller, string password)

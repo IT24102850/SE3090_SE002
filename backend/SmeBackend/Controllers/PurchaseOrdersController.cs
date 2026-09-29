@@ -572,7 +572,11 @@ public sealed class PurchaseOrdersController(
             });
         }
 
-        order.Receipts.Add(receipt);
+        // Added through the set, not through order.Receipts: BaseEntity assigns Id in
+        // its initialiser, so a new child discovered on a tracked parent's collection
+        // already has a key and change detection files it as an update of a row that
+        // was never inserted. An explicit Add states the intent and cascades to Items.
+        db.PurchaseOrderReceipts.Add(receipt);
         order.Status = orderItems.All(item => item.ReceivingClosed)
             ? "Received"
             : "PartiallyReceived";
