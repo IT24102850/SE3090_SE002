@@ -202,6 +202,36 @@ public sealed class ReportsController(
 
         var salesCount = await salesQuery.CountAsync(cancellationToken);
         var totalRevenue = await salesQuery.SumAsync(sale => (decimal?)sale.Amount, cancellationToken) ?? 0;
+        var saleMovementQuery = db.StockMovements
+            .AsNoTracking()
+            .Where(movement =>
+                movement.TenantId == tenantId &&
+                movement.MovementType == "Sale" &&
+                movement.OccurredAt >= range.Value.From &&
+                movement.OccurredAt < range.Value.ToExclusive);
+        if (branchId.HasValue)
+        {
+            saleMovementQuery = saleMovementQuery.Where(movement => movement.BranchId == branchId.Value);
+        }
+        var costSummary = await saleMovementQuery
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                MovementCount = group.Count(),
+                MissingCostCount = group.Count(movement => movement.UnitCost == null),
+                CostOfGoodsSold = group.Sum(movement =>
+                    (decimal?)((movement.UnitCost ?? 0m) * Math.Abs(movement.Quantity))),
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        var costOfGoodsSold = salesCount == 0
+            ? 0m
+            : costSummary is { MovementCount: > 0, MissingCostCount: 0 }
+                ? costSummary.CostOfGoodsSold ?? 0m
+                : (decimal?)null;
+        var grossProfit = costOfGoodsSold.HasValue
+            ? totalRevenue - costOfGoodsSold.Value
+            : (decimal?)null;
+
         var recentSales = await salesQuery
             .OrderByDescending(sale => sale.OccurredAt)
             .ThenByDescending(sale => sale.Id)
@@ -230,6 +260,7 @@ public sealed class ReportsController(
                 movement.Reference,
                 ItemName = item.Name,
                 Quantity = Math.Abs(movement.Quantity),
+                movement.UnitCost,
             }).ToListAsync(cancellationToken);
         var movementsByReference = saleMovements
             .GroupBy(movement => movement.Reference!)
@@ -244,7 +275,13 @@ public sealed class ReportsController(
                 sale.OccurredAt,
                 sale.Amount,
                 lines.Sum(line => line.Quantity),
-                lines.Select(line => line.ItemName).Distinct().ToList());
+                lines.Select(line => line.ItemName).Distinct().ToList(),
+                lines.Count == 0 || lines.Any(line => !line.UnitCost.HasValue)
+                    ? null
+                    : lines.Sum(line => line.Quantity * line.UnitCost!.Value),
+                lines.Count == 0 || lines.Any(line => !line.UnitCost.HasValue)
+                    ? null
+                    : sale.Amount - lines.Sum(line => line.Quantity * line.UnitCost!.Value));
         }).ToList();
 
         return Ok(new SalesActivityReportResponse(
@@ -254,6 +291,8 @@ public sealed class ReportsController(
             salesCount,
             totalRevenue,
             salesCount == 0 ? 0 : totalRevenue / salesCount,
+            costOfGoodsSold,
+            grossProfit,
             recent));
     }
 
@@ -420,6 +459,8 @@ public sealed record SalesActivityReportResponse(
     int SalesCount,
     decimal TotalRevenue,
     decimal AverageSale,
+    decimal? CostOfGoodsSold,
+    decimal? GrossProfit,
     IReadOnlyList<SalesActivityItemResponse> RecentSales);
 
 public sealed record SalesActivityItemResponse(
@@ -428,7 +469,9 @@ public sealed record SalesActivityItemResponse(
     DateTime OccurredAt,
     decimal Amount,
     decimal Quantity,
-    IReadOnlyList<string> Items);
+    IReadOnlyList<string> Items,
+    decimal? CostOfGoodsSold,
+    decimal? GrossProfit);
 
 
 public sealed record PatientCountReportResponse(

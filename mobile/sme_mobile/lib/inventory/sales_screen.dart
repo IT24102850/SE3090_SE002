@@ -32,6 +32,7 @@ class _SalesScreenState extends State<SalesScreen> {
   bool _inventoryLoaded = false;
   int _inventoryRevision = 0;
   double _totalRevenue = 0;
+  double? _grossProfit;
   int _periodDays = 7;
 
   List<InventoryItem> get _availableItems => _items
@@ -68,6 +69,7 @@ class _SalesScreenState extends State<SalesScreen> {
       _inventoryLoaded = false;
       _days = const [];
       _totalRevenue = 0;
+      _grossProfit = null;
     });
     try {
       final items = <InventoryItem>[];
@@ -122,11 +124,18 @@ class _SalesScreenState extends State<SalesScreen> {
           (bucket['revenue'] as num?)?.toDouble() ?? 0,
         );
       }).toList();
+      final activity =
+          await widget.client.get('/api/reports/sales-activity$query');
+      if (activity.statusCode != 200) {
+        throw _apiError(activity.body, activity.statusCode);
+      }
+      final activityData = jsonDecode(activity.body) as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
         _days = days;
         _totalRevenue = (data['totalRevenue'] as num?)?.toDouble() ??
             days.fold<double>(0, (sum, day) => sum + day.amount);
+        _grossProfit = (activityData['grossProfit'] as num?)?.toDouble();
         _loading = false;
       });
       if (showRefreshFeedback) {
@@ -138,7 +147,9 @@ class _SalesScreenState extends State<SalesScreen> {
       final message = _messageFromError(error);
       setState(() => _loading = false);
       _showFeedback(
-        showRefreshFeedback ? 'Refresh failed: $message' : 'Could not load sales: $message',
+        showRefreshFeedback
+            ? 'Refresh failed: $message'
+            : 'Could not load sales: $message',
         _SalesFeedbackTone.error,
       );
     }
@@ -159,15 +170,21 @@ class _SalesScreenState extends State<SalesScreen> {
     }
 
     return switch (status) {
-      400 => 'The sale request was invalid (HTTP 400). Check the quantity and price.',
+      400 =>
+        'The sale request was invalid (HTTP 400). Check the quantity and price.',
       401 => 'Your session has expired. Sign in again and retry the sale.',
       403 => 'You do not have permission to record this sale (HTTP 403).',
       404 =>
         'The sales API endpoint was not found (HTTP 404). Check the deployed backend route.',
-      409 => 'The sale conflicts with the latest inventory state (HTTP 409). Refresh stock and retry.',
-      422 => 'The backend could not process this sale (HTTP 422). Check the entered values.',
+      409 =>
+        'The sale conflicts with the latest inventory state (HTTP 409). Refresh stock and retry.',
+      422 =>
+        'The backend could not process this sale (HTTP 422). Check the entered values.',
       429 => 'Too many requests. Wait a moment, then try again.',
-      500 || 502 || 503 || 504 =>
+      500 ||
+      502 ||
+      503 ||
+      504 =>
         'The backend is temporarily unavailable (HTTP $status). Try again shortly.',
       _ => 'The request failed (HTTP $status). Please try again.',
     };
@@ -240,13 +257,36 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _recordSale() async {
     final item = _selectedItem;
     final quantity = double.tryParse(_quantityController.text.trim());
-    final price = item?.unitCost ?? 0;
+    final price = item?.sellingPrice;
+    final cost = item?.unitCost;
+    if (item != null && price == null) {
+      _showFeedback(
+        'Set a selling price for ${item.name} in web inventory before recording a sale.',
+        _SalesFeedbackTone.error,
+      );
+      return;
+    }
+    if (item != null && cost == null) {
+      _showFeedback(
+        'Set the unit cost for ${item.name} in web inventory to calculate profit.',
+        _SalesFeedbackTone.error,
+      );
+      return;
+    }
+    if (item != null && price != null && cost != null && price <= cost) {
+      _showFeedback(
+        'Selling price must be greater than unit cost. Update prices in web inventory.',
+        _SalesFeedbackTone.error,
+      );
+      return;
+    }
     if (item == null ||
         item.quantity <= 0 ||
         item.branchId == null ||
         quantity == null ||
         quantity <= 0 ||
-        price < 0) {
+        price == null ||
+        cost == null) {
       _showFeedback('Choose an item and enter a valid quantity.',
           _SalesFeedbackTone.error);
       return;
@@ -259,7 +299,7 @@ class _SalesScreenState extends State<SalesScreen> {
       return;
     }
 
-    final confirmed = await _confirmSale(item, quantity, price);
+    final confirmed = await _confirmSale(item, quantity, price, cost);
     if (!mounted) return;
     if (!confirmed) {
       _showFeedback(
@@ -275,18 +315,28 @@ class _SalesScreenState extends State<SalesScreen> {
         '/api/inventory/${item.id}/sell',
         body: {
           'quantity': quantity,
-          'unitPrice': price,
+          'expectedSellingPrice': price,
+          'expectedUnitCost': cost,
         },
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw _apiError(response.body, response.statusCode);
       }
       if (!mounted) return;
+      final saleResult = _tryDecodeJson(response.body);
+      final saleData = saleResult is Map<String, dynamic>
+          ? saleResult
+          : const <String, dynamic>{};
+      final saleAmount =
+          (saleData['amount'] as num?)?.toDouble() ?? quantity * price;
+      final grossProfit = (saleData['grossProfit'] as num?)?.toDouble() ??
+          quantity * (price - cost);
       _quantityController.text = '1';
       _showFeedback(
         'Sale recorded successfully: ${_quantity(quantity)} ${item.unit} '
         '${item.name} for LKR ${_money(price)} each '
-        '(total LKR ${_money(quantity * price)}). Inventory stock was updated.',
+        '(total LKR ${_money(saleAmount)}, gross profit '
+        'LKR ${_money(grossProfit)}). Inventory stock was updated.',
         _SalesFeedbackTone.success,
       );
       await _load();
@@ -306,6 +356,7 @@ class _SalesScreenState extends State<SalesScreen> {
     InventoryItem item,
     double quantity,
     double unitPrice,
+    double unitCost,
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -389,6 +440,12 @@ class _SalesScreenState extends State<SalesScreen> {
                       'LKR ${_money(quantity * unitPrice)}',
                       valueColor: AppColors.cyan,
                     ),
+                    const SizedBox(height: 9),
+                    _confirmationDetail(
+                      'Estimated gross profit',
+                      'LKR ${_money(quantity * (unitPrice - unitCost))}',
+                      valueColor: AppColors.success,
+                    ),
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 11),
                       child: Divider(height: 1, color: AppColors.hairline),
@@ -408,8 +465,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       label: 'Cancel',
                       expand: false,
                       height: 48,
-                      onPressed: () =>
-                          Navigator.pop(dialogContext, false),
+                      onPressed: () => Navigator.pop(dialogContext, false),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -478,8 +534,7 @@ class _SalesScreenState extends State<SalesScreen> {
         title: 'Sales',
         actions: [
           IconButton(
-            onPressed:
-                _loading ? null : () => _load(showRefreshFeedback: true),
+            onPressed: _loading ? null : () => _load(showRefreshFeedback: true),
             tooltip: 'Refresh sales',
             icon: const Icon(Icons.refresh_rounded, color: AppColors.cyan),
           ),
@@ -500,7 +555,7 @@ class _SalesScreenState extends State<SalesScreen> {
             _buildSaleForm(),
             const SizedBox(height: 24),
             _sectionHeading(Icons.show_chart_rounded, 'Sales performance',
-                'Recorded revenue from the last $_periodDays days.'),
+                'Sales revenue and gross profit from the last $_periodDays days.'),
             const SizedBox(height: 10),
             _buildRevenueChart(maxRevenue),
             const SizedBox(height: 14),
@@ -735,7 +790,7 @@ class _SalesScreenState extends State<SalesScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'UNIT PRICE',
+                  'SELLING PRICE',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.caption.copyWith(
@@ -747,7 +802,11 @@ class _SalesScreenState extends State<SalesScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  item == null ? 'Select item' : 'LKR ${_money(item.unitCost)}',
+                  item == null
+                      ? 'Select item'
+                      : item.sellingPrice == null
+                          ? 'Set price on web'
+                          : 'LKR ${_money(item.sellingPrice!)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.body.copyWith(
@@ -767,8 +826,10 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Widget _buildSalePreview() {
     final quantity = double.tryParse(_quantityController.text) ?? 0;
-    final price = _selectedItem?.unitCost ?? 0;
+    final price = _selectedItem?.sellingPrice ?? 0;
+    final cost = _selectedItem?.unitCost;
     final total = quantity * price;
+    final profit = cost == null ? null : quantity * (price - cost);
     final remaining = (_selectedItem?.quantity ?? 0) - quantity;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
@@ -799,12 +860,27 @@ class _SalesScreenState extends State<SalesScreen> {
               ],
             ),
           ),
-          Text(
-            'After sale: ${_quantity(remaining < 0 ? 0 : remaining)} ${_selectedItem!.unit}',
-            style: AppTextStyles.caption.copyWith(
-              color: remaining < 0 ? AppColors.danger : AppColors.textSecondary,
-              fontSize: 9,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'Profit: ${profit == null ? 'Set cost on web' : 'LKR ${_money(profit)}'}',
+                style: AppTextStyles.caption.copyWith(
+                  color: profit == null ? AppColors.warning : AppColors.success,
+                  fontSize: 9,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'After sale: ${_quantity(remaining < 0 ? 0 : remaining)} ${_selectedItem!.unit}',
+                style: AppTextStyles.caption.copyWith(
+                  color: remaining < 0
+                      ? AppColors.danger
+                      : AppColors.textSecondary,
+                  fontSize: 9,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -826,6 +902,17 @@ class _SalesScreenState extends State<SalesScreen> {
                   color: AppColors.textMuted,
                   fontSize: 10,
                 )),
+            Text(
+              _grossProfit == null
+                  ? 'Gross profit unavailable until all sold items have unit costs.'
+                  : 'Gross profit · LKR ${_money(_grossProfit!)}',
+              style: AppTextStyles.caption.copyWith(
+                color: _grossProfit == null
+                    ? AppColors.warning
+                    : AppColors.success,
+                fontSize: 10,
+              ),
+            ),
             const SizedBox(height: 11),
             Row(
               children: [

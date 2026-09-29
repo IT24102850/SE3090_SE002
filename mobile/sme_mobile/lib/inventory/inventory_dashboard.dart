@@ -2293,7 +2293,7 @@ class _InventoryDashboardState extends State<InventoryDashboard>
               ),
               const SizedBox(width: 8),
               Text(
-                'LKR ${item.unitCost.toStringAsFixed(2)} / ${item.unit}',
+                '${item.unitCost == null ? 'Unit cost not set' : 'LKR ${item.unitCost!.toStringAsFixed(2)}'} / ${item.unit}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.caption

@@ -22,6 +22,8 @@ describe('inventory sales activity', () => {
             salesCount: 2,
             totalRevenue: 12500,
             averageSale: 6250,
+            costOfGoodsSold: 8000,
+            grossProfit: 4500,
             recentSales: [
               {
                 id: 'sale-1',
@@ -30,6 +32,8 @@ describe('inventory sales activity', () => {
                 amount: 7500,
                 quantity: 3,
                 items: ['Coffee Beans'],
+                costOfGoodsSold: 6000,
+                grossProfit: 1500,
               },
             ],
           }
@@ -87,6 +91,7 @@ describe('inventory sales activity', () => {
     expect(screen.getByText('SALE-20260929-001')).toBeInTheDocument();
     expect(screen.getByText('Coffee Beans')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getAllByText('Gross profit')).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/^\/api\/reports\/sales-activity\?/),
       expect.anything(),

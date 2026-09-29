@@ -345,6 +345,28 @@ public sealed class InventoryController(
             ModelState.AddModelError("unitCost", "Unit cost cannot be negative.");
             return ValidationProblem(ModelState);
         }
+        if (request.UnitCost.HasValue && decimal.Round(request.UnitCost.Value, 2) != request.UnitCost)
+        {
+            ModelState.AddModelError("unitCost", "Unit cost can have up to two decimal places.");
+            return ValidationProblem(ModelState);
+        }
+        if (request.SellingPrice < 0)
+        {
+            ModelState.AddModelError("sellingPrice", "Selling price cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+        if (request.SellingPrice.HasValue && decimal.Round(request.SellingPrice.Value, 2) != request.SellingPrice)
+        {
+            ModelState.AddModelError("sellingPrice", "Selling price can have up to two decimal places.");
+            return ValidationProblem(ModelState);
+        }
+        if (request.UnitCost.HasValue &&
+            request.SellingPrice.HasValue &&
+            request.SellingPrice <= request.UnitCost)
+        {
+            ModelState.AddModelError("sellingPrice", "Selling price must be greater than unit cost.");
+            return ValidationProblem(ModelState);
+        }
 
         if (await db.InventoryItems.IgnoreQueryFilters()
             .AnyAsync(candidate => candidate.TenantId == tenantId && candidate.Sku == sku && candidate.Id != id,
@@ -392,6 +414,7 @@ public sealed class InventoryController(
         else if (request.ClearSupplier) item.SupplierId = null;
         item.ReorderLevel = request.ReorderLevel;
         item.UnitCost = request.UnitCost;
+        item.SellingPrice = request.SellingPrice;
         item.UpdatedAt = DateTime.UtcNow;
 
         NotificationHelper.Queue(db, tenantId, null, "InventoryUpdated", "Inventory item updated", $"{item.Name} was updated.");
@@ -472,18 +495,20 @@ public sealed class InventoryController(
             ModelState.AddModelError("quantity", "Sale quantity can have up to three decimal places.");
             return ValidationProblem(ModelState);
         }
-        if (request.UnitPrice < 0)
-        {
-            ModelState.AddModelError("unitPrice", "Unit sale price cannot be negative.");
-            return ValidationProblem(ModelState);
-        }
-        if (decimal.Round(request.UnitPrice, 2) != request.UnitPrice)
-        {
-            ModelState.AddModelError("unitPrice", "Unit sale price can have up to two decimal places.");
-            return ValidationProblem(ModelState);
-        }
         if (!item.BranchId.HasValue)
             return Conflict(new { message = "Sales require the item to be assigned to a branch." });
+        if (!item.UnitCost.HasValue)
+            return Conflict(new { message = "Set a unit cost for this item in web inventory before recording a sale." });
+        if (!item.SellingPrice.HasValue)
+            return Conflict(new { message = "Set a selling price for this item in web inventory before recording a sale." });
+        if (item.SellingPrice <= item.UnitCost)
+            return Conflict(new { message = "Selling price must be greater than unit cost to record a profitable sale." });
+        if (request.ExpectedSellingPrice.HasValue &&
+            request.ExpectedSellingPrice.Value != item.SellingPrice.Value)
+            return Conflict(new { message = "The selling price changed. Refresh the item and confirm the sale again." });
+        if (request.ExpectedUnitCost.HasValue &&
+            request.ExpectedUnitCost.Value != item.UnitCost.Value)
+            return Conflict(new { message = "The unit cost changed. Refresh the item and confirm the sale again." });
         if (item.Quantity < request.Quantity)
             return Conflict(new { message = $"Only {item.Quantity} unit(s) of '{item.Name}' are available." });
 
@@ -497,17 +522,20 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
         const decimal maximumSaleAmount = 9_999_999_999_999_999.99m;
-        if (request.UnitPrice > maximumSaleAmount / request.Quantity)
+        var unitPrice = item.SellingPrice.Value;
+        if (unitPrice > maximumSaleAmount / request.Quantity)
         {
-            ModelState.AddModelError("unitPrice", "Sale total exceeds the supported amount.");
+            ModelState.AddModelError("quantity", "Sale total exceeds the supported amount.");
             return ValidationProblem(ModelState);
         }
-        var amount = decimal.Round(request.Quantity * request.UnitPrice, 2, MidpointRounding.AwayFromZero);
+        var amount = decimal.Round(request.Quantity * unitPrice, 2, MidpointRounding.AwayFromZero);
         if (amount > maximumSaleAmount)
         {
-            ModelState.AddModelError("unitPrice", "Sale total exceeds the supported amount.");
+            ModelState.AddModelError("quantity", "Sale total exceeds the supported amount.");
             return ValidationProblem(ModelState);
         }
+        var costOfGoodsSold = request.Quantity * item.UnitCost.Value;
+        var grossProfit = amount - costOfGoodsSold;
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var updatedItems = await db.InventoryItems
@@ -529,7 +557,7 @@ public sealed class InventoryController(
             .Where(candidate => candidate.Id == item.Id)
             .Select(candidate => candidate.Quantity)
             .SingleAsync(cancellationToken);
-        var notes = $"Sale of {request.Quantity} {item.Name} at {request.UnitPrice} each.";
+        var notes = $"Sale of {request.Quantity} {item.Name} at {unitPrice} each.";
         db.Sales.Add(new Sale
         {
             TenantId = tenantId,
@@ -558,8 +586,10 @@ public sealed class InventoryController(
             item.Id,
             item.Name,
             request.Quantity,
-            request.UnitPrice,
+            unitPrice,
             amount,
+            costOfGoodsSold,
+            grossProfit,
             remainingQuantity,
             now));
     }
@@ -679,11 +709,21 @@ public sealed class InventoryController(
             ModelState.AddModelError("unitCost", "Unit cost cannot be negative.");
             return ValidationProblem(ModelState);
         }
-
+        if (request.UnitCost.HasValue && decimal.Round(request.UnitCost.Value, 2) != request.UnitCost)
+        {
+            ModelState.AddModelError("unitCost", "Unit cost can have up to two decimal places.");
+            return ValidationProblem(ModelState);
+        }
         item.Quantity += request.Quantity;
         if (request.UnitCost.HasValue)
         {
-            item.UnitCost = request.UnitCost;
+            item.UnitCost = item.Quantity == request.Quantity || item.UnitCost.HasValue
+                ? decimal.Round(
+                    ((item.Quantity - request.Quantity) * (item.UnitCost ?? 0m) +
+                     request.Quantity * request.UnitCost.Value) / item.Quantity,
+                    2,
+                    MidpointRounding.AwayFromZero)
+                : null;
         }
         item.UpdatedAt = DateTime.UtcNow;
 
@@ -826,6 +866,28 @@ public sealed class InventoryController(
             ModelState.AddModelError("unitCost", "Unit cost cannot be negative.");
             return ValidationProblem(ModelState);
         }
+        if (request.UnitCost.HasValue && decimal.Round(request.UnitCost.Value, 2) != request.UnitCost)
+        {
+            ModelState.AddModelError("unitCost", "Unit cost can have up to two decimal places.");
+            return ValidationProblem(ModelState);
+        }
+        if (request.SellingPrice < 0)
+        {
+            ModelState.AddModelError("sellingPrice", "Selling price cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+        if (request.SellingPrice.HasValue && decimal.Round(request.SellingPrice.Value, 2) != request.SellingPrice)
+        {
+            ModelState.AddModelError("sellingPrice", "Selling price can have up to two decimal places.");
+            return ValidationProblem(ModelState);
+        }
+        if (request.UnitCost.HasValue &&
+            request.SellingPrice.HasValue &&
+            request.SellingPrice <= request.UnitCost)
+        {
+            ModelState.AddModelError("sellingPrice", "Selling price must be greater than unit cost.");
+            return ValidationProblem(ModelState);
+        }
 
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
@@ -898,6 +960,7 @@ public sealed class InventoryController(
             Quantity = request.Quantity,
             ReorderLevel = request.ReorderLevel,
             UnitCost = request.UnitCost,
+            SellingPrice = request.SellingPrice,
         };
 
         db.InventoryItems.Add(item);
@@ -1018,6 +1081,7 @@ public sealed class InventoryController(
             item.Quantity,
             item.ReorderLevel,
             item.UnitCost,
+            item.SellingPrice,
             status,
             item.CreatedAt);
     }
@@ -1049,13 +1113,15 @@ public sealed record InventoryItemResponse(
     decimal Quantity,
     decimal ReorderLevel,
     decimal? UnitCost,
+    decimal? SellingPrice,
     string Status,
     DateTime CreatedAt);
 
 public sealed record RecordInventorySaleRequest(
     decimal Quantity,
-    decimal UnitPrice,
-    string? Reference = null);
+    string? Reference = null,
+    decimal? ExpectedSellingPrice = null,
+    decimal? ExpectedUnitCost = null);
 
 public sealed record RecordInventorySaleResponse(
     string Reference,
@@ -1064,6 +1130,8 @@ public sealed record RecordInventorySaleResponse(
     decimal Quantity,
     decimal UnitPrice,
     decimal Amount,
+    decimal CostOfGoodsSold,
+    decimal GrossProfit,
     decimal RemainingQuantity,
     DateTime OccurredAt);
 
@@ -1091,7 +1159,8 @@ public sealed record CreateInventoryRequest(
     decimal ReorderLevel = 0,
     decimal? UnitCost = null,
     Guid? SupplierId = null,
-    string? Category = null);
+    string? Category = null,
+    decimal? SellingPrice = null);
 
 public sealed record UpdateInventoryRequest(
     string? Name,
@@ -1104,7 +1173,8 @@ public sealed record UpdateInventoryRequest(
     decimal? UnitCost = null,
     Guid? SupplierId = null,
     bool ClearSupplier = false,
-    string? Category = null);
+    string? Category = null,
+    decimal? SellingPrice = null);
 
 public sealed record AdjustInventoryRequest(
     decimal Quantity,

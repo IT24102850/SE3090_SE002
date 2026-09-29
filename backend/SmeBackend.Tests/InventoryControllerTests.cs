@@ -294,7 +294,7 @@ public class InventoryControllerTests
 
         var result = await controller.RecordInventorySale(
             item.Id,
-            new RecordInventorySaleRequest(0m, 100m),
+            new RecordInventorySaleRequest(0m),
             CancellationToken.None);
 
         var problem = Assert.IsType<ObjectResult>(result.Result);
@@ -336,7 +336,52 @@ public class InventoryControllerTests
 
         var result = await controller.RecordInventorySale(
             item.Id,
-            new RecordInventorySaleRequest(2m, 100m),
+            new RecordInventorySaleRequest(2m),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);
+        Assert.Empty(db.Sales);
+        Assert.Equal(5m, item.Quantity);
+    }
+
+    [Fact]
+    public async Task RecordInventorySale_WhenSellingPriceIsNotConfigured_ReturnsConflict()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        var item = new InventoryItem
+        {
+            TenantId = tenantId,
+            Name = "Tea",
+            Sku = "SKU-005",
+            BranchId = Guid.NewGuid(),
+            Quantity = 5m,
+            UnitCost = 80m,
+            SellingPrice = null,
+            IsActive = true,
+        };
+        db.InventoryItems.Add(item);
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.RecordInventorySale(
+            item.Id,
+            new RecordInventorySaleRequest(2m),
             CancellationToken.None);
 
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
