@@ -7,6 +7,7 @@ import LandingPage from './features/marketing/LandingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './shared/components/AppLayout';
 import { ToastProvider } from './shared/components/Toast';
+import { PaywallProvider } from './features/subscription/PaywallProvider';
 import './features/inventory/inventory.css';
 import { ToastProvider as InventoryToastProvider } from './features/inventory/ui/ToastContext';
 
@@ -19,6 +20,11 @@ import { ToastProvider as InventoryToastProvider } from './features/inventory/ui
  * navigation that actually needs them, which is behind a login.
  */
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+/* Unify's own plan: the public price list and the tenant admin's console for
+ * what their business pays us. Distinct from /subscriptions, which is the
+ * memberships a tenant sells to its own customers. */
+const PricingPage = lazy(() => import('./features/subscription/PricingPage'));
+const SubscriptionPage = lazy(() => import('./features/subscription/SubscriptionPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 // Public, chrome-less: the booking widget a business embeds on its own site.
 const EmbedBookingPage = lazy(() => import('./features/embed/EmbedBookingPage'));
@@ -74,6 +80,7 @@ const PlatformTenantsPage = lazy(() => import('./features/platform/PlatformTenan
 const PlatformUsersPage = lazy(() => import('./features/platform/PlatformUsersPage'));
 const PlatformAuditPage = lazy(() => import('./features/platform/PlatformAuditPage'));
 const PlatformSecurityPage = lazy(() => import('./features/platform/PlatformSecurityPage'));
+const PlatformRevenuePage = lazy(() => import('./features/platform/PlatformRevenuePage'));
 
 /* Deliberately near-empty. This shows for the length of one chunk fetch on a
  * local network, and a spinner that appears and vanishes inside 100ms reads
@@ -114,9 +121,11 @@ function App() {
       <ToastProvider>
         <AuthInitializer>
           <BrowserRouter>
+            <PaywallProvider>
             <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/embed/book/:tenantId" element={<EmbedBookingPage />} />
 
@@ -296,6 +305,17 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
                     <Shell><BusinessSettingsPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* The business's own Unify plan. Managers can see why a screen
+                  is locked; only an Admin can change what is paid. */}
+              <Route
+                path="/subscription"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><SubscriptionPage /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -481,11 +501,13 @@ function App() {
               <Route path="/platform/users" element={<PlatformUsersPage />} />
               <Route path="/platform/audit" element={<PlatformAuditPage />} />
               <Route path="/platform/security" element={<PlatformSecurityPage />} />
+              <Route path="/platform/revenue" element={<PlatformRevenuePage />} />
 
               <Route path="/" element={<LandingPage />} />
               <Route path="*" element={<div style={{ padding: '2rem' }}><h1>404 - Page Not Found</h1></div>} />
             </Routes>
             </Suspense>
+            </PaywallProvider>
           </BrowserRouter>
         </AuthInitializer>
       </ToastProvider>
