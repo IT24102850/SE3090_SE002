@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SmeBackend.DTOs;
 using SmeBackend.Services;
+using SmeBackend.Authorization;
+using SmeBackend.Models;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
@@ -11,6 +14,7 @@ namespace SmeBackend.Controllers;
 [Route("api/dynamic-forms")]
 [Authorize]
 [Produces("application/json")]
+[RequiresPlanFeature(PlanFeatures.CustomBranding)]
 public class DynamicFormsController : BillingControllerBase
 {
     private readonly IDynamicFormService _dynamicFormService;
