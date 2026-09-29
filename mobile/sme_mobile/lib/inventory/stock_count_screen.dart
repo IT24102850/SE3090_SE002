@@ -61,8 +61,22 @@ class _StockCountScreenState extends State<StockCountScreen>
           _connectivity.onConnectivityChanged.listen((results) {
         final online =
             results.any((result) => result != ConnectivityResult.none);
-        if (mounted) setState(() => _isOnline = online);
-        if (online) _sync(silent: true);
+        if (!mounted) return;
+        final connectionRestored = online && !_isOnline;
+        final connectionLost = !online && _isOnline;
+        setState(() => _isOnline = online);
+        if (connectionRestored) {
+          showAppNotification(
+            'Connection restored. Syncing saved physical counts.',
+            tone: AppNotificationTone.info,
+          );
+          _sync(announceEmpty: false);
+        } else if (connectionLost) {
+          showAppNotification(
+            'You are offline. New physical counts will stay safely queued on this device.',
+            tone: AppNotificationTone.warning,
+          );
+        }
       }, onError: (_) {
         // Ignore if native channel is unavailable before app restart
       });
@@ -259,11 +273,11 @@ class _StockCountScreenState extends State<StockCountScreen>
     }
   }
 
-  Future<void> _sync({bool silent = false}) async {
+  Future<void> _sync({bool silent = false, bool announceEmpty = true}) async {
     if (!mounted || _syncing) return;
     final queued = _pending.where((count) => !count.requiresReview).toList();
     if (queued.isEmpty) {
-      if (!silent) {
+      if (!silent && (announceEmpty || _pending.isNotEmpty)) {
         showAppNotification(
           _pending.isEmpty
               ? 'There are no physical counts waiting to sync.'
@@ -553,6 +567,7 @@ class _StockCountScreenState extends State<StockCountScreen>
       ];
       await _store.save(_catalog, pending);
       if (!mounted) return;
+      HapticFeedback.mediumImpact();
       setState(() {
         _pending = pending;
         _sku.clear();
@@ -763,143 +778,184 @@ class _StockCountScreenState extends State<StockCountScreen>
         ],
       ),
       child: SafeArea(
-        child: _loading
-            ? const AppLoader(message: 'Initializing local inventory cache...')
-            : RefreshIndicator(
-                color: AppColors.cyan,
-                backgroundColor: AppColors.overlaySurface,
-                onRefresh: () async {
-                  final refreshed = await _refreshCatalog();
-                  if (!refreshed) {
-                    if (mounted) {
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 320),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, .025),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
+          ),
+          child: _loading
+              ? const AppLoader(
+                  key: ValueKey('stock-count-loading'),
+                  message: 'Initializing local inventory cache...',
+                )
+              : RefreshIndicator(
+                  key: const ValueKey('stock-count-content'),
+                  color: AppColors.cyan,
+                  backgroundColor: AppColors.overlaySurface,
+                  onRefresh: () async {
+                    final refreshed = await _refreshCatalog();
+                    if (!refreshed) {
+                      if (mounted) {
+                        showAppNotification(
+                          'Inventory could not be refreshed. Showing the last saved catalog.',
+                          tone: AppNotificationTone.error,
+                        );
+                      }
+                      return;
+                    }
+                    await _sync();
+                    await _loadApprovalQueue();
+                    if (mounted && !_syncing) {
                       showAppNotification(
-                        'Inventory could not be refreshed. Showing the last saved catalog.',
-                        tone: AppNotificationTone.error,
+                        _pending.isEmpty
+                            ? 'Inventory catalog refreshed and counts synchronized.'
+                            : 'Inventory catalog refreshed. Review queued counts for recount warnings.',
+                        tone: _pending.isEmpty
+                            ? AppNotificationTone.success
+                            : AppNotificationTone.warning,
                       );
                     }
-                    return;
-                  }
-                  await _sync();
-                  await _loadApprovalQueue();
-                  if (mounted && !_syncing) {
-                    showAppNotification(
-                      _pending.isEmpty
-                          ? 'Inventory catalog refreshed and counts synchronized.'
-                          : 'Inventory catalog refreshed. Review queued counts for recount warnings.',
-                      tone: _pending.isEmpty
-                          ? AppNotificationTone.success
-                          : AppNotificationTone.warning,
-                    );
-                  }
-                },
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                  children: [
-                    // Offline / Online Status Header
-                    _buildStatusBanner(),
-                    const SizedBox(height: 18),
+                  },
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                    children: [
+                      // Offline / Online Status Header
+                      _buildStatusBanner(),
+                      const SizedBox(height: 18),
 
-                    // Metrics Strip
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _AuditStatCard(
-                            label: 'CACHED SKUS',
-                            value: '${_catalog.length}',
-                            icon: Icons.dataset_rounded,
-                            accentColor: AppColors.cyan,
-                            subLabel: 'Available offline',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _AuditStatCard(
-                            label: 'PENDING QUEUE',
-                            value: '${_pending.length}',
-                            icon: Icons.cloud_upload_rounded,
-                            accentColor: _pending.isNotEmpty
-                                ? const Color(0xFFF59E0B)
-                                : const Color(0xFF10B981),
-                            subLabel: _pending.isNotEmpty
-                                ? 'Pending server sync'
-                                : 'Fully synchronized',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Scanner Viewport
-                    _buildScannerBox(),
-                    const SizedBox(height: 18),
-
-                    // Quick Catalog Chips
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 320),
-                      curve: Curves.easeOutCubic,
-                      child: _catalog.isEmpty
-                          ? const SizedBox.shrink()
-                          : Column(
-                              children: [
-                                SectionHeader(
-                                  'CACHED ITEMS',
-                                  trailing: Text('Tap to select',
-                                      style: AppTextStyles.caption
-                                          .copyWith(color: AppColors.cyan)),
-                                ),
-                                _buildCatalogChipCarousel(),
-                                const SizedBox(height: 18),
-                              ],
+                      // Metrics Strip
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _AuditStatCard(
+                              label: 'CACHED SKUS',
+                              value: '${_catalog.length}',
+                              icon: Icons.dataset_rounded,
+                              accentColor: AppColors.cyan,
+                              subLabel: 'Available offline',
                             ),
-                    ),
-
-                    // Physical Count Form
-                    _buildCountInputCard(),
-                    const SizedBox(height: 22),
-
-                    if (_approvalLoading || _approvalQueue.isNotEmpty) ...[
-                      SectionHeader(
-                        'LARGE DISCREPANCIES',
-                        trailing: Text(
-                            '${_approvalQueue.length} awaiting review',
-                            style: AppTextStyles.caption
-                                .copyWith(color: AppColors.warning)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _AuditStatCard(
+                              label: 'PENDING QUEUE',
+                              value: '${_pending.length}',
+                              icon: Icons.cloud_upload_rounded,
+                              accentColor: _pending.isNotEmpty
+                                  ? const Color(0xFFF59E0B)
+                                  : const Color(0xFF10B981),
+                              subLabel: _pending.isNotEmpty
+                                  ? 'Pending server sync'
+                                  : 'Fully synchronized',
+                            ),
+                          ),
+                        ],
                       ),
-                      if (_approvalLoading)
-                        const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Center(
-                            child: CircularProgressIndicator(
-                                color: AppColors.cyan),
-                          ),
-                        )
-                      else
-                        ..._approvalQueue.map(_buildApprovalCard),
-                      const SizedBox(height: 14),
-                    ],
+                      const SizedBox(height: 20),
 
-                    // Pending Queue List
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 350),
-                      curve: Curves.easeOutCubic,
-                      child: _pending.isEmpty
-                          ? const SizedBox.shrink()
-                          : Column(
-                              children: [
-                                SectionHeader(
-                                  'SAVED AUDIT QUEUE',
-                                  trailing: Text('${_pending.length} unsynced',
-                                      style: AppTextStyles.caption.copyWith(
-                                          color: const Color(0xFFF59E0B))),
-                                ),
-                                const SizedBox(height: 8),
-                                ..._pending.map(_buildPendingCard),
-                              ],
+                      // Scanner Viewport
+                      _buildScannerBox(),
+                      const SizedBox(height: 18),
+
+                      // Quick Catalog Chips
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeOutCubic,
+                        child: _catalog.isEmpty
+                            ? const SizedBox.shrink()
+                            : Column(
+                                children: [
+                                  SectionHeader(
+                                    'CACHED ITEMS',
+                                    trailing: Text('Tap to select',
+                                        style: AppTextStyles.caption
+                                            .copyWith(color: AppColors.cyan)),
+                                  ),
+                                  _buildCatalogChipCarousel(),
+                                  const SizedBox(height: 18),
+                                ],
+                              ),
+                      ),
+
+                      // Physical Count Form
+                      _buildCountInputCard(),
+                      const SizedBox(height: 22),
+
+                      if (_approvalLoading || _approvalQueue.isNotEmpty) ...[
+                        SectionHeader(
+                          'LARGE DISCREPANCIES',
+                          trailing: Text(
+                              '${_approvalQueue.length} awaiting review',
+                              style: AppTextStyles.caption
+                                  .copyWith(color: AppColors.warning)),
+                        ),
+                        if (_approvalLoading)
+                          const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                  color: AppColors.cyan),
                             ),
-                    ),
-                  ],
+                          )
+                        else
+                          ..._approvalQueue.map(_buildApprovalCard),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Pending Queue List
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 350),
+                        curve: Curves.easeOutCubic,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 260),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: (child, animation) =>
+                              FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, .04),
+                                end: Offset.zero,
+                              ).animate(animation),
+                              child: child,
+                            ),
+                          ),
+                          child: _pending.isEmpty
+                              ? const SizedBox.shrink(
+                                  key: ValueKey('stock-count-queue-empty'),
+                                )
+                              : Column(
+                                  key: ValueKey(_pending
+                                      .map((count) => count.id)
+                                      .join('|')),
+                                  children: [
+                                    SectionHeader(
+                                      'SAVED AUDIT QUEUE',
+                                      trailing: Text(
+                                          '${_pending.length} unsynced',
+                                          style: AppTextStyles.caption.copyWith(
+                                              color: const Color(0xFFF59E0B))),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ..._pending.map(_buildPendingCard),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+        ),
       ),
     );
   }
@@ -1251,150 +1307,210 @@ class _StockCountScreenState extends State<StockCountScreen>
           ),
 
           // Real-time Variance Preview Banner
-          if (matchedItem != null) ...[
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.glassFill,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.glassBorder),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOutCubic,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, .035),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              child: matchedItem != null
+                  ? Column(
+                      key: ValueKey('count-preview-${matchedItem.sku}'),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          matchedItem.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.subtitle.copyWith(fontSize: 13),
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.glassFill,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.glassBorder),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      matchedItem.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.subtitle
+                                          .copyWith(fontSize: 13),
+                                    ),
+                                    Text(
+                                      'System Record: ${_formatAuditQuantity(matchedItem.quantity)} ${matchedItem.unit}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.caption
+                                          .copyWith(color: AppColors.textMuted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (hasVariance)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: (variance == 0
+                                            ? const Color(0xFF10B981)
+                                            : variance > 0
+                                                ? AppColors.cyan
+                                                : const Color(0xFFF43F5E))
+                                        .withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    variance == 0
+                                        ? 'MATCHED (0)'
+                                        : variance > 0
+                                            ? '+${_formatAuditQuantity(variance)} SURPLUS'
+                                            : '${_formatAuditQuantity(variance)} DEFICIT',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: variance == 0
+                                          ? const Color(0xFF10B981)
+                                          : variance > 0
+                                              ? AppColors.cyan
+                                              : const Color(0xFFF43F5E),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                        Text(
-                          'System Record: ${_formatAuditQuantity(matchedItem.quantity)} ${matchedItem.unit}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.caption
-                              .copyWith(color: AppColors.textMuted),
-                        ),
+                        if (hasVariance) ...[
+                          const SizedBox(height: 10),
+                          _quantitySummary(
+                            matchedItem.quantity,
+                            physicalQty,
+                            variance,
+                            matchedItem.unit,
+                          ),
+                        ],
                       ],
+                    )
+                  : const SizedBox.shrink(
+                      key: ValueKey('count-preview-empty'),
                     ),
-                  ),
-                  if (hasVariance)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: (variance == 0
-                                ? const Color(0xFF10B981)
-                                : variance > 0
-                                    ? AppColors.cyan
-                                    : const Color(0xFFF43F5E))
-                            .withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        variance == 0
-                            ? 'MATCHED (0)'
-                            : variance > 0
-                                ? '+${_formatAuditQuantity(variance)} SURPLUS'
-                                : '${_formatAuditQuantity(variance)} DEFICIT',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: variance == 0
-                              ? const Color(0xFF10B981)
-                              : variance > 0
-                                  ? AppColors.cyan
-                                  : const Color(0xFFF43F5E),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
             ),
-            if (hasVariance) ...[
-              const SizedBox(height: 10),
-              _quantitySummary(
-                matchedItem.quantity,
-                physicalQty,
-                variance,
-                matchedItem.unit,
-              ),
-            ],
-          ],
+          ),
 
-          if (matchedItem != null && hasVariance && variance != 0) ...[
-            const SizedBox(height: 14),
-            DropdownButtonFormField<String>(
-              initialValue: _reason,
-              decoration: const InputDecoration(
-                labelText: 'Reason for discrepancy *',
-                filled: true,
-              ),
-              items: const [
-                DropdownMenuItem(
-                    value: 'DamagedStock', child: Text('Damaged stock')),
-                DropdownMenuItem(
-                    value: 'LostOrMissing', child: Text('Lost / missing')),
-                DropdownMenuItem(
-                    value: 'CountingError', child: Text('Counting error')),
-                DropdownMenuItem(
-                    value: 'SupplierShortage',
-                    child: Text('Supplier shortage')),
-                DropdownMenuItem(value: 'Other', child: Text('Other')),
-              ],
-              onChanged: (value) => setState(() => _reason = value),
-            ),
-            if (_reason == 'Other') ...[
-              const SizedBox(height: 10),
-              TextField(
-                controller: _reasonNotes,
-                maxLength: 1000,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Explain the discrepancy *',
-                  filled: true,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOutCubic,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, .04),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
                 ),
               ),
-            ],
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _selectedPhotos.length >= 3
-                  ? null
-                  : () => _showEvidenceSourcePicker(),
-              icon: const Icon(Icons.add_a_photo_outlined),
-              label: Text(
-                _selectedPhotos.isEmpty
-                    ? 'Add evidence photos (optional)'
-                    : 'Evidence photos (${_selectedPhotos.length}/3)',
-              ),
-            ),
-            if (_selectedPhotos.isNotEmpty)
-              Wrap(
-                spacing: 8,
-                children: List.generate(_selectedPhotos.length, (index) {
-                  return InputChip(
-                    label: Text(_selectedPhotos[index].name),
-                    onDeleted: () => setState(
-                      () => _selectedPhotos.removeAt(index),
+              child: matchedItem != null && hasVariance && variance != 0
+                  ? Column(
+                      key: ValueKey('count-reason-${matchedItem.sku}'),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 14),
+                        DropdownButtonFormField<String>(
+                          initialValue: _reason,
+                          decoration: const InputDecoration(
+                            labelText: 'Reason for discrepancy *',
+                            filled: true,
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'DamagedStock',
+                                child: Text('Damaged stock')),
+                            DropdownMenuItem(
+                                value: 'LostOrMissing',
+                                child: Text('Lost / missing')),
+                            DropdownMenuItem(
+                                value: 'CountingError',
+                                child: Text('Counting error')),
+                            DropdownMenuItem(
+                                value: 'SupplierShortage',
+                                child: Text('Supplier shortage')),
+                            DropdownMenuItem(
+                                value: 'Other', child: Text('Other')),
+                          ],
+                          onChanged: (value) => setState(() => _reason = value),
+                        ),
+                        if (_reason == 'Other') ...[
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _reasonNotes,
+                            maxLength: 1000,
+                            maxLines: 2,
+                            decoration: const InputDecoration(
+                              labelText: 'Explain the discrepancy *',
+                              filled: true,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: _selectedPhotos.length >= 3
+                              ? null
+                              : () => _showEvidenceSourcePicker(),
+                          icon: const Icon(Icons.add_a_photo_outlined),
+                          label: Text(
+                            _selectedPhotos.isEmpty
+                                ? 'Add evidence photos (optional)'
+                                : 'Evidence photos (${_selectedPhotos.length}/3)',
+                          ),
+                        ),
+                        if (_selectedPhotos.isNotEmpty)
+                          Wrap(
+                            spacing: 8,
+                            children:
+                                List.generate(_selectedPhotos.length, (index) {
+                              return InputChip(
+                                label: Text(_selectedPhotos[index].name),
+                                onDeleted: () => setState(
+                                  () => _selectedPhotos.removeAt(index),
+                                ),
+                              );
+                            }),
+                          ),
+                        if (_isLargeVariance(variance, matchedItem.quantity))
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'Manager approval required: adjustment is over 5 units or over 10% of system stock.',
+                              style: AppTextStyles.caption
+                                  .copyWith(color: AppColors.warning),
+                            ),
+                          ),
+                      ],
+                    )
+                  : const SizedBox.shrink(
+                      key: ValueKey('count-no-discrepancy'),
                     ),
-                  );
-                }),
-              ),
-            if (_isLargeVariance(variance, matchedItem.quantity))
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Manager approval required: adjustment is over 5 units or over 10% of system stock.',
-                  style:
-                      AppTextStyles.caption.copyWith(color: AppColors.warning),
-                ),
-              ),
-          ],
+            ),
+          ),
 
           const SizedBox(height: 20),
           NeonButton(

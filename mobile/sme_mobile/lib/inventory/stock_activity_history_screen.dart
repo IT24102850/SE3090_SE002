@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/ui/ui.dart';
+import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
 
 enum _MovementFilter { all, stockIn, stockOut }
@@ -77,7 +78,7 @@ class _StockActivityHistoryScreenState
     _loadMovements();
   }
 
-  Future<void> _loadMovements() async {
+  Future<void> _loadMovements({bool showRefreshFeedback = false}) async {
     setState(() {
       _loading = true;
       _loadError = null;
@@ -90,18 +91,32 @@ class _StockActivityHistoryScreenState
             'Could not load stock activity (server ${response.statusCode}).');
       }
       final payload = jsonDecode(response.body);
-      if (payload is! List) {
+      final records = switch (payload) {
+        List<dynamic> list => list,
+        Map<String, dynamic> page when page['items'] is List<dynamic> =>
+          page['items'] as List<dynamic>,
+        _ => null,
+      };
+      if (records == null) {
         throw const FormatException('Unexpected stock activity response.');
       }
-      final movements = payload
-          .whereType<Map<String, dynamic>>()
-          .map(_StockMovement.fromJson)
-          .toList();
+      final movements = records.map((record) {
+        if (record is! Map<String, dynamic>) {
+          throw const FormatException('Invalid stock activity record.');
+        }
+        return _StockMovement.fromJson(record);
+      }).toList();
       if (!mounted) return;
       setState(() {
         _movements = movements;
         _loading = false;
       });
+      if (showRefreshFeedback) {
+        showAppNotification(
+          'Stock activity refreshed successfully.',
+          tone: AppNotificationTone.success,
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -144,7 +159,9 @@ class _StockActivityHistoryScreenState
         title: 'Stock Activity',
         actions: [
           IconButton(
-            onPressed: _loading ? null : _loadMovements,
+            onPressed: _loading
+                ? null
+                : () => _loadMovements(showRefreshFeedback: true),
             tooltip: 'Refresh activity',
             icon: const Icon(Icons.refresh_rounded, color: AppColors.cyan),
           ),
@@ -152,7 +169,7 @@ class _StockActivityHistoryScreenState
       ),
       child: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _loadMovements,
+          onRefresh: () => _loadMovements(showRefreshFeedback: true),
           color: AppColors.cyan,
           backgroundColor: AppColors.overlaySurface,
           child: ListView(
@@ -204,7 +221,8 @@ class _StockActivityHistoryScreenState
                   title: 'Activity could not be loaded',
                   message: _loadError!,
                   action: TextButton.icon(
-                    onPressed: _loadMovements,
+                    onPressed: () =>
+                        _loadMovements(showRefreshFeedback: true),
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Try again'),
                   ),

@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +17,7 @@ const inventoryItem = {
   branch: 'Main branch',
   branchId: 'branch-1',
   quantity: 8,
+  reorderLevel: 6,
   unitCost: 50,
   sellingPrice: 75,
 };
@@ -115,8 +116,16 @@ describe('SalesPage', () => {
       expectedUnitCost: 50,
       reference: 'SALE-WEB-sale-reference-id',
     }));
-    expect(await screen.findByRole('heading', { name: 'Sale receipt' })).toBeInTheDocument();
-    expect(screen.getByText('LKR 150.00')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Sale recorded' })).toBeInTheDocument();
+    expect(screen.getAllByText('LKR 150.00')).toHaveLength(2);
+    expect(screen.getByText('PAID STATUS NOT RECORDED')).toBeInTheDocument();
+    expect(screen.getByText('INVENTORY UPDATE')).toBeInTheDocument();
+    expect(screen.getByText('Stock remaining: 6 kg')).toBeInTheDocument();
+    expect(screen.getByText(/does not confirm that payment was collected/i)).toBeInTheDocument();
+    expect(screen.getByText(/LOW STOCK/)).toBeInTheDocument();
+    const receiptDialog = screen.getByRole('dialog');
+    expect(within(receiptDialog).queryByText('Cost of goods')).not.toBeInTheDocument();
+    expect(within(receiptDialog).queryByText('Gross profit')).not.toBeInTheDocument();
   });
 
   it('shows matching items while typing and explains when there are no matches', async () => {

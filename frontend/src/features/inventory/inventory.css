@@ -1092,8 +1092,13 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .sales-hero .eyebrow { color: #84e6d1; }
 .inventory-scope .sales-stat-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; }
 .inventory-scope .sales-stat { display: grid; gap: .35rem; padding: 1rem 1.15rem; }
-.inventory-scope .sales-stat span { color: var(--color-text-secondary); font-size: .86rem; font-weight: 650; }
+.inventory-scope .sales-stat span { color: var(--color-text-secondary); font-size: .82rem; font-weight: 700; }
 .inventory-scope .sales-stat strong { color: var(--color-text); font-size: clamp(1.05rem, 2vw, 1.4rem); line-height: 1.3; overflow-wrap: anywhere; }
+.inventory-scope .sales-stat small { color: var(--color-text-muted); font-size: .73rem; line-height: 1.4; }
+.inventory-scope .sales-stat-revenue { border-top: 3px solid #16a39a; }
+.inventory-scope .sales-stat-profit { border-top: 3px solid #36a66a; }
+.inventory-scope .sales-stat-count { border-top: 3px solid #6688e8; }
+.inventory-scope .sales-stat-average { border-top: 3px solid #9b75d7; }
 .inventory-scope .sales-record-panel, .inventory-scope .sales-history-panel { min-width: 0; }
 .inventory-scope .sales-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding: 1.2rem; }
 .inventory-scope .sales-form .form-field { display: grid; align-content: start; gap: .45rem; color: var(--color-text); font-size: .9rem; font-weight: 700; }
@@ -1116,15 +1121,42 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .sales-total small { color: var(--color-text-secondary); font-size: .82rem; line-height: 1.45; }
 .inventory-scope .sales-submit { min-height: 46px; }
 .inventory-scope .sales-form .form-error { grid-column: 1 / -1; margin: 0; color: var(--color-critical); font-size: .88rem; font-weight: 650; }
+.inventory-scope .sales-item-picker { grid-column: 1 / -1; }
+.inventory-scope .sales-section-eyebrow { display: block; margin-bottom: .28rem; color: var(--color-primary); font-size: .67rem; font-weight: 800; letter-spacing: .1em; }
 .inventory-scope .sales-history-panel .data-table { min-width: 780px; }
-.inventory-scope .sales-receipt-overlay { z-index: calc(var(--z-modal) + 2); }
-.inventory-scope .sales-receipt-modal { width: min(100%, 620px); }
-.inventory-scope .sales-receipt-actions { align-items: center; }
-.inventory-scope .sales-receipt-actions > div { display: flex; gap: .5rem; flex-wrap: wrap; }
-.inventory-scope .sales-receipt-body { display: grid; gap: 0; }
-.inventory-scope .sales-receipt-body p { display: flex; gap: 1rem; justify-content: space-between; margin: 0; padding: .72rem 0; border-bottom: 1px solid var(--color-border); font-size: .92rem; line-height: 1.45; }
-.inventory-scope .sales-receipt-body p strong { flex: 0 0 38%; color: var(--color-text-secondary); }
-.inventory-scope .sales-receipt-body p span { text-align: right; overflow-wrap: anywhere; }
+.inventory-scope .sales-receipt-overlay { z-index: calc(var(--z-modal) + 2); overflow-y: auto; align-items: flex-start; }
+.inventory-scope .sales-receipt-modal { display: grid; gap: .8rem; width: min(100%, 760px); margin: auto; }
+.inventory-scope .sales-receipt-toolbar { display: flex; gap: .75rem; align-items: center; justify-content: space-between; padding: .7rem .9rem; color: var(--color-text-secondary); font-size: .82rem; font-weight: 700; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: .8rem; }
+.inventory-scope .sales-receipt-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.inventory-scope .sales-receipt-paper { display: grid; gap: 1.2rem; padding: clamp(1.15rem, 4vw, 2.1rem); color: #172033; background: #fff; border: 1px solid #e5eaf0; border-radius: 1rem; box-shadow: 0 20px 55px rgba(15, 23, 42, .2); }
+.inventory-scope .sales-receipt-paper-header { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; padding: 1.5rem; color: #fff; background: #101b2d; border-radius: .9rem; }
+.inventory-scope .sales-receipt-paper-header h2 { margin: .4rem 0 .25rem; color: #fff; font-size: 1.55rem; }
+.inventory-scope .sales-receipt-paper-header p { margin: 0; color: #c3d1e1; font-size: .85rem; }
+.inventory-scope .sales-receipt-kicker { color: #8cebf2; font-size: .7rem; font-weight: 800; letter-spacing: .17em; }
+.inventory-scope .sales-receipt-status { padding: .55rem .7rem; color: #8cebf2; text-align: center; background: #1e3148; border-radius: .55rem; font-size: .62rem; font-weight: 800; letter-spacing: .04em; }
+.inventory-scope .sales-receipt-metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.inventory-scope .sales-receipt-metadata > div { display: grid; gap: .32rem; min-width: 0; }
+.inventory-scope .sales-receipt-metadata > div:last-child { grid-column: 1 / -1; }
+.inventory-scope .sales-receipt-metadata span, .inventory-scope .sales-receipt-line-head, .inventory-scope .sales-receipt-inventory > span, .inventory-scope .sales-receipt-total > span { color: #667085; font-size: .66rem; font-weight: 800; letter-spacing: .1em; }
+.inventory-scope .sales-receipt-metadata strong { color: #172033; font-size: .88rem; overflow-wrap: anywhere; }
+.inventory-scope .sales-receipt-line-items { overflow: hidden; border: 1px solid #e5eaf0; border-radius: .7rem; }
+.inventory-scope .sales-receipt-line-head, .inventory-scope .sales-receipt-line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: .8rem; align-items: start; }
+.inventory-scope .sales-receipt-line-items:not(.has-unit-price) .sales-receipt-line-head, .inventory-scope .sales-receipt-line-items:not(.has-unit-price) .sales-receipt-line { grid-template-columns: minmax(0, 1fr) auto auto; }
+.inventory-scope .sales-receipt-line-head { padding: .75rem .9rem; background: #f4f8fb; }
+.inventory-scope .sales-receipt-line { padding: .9rem; color: #172033; font-size: .82rem; }
+.inventory-scope .sales-receipt-line > div { display: grid; gap: .25rem; min-width: 0; }
+.inventory-scope .sales-receipt-line > div strong, .inventory-scope .sales-receipt-line > strong { overflow-wrap: anywhere; }
+.inventory-scope .sales-receipt-line small { color: #667085; font-size: .73rem; }
+.inventory-scope .sales-receipt-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, .55fr); gap: 1rem; align-items: stretch; }
+.inventory-scope .sales-receipt-inventory { display: grid; align-content: center; gap: .5rem; padding: .9rem; background: #f4f8fb; border-radius: .65rem; }
+.inventory-scope .sales-receipt-inventory strong { color: #172033; font-size: .83rem; }
+.inventory-scope .sales-receipt-total { display: grid; align-content: center; gap: .4rem; padding: 1rem; color: #fff; background: #101b2d; border-radius: .7rem; }
+.inventory-scope .sales-receipt-total > span { color: #c3d1e1; }
+.inventory-scope .sales-receipt-total strong { font-size: 1.4rem; }
+.inventory-scope .sales-receipt-low-stock { margin: 0; padding: .75rem; color: #805500; background: #fff5d9; border-radius: .6rem; font-size: .8rem; font-weight: 750; }
+.inventory-scope .sales-receipt-footer { padding-top: .8rem; text-align: center; border-top: 1px solid #e5eaf0; }
+.inventory-scope .sales-receipt-footer p { margin: 0 0 .4rem; color: #667085; font-size: .75rem; line-height: 1.5; }
+.inventory-scope .sales-receipt-footer span { color: #00a0b8; font-size: .72rem; font-weight: 750; }
 .inventory-scope .po-detail-items { max-width: 100%; overflow-x: auto; }
 .inventory-scope .po-detail-items-table { min-width: 700px; width: 100%; }
 .inventory-scope .po-detail-items-table th, .inventory-scope .po-detail-items-table td { padding: .65rem .55rem; font-size: .84rem; line-height: 1.45; }
@@ -1137,14 +1169,29 @@ body:has(.inventory-scope) .app-shell::after,
   .inventory-scope .sales-hero { align-items: flex-start; flex-direction: column; padding: 1.15rem; }
   .inventory-scope .sales-hero .page-actions { width: 100%; }
   .inventory-scope .sales-hero .page-actions .btn { width: 100%; min-height: 44px; }
+  .inventory-scope .sales-receipt-paper-header, .inventory-scope .sales-receipt-toolbar { align-items: stretch; flex-direction: column; }
+  .inventory-scope .sales-receipt-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .inventory-scope .sales-receipt-actions .btn { min-height: 42px; }
+  .inventory-scope .sales-receipt-metadata, .inventory-scope .sales-receipt-summary { grid-template-columns: minmax(0, 1fr); }
+  .inventory-scope .sales-receipt-metadata > div:last-child { grid-column: auto; }
+  .inventory-scope .sales-receipt-line-head, .inventory-scope .sales-receipt-line { grid-template-columns: minmax(0, 1fr) auto; }
+  .inventory-scope .sales-receipt-line-items.has-unit-price .sales-receipt-line-head > :nth-child(3), .inventory-scope .sales-receipt-line-items.has-unit-price .sales-receipt-line > :nth-child(3) { display: none; }
 }
 @media print {
+  @page { size: A4; margin: 12mm; }
   body:has(.sales-receipt-overlay) * { visibility: hidden !important; }
   body:has(.sales-receipt-overlay) .sales-receipt-overlay,
-  body:has(.sales-receipt-overlay) .sales-receipt-overlay * { visibility: visible !important; }
-  .inventory-scope .sales-receipt-overlay { position: static; display: block; padding: 0; background: #fff; }
-  .inventory-scope .sales-receipt-modal { width: 100%; max-height: none; box-shadow: none; }
-  .inventory-scope .sales-receipt-actions > div, .inventory-scope .sales-receipt-actions > button { display: none !important; }
+  body:has(.sales-receipt-overlay) .sales-receipt-paper,
+  body:has(.sales-receipt-overlay) .sales-receipt-paper * { visibility: visible !important; }
+  body:has(.sales-receipt-overlay) { background: #fff !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .inventory-scope .sales-receipt-overlay { position: static !important; display: block !important; width: 100% !important; min-height: 0 !important; padding: 0 !important; overflow: visible !important; background: #fff !important; }
+  .inventory-scope .sales-receipt-modal { display: block !important; width: 100% !important; max-width: none !important; margin: 0 !important; }
+  .inventory-scope .sales-receipt-toolbar { display: none !important; }
+  .inventory-scope .sales-receipt-paper { display: grid !important; gap: 1rem !important; width: 100% !important; padding: 0 !important; color: #172033 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; break-inside: avoid; }
+  .inventory-scope .sales-receipt-paper-header, .inventory-scope .sales-receipt-total { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .inventory-scope .sales-receipt-paper-header { flex-direction: row !important; padding: 18px !important; }
+  .inventory-scope .sales-receipt-actions { display: none !important; }
+  .inventory-scope .sales-receipt-line-items, .inventory-scope .sales-receipt-summary, .inventory-scope .sales-receipt-metadata { break-inside: avoid; }
 }
 @media (prefers-reduced-motion: reduce) { .inventory-scope .purchase-orders-hero::after, .inventory-scope .purchase-orders-hero-art i { animation: none; }.inventory-scope .purchase-order-metric, .inventory-scope .purchase-orders-refresh, .inventory-scope .purchase-orders-create { transition: none; } }
 

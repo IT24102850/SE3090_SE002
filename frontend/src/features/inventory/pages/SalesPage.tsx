@@ -16,6 +16,7 @@ type InventoryItem = {
   branch?: string;
   branchId?: string | null;
   quantity: number;
+  reorderLevel?: number;
   unitCost: number | null;
   sellingPrice: number | null;
 };
@@ -52,6 +53,7 @@ type SaleReceipt = {
   costOfGoodsSold: number;
   grossProfit: number;
   remainingQuantity: number;
+  reorderLevel: number;
   occurredAt: string;
 };
 
@@ -68,6 +70,20 @@ function money(value: number | null | undefined) {
 
 function quantity(value: number) {
   return value.toLocaleString('en-LK', { maximumFractionDigits: 3 });
+}
+
+function receiptDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date unavailable';
+  const local = date.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return local.replace(',', '');
 }
 
 function hasSupportedQuantityPrecision(value: number) {
@@ -218,6 +234,7 @@ export function SalesPage() {
         costOfGoodsSold: result.costOfGoodsSold,
         grossProfit: result.grossProfit,
         remainingQuantity: result.remainingQuantity,
+        reorderLevel: selectedItem.reorderLevel ?? 0,
         occurredAt: result.occurredAt,
       });
       setAmount('1');
@@ -247,10 +264,10 @@ export function SalesPage() {
       </header>
 
       <section className="stat-strip sales-stat-strip" aria-label="Sales summary for the last seven days">
-        <article className="panel sales-stat"><span>7-day revenue</span><strong>{money(report?.totalRevenue)}</strong></article>
-        <article className="panel sales-stat"><span>Gross profit</span><strong>{money(report?.grossProfit)}</strong></article>
-        <article className="panel sales-stat"><span>Sales recorded</span><strong>{report?.salesCount ?? '—'}</strong></article>
-        <article className="panel sales-stat"><span>Average sale</span><strong>{money(report?.averageSale)}</strong></article>
+        <article className="panel sales-stat sales-stat-revenue"><span>7-day revenue</span><strong>{money(report?.totalRevenue)}</strong><small>Sales total for the last seven days</small></article>
+        <article className="panel sales-stat sales-stat-profit"><span>Gross profit</span><strong>{money(report?.grossProfit)}</strong><small>Revenue after recorded item costs</small></article>
+        <article className="panel sales-stat sales-stat-count"><span>Sales recorded</span><strong>{report?.salesCount ?? '—'}</strong><small>Transactions in this period</small></article>
+        <article className="panel sales-stat sales-stat-average"><span>Average sale</span><strong>{money(report?.averageSale)}</strong><small>Average transaction value</small></article>
       </section>
 
       {user?.role !== 'Admin' && user?.role !== 'Manager' && (
@@ -259,7 +276,7 @@ export function SalesPage() {
 
       <section className="panel sales-record-panel">
         <div className="panel-head">
-          <div><h2>Record a sale</h2><p>Prices are locked to the catalog; stock and pricing are rechecked when saved.</p></div>
+          <div><span className="sales-section-eyebrow">NEW TRANSACTION</span><h2>Record a sale</h2><p>Choose an in-stock item, review the total, and confirm. Catalog prices stay locked.</p></div>
           <Badge tone="blue">Live stock</Badge>
         </div>
         <div className="sales-form">
@@ -362,7 +379,7 @@ export function SalesPage() {
       </section>
 
       <section className="panel sales-history-panel">
-        <div className="panel-head"><div><h2>Recent sales &amp; receipts</h2><p>Latest recorded sales in the last seven days.</p></div></div>
+        <div className="panel-head"><div><span className="sales-section-eyebrow">TRANSACTION HISTORY</span><h2>Recent sales &amp; receipts</h2><p>Open a sale receipt to print it or save it as a PDF.</p></div><Badge tone="blue">Last 7 days</Badge></div>
         {loading && !report ? <p className="empty-state">Loading sales…</p> : (
           <div className="table-wrap">
             <table className="data-table">
@@ -398,34 +415,54 @@ export function SalesPage() {
 
       {receipt && (
         <div className="modal-overlay sales-receipt-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReceipt(null); }}>
-          <section className="modal sales-receipt-modal" role="dialog" aria-modal="true" aria-labelledby="sales-receipt-title">
-            <div className="modal-header sales-receipt-actions">
-              <h2 id="sales-receipt-title">Sale receipt</h2>
-              <div><button className="btn btn-secondary" type="button" onClick={() => window.print()}>Print / Save PDF</button><button className="btn btn-secondary" type="button" onClick={() => setReceipt(null)}>Close</button></div>
+          <section className="sales-receipt-modal" role="dialog" aria-modal="true" aria-labelledby="sales-receipt-title">
+            <div className="sales-receipt-toolbar">
+              <span>Receipt preview</span>
+              <div className="sales-receipt-actions">
+                <button className="btn btn-primary" type="button" onClick={() => window.print()}>Print / Save PDF</button>
+                <button className="btn btn-secondary" type="button" onClick={() => setReceipt(null)} aria-label="Close receipt">Close</button>
+              </div>
             </div>
-            <div className="modal-body sales-receipt-body">
-              <p><strong>Reference</strong><span>{receipt.reference}</span></p>
-              <p><strong>Date</strong><span>{new Date(receipt.occurredAt).toLocaleString('en-LK')}</span></p>
-              {'itemName' in receipt ? (
-                <>
-                  <p><strong>Item</strong><span>{receipt.itemName} · {receipt.sku}</span></p>
-                  <p><strong>Branch</strong><span>{receipt.branch}</span></p>
-                  <p><strong>Quantity</strong><span>{quantity(receipt.quantity)} {receipt.unit}</span></p>
-                  <p><strong>Unit price</strong><span>{money(receipt.unitPrice)}</span></p>
-                  <p><strong>Total</strong><span>{money(receipt.amount)}</span></p>
-                  <p><strong>Cost of goods</strong><span>{money(receipt.costOfGoodsSold)}</span></p>
-                  <p><strong>Gross profit</strong><span>{money(receipt.grossProfit)}</span></p>
-                  <p><strong>Stock remaining</strong><span>{quantity(receipt.remainingQuantity)} {receipt.unit}</span></p>
-                </>
-              ) : (
-                <>
-                  <p><strong>Items</strong><span>{receipt.items.join(', ') || 'Inventory sale'}</span></p>
-                  <p><strong>Quantity</strong><span>{quantity(receipt.quantity)} total units</span></p>
-                  <p><strong>Sale total</strong><span>{money(receipt.amount)}</span></p>
-                  <p><strong>Gross profit</strong><span>{money(receipt.grossProfit)}</span></p>
-                </>
+            <article className="sales-receipt-paper">
+              <header className="sales-receipt-paper-header">
+                <div>
+                  <span className="sales-receipt-kicker">SALES RECEIPT</span>
+                  <h2 id="sales-receipt-title">Sale recorded</h2>
+                  <p>Inventory transaction receipt</p>
+                </div>
+                <span className="sales-receipt-status">PAID STATUS NOT RECORDED</span>
+              </header>
+              <div className="sales-receipt-metadata">
+                <div><span>REFERENCE</span><strong>{receipt.reference}</strong></div>
+                <div><span>DATE &amp; TIME</span><strong>{receiptDate(receipt.occurredAt)}</strong></div>
+                <div><span>BRANCH</span><strong>{'branch' in receipt ? receipt.branch : 'Not included in the sales report'}</strong></div>
+              </div>
+              <div className={`sales-receipt-line-items${'itemName' in receipt ? ' has-unit-price' : ''}`}>
+                <div className="sales-receipt-line-head">
+                  <span>ITEM</span><span>QTY</span>{'itemName' in receipt && <span>UNIT PRICE</span>}<span>AMOUNT</span>
+                </div>
+                <div className="sales-receipt-line">
+                  <div><strong>{'itemName' in receipt ? receipt.itemName : receipt.items.join(', ') || 'Inventory sale'}</strong>{'itemName' in receipt && <small>SKU {receipt.sku}</small>}</div>
+                  <span>{'itemName' in receipt ? `${quantity(receipt.quantity)} ${receipt.unit}` : `Qty ${quantity(receipt.quantity)}`}</span>
+                  {'itemName' in receipt && <span>{money(receipt.unitPrice)}</span>}
+                  <strong>{money(receipt.amount)}</strong>
+                </div>
+              </div>
+              <div className="sales-receipt-summary">
+                <div className="sales-receipt-inventory">
+                  <span>{'remainingQuantity' in receipt ? 'INVENTORY UPDATE' : 'SALE RECORD'}</span>
+                  <strong>{'remainingQuantity' in receipt ? `Stock remaining: ${quantity(receipt.remainingQuantity)} ${receipt.unit}` : 'Saved sale transaction'}</strong>
+                </div>
+                <div className="sales-receipt-total"><span>TOTAL</span><strong>{money(receipt.amount)}</strong></div>
+              </div>
+              {'remainingQuantity' in receipt && receipt.remainingQuantity <= receipt.reorderLevel && (
+                <p className="sales-receipt-low-stock">LOW STOCK | Remaining quantity is at or below the reorder level.</p>
               )}
-            </div>
+              <footer className="sales-receipt-footer">
+                <p>This receipt confirms an inventory sale record only. It does not confirm that payment was collected.</p>
+                <span>Generated by SME Web</span>
+              </footer>
+            </article>
           </section>
         </div>
       )}

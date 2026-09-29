@@ -86,6 +86,7 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _selectItem(InventoryItem item) {
+    HapticFeedback.selectionClick();
     setState(() {
       _selectedItem = item;
       _itemPickerExpanded = false;
@@ -95,10 +96,8 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildItemPicker() {
-    final canSearch = !_saving &&
-        !_loading &&
-        _inventoryLoaded &&
-        _availableItems.isNotEmpty;
+    final canSearch =
+        !_saving && !_loading && _inventoryLoaded && _availableItems.isNotEmpty;
     final matches = _matchingAvailableItems;
 
     return Column(
@@ -144,117 +143,156 @@ class _SalesScreenState extends State<SalesScreen> {
               ? (_) => setState(() => _itemPickerExpanded = true)
               : null,
         ),
-        if (_itemPickerExpanded && canSearch) ...[
-          const SizedBox(height: 7),
-          Container(
-            key: const Key('sale-item-search-results'),
-            constraints: const BoxConstraints(maxHeight: 270),
-            decoration: BoxDecoration(
-              color: AppColors.bgMid,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.glassBorder),
-            ),
-            child: matches.isEmpty
+        if (canSearch)
+          AnimatedSize(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            child: _itemPickerExpanded
                 ? Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Text(
-                      'No matching in-stock items. Try another name, SKU, category or branch.',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textMuted,
-                        height: 1.4,
+                    key: const ValueKey('sale-picker-open'),
+                    padding: const EdgeInsets.only(top: 7),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0, -0.04),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      ),
+                      child: Container(
+                        key: ValueKey(
+                            'sale-item-search-${matches.isEmpty ? 'empty' : 'results'}'),
+                        constraints: const BoxConstraints(maxHeight: 270),
+                        decoration: BoxDecoration(
+                          color: AppColors.bgMid,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.glassBorder),
+                        ),
+                        child: matches.isEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Text(
+                                  'No matching in-stock items. Try another name, SKU, category or branch.',
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.textMuted,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                shrinkWrap: true,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                itemCount: matches.length,
+                                separatorBuilder: (_, __) => const Divider(
+                                  height: 1,
+                                  indent: 14,
+                                  endIndent: 14,
+                                  color: AppColors.hairline,
+                                ),
+                                itemBuilder: (context, index) {
+                                  final item = matches[index];
+                                  return InkWell(
+                                    key: Key('sale-item-option-${item.id}'),
+                                    onTap: () => _selectItem(item),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 13,
+                                        vertical: 10,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 36,
+                                            height: 36,
+                                            decoration: BoxDecoration(
+                                              color: AppColors.cyan
+                                                  .withValues(alpha: .1),
+                                              borderRadius:
+                                                  BorderRadius.circular(11),
+                                            ),
+                                            child: const Icon(
+                                              Icons.inventory_2_outlined,
+                                              color: AppColors.cyan,
+                                              size: 18,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  item.name,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: AppTextStyles.body
+                                                      .copyWith(
+                                                    color:
+                                                        AppColors.textPrimary,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  '${item.sku} · ${item.category} · ${item.branch}',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: AppTextStyles.caption
+                                                      .copyWith(
+                                                    color: AppColors.textMuted,
+                                                    fontSize: 9,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  '${_quantity(item.quantity)} ${item.unit} available'
+                                                  '${item.sellingPrice == null ? ' · Price not set' : ' · LKR ${_money(item.sellingPrice!)}'}',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: AppTextStyles.caption
+                                                      .copyWith(
+                                                    color: item.sellingPrice ==
+                                                            null
+                                                        ? AppColors.warning
+                                                        : AppColors
+                                                            .textSecondary,
+                                                    fontSize: 9,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          const Icon(
+                                            Icons.chevron_right_rounded,
+                                            color: AppColors.textMuted,
+                                            size: 19,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                       ),
                     ),
                   )
-                : ListView.separated(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: matches.length,
-                    separatorBuilder: (_, __) => const Divider(
-                      height: 1,
-                      indent: 14,
-                      endIndent: 14,
-                      color: AppColors.hairline,
-                    ),
-                    itemBuilder: (context, index) {
-                      final item = matches[index];
-                      return InkWell(
-                        key: Key('sale-item-option-${item.id}'),
-                        onTap: () => _selectItem(item),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 13,
-                            vertical: 10,
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: AppColors.cyan.withValues(alpha: .1),
-                                  borderRadius: BorderRadius.circular(11),
-                                ),
-                                child: const Icon(
-                                  Icons.inventory_2_outlined,
-                                  color: AppColors.cyan,
-                                  size: 18,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppTextStyles.body.copyWith(
-                                        color: AppColors.textPrimary,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      '${item.sku} · ${item.category} · ${item.branch}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppTextStyles.caption.copyWith(
-                                        color: AppColors.textMuted,
-                                        fontSize: 9,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      '${_quantity(item.quantity)} ${item.unit} available'
-                                      '${item.sellingPrice == null ? ' · Price not set' : ' · LKR ${_money(item.sellingPrice!)}'}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppTextStyles.caption.copyWith(
-                                        color: item.sellingPrice == null
-                                            ? AppColors.warning
-                                            : AppColors.textSecondary,
-                                        fontSize: 9,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              const Icon(
-                                Icons.chevron_right_rounded,
-                                color: AppColors.textMuted,
-                                size: 19,
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                : const SizedBox.shrink(
+                    key: ValueKey('sale-picker-closed'),
                   ),
           ),
-        ],
       ],
     );
   }
@@ -1096,23 +1134,44 @@ class _SalesScreenState extends State<SalesScreen> {
                       letterSpacing: .6,
                     )),
                 const SizedBox(height: 3),
-                Text('LKR ${_money(total)}',
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, .15),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: Text(
+                    'LKR ${_money(total)}',
+                    key: ValueKey(total),
                     style: AppTextStyles.subtitle.copyWith(
                       color: AppColors.violet,
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                    )),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                'Profit: ${profit == null ? 'Set cost on web' : 'LKR ${_money(profit)}'}',
-                style: AppTextStyles.caption.copyWith(
-                  color: profit == null ? AppColors.warning : AppColors.success,
-                  fontSize: 9,
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                child: Text(
+                  'Profit: ${profit == null ? 'Set cost on web' : 'LKR ${_money(profit)}'}',
+                  key: ValueKey(profit),
+                  style: AppTextStyles.caption.copyWith(
+                    color:
+                        profit == null ? AppColors.warning : AppColors.success,
+                    fontSize: 9,
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
