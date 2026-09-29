@@ -98,8 +98,9 @@ type PurchaseOrderItemOption = {
   id: string;
   name: string;
   sku: string;
-  unitCost?: number;
+  unitCost?: number | null;
   branchId?: string | null;
+  supplierId?: string | null;
 };
 
 type PurchaseOrderOptionsResponse = {
@@ -426,12 +427,18 @@ function CreatePoModal({
   const [branchId, setBranchId] = useState(defaultBranchId && branches.some((branch) => branch.id === defaultBranchId)
     ? defaultBranchId
     : branches[0]?.id ?? '');
-  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '');
+  const itemForReorder = inventoryItems.find((item) => item.id === initialInventoryItemId);
+  const initialSupplierId = suppliers.some((supplier) => supplier.id === itemForReorder?.supplierId)
+    ? itemForReorder!.supplierId!
+    : suppliers[0]?.id ?? '';
+  const [supplierId, setSupplierId] = useState(initialSupplierId);
   const [poNumber, setPoNumber] = useState(defaultNumber);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const branchInventoryItems = inventoryItems.filter((item) => item.branchId === branchId);
+  const branchInventoryItems = inventoryItems.filter(
+    (item) => item.branchId === branchId && item.supplierId === supplierId,
+  );
   const initialItem = branchInventoryItems.find((item) => item.id === initialInventoryItemId) ?? branchInventoryItems[0];
   const [items, setItems] = useState<PoItemDraft[]>([
     {
@@ -482,13 +489,35 @@ function CreatePoModal({
   }
 
   function changeBranch(nextBranchId: string) {
-    const nextBranchItems = inventoryItems.filter((item) => item.branchId === nextBranchId);
+    const nextBranchItems = inventoryItems.filter(
+      (item) => item.branchId === nextBranchId && item.supplierId === supplierId,
+    );
     setBranchId(nextBranchId);
     setItems((current) => current.map((row) => {
-      if (!row.inventoryItemId || inventoryItems.some((item) => item.id === row.inventoryItemId && item.branchId === nextBranchId)) {
+      if (!row.inventoryItemId || inventoryItems.some((item) =>
+        item.id === row.inventoryItemId &&
+        item.branchId === nextBranchId &&
+        item.supplierId === supplierId)) {
         return row;
       }
       const replacement = nextBranchItems[0];
+      return {
+        ...row,
+        inventoryItemId: replacement?.id ?? '',
+        description: replacement?.name ?? '',
+        unitPrice: replacement?.unitCost ?? 0,
+      };
+    }));
+  }
+
+  function changeSupplier(nextSupplierId: string) {
+    const nextSupplierItems = inventoryItems.filter(
+      (item) => item.branchId === branchId && item.supplierId === nextSupplierId,
+    );
+    setSupplierId(nextSupplierId);
+    setItems((current) => current.map((row) => {
+      if (!row.inventoryItemId) return row;
+      const replacement = nextSupplierItems[0];
       return {
         ...row,
         inventoryItemId: replacement?.id ?? '',
@@ -531,6 +560,17 @@ function CreatePoModal({
       if (!item.inventoryItemId && !item.description.trim()) {
         setError(`Item #${i + 1} requires an inventory item or custom description.`);
         return;
+      }
+      if (item.inventoryItemId) {
+        const catalogItem = branchInventoryItems.find((candidate) => candidate.id === item.inventoryItemId);
+        if (!catalogItem || catalogItem.unitCost == null) {
+          setError(`Item #${i + 1} is not linked to this supplier and branch or has no catalog unit cost.`);
+          return;
+        }
+        if (Number(item.unitPrice) !== catalogItem.unitCost) {
+          setError(`Item #${i + 1} price must match its catalog unit cost.`);
+          return;
+        }
       }
       if (Number(item.quantity) <= 0) {
         setError(`Item #${i + 1} quantity must be greater than 0.`);
@@ -588,7 +628,7 @@ function CreatePoModal({
             </label>
             <label className="form-field form-field-wide">
               Supplier
-              <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required>
+              <select value={supplierId} onChange={(event) => changeSupplier(event.target.value)} required>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </label>
@@ -623,12 +663,13 @@ function CreatePoModal({
                         <select
                           value={row.inventoryItemId || 'custom'}
                           onChange={(e) => handleItemSelect(idx, e.target.value)}
+                          aria-label={`Inventory item for line ${idx + 1}`}
                           style={{ marginBottom: isCustom ? '0.35rem' : '0' }}
                         >
                           <option value="custom">-- Custom Description --</option>
                           {branchInventoryItems.map((inv) => (
                             <option key={inv.id} value={inv.id}>
-                              {inv.name} ({inv.sku})
+                              {inv.name} ({inv.sku}){inv.unitCost == null ? ' · cost not set' : ''}
                             </option>
                           ))}
                         </select>
@@ -645,10 +686,11 @@ function CreatePoModal({
                       <td>
                         <input
                           type="number"
-                          min={1}
-                          step={1}
+                          min="0.001"
+                          step="0.001"
                           value={row.quantity}
                           onChange={(e) => handleFieldChange(idx, 'quantity', Number(e.target.value))}
+                          aria-label={`Quantity for line ${idx + 1}`}
                           required
                         />
                       </td>
@@ -656,9 +698,12 @@ function CreatePoModal({
                         <input
                           type="number"
                           min={0}
-                          step={1}
+                          step="0.01"
                           value={row.unitPrice}
                           onChange={(e) => handleFieldChange(idx, 'unitPrice', Number(e.target.value))}
+                          readOnly={!isCustom}
+                          aria-label={`Unit price for line ${idx + 1}${isCustom ? '' : ' (catalog locked)'}`}
+                          title={isCustom ? 'Custom line price' : 'Catalog unit cost is locked'}
                           required
                         />
                       </td>

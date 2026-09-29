@@ -46,6 +46,7 @@ const InventoryManagerPage = lazy(() => import('./features/inventory/pages/Inven
 const SuppliersPage = lazy(() => import('./features/inventory/pages/SuppliersPage').then((m) => ({ default: m.SuppliersPage })));
 const StockMovementLogPage = lazy(() => import('./features/inventory/pages/StockMovementLogPage').then((m) => ({ default: m.StockMovementLogPage })));
 const PurchaseOrderManagerPage = lazy(() => import('./features/inventory/pages/PurchaseOrderManagerPage').then((m) => ({ default: m.PurchaseOrderManagerPage })));
+const SalesPage = lazy(() => import('./features/inventory/pages/SalesPage').then((m) => ({ default: m.SalesPage })));
 const AgentWorkflowMonitorPage = lazy(() => import('./features/inventory/pages/AgentWorkflowMonitor').then((m) => ({ default: m.AgentWorkflowMonitorPage })));
 const LowStockAlertsPage = lazy(() => import('./features/inventory/pages/LowStockAlertsPage').then((m) => ({ default: m.LowStockAlertsPage })));
 const BranchOverviewPage = lazy(() => import('./features/inventory/pages/BranchOverviewPage').then((m) => ({ default: m.BranchOverviewPage })));
@@ -401,6 +402,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
                     <InventoryShell><PurchaseOrderManagerPage /></InventoryShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/sales"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <InventoryShell><SalesPage /></InventoryShell>
                   </ProtectedRoute>
                 }
               />

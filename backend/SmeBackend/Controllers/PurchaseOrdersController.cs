@@ -242,6 +242,20 @@ public sealed class PurchaseOrdersController(
                             "Choose an inventory item assigned to the purchase order's destination branch.");
                         return ValidationProblem(ModelState);
                     }
+                    if (invItem.SupplierId != request.SupplierId)
+                    {
+                        ModelState.AddModelError(
+                            $"items[{i}].inventoryItemId",
+                            "Choose an inventory item assigned to the purchase order's supplier.");
+                        return ValidationProblem(ModelState);
+                    }
+                    if (!invItem.UnitCost.HasValue || itemReq.UnitPrice != invItem.UnitCost.Value)
+                    {
+                        ModelState.AddModelError(
+                            $"items[{i}].unitPrice",
+                            "The unit price for a catalog item must match its current catalog unit cost.");
+                        return ValidationProblem(ModelState);
+                    }
                     if (string.IsNullOrWhiteSpace(desc))
                     {
                         desc = invItem.Name;

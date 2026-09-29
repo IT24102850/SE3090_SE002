@@ -4,7 +4,7 @@ import { getStoredToken } from '../authToken';
 import { useToast } from '../ui/ToastContext';
 import { Icon } from '../ui/Icon';
 
-type MovementType = 'Receive' | 'Issue' | 'Waste' | 'Adjustment';
+type MovementType = 'Receive' | 'Sale' | 'Issue' | 'Waste' | 'Adjustment';
 
 type MovementEntry = {
   id: string;
@@ -17,15 +17,17 @@ type MovementEntry = {
   reference?: string;
   notes?: string;
   performedBy?: string;
+  supplierName?: string;
 };
 
 const PAGE_SIZE = 8;
 
-const movementTypes = ['All types', 'Receive', 'Issue', 'Waste', 'Adjustment'] as const;
+const movementTypes = ['All types', 'Receive', 'Sale', 'Issue', 'Waste', 'Adjustment'] as const;
 type MovementTypeFilter = (typeof movementTypes)[number];
 
 const typeTone: Record<MovementType, BadgeTone> = {
   Receive: 'green',
+  Sale: 'red',
   Issue: 'red',
   Waste: 'red',
   Adjustment: 'amber',
@@ -33,7 +35,7 @@ const typeTone: Record<MovementType, BadgeTone> = {
 
 function normalizeMovementType(value: unknown): MovementType {
   if (value === 'PurchaseReceived') return 'Receive';
-  if (value === 'Receive' || value === 'Issue' || value === 'Waste' || value === 'Adjustment') return value;
+  if (value === 'Receive' || value === 'Sale' || value === 'Issue' || value === 'Waste' || value === 'Adjustment') return value;
   return 'Adjustment';
 }
 
@@ -79,6 +81,7 @@ export function StockMovementLogPage() {
         reference: movement.reference ?? undefined,
         notes: movement.notes ?? undefined,
         performedBy: movement.performedBy ?? undefined,
+        supplierName: movement.supplierName ?? undefined,
       })));
       return true;
     } catch (error) {
@@ -112,7 +115,9 @@ export function StockMovementLogPage() {
         row.sku.toLowerCase().includes(queryLower) ||
         row.reference?.toLowerCase().includes(queryLower) ||
         row.reasonLabel.toLowerCase().includes(queryLower) ||
-        row.notes?.toLowerCase().includes(queryLower);
+        row.notes?.toLowerCase().includes(queryLower) ||
+        row.performedBy?.toLowerCase().includes(queryLower) ||
+        row.supplierName?.toLowerCase().includes(queryLower);
       const matchesFrom = fromMs === null || occurredMs >= fromMs;
       const matchesTo = toMs === null || occurredMs <= toMs;
       return matchesQuery && matchesFrom && matchesTo;
@@ -125,7 +130,7 @@ export function StockMovementLogPage() {
   const movementTypeCounts = useMemo(() => ({
     all: contextFiltered.length,
     received: contextFiltered.filter((row) => row.movementType === 'Receive').length,
-    issued: contextFiltered.filter((row) => row.movementType === 'Issue').length,
+    issued: contextFiltered.filter((row) => row.movementType === 'Sale' || row.movementType === 'Issue').length,
     wasted: contextFiltered.filter((row) => row.movementType === 'Waste').length,
     adjusted: contextFiltered.filter((row) => row.movementType === 'Adjustment').length,
   }), [contextFiltered]);
@@ -148,7 +153,7 @@ export function StockMovementLogPage() {
 
   const stats = useMemo(() => {
     const received = filtered.filter((row) => row.movementType === 'Receive' && row.quantity > 0).reduce((sum, row) => sum + row.quantity, 0);
-    const issued = filtered.filter((row) => (row.movementType === 'Issue' || row.movementType === 'Waste') && row.quantity < 0).reduce((sum, row) => sum + Math.abs(row.quantity), 0);
+    const issued = filtered.filter((row) => (row.movementType === 'Sale' || row.movementType === 'Issue' || row.movementType === 'Waste') && row.quantity < 0).reduce((sum, row) => sum + Math.abs(row.quantity), 0);
     const net = filtered.reduce((sum, row) => sum + row.quantity, 0);
     return {
       count: filtered.length,
@@ -156,7 +161,7 @@ export function StockMovementLogPage() {
       issued,
       net,
       receives: filtered.filter((row) => row.movementType === 'Receive').length,
-      issues: filtered.filter((row) => row.movementType === 'Issue').length,
+      issues: filtered.filter((row) => row.movementType === 'Sale' || row.movementType === 'Issue').length,
       wastes: filtered.filter((row) => row.movementType === 'Waste').length,
       adjustments: filtered.filter((row) => row.movementType === 'Adjustment').length,
     };

@@ -411,7 +411,7 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .user-chip-avatar { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; color: var(--color-surface); font-size: .72rem; font-weight: 800; background: var(--color-text-secondary); border-radius: .45rem; }
 
 /* Purchase order manager */
-.inventory-scope .po-layout { display: grid; grid-template-columns: 1fr 360px; gap: 1rem; align-items: start; }
+.inventory-scope .po-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(330px, 420px); gap: 1rem; align-items: start; }
 .inventory-scope .po-detail-panel { position: sticky; top: 1rem; min-height: 420px; }
 .inventory-scope .po-detail-body { padding: 1rem 1.25rem 1.25rem; }
 .inventory-scope .po-detail-empty { display: grid; place-items: center; min-height: 320px; padding: 2rem; color: var(--color-text-muted); text-align: center; }
@@ -425,8 +425,8 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .status-timeline li { display: grid; grid-template-columns: auto 1fr; gap: .75rem; align-items: start; }
 .inventory-scope .timeline-marker { width: .55rem; height: .55rem; margin-top: .35rem; background: var(--color-primary); border-radius: 50%; box-shadow: 0 0 0 3px var(--color-primary-soft); }
 .inventory-scope .timeline-head { display: flex; gap: .5rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
-.inventory-scope .timeline-user { margin: .25rem 0 0; color: var(--color-text-secondary); font-size: .8rem; font-weight: 650; }
-.inventory-scope .timeline-note { margin: .2rem 0 0; color: var(--color-text-secondary); font-size: .78rem; }
+.inventory-scope .timeline-user { margin: .25rem 0 0; color: var(--color-text-secondary); font-size: .88rem; font-weight: 650; line-height: 1.45; }
+.inventory-scope .timeline-note { margin: .35rem 0 0; color: var(--color-text-secondary); font-size: .86rem; line-height: 1.55; overflow-wrap: anywhere; }
 .inventory-scope .po-receipt-photos { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
 .inventory-scope .po-receipt-photos img { display: block; width: 4.5rem; height: 4.5rem; object-fit: cover; border-radius: .5rem; border: 1px solid var(--color-border); }
 .inventory-scope .lifecycle-tracker { display: flex; gap: 0; margin: 0; padding: 0; list-style: none; align-items: center; }
@@ -1076,11 +1076,67 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .purchase-orders-stat-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; margin-bottom: 1rem; }
 .inventory-scope .purchase-order-metric { position: relative; min-width: 0; overflow: hidden; padding: 1rem; border-radius: .95rem; transition: transform .2s ease, box-shadow .2s ease; }.inventory-scope .purchase-order-metric::after { content: ''; position: absolute; right: -30px; bottom: -54px; width: 120px; height: 120px; background: var(--metric-tint, var(--color-primary-soft)); border-radius: 50%; opacity: .65; }.inventory-scope .purchase-order-metric:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
 .inventory-scope .purchase-order-metric-main { position: relative; z-index: 1; display: flex; gap: .75rem; align-items: center; }.inventory-scope .purchase-order-metric-main > div { display: grid; min-width: 0; gap: .1rem; }.inventory-scope .purchase-order-metric-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; color: var(--metric-color); background: var(--metric-tint); border-radius: 13px; font-size: 1.12rem; font-weight: 850; }.inventory-scope .purchase-order-kicker { color: var(--metric-color); font-size: .58rem; font-weight: 850; letter-spacing: .12em; }.inventory-scope .purchase-order-metric strong { font-size: 1.55rem; line-height: 1.1; }.inventory-scope .purchase-order-metric small { color: var(--color-text-secondary); font-size: .72rem; }.inventory-scope .purchase-order-metric-detail { position: relative; z-index: 1; margin-top: .75rem; padding-top: .55rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border); font-size: .67rem; }.inventory-scope .purchase-order-metric-total { --metric-color: #4b73dc; --metric-tint: #e8edff; }.inventory-scope .purchase-order-metric-open { --metric-color: #bb7910; --metric-tint: #fff1cf; }.inventory-scope .purchase-order-metric-transit { --metric-color: #087f9b; --metric-tint: #d9f7fb; }.inventory-scope .purchase-order-metric-value { --metric-color: #118267; --metric-tint: #d9f7eb; }.inventory-scope .purchase-order-metric .purchase-order-value { font-size: 1.12rem; white-space: nowrap; }
-.inventory-scope .purchase-orders-layout { grid-template-columns: minmax(0, 1fr) minmax(310px, 360px); gap: 1rem; }.inventory-scope .po-list-panel, .inventory-scope .po-detail-panel { overflow: hidden; border-radius: 1rem; }.inventory-scope .purchase-orders-panel-head { display: flex; gap: .8rem; align-items: center; justify-content: space-between; padding: 1rem 1.15rem .85rem; border-bottom: 1px solid var(--color-border); }.inventory-scope .purchase-orders-panel-head > div { display: flex; gap: .65rem; align-items: center; }.inventory-scope .purchase-orders-panel-head h2 { margin: 0; font-size: .98rem; }.inventory-scope .purchase-orders-panel-head p { margin: .15rem 0 0; color: var(--color-text-muted); font-size: .72rem; }.inventory-scope .purchase-orders-panel-icon { display: grid; width: 38px; height: 38px; place-items: center; color: #087f75; background: #dcf9f1; border-radius: 12px; font-size: 1.12rem; }.inventory-scope .purchase-orders-count { padding: .32rem .6rem; color: var(--color-primary); background: var(--color-primary-soft); border-radius: 999px; font-size: .68rem; font-weight: 800; white-space: nowrap; }.inventory-scope .purchase-orders-page .toolbar { padding: .75rem 1rem; }.inventory-scope .purchase-orders-clear { min-height: 36px; color: var(--color-primary); font-size: .75rem; }.inventory-scope .purchase-orders-page .data-table tbody tr { cursor: pointer; transition: background .16s ease; }.inventory-scope .purchase-orders-page .data-table tbody tr:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }.inventory-scope .purchase-orders-page .po-detail-panel { top: 1rem; }
+.inventory-scope .purchase-orders-layout { grid-template-columns: minmax(0, 1fr) minmax(360px, 440px); gap: 1rem; }.inventory-scope .po-list-panel, .inventory-scope .po-detail-panel { overflow: hidden; border-radius: 1rem; }.inventory-scope .purchase-orders-panel-head { display: flex; gap: .8rem; align-items: center; justify-content: space-between; padding: 1rem 1.15rem .85rem; border-bottom: 1px solid var(--color-border); }.inventory-scope .purchase-orders-panel-head > div { display: flex; gap: .65rem; align-items: center; }.inventory-scope .purchase-orders-panel-head h2 { margin: 0; font-size: .98rem; }.inventory-scope .purchase-orders-panel-head p { margin: .15rem 0 0; color: var(--color-text-muted); font-size: .82rem; line-height: 1.45; }.inventory-scope .purchase-orders-panel-icon { display: grid; width: 38px; height: 38px; place-items: center; color: #087f75; background: #dcf9f1; border-radius: 12px; font-size: 1.12rem; }.inventory-scope .purchase-orders-count { padding: .32rem .6rem; color: var(--color-primary); background: var(--color-primary-soft); border-radius: 999px; font-size: .75rem; font-weight: 800; white-space: nowrap; }.inventory-scope .purchase-orders-page .toolbar { padding: .75rem 1rem; }.inventory-scope .purchase-orders-clear { min-height: 36px; color: var(--color-primary); font-size: .8rem; }.inventory-scope .purchase-orders-page .data-table tbody tr { cursor: pointer; transition: background .16s ease; }.inventory-scope .purchase-orders-page .data-table tbody tr:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }.inventory-scope .purchase-orders-page .po-detail-panel { top: 1rem; }
 @keyframes purchase-order-sheen { 0%, 35% { transform: translateX(-100%); } 75%, 100% { transform: translateX(100%); } }
 @keyframes purchase-order-orbit { 50% { transform: translate(4px,-5px); opacity: .65; } }
 @media (max-width: 980px) { .inventory-scope .purchase-orders-stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }.inventory-scope .purchase-orders-hero-art { right: 25%; opacity: .65; } }
 @media (max-width: 640px) { .inventory-scope .purchase-orders-hero { min-height: 0; align-items: flex-start; flex-direction: column; padding: 1.15rem; }.inventory-scope .purchase-orders-hero-art { top: -48px; right: -10px; opacity: .35; transform: scale(.75) rotate(-10deg); }.inventory-scope .purchase-orders-hero-actions { width: 100%; grid-template-columns: 1fr 1fr; }.inventory-scope .purchase-orders-stat-strip { gap: .55rem; }.inventory-scope .purchase-order-metric { padding: .75rem; }.inventory-scope .purchase-order-metric-icon { width: 34px; height: 34px; }.inventory-scope .purchase-order-metric strong { font-size: 1.25rem; }.inventory-scope .purchase-order-metric .purchase-order-value { font-size: .9rem; }.inventory-scope .purchase-orders-panel-head { align-items: flex-start; }.inventory-scope .purchase-orders-panel-head p { max-width: 220px; } }
+@media (max-width: 1180px) { .inventory-scope .purchase-orders-layout { grid-template-columns: minmax(0, 1fr); }.inventory-scope .purchase-orders-layout .po-detail-panel { position: static; }.inventory-scope .purchase-orders-layout .po-detail-body { overflow-x: auto; }.inventory-scope .purchase-orders-layout .po-detail-body .lifecycle-tracker { min-width: 320px; }.inventory-scope .purchase-orders-layout .po-detail-body .detail-grid { min-width: 320px; }.inventory-scope .purchase-orders-layout .po-detail-body .status-timeline { min-width: 320px; } }
+@media (max-width: 640px) { .inventory-scope .po-detail-body { padding: .9rem; }.inventory-scope .po-actions { flex-direction: column; }.inventory-scope .po-actions .btn { width: 100%; justify-content: center; }.inventory-scope .status-timeline { gap: 1rem; }.inventory-scope .timeline-head { align-items: flex-start; flex-direction: column; }.inventory-scope .timeline-note { font-size: .9rem; } }
+
+/* Inventory workflows added to the web shell. */
+.inventory-scope .sales-page { display: grid; gap: 1rem; }
+.inventory-scope .sales-hero { display: flex; gap: 1.25rem; align-items: center; justify-content: space-between; padding: 1.5rem 1.7rem; color: #f2fbff; background: linear-gradient(120deg, #122039, #203b5e 68%, #17675e); border: 1px solid rgba(64, 185, 170, .25); border-radius: 1rem; box-shadow: 0 18px 40px rgba(14,25,55,.18); }
+.inventory-scope .sales-hero h1 { margin: .25rem 0 .4rem; color: #fff; font-size: 1.8rem; line-height: 1.15; letter-spacing: -.025em; }
+.inventory-scope .sales-hero .workflow-hero-copy > p:last-child { max-width: 42rem; margin: 0; color: #d5e4ef; font-size: .98rem; line-height: 1.55; }
+.inventory-scope .sales-hero .eyebrow { color: #84e6d1; }
+.inventory-scope .sales-stat-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; }
+.inventory-scope .sales-stat { display: grid; gap: .35rem; padding: 1rem 1.15rem; }
+.inventory-scope .sales-stat span { color: var(--color-text-secondary); font-size: .86rem; font-weight: 650; }
+.inventory-scope .sales-stat strong { color: var(--color-text); font-size: clamp(1.05rem, 2vw, 1.4rem); line-height: 1.3; overflow-wrap: anywhere; }
+.inventory-scope .sales-record-panel, .inventory-scope .sales-history-panel { min-width: 0; }
+.inventory-scope .sales-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding: 1.2rem; }
+.inventory-scope .sales-form .form-field { display: grid; align-content: start; gap: .45rem; color: var(--color-text); font-size: .9rem; font-weight: 700; }
+.inventory-scope .sales-form .form-field input, .inventory-scope .sales-form .form-field select { min-width: 0; min-height: 44px; padding: .65rem .75rem; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: .6rem; font: inherit; font-weight: 500; line-height: 1.4; }
+.inventory-scope .sales-form .form-field input:focus, .inventory-scope .sales-form .form-field select:focus { outline: 3px solid color-mix(in srgb, var(--color-primary) 24%, transparent); border-color: var(--color-primary); }
+.inventory-scope .sales-form .form-field input[readonly] { color: var(--color-text-secondary); background: var(--color-surface-muted); }
+.inventory-scope .sales-form .form-field small { color: var(--color-text-secondary); font-size: .82rem; font-weight: 500; }
+.inventory-scope .sales-total { display: grid; align-content: center; gap: .3rem; padding: .85rem 1rem; background: var(--color-primary-soft); border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border)); border-radius: .7rem; }
+.inventory-scope .sales-total span { color: var(--color-text-secondary); font-size: .83rem; font-weight: 700; }
+.inventory-scope .sales-total strong { color: var(--color-primary); font-size: 1.3rem; }
+.inventory-scope .sales-total small { color: var(--color-text-secondary); font-size: .82rem; line-height: 1.45; }
+.inventory-scope .sales-submit { min-height: 46px; }
+.inventory-scope .sales-form .form-error { grid-column: 1 / -1; margin: 0; color: var(--color-critical); font-size: .88rem; font-weight: 650; }
+.inventory-scope .sales-history-panel .data-table { min-width: 780px; }
+.inventory-scope .sales-receipt-overlay { z-index: calc(var(--z-modal) + 2); }
+.inventory-scope .sales-receipt-modal { width: min(100%, 620px); }
+.inventory-scope .sales-receipt-actions { align-items: center; }
+.inventory-scope .sales-receipt-actions > div { display: flex; gap: .5rem; flex-wrap: wrap; }
+.inventory-scope .sales-receipt-body { display: grid; gap: 0; }
+.inventory-scope .sales-receipt-body p { display: flex; gap: 1rem; justify-content: space-between; margin: 0; padding: .72rem 0; border-bottom: 1px solid var(--color-border); font-size: .92rem; line-height: 1.45; }
+.inventory-scope .sales-receipt-body p strong { flex: 0 0 38%; color: var(--color-text-secondary); }
+.inventory-scope .sales-receipt-body p span { text-align: right; overflow-wrap: anywhere; }
+.inventory-scope .po-detail-items { max-width: 100%; overflow-x: auto; }
+.inventory-scope .po-detail-items-table { min-width: 700px; width: 100%; }
+.inventory-scope .po-detail-items-table th, .inventory-scope .po-detail-items-table td { padding: .65rem .55rem; font-size: .84rem; line-height: 1.45; }
+.inventory-scope .po-detail-items-table td:first-child { white-space: normal; overflow-wrap: anywhere; }
+.inventory-scope .purchase-orders-layout .timeline-section { min-width: 0; }
+
+@media (max-width: 760px) {
+  .inventory-scope .sales-stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-scope .sales-form { grid-template-columns: minmax(0, 1fr); padding: .95rem; }
+  .inventory-scope .sales-hero { align-items: flex-start; flex-direction: column; padding: 1.15rem; }
+  .inventory-scope .sales-hero .page-actions { width: 100%; }
+  .inventory-scope .sales-hero .page-actions .btn { width: 100%; min-height: 44px; }
+}
+@media print {
+  body:has(.sales-receipt-overlay) * { visibility: hidden !important; }
+  body:has(.sales-receipt-overlay) .sales-receipt-overlay,
+  body:has(.sales-receipt-overlay) .sales-receipt-overlay * { visibility: visible !important; }
+  .inventory-scope .sales-receipt-overlay { position: static; display: block; padding: 0; background: #fff; }
+  .inventory-scope .sales-receipt-modal { width: 100%; max-height: none; box-shadow: none; }
+  .inventory-scope .sales-receipt-actions > div, .inventory-scope .sales-receipt-actions > button { display: none !important; }
+}
 @media (prefers-reduced-motion: reduce) { .inventory-scope .purchase-orders-hero::after, .inventory-scope .purchase-orders-hero-art i { animation: none; }.inventory-scope .purchase-order-metric, .inventory-scope .purchase-orders-refresh, .inventory-scope .purchase-orders-create { transition: none; } }
 
 /* Match the shared inventory hero and card language used by the manager and supplier pages. */

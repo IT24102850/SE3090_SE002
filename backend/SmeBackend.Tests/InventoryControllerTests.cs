@@ -1025,6 +1025,7 @@ public class PurchaseOrdersControllerTests
             Name = "Organic Coffee",
             Sku = "SKU-COF-01",
             Quantity = 10,
+            SupplierId = supplierId,
             UnitCost = 1500m,
             IsActive = true,
         });
@@ -1055,7 +1056,7 @@ public class PurchaseOrdersControllerTests
             "Draft",
             new List<PurchaseOrderItemRequest>
             {
-                new(itemId, null, 10m, 1400m),
+                new(itemId, null, 10m, 1500m),
                 new(null, "Paper cups (x100)", 5m, 800m),
             });
 
@@ -1065,20 +1066,81 @@ public class PurchaseOrdersControllerTests
 
         Assert.Equal("PO-TEST-001", response.Number);
         Assert.Equal(2, response.LineItems);
-        Assert.Equal(18000m, response.TotalAmount);
+        Assert.Equal(19000m, response.TotalAmount);
         Assert.NotNull(response.Items);
         Assert.Equal(2, response.Items!.Count);
         var coffeeItem = response.Items.Single(i => i.InventoryItemId == itemId);
         Assert.Equal("Organic Coffee", coffeeItem.ItemName);
         Assert.Equal(10m, coffeeItem.Quantity);
-        Assert.Equal(1400m, coffeeItem.UnitPrice);
-        Assert.Equal(14000m, coffeeItem.LineTotal);
+        Assert.Equal(1500m, coffeeItem.UnitPrice);
+        Assert.Equal(15000m, coffeeItem.LineTotal);
 
         var customItem = response.Items.Single(i => i.InventoryItemId == null);
         Assert.Equal("Paper cups (x100)", customItem.Description);
         Assert.Equal(5m, customItem.Quantity);
         Assert.Equal(800m, customItem.UnitPrice);
         Assert.Equal(4000m, customItem.LineTotal);
+    }
+
+    [Theory]
+    [InlineData(false, 1400.0)]
+    [InlineData(true, 1500.0)]
+    public async Task CreatePurchaseOrder_RejectsCatalogPriceOrSupplierMismatch(
+        bool useDifferentSupplier,
+        double requestedUnitPrice)
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        var otherSupplierId = Guid.NewGuid();
+        var itemId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        db.Branches.Add(new Branch { Id = branchId, TenantId = tenantId, Name = "Main Branch" });
+        db.Suppliers.AddRange(
+            new Supplier { Id = supplierId, TenantId = tenantId, Name = "Catalog Supplier" },
+            new Supplier { Id = otherSupplierId, TenantId = tenantId, Name = "Different Supplier" });
+        db.InventoryItems.Add(new InventoryItem
+        {
+            Id = itemId,
+            TenantId = tenantId,
+            BranchId = branchId,
+            SupplierId = supplierId,
+            Name = "Organic Coffee",
+            Sku = "SKU-COF-02",
+            Quantity = 10,
+            UnitCost = 1500m,
+            IsActive = true,
+        });
+        await db.SaveChangesAsync();
+
+        var authorizationService = new Mock<IAuthorizationService>();
+        authorizationService.Setup(x => x.AuthorizeAsync(
+                It.IsAny<ClaimsPrincipal>(),
+                It.IsAny<object?>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(AuthorizationResult.Success());
+        var controller = new PurchaseOrdersController(db, authorizationService.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.CreatePurchaseOrder(
+            new CreatePurchaseOrderRequest(
+                branchId,
+                useDifferentSupplier ? otherSupplierId : supplierId,
+                "PO-CATALOG-VALIDATION",
+                "Draft",
+                [new PurchaseOrderItemRequest(itemId, null, 1m, (decimal)requestedUnitPrice)]),
+            CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result.Result);
+        Assert.Empty(await db.PurchaseOrders.ToListAsync());
     }
 
     [Fact]
