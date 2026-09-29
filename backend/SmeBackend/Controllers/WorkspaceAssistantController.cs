@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Authorization;
 using SmeBackend.Data;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
@@ -21,6 +22,9 @@ namespace SmeBackend.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/workspace-assistant")]
+// Paid feature: the tenant's Unify plan decides whether this module is
+// available at all (Authorization/RequiresPlanAttribute.cs).
+[RequiresPlanFeature(PlanFeatures.AiAgents)]
 public sealed class WorkspaceAssistantController(AppDbContext db) : ControllerBase
 {
     [HttpPost("chat")]

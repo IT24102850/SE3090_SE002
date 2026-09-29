@@ -111,10 +111,53 @@ const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
 
 const withOtp = (otp?: string) => (otp ? { 'X-Platform-Otp': otp } : undefined);
 
+
+/* ── Revenue: Unify's own subscription business ───────────────────── */
+
+export interface RevenueOverview {
+  generatedAt: string;
+  currency: string;
+  mrr: number;
+  arr: number;
+  arpa: number;
+  collected30d: number;
+  addOnRevenue30d: number;
+  tenants: {
+    total: number; paying: number; free: number; trialing: number; pastDue: number;
+    cancelling: number; complimentary: number; paidConversionRate: number | null;
+  };
+  funnel: {
+    trialsStarted30d: number; trialsConverted30d: number; trialsExpired30d: number;
+    trialConversionRate: number | null;
+    newPaid30d: number; churned30d: number; churnRate: number | null;
+  };
+  planMix: { planCode: string; count: number; paying: number; mrr: number }[];
+  termMix: { period: string; label: string; count: number }[];
+  recentEvents: {
+    id: string; createdAt: string; eventType: string; fromPlanCode: string | null; toPlanCode: string | null;
+    period: string | null; currency: string | null; amount: number | null; actorEmail: string | null;
+    detail: string | null; tenantId: string; tenantName: string;
+  }[];
+}
+
+export interface RevenueSubscriptionRow {
+  id: string; tenantId: string; tenantName: string; businessType: string;
+  planCode: string; tier: number; status: string; period: string; currency: string; amount: number;
+  currentPeriodStart: string; currentPeriodEnd: string | null; trialEndsAt: string | null; graceEndsAt: string | null;
+  autoRenew: boolean; cancelAtPeriodEnd: boolean; isComplimentary: boolean; extraSeats: number;
+  lastPaymentAt: string | null; startedAt: string | null; openInvoices: number;
+}
+
+export interface RevenueInvoiceRow {
+  id: string; number: string; kind: string; planCode: string | null; period: string | null;
+  currency: string; total: number; status: string; issuedAt: string; dueAt: string; paidAt: string | null;
+  tenantId: string; tenantName: string; provider: string | null;
+}
+
 export const platformApi = createApi({
   reducerPath: 'platformApi',
   baseQuery,
-  tagTypes: ['Overview', 'Tenants', 'Tenant', 'Users', 'Audit', 'Sessions', 'Me'],
+  tagTypes: ['Overview', 'Tenants', 'Tenant', 'Users', 'Audit', 'Sessions', 'Me', 'Revenue'],
   endpoints: (builder) => ({
     // auth
     login: builder.mutation<PlatformLoginResult, { email: string; password: string; code?: string }>({
@@ -186,6 +229,35 @@ export const platformApi = createApi({
       query: (params) => ({ url: 'platform/audit', params }),
       providesTags: ['Audit'],
     }),
+
+    // revenue
+    revenue: builder.query<RevenueOverview, void>({ query: () => 'platform/revenue', providesTags: ['Revenue'] }),
+    revenueSubscriptions: builder.query<Paged<RevenueSubscriptionRow>, { plan?: string; status?: string; page?: number; pageSize?: number }>({
+      query: (params) => ({ url: 'platform/revenue/subscriptions', params }),
+      providesTags: ['Revenue'],
+    }),
+    revenueInvoices: builder.query<Paged<RevenueInvoiceRow>, { status?: string; page?: number; pageSize?: number }>({
+      query: (params) => ({ url: 'platform/revenue/invoices', params }),
+      providesTags: ['Revenue'],
+    }),
+    compSubscription: builder.mutation<{ message: string }, { tenantId: string; planCode: string; period?: string; months: number; reason: string; otp?: string }>({
+      query: ({ tenantId, otp, ...body }) => ({
+        url: `platform/revenue/subscriptions/${tenantId}/comp`,
+        method: 'POST',
+        body,
+        headers: withOtp(otp),
+      }),
+      invalidatesTags: ['Revenue', 'Audit', 'Overview'],
+    }),
+    extendSubscription: builder.mutation<{ currentPeriodEnd: string; message: string }, { tenantId: string; days: number; reason: string; otp?: string }>({
+      query: ({ tenantId, otp, ...body }) => ({
+        url: `platform/revenue/subscriptions/${tenantId}/extend`,
+        method: 'POST',
+        body,
+        headers: withOtp(otp),
+      }),
+      invalidatesTags: ['Revenue', 'Audit'],
+    }),
   }),
 });
 
@@ -206,6 +278,11 @@ export const {
   useSetUserActiveMutation,
   useResetUserPasswordMutation,
   useAuditQuery,
+  useRevenueQuery,
+  useRevenueSubscriptionsQuery,
+  useRevenueInvoicesQuery,
+  useCompSubscriptionMutation,
+  useExtendSubscriptionMutation,
 } = platformApi;
 
 /** Pulls the server's message out of an RTK Query error, with a fallback. */

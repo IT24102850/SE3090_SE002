@@ -206,6 +206,22 @@ builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, Sme
 builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessorFactory, SmeBackend.Services.Billing.PaymentProcessorFactory>();
 builder.Services.AddHostedService<SmeBackend.Services.Billing.BillingAutomationService>();
 
+// Unify's own subscription: what a tenant admin pays US for the platform, as
+// opposed to the billing engine above, which is what a tenant charges their
+// own customers. The two never share credentials - see
+// Services/PlatformBilling/PlatformGatewayProvider.cs - but they do share the
+// IPaymentProcessor implementations registered just above, so Stripe and
+// PayPal are implemented once.
+builder.Services.AddSingleton<SmeBackend.Services.PlatformBilling.IPlatformGatewayProvider,
+    SmeBackend.Services.PlatformBilling.PlatformGatewayProvider>();
+builder.Services.AddScoped<SmeBackend.Services.PlatformBilling.IEntitlementService,
+    SmeBackend.Services.PlatformBilling.EntitlementService>();
+builder.Services.AddScoped<SmeBackend.Services.PlatformBilling.IPlatformSubscriptionService,
+    SmeBackend.Services.PlatformBilling.PlatformSubscriptionService>();
+builder.Services.AddScoped<SmeBackend.Services.PlatformBilling.IPlatformCheckoutService,
+    SmeBackend.Services.PlatformBilling.PlatformCheckoutService>();
+builder.Services.AddHostedService<SmeBackend.Services.PlatformBilling.PlatformRenewalService>();
+
 // The public website booking widget is anonymous, so it gets a per-IP
 // budget that no signed-in endpoint needs: enough for a family working
 // through the form, far short of a script hammering it.
@@ -316,6 +332,13 @@ using (var scope = app.Services.CreateScope())
         db,
         app.Configuration,
         scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PlatformOwnerSeeder"));
+
+    // The price list is code, not data: syncing it on every boot is what
+    // makes a pricing change a reviewable commit. See Data/PlatformPlanCatalog.
+    var catalogueLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PlatformCatalog");
+    await PlatformPlanCatalog.SyncAsync(db, catalogueLogger);
+    await PlatformAddOnCatalog.SyncAsync(db, catalogueLogger);
+    await PlatformPromotionSeeder.SeedAsync(db, catalogueLogger);
 
     if (app.Environment.IsDevelopment())
     {

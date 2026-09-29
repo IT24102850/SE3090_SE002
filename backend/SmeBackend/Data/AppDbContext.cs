@@ -66,6 +66,24 @@ public class AppDbContext : DbContext
     public DbSet<PlatformSession> PlatformSessions { get; set; } = null!;
     public DbSet<PlatformAuditLog> PlatformAuditLogs { get; set; } = null!;
 
+    // What a tenant buys from Unify (as opposed to Subscriptions above, which
+    // is what a tenant's own customers buy from them). Same reason as the
+    // console tables for carrying no tenant filter: the renewal worker, the
+    // gateway webhook and the owner's revenue screen all read them with no
+    // tenant in context. Every tenant-facing query filters by TenantId by
+    // hand, from the token.
+    public DbSet<PlatformPlan> PlatformPlans { get; set; } = null!;
+    public DbSet<PlatformPlanPrice> PlatformPlanPrices { get; set; } = null!;
+    public DbSet<PlatformSubscription> PlatformSubscriptions { get; set; } = null!;
+    public DbSet<PlatformSubscriptionEvent> PlatformSubscriptionEvents { get; set; } = null!;
+    public DbSet<PlatformInvoice> PlatformInvoices { get; set; } = null!;
+    public DbSet<PlatformPayment> PlatformPayments { get; set; } = null!;
+    public DbSet<PlatformAddOn> PlatformAddOns { get; set; } = null!;
+    public DbSet<PlatformCreditEntry> PlatformCreditEntries { get; set; } = null!;
+    public DbSet<PlatformUsageCounter> PlatformUsageCounters { get; set; } = null!;
+    public DbSet<PlatformPromotion> PlatformPromotions { get; set; } = null!;
+    public DbSet<PlatformPromotionRedemption> PlatformPromotionRedemptions { get; set; } = null!;
+
      // Billing engine
     public DbSet<Invoice> Invoices { get; set; } = null!;
     public DbSet<InvoiceItem> InvoiceItems { get; set; } = null!;
@@ -532,6 +550,161 @@ public class AppDbContext : DbContext
             entity.Property(a => a.IpAddress).HasMaxLength(64);
             entity.Property(a => a.UserAgent).HasMaxLength(512);
         });
+        // ============ UNIFY'S OWN SUBSCRIPTION (what tenants pay us) ============
+        modelBuilder.Entity<PlatformPlan>(entity =>
+        {
+            entity.ToTable("platform_plans");
+            entity.HasIndex(p => p.Code).IsUnique();
+            entity.HasIndex(p => p.Tier);
+            entity.Property(p => p.Code).HasMaxLength(40).IsRequired();
+            entity.Property(p => p.Name).HasMaxLength(80).IsRequired();
+            entity.Property(p => p.Tagline).HasMaxLength(200);
+            entity.Property(p => p.HighlightsJson).HasColumnType("jsonb");
+            entity.Property(p => p.LimitsJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<PlatformPlanPrice>(entity =>
+        {
+            entity.ToTable("platform_plan_prices");
+            entity.HasIndex(p => new { p.PlanId, p.Currency, p.Period }).IsUnique();
+            entity.HasOne(p => p.Plan).WithMany(p => p.Prices).HasForeignKey(p => p.PlanId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(p => p.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(p => p.Period).HasMaxLength(20).IsRequired();
+            entity.Property(p => p.Amount).HasPrecision(18, 2);
+            entity.Property(p => p.MonthlyEquivalent).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<PlatformSubscription>(entity =>
+        {
+            entity.ToTable("platform_subscriptions");
+            // One standing per business - the whole design leans on this.
+            entity.HasIndex(s => s.TenantId).IsUnique();
+            entity.HasIndex(s => s.Status);
+            // The renewal worker's query: paid plans whose term is ending.
+            entity.HasIndex(s => new { s.Tier, s.CurrentPeriodEnd });
+            entity.HasOne(s => s.Tenant).WithMany().HasForeignKey(s => s.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(s => s.Plan).WithMany().HasForeignKey(s => s.PlanId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(s => s.PlanCode).HasMaxLength(40).IsRequired();
+            entity.Property(s => s.Status).HasMaxLength(20).IsRequired();
+            entity.Property(s => s.Period).HasMaxLength(20).IsRequired();
+            entity.Property(s => s.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(s => s.Amount).HasPrecision(18, 2);
+            entity.Property(s => s.DiscountAmount).HasPrecision(18, 2);
+            entity.Property(s => s.CancelReason).HasMaxLength(500);
+            entity.Property(s => s.ComplimentaryReason).HasMaxLength(500);
+            entity.Property(s => s.PromotionCode).HasMaxLength(40);
+        });
+
+        modelBuilder.Entity<PlatformSubscriptionEvent>(entity =>
+        {
+            entity.ToTable("platform_subscription_events");
+            entity.HasIndex(e => new { e.TenantId, e.CreatedAt });
+            entity.HasIndex(e => e.EventType);
+            entity.Property(e => e.EventType).HasMaxLength(40).IsRequired();
+            entity.Property(e => e.FromPlanCode).HasMaxLength(40);
+            entity.Property(e => e.ToPlanCode).HasMaxLength(40);
+            entity.Property(e => e.Period).HasMaxLength(20);
+            entity.Property(e => e.Currency).HasMaxLength(3);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.ActorEmail).HasMaxLength(256);
+            entity.Property(e => e.Detail).HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<PlatformInvoice>(entity =>
+        {
+            entity.ToTable("platform_invoices");
+            entity.HasIndex(i => i.Number).IsUnique();
+            entity.HasIndex(i => new { i.TenantId, i.IssuedAt });
+            entity.HasIndex(i => i.Status);
+            entity.HasOne(i => i.Tenant).WithMany().HasForeignKey(i => i.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(i => i.Number).HasMaxLength(40).IsRequired();
+            entity.Property(i => i.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(i => i.PlanCode).HasMaxLength(40);
+            entity.Property(i => i.Period).HasMaxLength(20);
+            entity.Property(i => i.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(i => i.Status).HasMaxLength(20).IsRequired();
+            entity.Property(i => i.PromotionCode).HasMaxLength(40);
+            entity.Property(i => i.LinesJson).HasColumnType("jsonb");
+            entity.Property(i => i.Subtotal).HasPrecision(18, 2);
+            entity.Property(i => i.Discount).HasPrecision(18, 2);
+            entity.Property(i => i.Tax).HasPrecision(18, 2);
+            entity.Property(i => i.Total).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<PlatformPayment>(entity =>
+        {
+            entity.ToTable("platform_payments");
+            entity.HasIndex(p => p.InvoiceId);
+            // The webhook's only lookup key.
+            entity.HasIndex(p => new { p.Provider, p.ExternalId });
+            entity.HasIndex(p => new { p.TenantId, p.Status });
+            entity.HasOne(p => p.Invoice).WithMany(i => i.Payments).HasForeignKey(p => p.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(p => p.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(p => p.Method).HasMaxLength(30).IsRequired();
+            entity.Property(p => p.Provider).HasMaxLength(20).IsRequired();
+            entity.Property(p => p.Status).HasMaxLength(20).IsRequired();
+            entity.Property(p => p.ExternalId).HasMaxLength(200);
+            entity.Property(p => p.GatewayResponse).HasMaxLength(4000);
+            entity.Property(p => p.IntentJson).HasColumnType("jsonb");
+            entity.Property(p => p.Amount).HasPrecision(18, 2);
+            entity.Property(p => p.SettlementCurrency).HasMaxLength(3);
+            entity.Property(p => p.SettlementAmount).HasPrecision(18, 2);
+            entity.Property(p => p.ExchangeRate).HasPrecision(18, 6);
+        });
+
+        modelBuilder.Entity<PlatformAddOn>(entity =>
+        {
+            entity.ToTable("platform_addons");
+            entity.HasIndex(a => a.Code).IsUnique();
+            entity.Property(a => a.Code).HasMaxLength(60).IsRequired();
+            entity.Property(a => a.Name).HasMaxLength(100).IsRequired();
+            entity.Property(a => a.Tagline).HasMaxLength(300);
+            entity.Property(a => a.CreditType).HasMaxLength(30).IsRequired();
+            entity.Property(a => a.Category).HasMaxLength(30);
+            entity.Property(a => a.PricesJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<PlatformCreditEntry>(entity =>
+        {
+            entity.ToTable("platform_credit_entries");
+            // The balance query: live lots of one type for one tenant.
+            entity.HasIndex(e => new { e.TenantId, e.CreditType, e.ExpiresAt });
+            entity.Property(e => e.CreditType).HasMaxLength(30).IsRequired();
+            entity.Property(e => e.Reason).HasMaxLength(30).IsRequired();
+            entity.Property(e => e.Detail).HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<PlatformUsageCounter>(entity =>
+        {
+            entity.ToTable("platform_usage_counters");
+            entity.HasIndex(c => new { c.TenantId, c.Metric, c.PeriodKey }).IsUnique();
+            entity.Property(c => c.Metric).HasMaxLength(30).IsRequired();
+            entity.Property(c => c.PeriodKey).HasMaxLength(10).IsRequired();
+        });
+
+        modelBuilder.Entity<PlatformPromotion>(entity =>
+        {
+            entity.ToTable("platform_promotions");
+            entity.HasIndex(p => p.Code).IsUnique();
+            entity.Property(p => p.Code).HasMaxLength(40).IsRequired();
+            entity.Property(p => p.Name).HasMaxLength(120).IsRequired();
+            entity.Property(p => p.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(p => p.PlanCode).HasMaxLength(40);
+            entity.Property(p => p.Period).HasMaxLength(20);
+            entity.Property(p => p.AmountOff).HasPrecision(18, 2);
+            entity.Property(p => p.AmountCurrency).HasMaxLength(3);
+        });
+
+        modelBuilder.Entity<PlatformPromotionRedemption>(entity =>
+        {
+            entity.ToTable("platform_promotion_redemptions");
+            // One redemption of one offer per business.
+            entity.HasIndex(r => new { r.TenantId, r.PromotionId }).IsUnique();
+            entity.Property(r => r.Code).HasMaxLength(40).IsRequired();
+            entity.Property(r => r.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(r => r.DiscountAmount).HasPrecision(18, 2);
+        });
+
         // Purchase order items
         modelBuilder.Entity<PurchaseOrderItem>(entity =>
         {
