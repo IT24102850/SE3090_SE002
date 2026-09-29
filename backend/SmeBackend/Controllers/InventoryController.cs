@@ -181,8 +181,9 @@ public sealed class InventoryController(
             cancellationToken: cancellationToken);
 
     [HttpGet("movements")]
-    public async Task<ActionResult<IReadOnlyList<InventoryMovementResponse>>> GetMovements(
+    public async Task<ActionResult<InventoryMovementListResponse>> GetMovements(
         [FromQuery] Guid? branchId = null,
+        [FromQuery] int page = 1,
         [FromQuery] int pageSize = 100,
         CancellationToken cancellationToken = default)
     {
@@ -201,10 +202,12 @@ public sealed class InventoryController(
             return Forbid();
         }
 
+        page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
         var query = db.StockMovements
             .AsNoTracking()
             .OrderByDescending(movement => movement.OccurredAt)
+            .ThenByDescending(movement => movement.Id)
             .AsQueryable();
 
         if (branchId.HasValue)
@@ -212,7 +215,13 @@ public sealed class InventoryController(
             query = query.Where(movement => movement.BranchId == branchId.Value);
         }
 
-        var movements = await query.Take(pageSize).ToListAsync(cancellationToken);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+        page = totalPages == 0 ? 1 : Math.Min(page, totalPages);
+        var movements = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
         var itemIds = movements.Select(movement => movement.InventoryItemId).Distinct().ToList();
         var items = await db.InventoryItems
             .AsNoTracking()
@@ -228,7 +237,7 @@ public sealed class InventoryController(
             .Where(supplier => supplierIds.Contains(supplier.Id))
             .ToDictionaryAsync(supplier => supplier.Id, cancellationToken);
 
-        return Ok(movements.Select(movement =>
+        var movementResponses = movements.Select(movement =>
         {
             items.TryGetValue(movement.InventoryItemId, out var item);
             Supplier? supplier = null;
@@ -247,7 +256,14 @@ public sealed class InventoryController(
                 supplier?.Name,
                 supplier?.LeadTimeDays,
                 movement.PerformedBy);
-        }).ToList());
+        }).ToList();
+
+        return Ok(new InventoryMovementListResponse(
+            movementResponses,
+            page,
+            pageSize,
+            totalCount,
+            totalPages));
     }
 
     [HttpGet("{id:guid}")]
@@ -1506,6 +1522,13 @@ public sealed record InventoryMovementResponse(
     string? SupplierName,
     int? SupplierLeadTimeDays,
     string? PerformedBy);
+
+public sealed record InventoryMovementListResponse(
+    IReadOnlyList<InventoryMovementResponse> Items,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int TotalPages);
 
 public sealed record CreateInventoryRequest(
     string Name,

@@ -15,6 +15,67 @@ namespace SmeBackend.Tests;
 public class InventoryControllerTests
 {
     [Fact]
+    public async Task GetMovements_ReturnsPagedRecordsAndTotalCount()
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var item = new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = branchId,
+            Name = "Coffee Beans",
+            Sku = "COFFEE-001",
+            IsActive = true,
+        };
+        db.InventoryItems.Add(item);
+        db.StockMovements.AddRange(
+            new StockMovement
+            {
+                TenantId = tenantId,
+                BranchId = branchId,
+                InventoryItemId = item.Id,
+                MovementType = "PurchaseReceived",
+                Quantity = 4m,
+                OccurredAt = DateTime.UtcNow.AddMinutes(-1),
+            },
+            new StockMovement
+            {
+                TenantId = tenantId,
+                BranchId = branchId,
+                InventoryItemId = item.Id,
+                MovementType = "Consumption",
+                Quantity = -2m,
+                OccurredAt = DateTime.UtcNow,
+            });
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.GetMovements(page: 2, pageSize: 1, cancellationToken: CancellationToken.None);
+
+        var response = Assert.IsType<OkObjectResult>(result.Result).Value as InventoryMovementListResponse;
+        Assert.NotNull(response);
+        Assert.Equal(2, response.TotalCount);
+        Assert.Equal(2, response.TotalPages);
+        Assert.Equal(2, response.Page);
+        Assert.Single(response.Items);
+        Assert.Equal("PurchaseReceived", response.Items[0].MovementType);
+    }
+
+    [Fact]
     public async Task GetCategories_WhenLegacyTenantHasNoCatalog_SeedsBusinessCategories()
     {
         var tenantId = Guid.NewGuid();

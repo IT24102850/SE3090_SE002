@@ -4,7 +4,7 @@ import { getStoredToken } from '../authToken';
 import { useToast } from '../ui/ToastContext';
 import { Icon } from '../ui/Icon';
 
-type MovementType = 'Receive' | 'Sale' | 'Issue' | 'Waste' | 'Adjustment';
+type MovementType = string;
 
 type MovementEntry = {
   id: string;
@@ -22,21 +22,28 @@ type MovementEntry = {
 
 const PAGE_SIZE = 8;
 
-const movementTypes = ['All types', 'Receive', 'Sale', 'Issue', 'Waste', 'Adjustment'] as const;
-type MovementTypeFilter = (typeof movementTypes)[number];
+const baseMovementTypes = ['Receive', 'Sale', 'Issue', 'Consumption', 'Waste', 'Adjustment'] as const;
+type MovementTypeFilter = 'All types' | 'Outbound' | MovementType;
 
 const typeTone: Record<MovementType, BadgeTone> = {
   Receive: 'green',
   Sale: 'red',
   Issue: 'red',
+  Consumption: 'red',
   Waste: 'red',
   Adjustment: 'amber',
 };
 
 function normalizeMovementType(value: unknown): MovementType {
-  if (value === 'PurchaseReceived') return 'Receive';
-  if (value === 'Receive' || value === 'Sale' || value === 'Issue' || value === 'Waste' || value === 'Adjustment') return value;
-  return 'Adjustment';
+  if (typeof value !== 'string' || value.trim() === '') return 'Unknown';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'purchasereceived' || normalized === 'receive' || normalized === 'in') return 'Receive';
+  if (normalized === 'sale') return 'Sale';
+  if (normalized === 'issue' || normalized === 'out') return 'Issue';
+  if (normalized === 'consumption') return 'Consumption';
+  if (normalized === 'waste') return 'Waste';
+  if (normalized === 'adjustment') return 'Adjustment';
+  return value.trim();
 }
 
 function formatDateTime(iso: string) {
@@ -48,6 +55,16 @@ function formatDateTime(iso: string) {
   });
 }
 
+function getDateBoundary(value: string, nextDay = false): number | null {
+  if (!value) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day + (nextDay ? 1 : 0)).getTime();
+}
+
+function isOutboundMovement(movementType: MovementType) {
+  return movementType === 'Sale' || movementType === 'Issue' || movementType === 'Consumption';
+}
+
 export function StockMovementLogPage() {
   const token = getStoredToken();
   const { notify } = useToast();
@@ -55,7 +72,7 @@ export function StockMovementLogPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState('');
-  const [type, setType] = useState<MovementTypeFilter>(movementTypes[0]);
+  const [type, setType] = useState<MovementTypeFilter>('All types');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
@@ -64,30 +81,57 @@ export function StockMovementLogPage() {
     setLoading(true);
     setLoadError('');
     try {
-      const response = await fetch('/api/inventory/movements?pageSize=100', {
-        headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
-      });
-      if (!response.ok) throw new Error(`Movement request failed (${response.status})`);
-      const data = await response.json();
+      const headers = { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' };
+      const allMovements: MovementEntry[] = [];
+      let currentPage = 1;
+      let totalPages = 1;
+
+      do {
+        const response = await fetch(`/api/inventory/movements?page=${currentPage}&pageSize=100`, { headers });
+        if (!response.ok) throw new Error(`Movement request failed (${response.status})`);
+        const data: unknown = await response.json();
+        if (!data || typeof data !== 'object' || !('items' in data) || !Array.isArray(data.items)) {
+          throw new Error('Movement request returned an invalid response.');
+        }
+        const pageData = data as { items: unknown[]; totalPages: number };
+        if (!Number.isInteger(pageData.totalPages) || pageData.totalPages < 0) {
+          throw new Error('Movement request returned invalid pagination details.');
+        }
+        totalPages = pageData.totalPages;
+        allMovements.push(...pageData.items.map((value): MovementEntry => {
+          if (!value || typeof value !== 'object') throw new Error('Movement request returned an invalid record.');
+          const movement = value as Record<string, unknown>;
+          const occurredAt = typeof movement.occurredAt === 'string' ? movement.occurredAt : '';
+          const quantity = movement.quantity;
+          if (!movement.id || !Number.isFinite(Date.parse(occurredAt)) || typeof quantity !== 'number' || !Number.isFinite(quantity)) {
+            throw new Error('Movement request returned a record with invalid date or quantity.');
+          }
+          const movementType = normalizeMovementType(movement.movementType);
+          const notes = typeof movement.notes === 'string' ? movement.notes : undefined;
+          const reference = typeof movement.reference === 'string' ? movement.reference : undefined;
+          return {
+            id: String(movement.id),
+            occurredAt,
+            item: typeof movement.item === 'string' ? movement.item : 'Unknown item',
+            sku: typeof movement.sku === 'string' ? movement.sku : 'Unknown SKU',
+            movementType,
+            quantity,
+            reasonLabel: notes ?? reference ?? movementType,
+            reference,
+            notes,
+            performedBy: typeof movement.performedBy === 'string' ? movement.performedBy : undefined,
+            supplierName: typeof movement.supplierName === 'string' ? movement.supplierName : undefined,
+          };
+        }));
+        currentPage += 1;
+      } while (currentPage <= totalPages && (!activeCheck || activeCheck()));
+
       if (activeCheck && !activeCheck()) return false;
-      setMovements((Array.isArray(data) ? data : []).map((movement: any): MovementEntry => ({
-        id: String(movement.id),
-        occurredAt: movement.occurredAt,
-        item: movement.item ?? 'Unknown item',
-        sku: movement.sku ?? 'Unknown SKU',
-        movementType: normalizeMovementType(movement.movementType),
-        quantity: Number(movement.quantity ?? 0),
-        reasonLabel: movement.notes ?? movement.reference ?? movement.movementType ?? 'Stock movement',
-        reference: movement.reference ?? undefined,
-        notes: movement.notes ?? undefined,
-        performedBy: movement.performedBy ?? undefined,
-        supplierName: movement.supplierName ?? undefined,
-      })));
+      setMovements(allMovements);
       return true;
     } catch (error) {
       console.error(error);
       if (!activeCheck || activeCheck()) {
-        setMovements([]);
         setLoadError(error instanceof Error ? error.message : 'Unable to load movement history.');
       }
       return false;
@@ -104,8 +148,8 @@ export function StockMovementLogPage() {
 
   const contextFiltered = useMemo(() => {
     const queryLower = query.trim().toLowerCase();
-    const fromMs = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
-    const toMs = dateTo ? new Date(`${dateTo}T23:59:59`).getTime() : null;
+    const fromMs = getDateBoundary(dateFrom);
+    const toMs = getDateBoundary(dateTo, true);
 
     return movements.filter((row) => {
       const occurredMs = new Date(row.occurredAt).getTime();
@@ -116,21 +160,30 @@ export function StockMovementLogPage() {
         row.reference?.toLowerCase().includes(queryLower) ||
         row.reasonLabel.toLowerCase().includes(queryLower) ||
         row.notes?.toLowerCase().includes(queryLower) ||
+        row.movementType.toLowerCase().includes(queryLower) ||
         row.performedBy?.toLowerCase().includes(queryLower) ||
         row.supplierName?.toLowerCase().includes(queryLower);
       const matchesFrom = fromMs === null || occurredMs >= fromMs;
-      const matchesTo = toMs === null || occurredMs <= toMs;
+      const matchesTo = toMs === null || occurredMs < toMs;
       return matchesQuery && matchesFrom && matchesTo;
     });
   }, [dateFrom, dateTo, movements, query]);
   const filtered = useMemo(
-    () => type === 'All types' ? contextFiltered : contextFiltered.filter((row) => row.movementType === type),
+    () => type === 'All types'
+      ? contextFiltered
+      : type === 'Outbound'
+        ? contextFiltered.filter((row) => isOutboundMovement(row.movementType))
+        : contextFiltered.filter((row) => row.movementType === type),
     [contextFiltered, type],
+  );
+  const availableTypes = useMemo(
+    () => [...new Set([...baseMovementTypes, ...movements.map((row) => row.movementType)])],
+    [movements],
   );
   const movementTypeCounts = useMemo(() => ({
     all: contextFiltered.length,
     received: contextFiltered.filter((row) => row.movementType === 'Receive').length,
-    issued: contextFiltered.filter((row) => row.movementType === 'Sale' || row.movementType === 'Issue').length,
+    issued: contextFiltered.filter((row) => isOutboundMovement(row.movementType)).length,
     wasted: contextFiltered.filter((row) => row.movementType === 'Waste').length,
     adjusted: contextFiltered.filter((row) => row.movementType === 'Adjustment').length,
   }), [contextFiltered]);
@@ -152,8 +205,8 @@ export function StockMovementLogPage() {
   }, [page, totalPages]);
 
   const stats = useMemo(() => {
-    const received = filtered.filter((row) => row.movementType === 'Receive' && row.quantity > 0).reduce((sum, row) => sum + row.quantity, 0);
-    const issued = filtered.filter((row) => (row.movementType === 'Sale' || row.movementType === 'Issue' || row.movementType === 'Waste') && row.quantity < 0).reduce((sum, row) => sum + Math.abs(row.quantity), 0);
+    const received = filtered.filter((row) => row.movementType === 'Receive').reduce((sum, row) => sum + Math.abs(row.quantity), 0);
+    const issued = filtered.filter((row) => isOutboundMovement(row.movementType) || row.movementType === 'Waste').reduce((sum, row) => sum + Math.abs(row.quantity), 0);
     const net = filtered.reduce((sum, row) => sum + row.quantity, 0);
     return {
       count: filtered.length,
@@ -161,7 +214,7 @@ export function StockMovementLogPage() {
       issued,
       net,
       receives: filtered.filter((row) => row.movementType === 'Receive').length,
-      issues: filtered.filter((row) => row.movementType === 'Sale' || row.movementType === 'Issue').length,
+      issues: filtered.filter((row) => isOutboundMovement(row.movementType)).length,
       wastes: filtered.filter((row) => row.movementType === 'Waste').length,
       adjustments: filtered.filter((row) => row.movementType === 'Adjustment').length,
     };
@@ -183,7 +236,7 @@ export function StockMovementLogPage() {
           <p className="movement-eyebrow"><span aria-hidden="true">↗</span> OPERATIONS / STOCK ACTIVITY</p>
           <h1>Stock movements</h1>
           <p>Follow stock coming in, going out, and adjustments across your inventory.</p>
-          <div className="movement-hero-meta"><span className={`movement-live-dot${loading ? ' is-loading' : ''}`} aria-hidden="true" />{loading ? 'Syncing recent activity…' : `${movements.length} latest records loaded`}<span className="movement-meta-separator">·</span>Latest first</div>
+          <div className="movement-hero-meta"><span className={`movement-live-dot${loading ? ' is-loading' : ''}`} aria-hidden="true" />{loading ? 'Syncing recent activity…' : `${movements.length} records loaded`}<span className="movement-meta-separator">·</span>Newest first</div>
         </div>
         <div className="movement-hero-art" aria-hidden="true"><span className="movement-art-ring movement-art-ring-one" /><span className="movement-art-ring movement-art-ring-two" /><span className="movement-art-icon"><Icon name="movement" size={42} /></span><span className="movement-art-point movement-art-point-one" /><span className="movement-art-point movement-art-point-two" /></div>
         <div className="movement-hero-actions"><button className="btn movement-refresh" type="button" onClick={() => void handleRefresh()} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh history'}</button></div>
@@ -224,7 +277,9 @@ export function StockMovementLogPage() {
             />
           </div>
           <select className="filter-select" value={type} onChange={(event) => setType(event.target.value as MovementTypeFilter)} aria-label="Filter by movement type">
-            {movementTypes.map((option) => <option key={option}>{option}</option>)}
+            <option>All types</option>
+            <option value="Outbound">Outbound</option>
+            {availableTypes.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
           <label className="date-filter">
             <span>From</span>
@@ -240,7 +295,7 @@ export function StockMovementLogPage() {
         <div className="movement-type-summary" aria-label="Movement type counts">
           <button type="button" className={`movement-type-chip${type === 'All types' ? ' is-active' : ''}`} aria-pressed={type === 'All types'} onClick={() => setType('All types')}>All <strong>{movementTypeCounts.all}</strong></button>
           <button type="button" className={`movement-type-chip movement-chip-receive${type === 'Receive' ? ' is-active' : ''}`} aria-pressed={type === 'Receive'} onClick={() => setType(type === 'Receive' ? 'All types' : 'Receive')}><i /> Received <strong>{movementTypeCounts.received}</strong></button>
-          <button type="button" className={`movement-type-chip movement-chip-issue${type === 'Issue' ? ' is-active' : ''}`} aria-pressed={type === 'Issue'} onClick={() => setType(type === 'Issue' ? 'All types' : 'Issue')}><i /> Issued <strong>{movementTypeCounts.issued}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-issue${type === 'Outbound' ? ' is-active' : ''}`} aria-pressed={type === 'Outbound'} onClick={() => setType(type === 'Outbound' ? 'All types' : 'Outbound')}><i /> Issued / consumed <strong>{movementTypeCounts.issued}</strong></button>
           <button type="button" className={`movement-type-chip movement-chip-waste${type === 'Waste' ? ' is-active' : ''}`} aria-pressed={type === 'Waste'} onClick={() => setType(type === 'Waste' ? 'All types' : 'Waste')}><i /> Wasted <strong>{movementTypeCounts.wasted}</strong></button>
           <button type="button" className={`movement-type-chip movement-chip-adjust${type === 'Adjustment' ? ' is-active' : ''}`} aria-pressed={type === 'Adjustment'} onClick={() => setType(type === 'Adjustment' ? 'All types' : 'Adjustment')}><i /> Adjusted <strong>{movementTypeCounts.adjusted}</strong></button>
         </div>
@@ -256,7 +311,7 @@ export function StockMovementLogPage() {
                     <p className="cell-title">{row.item}</p>
                     <p className="cell-sub">{row.sku}</p>
                   </td>
-                  <td className={`movement-type-cell movement-type-cell-${row.movementType.toLowerCase().replace(/\s+/g, '-')}`}><Badge tone={typeTone[row.movementType]}>{row.movementType}</Badge></td>
+                  <td className={`movement-type-cell movement-type-cell-${row.movementType.toLowerCase().replace(/\s+/g, '-')}`}><Badge tone={typeTone[row.movementType] ?? 'neutral'}>{row.movementType}</Badge></td>
                   <td>
                     <span className={`movement-quantity${row.quantity > 0 ? ' is-in' : row.quantity < 0 ? ' is-out' : ''}`}>
                       {row.quantity > 0 ? `+${row.quantity}` : row.quantity}
@@ -270,7 +325,7 @@ export function StockMovementLogPage() {
                 </tr>
               ))}
               {paged.length === 0 && (
-                <tr><td colSpan={7} className="empty-state">{movements.length === 0 ? 'No stock movement records are available yet.' : 'No movements match these filters. Try clearing a filter or changing the date range.'}</td></tr>
+                <tr><td colSpan={7} className="empty-state">{loading ? 'Loading movement history…' : loadError ? 'Movement history could not be loaded. Refresh to retry.' : movements.length === 0 ? 'No stock movement records are available yet.' : 'No movements match these filters. Try clearing a filter or changing the date range.'}</td></tr>
               )}
             </tbody>
           </table>
