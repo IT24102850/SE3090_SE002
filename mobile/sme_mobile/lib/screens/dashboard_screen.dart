@@ -32,7 +32,7 @@ import '../inventory/app_notifications.dart';
 import '../inventory/inventory_dashboard.dart';
 import '../inventory/sales_screen.dart';
 import '../inventory/stock_count_screen.dart';
-import '../inventory/stock_check_screen.dart';
+import '../inventory/stock_activity_history_screen.dart';
 import '../inventory/purchase_order_approval_screen.dart';
 import '../inventory/equipment_maintenance_screen.dart';
 import '../inventory/analytics_screen.dart';
@@ -799,7 +799,7 @@ const _quickActionImages = <String, String>{
       'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=400&q=60',
   'Inventory dashboard':
       'https://th.bing.com/th/id/OIP.v1H3kKPUl5tEIGHuHqxEBAHaE7?w=261&h=180&c=7&r=0&o=7&dpr=1.3&pid=1.7&rm=3',
-  'Stock movements':
+  'Stock activity':
       'https://images.unsplash.com/photo-1494412651409-8963ce7935a7?auto=format&fit=crop&w=400&q=60',
   'Physical stock count':
       'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=400&q=60',
@@ -957,12 +957,12 @@ List<_QuickActionGroup> _quickActionsFor(
   addAction(
       'Inventory',
       _QuickActionCard(
-        label: 'Stock movements',
-        icon: Icons.qr_code_scanner_rounded,
+        label: 'Stock activity',
+        icon: Icons.history_rounded,
         color: color,
-        imageUrl: _quickActionImages['Stock movements'],
+        imageUrl: _quickActionImages['Stock activity'],
         onTap: () => Navigator.of(context).push(
-          slideFadeRoute(StockCheckScreen(client: client)),
+          slideFadeRoute(StockActivityHistoryScreen(client: client)),
         ),
       ));
   addAction(

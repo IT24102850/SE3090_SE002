@@ -261,6 +261,126 @@ public class InventoryControllerTests
     }
 
     [Fact]
+    public async Task RecordPhysicalCount_WhenStockChangedSinceCount_ReturnsConflictWithoutAdjusting()
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var countedAt = DateTime.UtcNow.AddMinutes(-10);
+        var item = new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = branchId,
+            Name = "Coffee Beans",
+            Sku = "SKU-COUNT-STALE",
+            Quantity = 10m,
+            IsActive = true,
+        };
+        db.InventoryItems.Add(item);
+        db.StockMovements.Add(new StockMovement
+        {
+            TenantId = tenantId,
+            BranchId = branchId,
+            InventoryItemId = item.Id,
+            MovementType = "PurchaseReceived",
+            Quantity = 1m,
+            OccurredAt = DateTime.UtcNow.AddMinutes(-5),
+            Reference = "RECEIVE-AFTER-COUNT",
+        });
+        db.StockMovements.Add(new StockMovement
+        {
+            TenantId = tenantId,
+            BranchId = branchId,
+            InventoryItemId = item.Id,
+            MovementType = "Issue",
+            Quantity = -1m,
+            OccurredAt = DateTime.UtcNow.AddMinutes(-4),
+            Reference = "ISSUE-AFTER-COUNT",
+        });
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.RecordPhysicalCount(
+            item.Id,
+            new RecordPhysicalCountRequest(8m, 10m, countedAt, "MOBILE-AUDIT-COUNT-1"),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);
+        Assert.Equal(10m, (await db.InventoryItems.SingleAsync()).Quantity);
+        Assert.Equal(2, await db.StockMovements.CountAsync());
+    }
+
+    [Fact]
+    public async Task RecordPhysicalCount_WhenSnapshotIsCurrent_RecordsExactVarianceAndIsIdempotent()
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var item = new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = branchId,
+            Name = "Coffee Beans",
+            Sku = "SKU-COUNT-CURRENT",
+            Quantity = 10m,
+            IsActive = true,
+        };
+        db.InventoryItems.Add(item);
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+        var request = new RecordPhysicalCountRequest(
+            8m,
+            10m,
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            "MOBILE-AUDIT-COUNT-2");
+
+        var firstResult = await controller.RecordPhysicalCount(
+            item.Id,
+            request,
+            CancellationToken.None);
+        var firstResponse = Assert.IsType<InventoryItemResponse>(
+            Assert.IsType<OkObjectResult>(firstResult.Result).Value);
+        var secondResult = await controller.RecordPhysicalCount(
+            item.Id,
+            request,
+            CancellationToken.None);
+
+        Assert.Equal(8m, firstResponse.Quantity);
+        Assert.IsType<OkObjectResult>(secondResult.Result);
+        var movement = Assert.Single(await db.StockMovements.ToListAsync());
+        Assert.Equal(-2m, movement.Quantity);
+        Assert.Equal("Adjustment", movement.MovementType);
+        Assert.Equal("MOBILE-AUDIT-COUNT-2", movement.Reference);
+    }
+
+    [Fact]
     public async Task IssueInventoryItem_WhenStockIsAvailable_RecordsIssueMovement()
     {
         var tenantId = Guid.NewGuid();

@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -664,6 +665,180 @@ public sealed class InventoryController(
         return Ok(ToResponse(item));
     }
 
+    [HttpPost("{id:guid}/physical-count")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<InventoryItemResponse>> RecordPhysicalCount(
+        Guid id,
+        RecordPhysicalCountRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var item = await LoadItemAsync(id, cancellationToken);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        if (!await RequireItemAccessAsync(
+                InventoryAuthorizationPolicies.InventoryWrite,
+                item,
+                cancellationToken))
+        {
+            return Forbid();
+        }
+
+        const decimal maxStockQuantity = 999999999999999.999m;
+        if (request.CountedQuantity < 0 ||
+            request.SystemQuantityAtCount < 0 ||
+            request.CountedQuantity > maxStockQuantity ||
+            request.SystemQuantityAtCount > maxStockQuantity)
+        {
+            ModelState.AddModelError("countedQuantity", "Counted and recorded quantities cannot be negative.");
+            return ValidationProblem(ModelState);
+        }
+        if (decimal.Round(request.CountedQuantity, 3) != request.CountedQuantity ||
+            decimal.Round(request.SystemQuantityAtCount, 3) != request.SystemQuantityAtCount)
+        {
+            ModelState.AddModelError("countedQuantity", "Stock quantities can have up to three decimal places.");
+            return ValidationProblem(ModelState);
+        }
+        if (request.CountedAt == default ||
+            string.IsNullOrWhiteSpace(request.Reference) ||
+            request.Reference.Length > 100)
+        {
+            ModelState.AddModelError("reference", "A count timestamp and unique reference are required.");
+            return ValidationProblem(ModelState);
+        }
+        if (!item.BranchId.HasValue)
+        {
+            return Conflict(new { message = "Stock counts require the item to be assigned to a branch." });
+        }
+
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken)
+            : null;
+
+        var existingCount = await db.StockMovements.AsNoTracking()
+            .AnyAsync(
+                movement => movement.InventoryItemId == item.Id &&
+                            movement.MovementType == "Adjustment" &&
+                            movement.Reference == request.Reference,
+                cancellationToken);
+        if (existingCount)
+        {
+            return Ok(ToResponse(item));
+        }
+
+        var countedAtUtc = request.CountedAt.UtcDateTime;
+        var changedSinceCount = await db.StockMovements.AsNoTracking()
+            .AnyAsync(
+                movement => movement.InventoryItemId == item.Id &&
+                            movement.OccurredAt > countedAtUtc,
+                cancellationToken);
+        if (changedSinceCount || item.Quantity != request.SystemQuantityAtCount)
+        {
+            return Conflict(new
+            {
+                message = $"'{item.Name}' changed after this count was taken. Refresh inventory, recount the item, and save a new count. Current system quantity: {item.Quantity:0.###}."
+            });
+        }
+
+        var adjustment = request.CountedQuantity - request.SystemQuantityAtCount;
+        if (adjustment == 0)
+        {
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+            return Ok(ToResponse(item));
+        }
+
+        if (db.Database.IsRelational())
+        {
+            var updated = await db.InventoryItems
+                .Where(candidate =>
+                    candidate.Id == item.Id &&
+                    candidate.Quantity == request.SystemQuantityAtCount)
+                .ExecuteUpdateAsync(updates => updates
+                    .SetProperty(candidate => candidate.Quantity, request.CountedQuantity)
+                    .SetProperty(candidate => candidate.UpdatedAt, DateTime.UtcNow),
+                    cancellationToken);
+            if (updated == 0)
+            {
+                return Conflict(new
+                {
+                    message = $"'{item.Name}' stock changed while this count was being saved. Refresh inventory, recount the item, and save a new count."
+                });
+            }
+
+            db.Entry(item).State = EntityState.Detached;
+            db.StockMovements.Add(new StockMovement
+            {
+                TenantId = tenantId,
+                InventoryItemId = item.Id,
+                BranchId = item.BranchId.Value,
+                MovementType = "Adjustment",
+                Quantity = adjustment,
+                Reference = request.Reference,
+                Notes = $"Physical count: {request.CountedQuantity:0.###} counted; system quantity was {request.SystemQuantityAtCount:0.###} at {request.CountedAt:O}.",
+                OccurredAt = DateTime.UtcNow,
+                PerformedBy = CurrentActorName(),
+            });
+            NotificationHelper.Queue(
+                db,
+                tenantId,
+                null,
+                "StockAdjusted",
+                "Physical stock count recorded",
+                $"{item.Name} stock adjusted by {adjustment:0.###} after physical counting.");
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            item.Quantity = request.CountedQuantity;
+            item.UpdatedAt = DateTime.UtcNow;
+            db.StockMovements.Add(new StockMovement
+            {
+                TenantId = tenantId,
+                InventoryItemId = item.Id,
+                BranchId = item.BranchId.Value,
+                MovementType = "Adjustment",
+                Quantity = adjustment,
+                Reference = request.Reference,
+                Notes = $"Physical count: {request.CountedQuantity:0.###} counted; system quantity was {request.SystemQuantityAtCount:0.###} at {request.CountedAt:O}.",
+                OccurredAt = DateTime.UtcNow,
+                PerformedBy = CurrentActorName(),
+            });
+            NotificationHelper.Queue(
+                db,
+                tenantId,
+                null,
+                "StockAdjusted",
+                "Physical stock count recorded",
+                $"{item.Name} stock adjusted by {adjustment:0.###} after physical counting.");
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+        var updatedItem = await LoadItemAsync(id, cancellationToken);
+        return updatedItem is null ? NotFound() : Ok(ToResponse(updatedItem));
+    }
+
     [HttpPost("{id:guid}/issue")]
     [Consumes("application/json")]
     [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
@@ -1263,6 +1438,12 @@ public sealed record AdjustInventoryRequest(
     decimal Quantity,
     string? Reference = null,
     string? Notes = null);
+
+public sealed record RecordPhysicalCountRequest(
+    decimal CountedQuantity,
+    decimal SystemQuantityAtCount,
+    DateTimeOffset CountedAt,
+    string Reference);
 
 /// Reason is free text on purpose ("Spoiled", "Over-prepped", "Dropped",
 /// "Expired") - the waste report groups by it, and every kitchen names

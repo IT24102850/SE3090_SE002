@@ -16,7 +16,7 @@ import 'inventory_panel.dart';
 import 'equipment_maintenance_screen.dart';
 import 'inventory_models.dart';
 import 'purchase_order_approval_screen.dart';
-import 'stock_check_screen.dart';
+import 'stock_activity_history_screen.dart';
 import 'stock_count_screen.dart';
 
 String _formatQuantity(double value) =>
@@ -1830,14 +1830,15 @@ class _InventoryDashboardState extends State<InventoryDashboard>
           children: [
             Expanded(
               child: _ActionTile(
-                icon: Icons.qr_code_scanner_rounded,
-                title: 'Scan Movements',
-                subtitle: 'Check in / check out',
+                icon: Icons.history_rounded,
+                title: 'Stock Activity',
+                subtitle: 'Recent stock changes',
                 color: AppColors.cyan,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => StockCheckScreen(client: widget.client)),
+                      builder: (_) =>
+                          StockActivityHistoryScreen(client: widget.client)),
                 ),
               ),
             ),
@@ -2149,7 +2150,7 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Scan this QR from Stock Movements or Physical Stock Count.',
+                    'Scan this QR from Physical Stock Count.',
                     textAlign: TextAlign.center,
                     style: AppTextStyles.caption.copyWith(
                       color: AppColors.textSecondary,

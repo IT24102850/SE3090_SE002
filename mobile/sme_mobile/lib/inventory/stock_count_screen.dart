@@ -128,17 +128,21 @@ class _StockCountScreenState extends State<StockCountScreen>
 
   Future<void> _sync({bool silent = false}) async {
     if (!mounted || _syncing) return;
-    if (_pending.isEmpty) {
+    final queued = _pending.where((count) => !count.requiresReview).toList();
+    if (queued.isEmpty) {
       if (!silent) {
         showAppNotification(
-          'There are no physical counts waiting to sync.',
-          tone: AppNotificationTone.info,
+          _pending.isEmpty
+              ? 'There are no physical counts waiting to sync.'
+              : 'Remove counts marked for recount, refresh inventory, and count those items again.',
+          tone: _pending.isEmpty
+              ? AppNotificationTone.info
+              : AppNotificationTone.warning,
         );
       }
 
       return;
     }
-    final queued = List<_PendingCount>.of(_pending);
     final queuedIds = queued.map((count) => count.id).toSet();
     setState(() => _syncing = true);
     try {
@@ -156,23 +160,34 @@ class _StockCountScreenState extends State<StockCountScreen>
         final matches = _catalog
             .where((item) => item.sku.toLowerCase() == count.sku.toLowerCase());
         if (matches.isEmpty) {
-          remaining.add(count.withError('Item is no longer in catalog.'));
+          remaining.add(count.withError(
+            'Item is no longer in catalog. Verify it and take a new count.',
+            requiresReview: true,
+          ));
           continue;
         }
         final item = matches.first;
-        final delta = count.quantity - item.quantity;
-        if (delta == 0) continue;
+        if (count.systemQuantityAtCount == null) {
+          remaining.add(count.withError(
+            'This saved count has no system-quantity snapshot. Remove it and recount.',
+            requiresReview: true,
+          ));
+          continue;
+        }
         try {
           final response = await widget.client
-              .post('/api/inventory/${item.id}/adjust', body: {
-            'quantity': delta,
+              .post('/api/inventory/${item.id}/physical-count', body: {
+            'countedQuantity': count.quantity,
+            'systemQuantityAtCount': count.systemQuantityAtCount,
+            'countedAt': count.recordedAt.toUtc().toIso8601String(),
             'reference': 'MOBILE-AUDIT-${count.id}',
-            'notes':
-                'Physical audit count ${count.quantity} recorded at ${count.recordedAt.toIso8601String()}',
           });
           if (response.statusCode < 200 || response.statusCode >= 300) {
             remaining.add(count.withError(
-                _error(response.body) ?? 'Server rejected audit adjustment.'));
+              _error(response.body) ?? 'Server rejected physical count.',
+              requiresReview:
+                  response.statusCode == 409 || response.statusCode == 404,
+            ));
           }
         } catch (_) {
           remaining.add(count.withError('Unable to reach inventory service.'));
@@ -181,14 +196,19 @@ class _StockCountScreenState extends State<StockCountScreen>
       final newCounts =
           _pending.where((count) => !queuedIds.contains(count.id)).toList();
       final pendingAfterSync = [...newCounts, ...remaining];
+      await _refreshCatalog();
       await _store.save(_catalog, pendingAfterSync);
       if (mounted) setState(() => _pending = pendingAfterSync);
 
       if (!silent && mounted) {
+        final recountCount =
+            pendingAfterSync.where((count) => count.requiresReview).length;
         showAppNotification(
           pendingAfterSync.isEmpty
               ? 'All physical counts synced to inventory ledger.'
-              : '${pendingAfterSync.length} count(s) pending sync retry.',
+              : recountCount > 0
+                  ? '$recountCount count(s) changed since counting and need a fresh count.'
+                  : '${pendingAfterSync.length} count(s) pending sync retry.',
           tone: pendingAfterSync.isEmpty
               ? AppNotificationTone.success
               : AppNotificationTone.warning,
@@ -267,7 +287,7 @@ class _StockCountScreenState extends State<StockCountScreen>
       context: context,
       title: 'Save physical count?',
       message:
-          'Record ${quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 2)} unit${quantity == 1 ? '' : 's'} for ${item.name} (${item.sku})?',
+          'Record ${_formatAuditQuantity(quantity)} unit${quantity == 1 ? '' : 's'} for ${item.name} (${item.sku})? The system currently shows ${_formatAuditQuantity(item.quantity)}. If stock changes before sync, you will be asked to recount.',
       confirmLabel: 'Save Count',
       icon: Icons.fact_check_rounded,
       accent: AppColors.cyan,
@@ -281,7 +301,8 @@ class _StockCountScreenState extends State<StockCountScreen>
         sku: item.sku,
         name: item.name,
         quantity: quantity,
-        recordedAt: DateTime.now(),
+        systemQuantityAtCount: item.quantity,
+        recordedAt: DateTime.now().toUtc(),
       );
       final pending = [
         ..._pending.where((c) => c.sku.toLowerCase() != item.sku.toLowerCase()),
@@ -363,7 +384,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                     showAppNotification(
                       _pending.isEmpty
                           ? 'Inventory catalog refreshed and counts synchronized.'
-                          : 'Inventory catalog refreshed. Pending counts remain queued.',
+                          : 'Inventory catalog refreshed. Review queued counts for recount warnings.',
                       tone: _pending.isEmpty
                           ? AppNotificationTone.success
                           : AppNotificationTone.warning,
@@ -534,7 +555,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                 Text(
                   _pending.isEmpty
                       ? 'All counts uploaded to server.'
-                      : '${_pending.length} counts queued for automatic sync.',
+                      : '${_pending.length} counts queued; review any marked RECOUNT REQUIRED.',
                   style: AppTextStyles.caption
                       .copyWith(color: AppColors.textSecondary),
                 ),
@@ -831,7 +852,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                           style: AppTextStyles.subtitle.copyWith(fontSize: 13),
                         ),
                         Text(
-                          'System Record: ${matchedItem.quantity.toInt()} ${matchedItem.unit}',
+                          'System Record: ${_formatAuditQuantity(matchedItem.quantity)} ${matchedItem.unit}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.caption
@@ -857,8 +878,8 @@ class _StockCountScreenState extends State<StockCountScreen>
                         variance == 0
                             ? 'MATCHED (0)'
                             : variance > 0
-                                ? '+${variance.toInt()} SURPLUS'
-                                : '${variance.toInt()} DEFICIT',
+                                ? '+${_formatAuditQuantity(variance)} SURPLUS'
+                                : '${_formatAuditQuantity(variance)} DEFICIT',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
@@ -917,7 +938,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                         .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
                   ),
                   Text(
-                    'SKU: ${entry.sku} • Counted: ${entry.quantity.toInt()} units',
+                    'SKU: ${entry.sku} • Counted: ${entry.quantity} • System at count: ${entry.systemQuantityAtCount ?? 'unknown'}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.caption
@@ -925,11 +946,17 @@ class _StockCountScreenState extends State<StockCountScreen>
                   ),
                   if (entry.lastError != null)
                     Text(
-                      entry.lastError!,
-                      maxLines: 2,
+                      entry.requiresReview
+                          ? 'RECOUNT REQUIRED · ${entry.lastError}'
+                          : entry.lastError!,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.caption.copyWith(
-                          color: const Color(0xFFF43F5E), fontSize: 11),
+                        color: entry.requiresReview
+                            ? AppColors.error
+                            : AppColors.warning,
+                        fontSize: 11,
+                      ),
                     ),
                 ],
               ),
@@ -1046,6 +1073,14 @@ class _AuditStatCard extends StatelessWidget {
   }
 }
 
+String _formatAuditQuantity(double value) {
+  if (value == value.roundToDouble()) return value.toStringAsFixed(0);
+  return value
+      .toStringAsFixed(3)
+      .replaceFirst(RegExp(r'0+$'), '')
+      .replaceFirst(RegExp(r'\.$'), '');
+}
+
 class _CountStore {
   static const _catalogKey = 'stock_count_catalog_v2';
   static const _pendingKey = 'stock_count_pending_v2';
@@ -1124,39 +1159,60 @@ class _PendingCount {
     required this.sku,
     required this.name,
     required this.quantity,
+    required this.systemQuantityAtCount,
     required this.recordedAt,
     this.lastError,
+    this.requiresReview = false,
   });
 
   final String id, sku, name;
   final double quantity;
+  final double? systemQuantityAtCount;
   final DateTime recordedAt;
   final String? lastError;
+  final bool requiresReview;
 
-  _PendingCount withError(String error) => _PendingCount(
+  _PendingCount withError(
+    String error, {
+    bool requiresReview = false,
+  }) =>
+      _PendingCount(
         id: id,
         sku: sku,
         name: name,
         quantity: quantity,
+        systemQuantityAtCount: systemQuantityAtCount,
         recordedAt: recordedAt,
         lastError: error,
+        requiresReview: requiresReview,
       );
 
-  factory _PendingCount.fromJson(Map<String, dynamic> json) => _PendingCount(
-        id: '${json['id']}',
-        sku: '${json['sku']}',
-        name: '${json['name']}',
-        quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
-        recordedAt: DateTime.parse(json['recordedAt'] as String),
-        lastError: json['lastError'] as String?,
-      );
+  factory _PendingCount.fromJson(Map<String, dynamic> json) {
+    final systemQuantity = (json['systemQuantityAtCount'] as num?)?.toDouble();
+    final lastError = json['lastError'] as String?;
+    return _PendingCount(
+      id: '${json['id']}',
+      sku: '${json['sku']}',
+      name: '${json['name']}',
+      quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
+      systemQuantityAtCount: systemQuantity,
+      recordedAt: DateTime.parse(json['recordedAt'] as String),
+      lastError: lastError ??
+          (systemQuantity == null
+              ? 'Saved before count validation was added. Remove and recount.'
+              : null),
+      requiresReview: json['requiresReview'] == true || systemQuantity == null,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'sku': sku,
         'name': name,
         'quantity': quantity,
+        'systemQuantityAtCount': systemQuantityAtCount,
         'recordedAt': recordedAt.toIso8601String(),
         'lastError': lastError,
+        'requiresReview': requiresReview,
       };
 }
