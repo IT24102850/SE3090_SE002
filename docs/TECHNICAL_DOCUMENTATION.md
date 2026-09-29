@@ -247,7 +247,7 @@ For an Android emulator, use `http://10.0.2.2:5298`; for a physical device, use 
 The backend applies migrations automatically when it starts. To use a separate database manually:
 
 ```powershell
-psql "<postgres-connection-string>" -f scripts/seed-demo-data.ps1
+psql "<postgres-connection-string>" -f scripts/seed-demo-data.sql
 ```
 
 The main demo PowerShell scripts should be run from the repository root after the API has started, for example:
@@ -257,7 +257,7 @@ The main demo PowerShell scripts should be run from the repository root after th
 .\scripts\seed-mirissa-jetliner.ps1
 ```
 
-SQL seed files can be run with `psql -f`. The tourism, clinic, restaurant, gym, and school seed files are documented in the root README. Never commit real connection strings, API keys, or production credentials.
+SQL seed files can be run with `psql`, for example `psql "<postgres-connection-string>" -f scripts/seed-spice-garden-sample-records.sql`. The tourism, clinic, restaurant, gym, and school seed files are documented in the root README. Never commit real connection strings, API keys, or production credentials.
 
 ## 11. Environment Variables and Secrets
 
