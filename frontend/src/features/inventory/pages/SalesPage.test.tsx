@@ -98,8 +98,9 @@ describe('SalesPage', () => {
     }));
 
     renderPage();
-    const itemSelect = await screen.findByLabelText('Inventory item');
-    fireEvent.change(itemSelect, { target: { value: 'item-1' } });
+    const itemSearch = await screen.findByRole('combobox', { name: 'Search in-stock item' });
+    fireEvent.change(itemSearch, { target: { value: 'tea-001' } });
+    fireEvent.click(await screen.findByRole('option', { name: /Tea Leaves/ }));
     fireEvent.change(screen.getByLabelText('Quantity to sell'), { target: { value: '2' } });
 
     expect(screen.getByLabelText('Unit selling price')).toHaveValue('LKR 75.00');
@@ -116,5 +117,33 @@ describe('SalesPage', () => {
     }));
     expect(await screen.findByRole('heading', { name: 'Sale receipt' })).toBeInTheDocument();
     expect(screen.getByText('LKR 150.00')).toBeInTheDocument();
+  });
+
+  it('shows matching items while typing and explains when there are no matches', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/inventory?page=')) {
+        return new Response(JSON.stringify({ items: [inventoryItem], totalPages: 1 }), { status: 200 });
+      }
+      if (url.includes('/api/reports/sales-activity?')) {
+        return new Response(JSON.stringify({
+          salesCount: 0,
+          totalRevenue: 0,
+          averageSale: 0,
+          costOfGoodsSold: 0,
+          grossProfit: 0,
+          recentSales: [],
+        }), { status: 200 });
+      }
+      return new Response('Unexpected request', { status: 404 });
+    }));
+
+    renderPage();
+    const itemSearch = await screen.findByRole('combobox', { name: 'Search in-stock item' });
+    fireEvent.change(itemSearch, { target: { value: 'main branch' } });
+    expect(await screen.findByRole('option', { name: /Tea Leaves.*Main branch/ })).toBeInTheDocument();
+
+    fireEvent.change(itemSearch, { target: { value: 'not in catalog' } });
+    expect(await screen.findByText('No in-stock item matches this search.')).toBeInTheDocument();
   });
 });

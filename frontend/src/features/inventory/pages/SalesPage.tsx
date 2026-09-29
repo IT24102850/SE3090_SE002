@@ -114,6 +114,8 @@ export function SalesPage() {
   const [report, setReport] = useState<SalesReport | null>(null);
   const [selectedId, setSelectedId] = useState('');
   const [search, setSearch] = useState('');
+  const [itemPickerOpen, setItemPickerOpen] = useState(false);
+  const [activeItemOption, setActiveItemOption] = useState(0);
   const [amount, setAmount] = useState('1');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -130,6 +132,11 @@ export function SalesPage() {
       return `${item.name} ${item.sku} ${item.category ?? ''} ${item.branch ?? ''}`.toLowerCase().includes(query);
     });
   }, [items, search]);
+  const selectItem = (item: InventoryItem) => {
+    setSelectedId(item.id);
+    setSearch(`${item.name} · ${item.sku} · ${item.branch ?? 'No branch'}`);
+    setItemPickerOpen(false);
+  };
 
   const loadData = useCallback(async (showFeedback = false) => {
     setLoading(true);
@@ -256,17 +263,75 @@ export function SalesPage() {
           <Badge tone="blue">Live stock</Badge>
         </div>
         <div className="sales-form">
-          <label className="form-field">
+          <div
+            className="form-field sales-item-picker"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setItemPickerOpen(false);
+            }}
+          >
             Search in-stock item
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, SKU, category or branch" />
-          </label>
-          <label className="form-field">
-            Inventory item
-            <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)} disabled={loading || saving} required>
-              <option value="">Choose an in-stock item</option>
-              {itemOptions.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.sku} · {item.branch ?? 'No branch'}</option>)}
-            </select>
-          </label>
+            <input
+              role="combobox"
+              aria-label="Search in-stock item"
+              aria-autocomplete="list"
+              aria-expanded={itemPickerOpen && !loading && !saving}
+              aria-controls="sales-in-stock-item-options"
+              aria-activedescendant={itemPickerOpen && itemOptions[activeItemOption] ? `sales-item-option-${itemOptions[activeItemOption].id}` : undefined}
+              value={search}
+              onFocus={() => setItemPickerOpen(true)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setSelectedId('');
+                setActiveItemOption(0);
+                setItemPickerOpen(true);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setItemPickerOpen(false);
+                  return;
+                }
+                if (!itemPickerOpen || itemOptions.length === 0) return;
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  setActiveItemOption((current) => (current + 1) % itemOptions.length);
+                } else if (event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  setActiveItemOption((current) => (current - 1 + itemOptions.length) % itemOptions.length);
+                } else if (event.key === 'Enter') {
+                  event.preventDefault();
+                  selectItem(itemOptions[activeItemOption]);
+                }
+              }}
+              placeholder="Search name, SKU, category or branch"
+              disabled={loading || saving}
+              autoComplete="off"
+            />
+            {itemPickerOpen && !loading && !saving && (
+              <div id="sales-in-stock-item-options" className="sales-item-options" role="listbox" aria-label="Matching in-stock items">
+                {itemOptions.length > 0 ? itemOptions.map((item, index) => (
+                  <button
+                    id={`sales-item-option-${item.id}`}
+                    key={item.id}
+                    type="button"
+                    role="option"
+                    aria-selected={item.id === selectedId || index === activeItemOption}
+                    className={index === activeItemOption ? 'is-active' : ''}
+                    onMouseEnter={() => setActiveItemOption(index)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectItem(item)}
+                  >
+                    <span><strong>{item.name}</strong><small>{item.sku} · {item.category ?? 'Uncategorized'} · {item.branch ?? 'No branch'}</small></span>
+                    <span className="sales-item-stock">{quantity(item.quantity)} {item.unit ?? 'units'}</span>
+                  </button>
+                )) : (
+                  <p className="sales-item-empty">
+                    {items.some((item) => item.quantity > 0 && item.branchId) ? 'No in-stock item matches this search.' : 'No in-stock items with an assigned branch are available.'}
+                  </p>
+                )}
+              </div>
+            )}
+            {selectedItem && <small>Selected · {quantity(selectedItem.quantity)} {selectedItem.unit ?? 'units'} available at {selectedItem.branch ?? 'assigned branch'}</small>}
+          </div>
           <label className="form-field">
             Quantity
             <input type="number" aria-label="Quantity to sell" min="0.001" step="0.001" max={selectedItem?.quantity} value={amount} onChange={(event) => setAmount(event.target.value)} disabled={!selectedItem || saving} />
