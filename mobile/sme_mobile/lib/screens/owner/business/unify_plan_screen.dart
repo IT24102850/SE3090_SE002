@@ -221,6 +221,16 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen>
   List<Widget> _banners(UnifySubscription sub) {
     final banners = <Widget>[];
 
+    // A checkout is still out in the browser. The resume hook usually closes
+    // this out on its own, but a lifecycle callback is not something to bet a
+    // payment on - so there is always a button.
+    if (_pendingPaymentId != null) {
+      banners.add(_PendingNotice(
+        busy: _busy,
+        onCheck: () => unawaited(_confirmPending()),
+      ));
+    }
+
     if (sub.isPastDue) {
       banners.add(_Notice(
         tone: AppColors.warning,
@@ -533,6 +543,36 @@ class _Pill extends StatelessWidget {
         ),
         child: Text(label,
             style: AppTextStyles.caption.copyWith(color: AppColors.textBody)),
+      );
+}
+
+class _PendingNotice extends StatelessWidget {
+  final bool busy;
+  final VoidCallback onCheck;
+  const _PendingNotice({required this.busy, required this.onCheck});
+
+  @override
+  Widget build(BuildContext context) => GlassCard(
+        borderColor: AppColors.cyan,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Waiting for your payment',
+                style: AppTextStyles.subtitle.copyWith(color: AppColors.cyan)),
+            const SizedBox(height: 6),
+            Text(
+              'Finish it in the browser tab that opened. Once you are back here we check with '
+              'your bank automatically - or check now.',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textBody),
+            ),
+            const SizedBox(height: 12),
+            GhostButton(
+              label: 'Check payment status',
+              onPressed: busy ? null : onCheck,
+              height: 42,
+            ),
+          ],
+        ),
       );
 }
 
