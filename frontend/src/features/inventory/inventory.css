@@ -427,6 +427,8 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .timeline-head { display: flex; gap: .5rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .inventory-scope .timeline-user { margin: .25rem 0 0; color: var(--color-text-secondary); font-size: .8rem; font-weight: 650; }
 .inventory-scope .timeline-note { margin: .2rem 0 0; color: var(--color-text-secondary); font-size: .78rem; }
+.inventory-scope .po-receipt-photos { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+.inventory-scope .po-receipt-photos img { display: block; width: 4.5rem; height: 4.5rem; object-fit: cover; border-radius: .5rem; border: 1px solid var(--color-border); }
 .inventory-scope .lifecycle-tracker { display: flex; gap: 0; margin: 0; padding: 0; list-style: none; align-items: center; }
 .inventory-scope .lifecycle-step { display: flex; flex: 1; flex-direction: column; gap: .35rem; align-items: center; position: relative; min-width: 0; }
 .inventory-scope .lifecycle-step:not(:last-child)::after { content: ''; position: absolute; top: .45rem; left: calc(50% + .45rem); width: calc(100% - .9rem); height: 2px; background: var(--color-border); }

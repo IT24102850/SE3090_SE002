@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -284,15 +285,37 @@ class _PurchaseOrderApprovalScreenState
 
   String _apiError(String body, int statusCode) {
     if (statusCode == 403) {
-      return 'Access denied. You need Manager or Administrator privileges to review purchase orders.';
+      return 'Access denied. Your role or branch permissions do not allow this purchase order action.';
     }
+    Object? decoded;
     try {
-      final payload = jsonDecode(body);
-      if (payload is Map<String, dynamic>) {
-        final message = payload['message'] ?? payload['title'];
-        if (message is String && message.trim().isNotEmpty) return message;
-      }
-    } catch (_) {}
+      decoded = jsonDecode(body);
+    } on FormatException {
+      return 'Purchase orders API returned HTTP $statusCode.';
+    }
+    if (decoded is Map<String, dynamic>) {
+      final message = decoded['message'];
+      final title = decoded['title'];
+      final errors = decoded['errors'];
+      final validationMessages = errors is Map
+          ? errors.values
+              .whereType<List>()
+              .expand((messages) => messages)
+              .whereType<String>()
+              .where((text) => text.trim().isNotEmpty)
+              .toList()
+          : const <String>[];
+      final parts = <String>[
+        if (message is String && message.trim().isNotEmpty) message,
+        if (validationMessages.isNotEmpty) validationMessages.join(' '),
+        if (title is String &&
+            title.trim().isNotEmpty &&
+            title != message &&
+            validationMessages.isEmpty)
+          title,
+      ];
+      if (parts.isNotEmpty) return parts.join(' ');
+    }
     return 'Purchase orders API returned HTTP $statusCode.';
   }
 
@@ -484,7 +507,7 @@ class _PurchaseOrderApprovalScreenState
       }
     }
     if (!mounted) return;
-    final receiptItems = await showModalBottomSheet<List<Map<String, dynamic>>>(
+    final submission = await showModalBottomSheet<_ReceiptSubmission>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -493,27 +516,51 @@ class _PurchaseOrderApprovalScreenState
         inventoryItems: inventoryItems,
       ),
     );
-    if (receiptItems == null || receiptItems.isEmpty || !mounted) return;
+    if (submission == null || submission.items.isEmpty || !mounted) return;
 
     setState(() => order.approving = true);
+    var receiptSaved = false;
     try {
       final response = await widget.client.post(
         '/api/purchase-orders/${order.id}/receive',
-        body: {'items': receiptItems},
+        body: {'items': submission.items},
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(_apiError(response.body, response.statusCode));
       }
+      receiptSaved = true;
+      if (submission.photos.isNotEmpty) {
+        final payload = jsonDecode(response.body) as Map<String, dynamic>;
+        final receipts = (payload['receipts'] as List? ?? const [])
+            .whereType<Map<String, dynamic>>();
+        final receiptId = receipts.isEmpty ? null : '${receipts.first['id']}';
+        if (receiptId == null || receiptId.isEmpty) {
+          throw StateError(
+            'The receipt was saved, but the API did not return its receipt ID. Refresh the order and retry adding photos.',
+          );
+        }
+        for (final photo in submission.photos) {
+          final upload = await widget.client.uploadPurchaseReceiptPhoto(
+            order.id,
+            receiptId,
+            await photo.readAsBytes(),
+            photo.name,
+          );
+          if (upload.statusCode < 200 || upload.statusCode >= 300) {
+            throw StateError(_apiError(upload.body, upload.statusCode));
+          }
+        }
+      }
       await _load();
       if (!mounted) return;
       showAppNotification(
-        '${order.number} receipt saved. Accepted units were added to inventory.',
+        '${order.number} receipt saved. Accepted units were added to inventory${submission.photos.isEmpty ? '' : ' and ${submission.photos.length} photos attached'}.',
         tone: AppNotificationTone.success,
       );
     } catch (error) {
       if (mounted) {
         showAppNotification(
-          'Could not record receipt. ${error is StateError ? error.message : 'Please retry.'}',
+          '${receiptSaved ? 'Receipt saved, but photo evidence could not be attached.' : 'Could not record receipt.'} ${error is StateError ? error.message : 'Please retry.'}',
           tone: AppNotificationTone.error,
         );
       }
@@ -1156,6 +1203,10 @@ class _PurchaseOrderApprovalScreenState
               _buildLineItemsSection(order),
               const SizedBox(height: 14),
             ],
+            if (order.receipts.isNotEmpty) ...[
+              _buildReceiptHistory(order),
+              const SizedBox(height: 14),
+            ],
 
             // Contextual Action Buttons
             _buildActionSection(order),
@@ -1360,6 +1411,81 @@ class _PurchaseOrderApprovalScreenState
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReceiptHistory(_PurchaseOrder order) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.glassFill,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'RECEIPT HISTORY (${order.receipts.length})',
+            style: AppTextStyles.label.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 10,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...order.receipts.map((receipt) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${receipt.receivedAt.toLocal()} · ${receipt.receivedBy}',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    ...receipt.items.map((item) => Text(
+                          '${item.name}: ${item.acceptedQuantity} accepted · ${item.damagedQuantity} damaged · ${item.shortageQuantity} short',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textMuted,
+                            fontSize: 11,
+                          ),
+                        )),
+                    if (receipt.photoUrls.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: receipt.photoUrls
+                            .map((url) => ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    url,
+                                    width: 72,
+                                    height: 72,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        const SizedBox(
+                                      width: 72,
+                                      height: 72,
+                                      child: Icon(
+                                        Icons.broken_image_outlined,
+                                        color: AppColors.textMuted,
+                                      ),
+                                    ),
+                                  ),
+                                ))
+                            .toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              )),
         ],
       ),
     );
@@ -2098,11 +2224,12 @@ class _ReceivePurchaseOrderSheet extends StatefulWidget {
 
 class _ReceivePurchaseOrderSheetState
     extends State<_ReceivePurchaseOrderSheet> {
-  final _delivered = <String, TextEditingController>{};
+  final _accepted = <String, TextEditingController>{};
   final _damaged = <String, TextEditingController>{};
   final _notes = <String, TextEditingController>{};
   final _closedAsShort = <String>{};
   final _linkedInventoryItemIds = <String, String>{};
+  final _photos = <XFile>[];
 
   List<Map<String, dynamic>> get _branchInventoryItems => widget.inventoryItems
       .where((item) => '${item['branchId'] ?? ''}' == widget.order.branchId)
@@ -2112,7 +2239,7 @@ class _ReceivePurchaseOrderSheetState
   void initState() {
     super.initState();
     for (final item in widget.order.items) {
-      _delivered[item.id] = TextEditingController(text: '0');
+      _accepted[item.id] = TextEditingController(text: '0');
       _damaged[item.id] = TextEditingController(text: '0');
       _notes[item.id] = TextEditingController();
     }
@@ -2121,7 +2248,7 @@ class _ReceivePurchaseOrderSheetState
   @override
   void dispose() {
     for (final controller in [
-      ..._delivered.values,
+      ..._accepted.values,
       ..._damaged.values,
       ..._notes.values,
     ]) {
@@ -2134,22 +2261,16 @@ class _ReceivePurchaseOrderSheetState
     final receiptItems = <Map<String, dynamic>>[];
     for (final item in widget.order.items) {
       if (item.receivingClosed) continue;
-      final delivered = double.tryParse(_delivered[item.id]!.text.trim());
+      final accepted = double.tryParse(_accepted[item.id]!.text.trim());
       final damaged = double.tryParse(_damaged[item.id]!.text.trim());
-      if (delivered == null ||
+      final delivered = (accepted ?? 0) + (damaged ?? 0);
+      if (accepted == null ||
           damaged == null ||
-          delivered < 0 ||
+          accepted < 0 ||
           damaged < 0 ||
-          damaged > delivered) {
+          delivered > item.remainingQuantity) {
         showAppNotification(
-          'Enter valid quantities. Damaged quantity cannot exceed delivered quantity.',
-          tone: AppNotificationTone.warning,
-        );
-        return;
-      }
-      if (delivered > item.remainingQuantity) {
-        showAppNotification(
-          '${item.name} has only ${item.remainingQuantity} units remaining on this order.',
+          'Enter valid quantities. Accepted plus damaged units cannot exceed the ${item.remainingQuantity} units remaining.',
           tone: AppNotificationTone.warning,
         );
         return;
@@ -2159,7 +2280,7 @@ class _ReceivePurchaseOrderSheetState
       if (delivered == 0 && !closeShort) continue;
       final inventoryItemId =
           item.inventoryItemId ?? _linkedInventoryItemIds[item.id];
-      if (delivered > damaged && inventoryItemId == null) {
+      if (accepted > 0 && inventoryItemId == null) {
         showAppNotification(
           'Choose a destination-branch inventory item for ${item.name}.',
           tone: AppNotificationTone.warning,
@@ -2168,7 +2289,7 @@ class _ReceivePurchaseOrderSheetState
       }
       receiptItems.add({
         'purchaseOrderItemId': item.id,
-        'deliveredQuantity': delivered,
+        'acceptedQuantity': accepted,
         'damagedQuantity': damaged,
         'closeRemainingAsShort': closeShort,
         'notes': _notes[item.id]!.text.trim(),
@@ -2184,7 +2305,43 @@ class _ReceivePurchaseOrderSheetState
       );
       return;
     }
-    Navigator.of(context).pop(receiptItems);
+    Navigator.of(context).pop(
+      _ReceiptSubmission(items: receiptItems, photos: List.of(_photos)),
+    );
+  }
+
+  Future<void> _pickPhotos() async {
+    if (_photos.length >= 5) {
+      showAppNotification(
+        'A receipt can have at most five photos.',
+        tone: AppNotificationTone.warning,
+      );
+      return;
+    }
+    final selected = await ImagePicker().pickMultiImage(
+      imageQuality: 80,
+      maxWidth: 1600,
+      maxHeight: 1600,
+    );
+    if (!mounted || selected.isEmpty) return;
+    final supported = selected.where((file) {
+      final extension = file.name.split('.').last.toLowerCase();
+      return const {'jpg', 'jpeg', 'png', 'webp'}.contains(extension);
+    }).toList();
+    if (supported.length != selected.length) {
+      showAppNotification(
+        'Only JPEG, PNG, or WebP photos can be attached.',
+        tone: AppNotificationTone.warning,
+      );
+    }
+    if (_photos.length + supported.length > 5) {
+      showAppNotification(
+        'Select no more than ${5 - _photos.length} additional photos.',
+        tone: AppNotificationTone.warning,
+      );
+      return;
+    }
+    setState(() => _photos.addAll(supported));
   }
 
   @override
@@ -2249,11 +2406,11 @@ class _ReceivePurchaseOrderSheetState
                     ),
                   );
                 }
-                final delivered =
-                    double.tryParse(_delivered[item.id]!.text.trim()) ?? 0;
+                final accepted =
+                    double.tryParse(_accepted[item.id]!.text.trim()) ?? 0;
                 final damaged =
                     double.tryParse(_damaged[item.id]!.text.trim()) ?? 0;
-                final accepted = max(0.0, delivered - damaged);
+                final delivered = accepted + damaged;
                 final remainingAfterDelivery =
                     max(0.0, item.remainingQuantity - delivered);
                 return _receiptLineCard(
@@ -2313,8 +2470,8 @@ class _ReceivePurchaseOrderSheetState
                           SizedBox(
                             width: 125,
                             child: _receiptQuantityField(
-                              label: 'DELIVERED',
-                              controller: _delivered[item.id]!,
+                              label: 'ACCEPTED (GOOD)',
+                              controller: _accepted[item.id]!,
                               onChanged: (_) => setState(() {}),
                             ),
                           ),
@@ -2359,6 +2516,7 @@ class _ReceivePurchaseOrderSheetState
                       ),
                       TextField(
                         controller: _notes[item.id],
+                        maxLength: 1000,
                         style:
                             const TextStyle(color: Colors.white, fontSize: 13),
                         decoration: InputDecoration(
@@ -2377,6 +2535,29 @@ class _ReceivePurchaseOrderSheetState
               },
             ),
           ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _pickPhotos,
+              icon: const Icon(Icons.add_a_photo_outlined),
+              label: Text(
+                _photos.isEmpty
+                    ? 'Add optional receipt photos'
+                    : 'Add receipt photos (${_photos.length}/5)',
+              ),
+            ),
+          ),
+          if (_photos.isNotEmpty)
+            Wrap(
+              spacing: 6,
+              children: _photos
+                  .map((photo) => InputChip(
+                        label: Text(photo.name),
+                        onDeleted: () => setState(() => _photos.remove(photo)),
+                      ))
+                  .toList(),
+            ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -2442,6 +2623,66 @@ class _ReceivePurchaseOrderSheetState
       );
 }
 
+class _ReceiptSubmission {
+  const _ReceiptSubmission({required this.items, required this.photos});
+
+  final List<Map<String, dynamic>> items;
+  final List<XFile> photos;
+}
+
+class _PurchaseOrderReceipt {
+  const _PurchaseOrderReceipt({
+    required this.id,
+    required this.receivedAt,
+    required this.receivedBy,
+    required this.items,
+    required this.photoUrls,
+  });
+
+  final String id;
+  final DateTime receivedAt;
+  final String receivedBy;
+  final List<_PurchaseOrderReceiptLine> items;
+  final List<String> photoUrls;
+
+  factory _PurchaseOrderReceipt.fromJson(Map<String, dynamic> json) =>
+      _PurchaseOrderReceipt(
+        id: '${json['id']}',
+        receivedAt: DateTime.tryParse(json['receivedAt'] as String? ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        receivedBy: json['receivedBy'] as String? ?? 'Authorized user',
+        items: ((json['items'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(_PurchaseOrderReceiptLine.fromJson)
+            .toList(),
+        photoUrls: ((json['photoUrls'] as List?) ?? const [])
+            .whereType<String>()
+            .toList(),
+      );
+}
+
+class _PurchaseOrderReceiptLine {
+  const _PurchaseOrderReceiptLine({
+    required this.name,
+    required this.acceptedQuantity,
+    required this.damagedQuantity,
+    required this.shortageQuantity,
+  });
+
+  final String name;
+  final double acceptedQuantity;
+  final double damagedQuantity;
+  final double shortageQuantity;
+
+  factory _PurchaseOrderReceiptLine.fromJson(Map<String, dynamic> json) =>
+      _PurchaseOrderReceiptLine(
+        name: '${json['itemName'] ?? 'Item'}',
+        acceptedQuantity: (json['acceptedQuantity'] as num?)?.toDouble() ?? 0,
+        damagedQuantity: (json['damagedQuantity'] as num?)?.toDouble() ?? 0,
+        shortageQuantity: (json['shortageQuantity'] as num?)?.toDouble() ?? 0,
+      );
+}
+
 class _PurchaseOrder {
   _PurchaseOrder({
     required this.id,
@@ -2455,6 +2696,7 @@ class _PurchaseOrder {
     this.createdAt = '',
     this.updatedAt = '',
     this.items = const [],
+    this.receipts = const [],
   });
 
   final String id, number;
@@ -2466,6 +2708,7 @@ class _PurchaseOrder {
   final String createdAt;
   String updatedAt;
   final List<_PurchaseOrderLine> items;
+  final List<_PurchaseOrderReceipt> receipts;
   bool approving = false;
 
   factory _PurchaseOrder.fromJson(Map<String, dynamic> json) => _PurchaseOrder(
@@ -2488,6 +2731,10 @@ class _PurchaseOrder {
         items: ((json['items'] as List?) ?? const [])
             .whereType<Map<String, dynamic>>()
             .map(_PurchaseOrderLine.fromJson)
+            .toList(),
+        receipts: ((json['receipts'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(_PurchaseOrderReceipt.fromJson)
             .toList(),
       );
 }

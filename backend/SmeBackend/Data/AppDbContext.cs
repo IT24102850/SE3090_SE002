@@ -565,6 +565,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<PurchaseOrderReceipt>(entity =>
         {
             entity.Property(receipt => receipt.ReceivedBy).HasMaxLength(150).IsRequired();
+            entity.Property(receipt => receipt.PhotoUrlsJson).HasColumnType("jsonb");
             entity.HasOne<PurchaseOrder>()
                 .WithMany(order => order.Receipts)
                 .HasForeignKey(receipt => receipt.PurchaseOrderId)

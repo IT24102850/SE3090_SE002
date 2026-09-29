@@ -403,9 +403,41 @@ public sealed class PurchaseOrdersController(
                 continue;
             }
 
-            if (received.DeliveredQuantity < 0 || received.DamagedQuantity < 0)
+            if (received.AcceptedQuantity is null && received.DeliveredQuantity is null)
             {
-                ModelState.AddModelError($"items[{index}]", "Delivered and damaged quantities cannot be negative.");
+                ModelState.AddModelError($"items[{index}].acceptedQuantity", "Enter the accepted quantity.");
+                continue;
+            }
+            if (received.AcceptedQuantity is not null && received.DeliveredQuantity is not null)
+            {
+                ModelState.AddModelError($"items[{index}]", "Specify acceptedQuantity; deliveredQuantity is supported only for older clients.");
+                continue;
+            }
+            decimal acceptedQuantity;
+            if (received.AcceptedQuantity is { } acceptedInput)
+            {
+                acceptedQuantity = acceptedInput;
+            }
+            else
+            {
+                var oldDeliveredQuantity = received.DeliveredQuantity!.Value;
+                if (oldDeliveredQuantity < 0 ||
+                    received.DamagedQuantity < 0 ||
+                    received.DamagedQuantity > oldDeliveredQuantity)
+                {
+                    ModelState.AddModelError(
+                        $"items[{index}]",
+                        "Legacy delivered quantity must be non-negative and cannot be less than damaged quantity.");
+                    continue;
+                }
+
+                acceptedQuantity = oldDeliveredQuantity - received.DamagedQuantity;
+            }
+            var deliveredQuantity = acceptedQuantity + received.DamagedQuantity;
+
+            if (acceptedQuantity < 0 || received.DamagedQuantity < 0)
+            {
+                ModelState.AddModelError($"items[{index}]", "Accepted and damaged quantities cannot be negative.");
                 continue;
             }
             if (received.Notes is { Length: > 1000 })
@@ -413,17 +445,7 @@ public sealed class PurchaseOrdersController(
                 ModelState.AddModelError($"items[{index}].notes", "Notes cannot exceed 1000 characters.");
                 continue;
             }
-            if (received.DamagedQuantity > received.DeliveredQuantity)
-            {
-                ModelState.AddModelError($"items[{index}].damagedQuantity", "Damaged quantity cannot exceed delivered quantity.");
-                continue;
-            }
-            if (received.DeliveredQuantity == 0 && received.DamagedQuantity > 0)
-            {
-                ModelState.AddModelError($"items[{index}].deliveredQuantity", "Enter the delivered quantity before recording damage.");
-                continue;
-            }
-            if (received.DeliveredQuantity == 0 && !received.CloseRemainingAsShort)
+            if (deliveredQuantity == 0 && !received.CloseRemainingAsShort)
             {
                 continue;
             }
@@ -437,15 +459,14 @@ public sealed class PurchaseOrdersController(
                                     orderItem.DamagedQuantity +
                                     orderItem.ShortageQuantity;
             var remainingQuantity = orderItem.Quantity - accountedQuantity;
-            if (received.DeliveredQuantity > remainingQuantity)
+            if (deliveredQuantity > remainingQuantity)
             {
                 ModelState.AddModelError(
-                    $"items[{index}].deliveredQuantity",
-                    $"Delivered quantity cannot exceed the remaining {remainingQuantity:0.###} units.");
+                    $"items[{index}].acceptedQuantity",
+                    $"Accepted plus damaged quantity cannot exceed the remaining {remainingQuantity:0.###} units.");
                 continue;
             }
 
-            var acceptedQuantity = received.DeliveredQuantity - received.DamagedQuantity;
             if (received.InventoryItemId.HasValue &&
                 orderItem.InventoryItemId.HasValue &&
                 received.InventoryItemId != orderItem.InventoryItemId)
@@ -472,7 +493,7 @@ public sealed class PurchaseOrdersController(
             }
 
             var shortageQuantity = received.CloseRemainingAsShort
-                ? remainingQuantity - received.DeliveredQuantity
+                ? remainingQuantity - deliveredQuantity
                 : 0m;
             orderItem.ReceivedQuantity += acceptedQuantity;
             orderItem.DamagedQuantity += received.DamagedQuantity;
@@ -484,7 +505,7 @@ public sealed class PurchaseOrdersController(
             {
                 TenantId = tenantId,
                 PurchaseOrderItemId = orderItem.Id,
-                DeliveredQuantity = received.DeliveredQuantity,
+                DeliveredQuantity = deliveredQuantity,
                 AcceptedQuantity = acceptedQuantity,
                 DamagedQuantity = received.DamagedQuantity,
                 ShortageQuantity = shortageQuantity,
@@ -572,7 +593,7 @@ public sealed class PurchaseOrdersController(
             });
         }
 
-        order.Receipts.Add(receipt);
+        db.PurchaseOrderReceipts.Add(receipt);
         order.Status = orderItems.All(item => item.ReceivingClosed)
             ? "Received"
             : "PartiallyReceived";
@@ -596,6 +617,11 @@ public sealed class PurchaseOrdersController(
         User.FindFirst("fullName")?.Value ??
         User.Identity?.Name ??
         "Authorized user";
+
+    private static IReadOnlyList<string> DeserializePhotoUrls(string? json) =>
+        string.IsNullOrWhiteSpace(json)
+            ? []
+            : System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<string>>(json) ?? [];
 
     private bool TryGetTenantId(out Guid tenantId) =>
         Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out tenantId);
@@ -642,6 +668,7 @@ public sealed class PurchaseOrdersController(
         var receiptItems = await db.PurchaseOrderReceiptItems.AsNoTracking()
             .Where(item => receiptIds.Contains(item.PurchaseOrderReceiptId))
             .ToListAsync(cancellationToken);
+        var orderItemsById = orderItems.ToDictionary(item => item.Id);
         var receiptsByOrderId = receipts
             .GroupJoin(
                 receiptItems,
@@ -651,8 +678,10 @@ public sealed class PurchaseOrdersController(
                     receipt.Id,
                     receipt.ReceivedAt,
                     receipt.ReceivedBy,
+                    DeserializePhotoUrls(receipt.PhotoUrlsJson),
                     items.Select(item => new PurchaseOrderReceiptItemResponse(
                         item.PurchaseOrderItemId,
+                        orderItemsById.GetValueOrDefault(item.PurchaseOrderItemId)?.Description,
                         item.DeliveredQuantity,
                         item.AcceptedQuantity,
                         item.DamagedQuantity,
@@ -770,6 +799,7 @@ public sealed record PurchaseOrderItemResponse(
 
 public sealed record PurchaseOrderReceiptItemResponse(
     Guid PurchaseOrderItemId,
+    string? ItemName,
     decimal DeliveredQuantity,
     decimal AcceptedQuantity,
     decimal DamagedQuantity,
@@ -780,6 +810,7 @@ public sealed record PurchaseOrderReceiptResponse(
     Guid Id,
     DateTime ReceivedAt,
     string ReceivedBy,
+    IReadOnlyList<string> PhotoUrls,
     IReadOnlyList<PurchaseOrderReceiptItemResponse> Items);
 
 public sealed record PurchaseOrderResponse(
@@ -832,8 +863,9 @@ public sealed record ReceivePurchaseOrderRequest(
 
 public sealed record ReceivePurchaseOrderItemRequest(
     Guid PurchaseOrderItemId,
-    decimal DeliveredQuantity,
+    decimal? AcceptedQuantity,
     decimal DamagedQuantity,
     bool CloseRemainingAsShort,
     string? Notes,
-    Guid? InventoryItemId = null);
+    Guid? InventoryItemId = null,
+    decimal? DeliveredQuantity = null);

@@ -799,20 +799,21 @@ public class PurchaseOrdersControllerTests
             order.Id,
             new ReceivePurchaseOrderRequest(
             [
-                new ReceivePurchaseOrderItemRequest(poItemId, 8m, 2m, false, "Two bottles damaged", itemId)
+                new ReceivePurchaseOrderItemRequest(poItemId, 1m, 1m, false, "One bottle damaged", itemId)
             ]),
             CancellationToken.None);
 
         var firstResponse = Assert.IsType<PurchaseOrderResponse>(
             Assert.IsType<OkObjectResult>(firstResult.Result).Value);
         Assert.Equal("PartiallyReceived", firstResponse.Status);
-        Assert.Equal(6m, firstResponse.Items!.Single().ReceivedQuantity);
-        Assert.Equal(2m, firstResponse.Items!.Single().DamagedQuantity);
-        Assert.Equal(16m, inventoryItem.Quantity);
+        Assert.Equal(2m, (await db.PurchaseOrderReceipts.SingleAsync()).Items.Single().DeliveredQuantity);
+        Assert.Equal(1m, firstResponse.Items!.Single().ReceivedQuantity);
+        Assert.Equal(1m, firstResponse.Items!.Single().DamagedQuantity);
+        Assert.Equal(11m, inventoryItem.Quantity);
         var acceptedMovement = await db.StockMovements.SingleAsync();
-        Assert.Equal(6m, acceptedMovement.Quantity);
+        Assert.Equal(1m, acceptedMovement.Quantity);
         Assert.Equal("Receiving Staff", acceptedMovement.PerformedBy);
-        Assert.Contains("Damaged: 2", acceptedMovement.Notes);
+        Assert.Contains("Damaged: 1", acceptedMovement.Notes);
 
         var secondResult = await controller.ReceivePurchaseOrder(
             order.Id,
@@ -825,12 +826,12 @@ public class PurchaseOrdersControllerTests
         var secondResponse = Assert.IsType<PurchaseOrderResponse>(
             Assert.IsType<OkObjectResult>(secondResult.Result).Value);
         Assert.Equal("Received", secondResponse.Status);
-        Assert.Equal(7m, secondResponse.Items!.Single().ReceivedQuantity);
-        Assert.Equal(2m, secondResponse.Items!.Single().DamagedQuantity);
-        Assert.Equal(1m, secondResponse.Items!.Single().ShortageQuantity);
-        Assert.Equal(17m, inventoryItem.Quantity);
+        Assert.Equal(2m, secondResponse.Items!.Single().ReceivedQuantity);
+        Assert.Equal(1m, secondResponse.Items!.Single().DamagedQuantity);
+        Assert.Equal(7m, secondResponse.Items!.Single().ShortageQuantity);
+        Assert.Equal(12m, inventoryItem.Quantity);
         Assert.Equal(2, secondResponse.Receipts!.Count);
-        Assert.Equal(7m, (await db.StockMovements.SumAsync(movement => movement.Quantity)));
+        Assert.Equal(2m, (await db.StockMovements.SumAsync(movement => movement.Quantity)));
     }
 
     [Fact]

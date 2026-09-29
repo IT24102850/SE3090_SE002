@@ -24,6 +24,26 @@ class AuthenticatedApiClient {
     return _send(() => _dio.post(_normalize(path), data: body));
   }
 
+  Future<InventoryApiResponse> uploadPurchaseReceiptPhoto(
+    String orderId,
+    String receiptId,
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    final form = FormData.fromMap({
+      'file': MultipartFile.fromBytes(bytes, filename: fileName),
+    });
+    return _send(
+      () => _dio.post(
+        _normalize(
+          '/api/purchase-orders/$orderId/receipts/$receiptId/photos',
+        ),
+        data: form,
+        options: Options(contentType: 'multipart/form-data'),
+      ),
+    );
+  }
+
   Future<InventoryApiResponse> put(String path, {Object? body}) async {
     return _send(() => _dio.put(_normalize(path), data: body));
   }

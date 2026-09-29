@@ -81,8 +81,10 @@ type PurchaseOrderReceiptResponse = {
   id: string;
   receivedAt: string;
   receivedBy: string;
+  photoUrls?: string[];
   items: Array<{
     purchaseOrderItemId: string;
+    itemName?: string;
     deliveredQuantity: number;
     acceptedQuantity: number;
     damagedQuantity: number;
@@ -273,6 +275,18 @@ async function apiPost<T>(path: string, token: string | null, body: unknown): Pr
   return response.json() as Promise<T>;
 }
 
+async function apiUpload<T>(path: string, token: string | null, file: File): Promise<T> {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  if (!response.ok) throw new Error(await apiErrorMessage(response, path));
+  return response.json() as Promise<T>;
+}
+
 async function apiErrorMessage(response: Response, path: string): Promise<string> {
   const fallback = `Request failed (${response.status}): ${path}`;
   try {
@@ -280,7 +294,7 @@ async function apiErrorMessage(response: Response, path: string): Promise<string
     const validation = body.errors
       ? Object.values(body.errors).flat().filter(Boolean).join(' ')
       : '';
-    return body.message || body.title || validation || fallback;
+    return [body.message, validation].filter(Boolean).join(' ') || body.title || fallback;
   } catch {
     return fallback;
   }
@@ -701,7 +715,7 @@ function CreatePoModal({
 }
 
 type ReceiptDraft = {
-  deliveredQuantity: string;
+  acceptedQuantity: string;
   damagedQuantity: string;
   closeRemainingAsShort: boolean;
   notes: string;
@@ -721,18 +735,19 @@ function ReceivePoModal({
   onClose: () => void;
   onReceive: (items: Array<{
     purchaseOrderItemId: string;
-    deliveredQuantity: number;
+    acceptedQuantity: number;
     damagedQuantity: number;
     closeRemainingAsShort: boolean;
     notes: string;
     inventoryItemId?: string;
-  }>) => Promise<void>;
+  }>, photos: File[]) => Promise<void>;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
   const branchInventoryItems = inventoryItems.filter((item) => item.branchId === order.branchId);
   const [lines, setLines] = useState<Record<string, ReceiptDraft>>(() =>
     Object.fromEntries((order.items ?? []).map((item) => [item.id, {
-      deliveredQuantity: '',
+      acceptedQuantity: '',
       damagedQuantity: '',
       closeRemainingAsShort: false,
       notes: '',
@@ -758,43 +773,38 @@ function ReceivePoModal({
     }
     const payload = order.items.map((item) => ({
       purchaseOrderItemId: item.id,
-      deliveredQuantity: Number(lines[item.id]?.deliveredQuantity || 0),
+      acceptedQuantity: Number(lines[item.id]?.acceptedQuantity || 0),
       damagedQuantity: Number(lines[item.id]?.damagedQuantity || 0),
       closeRemainingAsShort: lines[item.id]?.closeRemainingAsShort ?? false,
       notes: lines[item.id]?.notes.trim() ?? '',
       inventoryItemId: item.inventoryItemId ?? lines[item.id]?.inventoryItemId,
     }));
     const changed = payload.some((line) =>
-      line.deliveredQuantity > 0 || line.closeRemainingAsShort,
+      line.acceptedQuantity > 0 || line.damagedQuantity > 0 || line.closeRemainingAsShort,
     );
     if (!changed) {
-      setError('Enter a delivered quantity or confirm a remaining shortage for at least one item.');
+      setError('Enter an accepted or damaged quantity, or confirm a remaining shortage for at least one item.');
       return;
     }
-    const invalid = payload.find((line) =>
-      line.deliveredQuantity < 0 ||
-      line.damagedQuantity < 0 ||
-      line.damagedQuantity > line.deliveredQuantity,
-    );
+    const invalid = payload.find((line) => {
+      const item = order.items?.find((candidate) => candidate.id === line.purchaseOrderItemId);
+      return line.acceptedQuantity < 0 ||
+        line.damagedQuantity < 0 ||
+        !item ||
+        line.acceptedQuantity + line.damagedQuantity > remaining(item);
+    });
     if (invalid) {
-      setError('Quantities must be zero or greater, and damaged units cannot exceed delivered units.');
+      setError('Accepted plus damaged units cannot exceed the remaining ordered quantity.');
       return;
     }
     const unlinkedAcceptedLine = payload.find((line) =>
-      line.deliveredQuantity > line.damagedQuantity && !line.inventoryItemId,
+      line.acceptedQuantity > 0 && !line.inventoryItemId,
     );
     if (unlinkedAcceptedLine) {
       setError('Choose a destination-branch inventory item for each accepted custom line.');
       return;
     }
-    const exceeds = order.items.find((item) =>
-      payload.find((line) => line.purchaseOrderItemId === item.id)!.deliveredQuantity > remaining(item),
-    );
-    if (exceeds) {
-      setError(`Delivered quantity for ${exceeds.itemName ?? exceeds.description ?? 'an item'} exceeds its ${remaining(exceeds)} remaining units.`);
-      return;
-    }
-    await onReceive(payload);
+    await onReceive(payload, photos);
   }
 
   return (
@@ -812,13 +822,13 @@ function ReceivePoModal({
           <div className="po-items-section">
             <table className="po-items-table">
               <thead>
-                <tr><th>Item</th><th>Ordered</th><th>Accepted so far</th><th>Remaining</th><th>Delivered now</th><th>Damaged now</th></tr>
+                <tr><th>Item</th><th>Ordered</th><th>Accepted so far</th><th>Remaining</th><th>Accepted now (good)</th><th>Damaged now</th></tr>
               </thead>
               <tbody>
                 {(order.items ?? []).map((item) => {
                   const left = remaining(item);
                   const line = lines[item.id] ?? {
-                    deliveredQuantity: '',
+                    acceptedQuantity: '',
                     damagedQuantity: '',
                     closeRemainingAsShort: false,
                     notes: '',
@@ -831,13 +841,13 @@ function ReceivePoModal({
                       <td>{left}</td>
                       <td>
                         <input
-                          aria-label={`Delivered now ${item.itemName ?? item.description ?? ''}`}
+                          aria-label={`Accepted now ${item.itemName ?? item.description ?? ''}`}
                           type="number"
                           min="0"
-                          max={left}
+                          max={Math.max(0, left - Number(line.damagedQuantity || 0))}
                           step="0.001"
-                          value={line.deliveredQuantity}
-                          onChange={(event) => updateLine(item.id, { deliveredQuantity: event.target.value })}
+                          value={line.acceptedQuantity}
+                          onChange={(event) => updateLine(item.id, { acceptedQuantity: event.target.value })}
                           disabled={saving || item.receivingClosed}
                         />
                       </td>
@@ -846,6 +856,7 @@ function ReceivePoModal({
                           aria-label={`Damaged now ${item.itemName ?? item.description ?? ''}`}
                           type="number"
                           min="0"
+                          max={Math.max(0, left - Number(line.acceptedQuantity || 0))}
                           step="0.001"
                           value={line.damagedQuantity}
                           onChange={(event) => updateLine(item.id, { damagedQuantity: event.target.value })}
@@ -869,7 +880,7 @@ function ReceivePoModal({
                         value={line.inventoryItemId ?? ''}
                         onChange={(event) => updateLine(item.id, { inventoryItemId: event.target.value || undefined })}
                         disabled={saving}
-                        required={Number(line.deliveredQuantity) > Number(line.damagedQuantity)}
+                        required={Number(line.acceptedQuantity) > 0}
                       >
                         <option value="">Select destination-branch item</option>
                         {branchInventoryItems.map((inventoryItem) => (
@@ -884,6 +895,7 @@ function ReceivePoModal({
                     Notes for {item.itemName ?? item.description ?? 'item'}
                     <input
                       value={line.notes}
+                      maxLength={1000}
                       onChange={(event) => updateLine(item.id, { notes: event.target.value })}
                       placeholder="Optional condition / supplier notes"
                       disabled={saving}
@@ -897,12 +909,40 @@ function ReceivePoModal({
                         onChange={(event) => updateLine(item.id, { closeRemainingAsShort: event.target.checked })}
                         disabled={saving}
                       />{' '}
-                      No more delivery expected; record the remaining {Math.max(0, remaining(item) - Number(line.deliveredQuantity || 0))} units as short
+                      No more delivery expected; record the remaining {Math.max(0, remaining(item) - Number(line.acceptedQuantity || 0) - Number(line.damagedQuantity || 0))} units as short
                     </span>
                   </label>
                 </div>
               );
             })}
+            <label className="form-field form-field-wide">
+              Optional delivery photos (up to 5, JPEG/PNG/WebP, 5 MB each)
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                onChange={(event) => {
+                  const selected = Array.from(event.target.files ?? []);
+                  if (selected.length + photos.length > 5) {
+                    setError('A receipt can have at most five photos.');
+                    event.target.value = '';
+                    return;
+                  }
+                  if (selected.some((file) => file.size > 5 * 1024 * 1024)) {
+                    setError('Each receipt photo must be 5 MB or smaller.');
+                    event.target.value = '';
+                    return;
+                  }
+                  setError(null);
+                  setPhotos((current) => [...current, ...selected]);
+                  event.target.value = '';
+                }}
+                disabled={saving || photos.length >= 5}
+              />
+              {photos.length > 0 && (
+                <span>{photos.map((photo) => photo.name).join(', ')}</span>
+              )}
+            </label>
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
@@ -1084,28 +1124,52 @@ export function PurchaseOrderManagerPage() {
 
   async function recordReceipt(order: PurchaseOrder, items: Array<{
     purchaseOrderItemId: string;
-    deliveredQuantity: number;
+    acceptedQuantity: number;
     damagedQuantity: number;
     closeRemainingAsShort: boolean;
     notes: string;
     inventoryItemId?: string;
-  }>) {
+  }>, photos: File[]) {
     if (!canReceivePurchaseOrders) return;
     setStatusSavingId(order.id);
+    let receiptSaved = false;
     try {
       const updated = await apiPost<PurchaseOrderResponse>(
         `/purchase-orders/${order.id}/receive`,
         token,
         { items },
       );
+      receiptSaved = true;
+      let updatedWithPhotos = updated;
+      if (photos.length > 0) {
+        const receiptId = updated.receipts?.[0]?.id;
+        if (!receiptId) {
+          throw new Error('The receipt was saved, but the API did not return a receipt ID for its photos.');
+        }
+        let photoUrls: string[] = [];
+        for (const photo of photos) {
+          const uploaded = await apiUpload<{ photoUrls: string[] }>(
+            `/purchase-orders/${order.id}/receipts/${receiptId}/photos`,
+            token,
+            photo,
+          );
+          photoUrls = uploaded.photoUrls;
+        }
+        updatedWithPhotos = {
+          ...updated,
+          receipts: (updated.receipts ?? []).map((receipt) =>
+            receipt.id === receiptId ? { ...receipt, photoUrls } : receipt,
+          ),
+        };
+      }
       setOrders((current) => current.map((candidate) =>
-        candidate.id === order.id ? responseToOrder(updated, candidate) : candidate,
+        candidate.id === order.id ? responseToOrder(updatedWithPhotos, candidate) : candidate,
       ));
       setReceivingOrder(null);
-      notify(`${order.number} receipt recorded. Accepted quantities were added to stock.`, 'success');
+      notify(`${order.number} receipt recorded. Accepted quantities were added to stock${photos.length === 0 ? '' : ` and ${photos.length} photos attached`}.`, 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'The receipt could not be recorded.';
-      notify(message, 'error');
+      notify(receiptSaved ? `Receipt saved, but photo evidence could not be attached. ${message}` : message, 'error');
     } finally {
       setStatusSavingId(null);
     }
@@ -1375,6 +1439,21 @@ export function PurchaseOrderManagerPage() {
                                 {item.notes ? ` · ${item.notes}` : ''}
                               </p>
                             ))}
+                            {!!receipt.photoUrls?.length && (
+                              <div className="po-receipt-photos">
+                                {receipt.photoUrls.map((url) => (
+                                  <a
+                                    key={url}
+                                    href={url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    aria-label="Open receipt photo"
+                                  >
+                                    <img src={url} alt="Purchase order receipt evidence" loading="lazy" />
+                                  </a>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </li>
                       ))}
@@ -1458,7 +1537,7 @@ export function PurchaseOrderManagerPage() {
           inventoryItems={options.items ?? []}
           saving={statusSavingId === receivingOrder.id}
           onClose={() => setReceivingOrder(null)}
-          onReceive={(items) => recordReceipt(receivingOrder, items)}
+          onReceive={(items, photos) => recordReceipt(receivingOrder, items, photos)}
         />
       )}
     </div>
