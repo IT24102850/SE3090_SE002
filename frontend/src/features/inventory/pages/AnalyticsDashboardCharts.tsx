@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -52,6 +52,9 @@ type SalesActivityReport = {
   averageSale: number;
   costOfGoodsSold: number | null;
   grossProfit: number | null;
+  page: number;
+  pageSize: number;
+  totalPages: number;
   recentSales: SalesActivityItem[];
 };
 type InventoryItem = {
@@ -72,6 +75,7 @@ type Slot<T> = { status: 'loading' } | { status: 'ready'; value: T } | { status:
 const loading = { status: 'loading' } as const;
 
 type DateRange = '7d' | '30d' | '90d';
+const SALES_PAGE_SIZE = 5;
 
 /* ── helpers ────────────────────────────────────────────────────────────── */
 function settle<T>(result: PromiseSettledResult<T>): Slot<T> {
@@ -123,6 +127,15 @@ function buildDateParams(range: DateRange): string {
   const from = new Date();
   from.setDate(from.getDate() - (range === '7d' ? 7 : range === '30d' ? 30 : 90));
   return `from=${from.toISOString()}&to=${to.toISOString()}`;
+}
+
+function pageButtons(currentPage: number, totalPages: number): Array<number | 'ellipsis-start' | 'ellipsis-end'> {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  if (currentPage <= 4) return [1, 2, 3, 4, 5, 'ellipsis-end', totalPages];
+  if (currentPage >= totalPages - 3) {
+    return [1, 'ellipsis-start', ...Array.from({ length: 5 }, (_, index) => totalPages - 4 + index)];
+  }
+  return [1, 'ellipsis-start', currentPage - 1, currentPage, currentPage + 1, 'ellipsis-end', totalPages];
 }
 
 function exportCsv(rows: ReturnType<typeof buildTableRows>, filename: string) {
@@ -244,6 +257,102 @@ function Metric({ label, value, detail, tone, icon }: {
   );
 }
 
+function SaleReceiptModal({
+  sale,
+  onClose,
+}: {
+  sale: SalesActivityItem;
+  onClose: () => void;
+}) {
+  const date = new Date(sale.occurredAt);
+  const formattedDate = Number.isNaN(date.getTime())
+    ? 'Date unavailable'
+    : date.toLocaleString('en-LK', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+  return (
+    <div
+      className="modal-overlay inventory-sale-receipt-overlay"
+      onClick={onClose}
+      role="presentation"
+    >
+      <article
+        className="inventory-sale-receipt-paper"
+        onClick={event => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="inventory-sale-receipt-title"
+      >
+        <div className="inventory-sale-receipt-actions">
+          <button type="button" className="btn btn-secondary" onClick={() => window.print()}>
+            Print / Save PDF
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onClose}
+            aria-label="Close receipt"
+          >
+            Close
+          </button>
+        </div>
+        <header className="inventory-sale-receipt-header">
+          <p>INVENTORY SALES</p>
+          <h2 id="inventory-sale-receipt-title">Sales receipt</h2>
+          <span>Recorded transaction</span>
+        </header>
+        <div className="inventory-sale-receipt-meta">
+          <div>
+            <span>REFERENCE</span>
+            <strong>{sale.reference}</strong>
+          </div>
+          <div>
+            <span>DATE &amp; TIME</span>
+            <strong>{formattedDate}</strong>
+          </div>
+        </div>
+        <div className="inventory-sale-receipt-items">
+          <div className="inventory-sale-receipt-items-head">
+            <span>ITEMS SOLD</span>
+            <span>QUANTITY</span>
+          </div>
+          <div className="inventory-sale-receipt-items-body">
+            <strong>{sale.items.length ? sale.items.join(', ') : 'Recorded sale'}</strong>
+            <span>{sale.quantity > 0 ? compact(sale.quantity) : '—'}</span>
+          </div>
+        </div>
+        <div className="inventory-sale-receipt-totals">
+          {sale.costOfGoodsSold != null && (
+            <div><span>Cost of goods sold</span><strong>{lkr(sale.costOfGoodsSold)}</strong></div>
+          )}
+          {sale.grossProfit != null && (
+            <div><span>Gross profit</span><strong>{lkr(sale.grossProfit)}</strong></div>
+          )}
+          <div className="inventory-sale-receipt-total">
+            <span>SALE TOTAL</span>
+            <strong>{new Intl.NumberFormat('en-LK', {
+              style: 'currency',
+              currency: 'LKR',
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }).format(sale.amount)}</strong>
+          </div>
+        </div>
+        <footer className="inventory-sale-receipt-note">
+          This receipt confirms an inventory sale record only. Payment collection,
+          customer details, branch, and unit prices are not included in the sales
+          activity data.
+        </footer>
+      </article>
+    </div>
+  );
+}
+
 /* ── main component ─────────────────────────────────────────────────────── */
 export function AnalyticsDashboardPage() {
   const token = getStoredToken();
@@ -255,20 +364,30 @@ export function AnalyticsDashboardPage() {
   const [usage, setUsage] = useState<Slot<InventoryUsageReport>>(loading);
   const [inventory, setInventory] = useState<Slot<InventoryListResponse>>(loading);
   const [sales, setSales] = useState<Slot<SalesActivityReport>>(loading);
+  const [receiptSale, setReceiptSale] = useState<SalesActivityItem | null>(null);
+  const [salesPageLoading, setSalesPageLoading] = useState(false);
+  const [salesPageError, setSalesPageError] = useState<string | null>(null);
+  const [salesPage, setSalesPage] = useState(1);
+  const salesRequestId = useRef(0);
 
   const load = useCallback(async (showMsg = false) => {
+    const requestId = ++salesRequestId.current;
     setUsage(loading);
     setInventory(loading);
     setSales(loading);
+    setSalesPageLoading(false);
+    setSalesPage(1);
+    setSalesPageError(null);
     const dateParams = buildDateParams(range);
     const [movementResult, inventoryResult, salesResult] = await Promise.allSettled([
       apiGet<InventoryUsageReport>(`/api/reports/inventory-usage?${dateParams}`, token),
       apiGetAllInventory(token),
-      apiGet<SalesActivityReport>(`/api/reports/sales-activity?${dateParams}`, token),
+      apiGet<SalesActivityReport>(`/api/reports/sales-activity?${dateParams}&page=1&pageSize=${SALES_PAGE_SIZE}`, token),
     ]);
     const movementSlot = settle(movementResult);
     const inventorySlot = settle(inventoryResult);
     const salesSlot = settle(salesResult);
+    if (requestId !== salesRequestId.current) return;
     setUsage(movementSlot);
     setInventory(inventorySlot);
     setSales(salesSlot);
@@ -284,6 +403,29 @@ export function AnalyticsDashboardPage() {
       }
     }
   }, [notify, token, range]);
+
+  const loadSalesPage = useCallback(async (page: number) => {
+    const requestId = ++salesRequestId.current;
+    setSalesPageLoading(true);
+    setSalesPageError(null);
+    try {
+      const dateParams = buildDateParams(range);
+      const report = await apiGet<SalesActivityReport>(
+        `/api/reports/sales-activity?${dateParams}&page=${page}&pageSize=${SALES_PAGE_SIZE}`,
+        token,
+      );
+      if (requestId === salesRequestId.current) {
+        setSales({ status: 'ready', value: report });
+        setSalesPage(page);
+      }
+    } catch (error) {
+      if (requestId === salesRequestId.current) {
+        setSalesPageError(error instanceof Error ? error.message : 'Request failed');
+      }
+    } finally {
+      if (requestId === salesRequestId.current) setSalesPageLoading(false);
+    }
+  }, [range, token]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -602,7 +744,7 @@ export function AnalyticsDashboardPage() {
             <div>
               <p className="eyebrow">RECENTLY RECORDED</p>
               <h2>Recent sales</h2>
-              <p>The latest completed sales within the selected date range.</p>
+              <p>All completed sales within the selected date range, shown page by page.</p>
             </div>
             <span className="inventory-analytics-panel-icon">
               <Icon name="chart" size={18} />
@@ -615,39 +757,107 @@ export function AnalyticsDashboardPage() {
           ) : sales.value.recentSales.length === 0 ? (
             <PanelEmpty>No sales have been recorded in this period.</PanelEmpty>
           ) : (
-            <div className="table-wrap inventory-sales-activity-table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>When</th>
-                    <th>Items sold</th>
-                    <th>Quantity</th>
-                    <th>Reference</th>
-                    <th className="inventory-sales-profit-heading">Gross profit</th>
-                    <th className="inventory-sales-amount-heading">Sale total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sales.value.recentSales.map(sale => (
-                    <tr key={sale.id}>
-                      <td>{saleDate(sale.occurredAt)}</td>
-                      <td>
-                        <strong>{sale.items.length ? sale.items.join(', ') : 'Recorded sale'}</strong>
-                      </td>
-                      <td>{sale.quantity > 0 ? compact(sale.quantity) : '—'}</td>
-                      <td><span className="cell-sub">{sale.reference}</span></td>
-                      <td className="inventory-sales-profit">
-                        {sale.grossProfit == null ? 'Cost data missing' : lkr(sale.grossProfit)}
-                      </td>
-                      <td className="inventory-sales-amount">{lkr(sale.amount)}</td>
+            <>
+              <div className="table-wrap inventory-sales-activity-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>When</th>
+                      <th>Items sold</th>
+                      <th>Quantity</th>
+                      <th>Reference</th>
+                      <th className="inventory-sales-profit-heading">Gross profit</th>
+                      <th className="inventory-sales-amount-heading">Sale total</th>
+                      <th>Receipt</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {sales.value.recentSales.map(sale => (
+                      <tr key={sale.id}>
+                        <td>{saleDate(sale.occurredAt)}</td>
+                        <td>
+                          <strong>{sale.items.length ? sale.items.join(', ') : 'Recorded sale'}</strong>
+                        </td>
+                        <td>{sale.quantity > 0 ? compact(sale.quantity) : '—'}</td>
+                        <td><span className="cell-sub">{sale.reference}</span></td>
+                        <td className="inventory-sales-profit">
+                          {sale.grossProfit == null ? 'Cost data missing' : lkr(sale.grossProfit)}
+                        </td>
+                        <td className="inventory-sales-amount">{lkr(sale.amount)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="link-button inventory-sale-receipt-action"
+                            onClick={() => setReceiptSale(sale)}
+                            aria-label={`View receipt for ${sale.reference}`}
+                          >
+                            View receipt
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="table-footer inventory-sales-activity-footer">
+                <p className="table-caption">
+                  {`Showing ${(salesPage - 1) * SALES_PAGE_SIZE + 1}–${Math.min(salesPage * SALES_PAGE_SIZE, sales.value.salesCount)} of ${sales.value.salesCount} sales`}
+                </p>
+                {sales.value.totalPages > 1 && (
+                  <nav className="pagination" aria-label="Sales activity pagination">
+                    <button
+                      type="button"
+                      className="pagination-btn"
+                      disabled={salesPage <= 1 || salesPageLoading}
+                      onClick={() => void loadSalesPage(salesPage - 1)}
+                    >
+                      Previous
+                    </button>
+                    {pageButtons(salesPage, sales.value.totalPages).map((pageNum, index) =>
+                      typeof pageNum === 'number' ? (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          className={`pagination-btn${pageNum === salesPage ? ' pagination-btn-active' : ''}`}
+                          aria-current={pageNum === salesPage ? 'page' : undefined}
+                          disabled={salesPageLoading}
+                          onClick={() => void loadSalesPage(pageNum)}
+                        >
+                          {pageNum}
+                        </button>
+                      ) : (
+                        <span key={`${pageNum}-${index}`} className="pagination-ellipsis" aria-hidden="true">…</span>
+                      ),
+                    )}
+                    <button
+                      type="button"
+                      className="pagination-btn"
+                      disabled={salesPage >= sales.value.totalPages || salesPageLoading}
+                      onClick={() => void loadSalesPage(salesPage + 1)}
+                    >
+                      Next
+                    </button>
+                  </nav>
+                )}
+                {salesPageError && (
+                  <div className="inventory-sales-page-error" role="alert">
+                    <span>{salesPageError}</span>
+                    <button type="button" className="link-button" onClick={() => void loadSalesPage(salesPage)}>
+                      Retry
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </article>
       </section>
+      {receiptSale && (
+        <SaleReceiptModal
+          sale={receiptSale}
+          onClose={() => setReceiptSale(null)}
+        />
+      )}
 
       {/* ── MAIN CHARTS GRID ── */}
       <section className="inventory-analytics-grid">

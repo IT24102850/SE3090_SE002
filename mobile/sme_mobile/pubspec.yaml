@@ -39,6 +39,7 @@ dependencies:
   google_sign_in: ^7.2.0
   flutter_appauth: ^8.0.3
   local_auth: ^3.0.2
+  pdf: ^3.13.1
 
 dev_dependencies:
   flutter_test:

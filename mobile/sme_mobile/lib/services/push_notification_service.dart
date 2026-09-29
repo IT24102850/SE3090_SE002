@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/api_service_provider.dart';
 import '../providers/auth_provider.dart';
+import 'notification_sound_service.dart';
 
 /// Wires up FCM push notifications. Fully real, but entirely inert until a
 /// real Firebase project's config files (google-services.json /
@@ -59,6 +60,7 @@ class PushNotificationService {
       final text =
           [title, body].where((s) => s != null && s.isNotEmpty).join(': ');
       if (text.isEmpty) return;
+      playMobileNotificationSound();
       messengerKey.currentState?.showSnackBar(SnackBar(content: Text(text)));
     });
   }
