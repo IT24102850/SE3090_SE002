@@ -429,21 +429,6 @@ class _DashboardDrawer extends ConsumerWidget {
                           .push(slideFadeRoute(const MyScheduleScreen()));
                     },
                   ),
-                if (user.role == 'Admin') ...[
-                  _DrawerItem(
-                    icon: Icons.admin_panel_settings,
-                    label: 'Admin Panel',
-                    accent: role.color,
-                    iconColor: role.color,
-                    onTap: () {
-                      Navigator.pop(context);
-                      AppSnackBar.info(
-                        context,
-                        'The full Admin Panel is available in the web app.',
-                      );
-                    },
-                  ),
-                ],
                 if (user.role != 'Customer')
                   const _DrawerSectionLabel(label: 'MANAGE INVENTORY'),
                 if (user.role != 'Customer')

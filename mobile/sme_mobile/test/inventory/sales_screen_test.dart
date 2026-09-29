@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sme_mobile/inventory/authenticated_api_client.dart';
 import 'package:sme_mobile/inventory/app_notifications.dart';
-import 'package:sme_mobile/inventory/inventory_models.dart';
 import 'package:sme_mobile/inventory/sales_screen.dart';
 
 void main() {
@@ -34,25 +33,25 @@ void main() {
     expect(
         tester.getRect(header).bottom,
         lessThan(tester
-            .getRect(
-              find.byType(DropdownButtonFormField<InventoryItem>),
-            )
+            .getRect(find.byKey(const Key('sale-item-search-field')))
             .top));
     expect(
       tester.getRect(header).bottom,
       lessThan(tester.view.physicalSize.height / tester.view.devicePixelRatio),
     );
-    await tester.tap(find.byType(DropdownButtonFormField<InventoryItem>));
+    await tester.tap(find.byKey(const Key('sale-item-search-field')));
     await tester.pumpAndSettle();
     expect(find.text('Unassigned stock'), findsNothing);
-    await tester.tap(find.text('Coffee Beans').last);
+    await tester.tap(find.byKey(const Key(
+      'sale-item-option-${_SalesApiAdapter.itemId}',
+    )));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('sale-unit-price-display')), findsOneWidget);
     expect(find.byKey(const Key('sale-unit-price-field')), findsNothing);
     expect(find.text('LKR 120.00'), findsNWidgets(2));
 
-    await tester.enterText(find.byType(TextField).at(0), '2');
+    await tester.enterText(find.byKey(const Key('sale-quantity-field')), '2');
     await tester.tap(find.text('Record sale'));
     await tester.pumpAndSettle();
 
@@ -108,9 +107,11 @@ void main() {
       home: SalesScreen(client: AuthenticatedApiClient(dio: dio)),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<InventoryItem>));
+    await tester.tap(find.byKey(const Key('sale-item-search-field')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Coffee Beans').last);
+    await tester.tap(find.byKey(const Key(
+      'sale-item-option-${_SalesApiAdapter.itemId}',
+    )));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Record sale'));
     await tester.pumpAndSettle();
@@ -122,6 +123,40 @@ void main() {
     expect(
         find.text('Sale cancelled. No inventory was changed.'), findsOneWidget);
     await tester.pump(const Duration(seconds: 6));
+    dio.close();
+  });
+
+  testWidgets('searches inventory by SKU and shows accurate item details', (
+    tester,
+  ) async {
+    final adapter = _SalesApiAdapter();
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api'))
+      ..httpClientAdapter = adapter;
+
+    await tester.pumpWidget(MaterialApp(
+      scaffoldMessengerKey: appMessengerKey,
+      home: SalesScreen(client: AuthenticatedApiClient(dio: dio)),
+    ));
+    await tester.pumpAndSettle();
+
+    final searchField = find.byKey(const Key('sale-item-search-field'));
+    await tester.tap(searchField);
+    await tester.enterText(searchField, 'wTr-05');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bottled Water'), findsOneWidget);
+    expect(find.text('WTR-05 · Drinks · Colombo Branch'), findsOneWidget);
+    expect(find.text('12 bottle available · LKR 20.00'), findsOneWidget);
+    expect(find.text('Coffee Beans'), findsNothing);
+
+    await tester.tap(find.byKey(
+      const Key('sale-item-option-59a715eb-6a6c-421b-b717-f141dc48c454'),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Colombo Branch'), findsOneWidget);
+    expect(find.text('LKR 20.00'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
     dio.close();
   });
 
@@ -200,9 +235,11 @@ void main() {
       home: SalesScreen(client: AuthenticatedApiClient(dio: dio)),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<InventoryItem>));
+    await tester.tap(find.byKey(const Key('sale-item-search-field')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Coffee Beans').last);
+    await tester.tap(find.byKey(const Key(
+      'sale-item-option-${_SalesApiAdapter.itemId}',
+    )));
     await tester.pumpAndSettle();
 
     adapter.failSale = true;
@@ -240,9 +277,11 @@ void main() {
       home: SalesScreen(client: AuthenticatedApiClient(dio: dio)),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<InventoryItem>));
+    await tester.tap(find.byKey(const Key('sale-item-search-field')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Coffee Beans').last);
+    await tester.tap(find.byKey(const Key(
+      'sale-item-option-${_SalesApiAdapter.itemId}',
+    )));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Record sale'));
     await tester.pumpAndSettle();
@@ -301,6 +340,19 @@ class _SalesApiAdapter implements HttpClientAdapter {
             'sellingPrice': 120,
             'branch': 'Main branch',
             'branchId': 'bcf51a09-74f3-4697-bfd6-f508c7770302',
+          },
+          {
+            'id': '59a715eb-6a6c-421b-b717-f141dc48c454',
+            'name': 'Bottled Water',
+            'sku': 'WTR-05',
+            'category': 'Drinks',
+            'quantity': 12,
+            'unit': 'bottle',
+            'reorderLevel': 3,
+            'unitCost': 10,
+            'sellingPrice': 20,
+            'branch': 'Colombo Branch',
+            'branchId': '0e984137-2d68-40bb-8020-43fe0b81c740',
           },
           {
             'id': '6aa6b7bd-32d6-44be-9382-fb2e790375f2',

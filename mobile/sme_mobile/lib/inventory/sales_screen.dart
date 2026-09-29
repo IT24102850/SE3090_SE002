@@ -25,6 +25,7 @@ class SalesScreen extends StatefulWidget {
 
 class _SalesScreenState extends State<SalesScreen> {
   final _quantityController = TextEditingController(text: '1');
+  final _itemSearchController = TextEditingController();
   List<InventoryItem> _items = const [];
   List<_RevenueDay> _days = const [];
   List<_RecentSale> _recentSales = const [];
@@ -32,8 +33,8 @@ class _SalesScreenState extends State<SalesScreen> {
   bool _loading = true;
   bool _saving = false;
   bool _inventoryLoaded = false;
+  bool _itemPickerExpanded = false;
   bool _hasLoadedOnce = false;
-  int _inventoryRevision = 0;
   double _totalRevenue = 0;
   double? _grossProfit;
   int _periodDays = 7;
@@ -41,6 +42,35 @@ class _SalesScreenState extends State<SalesScreen> {
   List<InventoryItem> get _availableItems => _items
       .where((item) => item.quantity > 0 && item.branchId != null)
       .toList();
+
+  List<InventoryItem> get _matchingAvailableItems {
+    final query = _itemSearchController.text.trim().toLowerCase();
+    if (query.isEmpty) return _availableItems;
+
+    final terms = query.split(RegExp(r'\s+'));
+    final matches = <({InventoryItem item, int score})>[];
+    for (final item in _availableItems) {
+      final name = item.name.toLowerCase();
+      final sku = item.sku.toLowerCase();
+      final searchable =
+          '${item.name} ${item.sku} ${item.category} ${item.branch} ${item.unit}'
+              .toLowerCase();
+      if (!terms.every(searchable.contains)) continue;
+
+      final score = sku == query
+          ? 0
+          : name == query
+              ? 1
+              : sku.startsWith(query)
+                  ? 2
+                  : name.startsWith(query)
+                      ? 3
+                      : 4;
+      matches.add((item: item, score: score));
+    }
+    matches.sort((a, b) => a.score.compareTo(b.score));
+    return matches.map((match) => match.item).toList();
+  }
 
   @override
   void initState() {
@@ -51,7 +81,182 @@ class _SalesScreenState extends State<SalesScreen> {
   @override
   void dispose() {
     _quantityController.dispose();
+    _itemSearchController.dispose();
     super.dispose();
+  }
+
+  void _selectItem(InventoryItem item) {
+    setState(() {
+      _selectedItem = item;
+      _itemPickerExpanded = false;
+      _itemSearchController.text = '${item.name} · ${item.sku}';
+    });
+    FocusScope.of(context).unfocus();
+  }
+
+  Widget _buildItemPicker() {
+    final canSearch = !_saving &&
+        !_loading &&
+        _inventoryLoaded &&
+        _availableItems.isNotEmpty;
+    final matches = _matchingAvailableItems;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          key: const Key('sale-item-search-field'),
+          controller: _itemSearchController,
+          enabled: canSearch,
+          textInputAction: TextInputAction.search,
+          style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+          decoration: _inputDecoration(
+            'Search item, SKU, category or branch',
+            Icons.search_rounded,
+          ).copyWith(
+            suffixIcon: IconButton(
+              tooltip: _itemPickerExpanded ? 'Close item list' : 'Browse items',
+              onPressed: canSearch
+                  ? () {
+                      setState(() {
+                        _itemPickerExpanded = !_itemPickerExpanded;
+                        if (_itemPickerExpanded) {
+                          _itemSearchController.clear();
+                        } else if (_selectedItem != null) {
+                          _itemSearchController.text =
+                              '${_selectedItem!.name} · ${_selectedItem!.sku}';
+                        }
+                      });
+                    }
+                  : null,
+              icon: Icon(
+                _itemPickerExpanded
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ),
+          onTap: canSearch
+              ? () => setState(() => _itemPickerExpanded = true)
+              : null,
+          onChanged: canSearch
+              ? (_) => setState(() => _itemPickerExpanded = true)
+              : null,
+        ),
+        if (_itemPickerExpanded && canSearch) ...[
+          const SizedBox(height: 7),
+          Container(
+            key: const Key('sale-item-search-results'),
+            constraints: const BoxConstraints(maxHeight: 270),
+            decoration: BoxDecoration(
+              color: AppColors.bgMid,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.glassBorder),
+            ),
+            child: matches.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Text(
+                      'No matching in-stock items. Try another name, SKU, category or branch.',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textMuted,
+                        height: 1.4,
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: matches.length,
+                    separatorBuilder: (_, __) => const Divider(
+                      height: 1,
+                      indent: 14,
+                      endIndent: 14,
+                      color: AppColors.hairline,
+                    ),
+                    itemBuilder: (context, index) {
+                      final item = matches[index];
+                      return InkWell(
+                        key: Key('sale-item-option-${item.id}'),
+                        onTap: () => _selectItem(item),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 13,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: AppColors.cyan.withValues(alpha: .1),
+                                  borderRadius: BorderRadius.circular(11),
+                                ),
+                                child: const Icon(
+                                  Icons.inventory_2_outlined,
+                                  color: AppColors.cyan,
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.body.copyWith(
+                                        color: AppColors.textPrimary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      '${item.sku} · ${item.category} · ${item.branch}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: AppColors.textMuted,
+                                        fontSize: 9,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      '${_quantity(item.quantity)} ${item.unit} available'
+                                      '${item.sellingPrice == null ? ' · Price not set' : ' · LKR ${_money(item.sellingPrice!)}'}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: item.sellingPrice == null
+                                            ? AppColors.warning
+                                            : AppColors.textSecondary,
+                                        fontSize: 9,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                color: AppColors.textMuted,
+                                size: 19,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ],
+    );
   }
 
   void _showFeedback(String message, _SalesFeedbackTone tone) {
@@ -94,7 +299,6 @@ class _SalesScreenState extends State<SalesScreen> {
       if (!mounted) return;
       setState(() {
         _items = items;
-        _inventoryRevision++;
         _inventoryLoaded = true;
         _selectedItem = _selectedItem == null
             ? null
@@ -104,6 +308,10 @@ class _SalesScreenState extends State<SalesScreen> {
                     item.quantity > 0 &&
                     item.branchId != null)
                 .firstOrNull;
+        _itemSearchController.text = _selectedItem == null
+            ? ''
+            : '${_selectedItem!.name} · ${_selectedItem!.sku}';
+        _itemPickerExpanded = false;
       });
 
       final now = DateTime.now().toUtc();
@@ -700,57 +908,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ],
             const SizedBox(height: 14),
-            DropdownButtonFormField<InventoryItem>(
-              key: ValueKey(_inventoryRevision),
-              initialValue: _selectedItem,
-              isExpanded: true,
-              dropdownColor: AppColors.bgMid,
-              selectedItemBuilder: (context) => _availableItems
-                  .map((item) => Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: Text(
-                          '${item.name} · ${item.sku}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.body
-                              .copyWith(color: AppColors.textPrimary),
-                        ),
-                      ))
-                  .toList(),
-              decoration: _inputDecoration(
-                  'Inventory item', Icons.inventory_2_outlined),
-              items: _availableItems
-                  .map((item) => DropdownMenuItem(
-                        value: item,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(item.name,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.body
-                                    .copyWith(color: AppColors.textPrimary)),
-                            Text(
-                              '${item.sku} · ${_quantity(item.quantity)} ${item.unit} available · ${item.branch}',
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.caption.copyWith(
-                                  color: AppColors.textMuted, fontSize: 9),
-                            ),
-                          ],
-                        ),
-                      ))
-                  .toList(),
-              onChanged: _saving ||
-                      _loading ||
-                      !_inventoryLoaded ||
-                      _availableItems.isEmpty
-                  ? null
-                  : (item) {
-                      setState(() {
-                        _selectedItem = item;
-                      });
-                    },
-            ),
+            _buildItemPicker(),
             if (_inventoryLoaded && _availableItems.isEmpty) ...[
               const SizedBox(height: 8),
               Text(
@@ -775,6 +933,7 @@ class _SalesScreenState extends State<SalesScreen> {
               children: [
                 Expanded(
                   child: TextField(
+                    key: const Key('sale-quantity-field'),
                     controller: _quantityController,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),

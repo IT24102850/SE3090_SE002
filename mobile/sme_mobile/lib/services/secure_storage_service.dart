@@ -77,12 +77,13 @@ class SecureStorageService {
   }
 
   static Future<void> setBiometricsEnabled(bool enabled) async {
-    await _storage.write(key: _biometricsKey, value: enabled ? 'true' : 'false');
+    await _storage.write(
+        key: _biometricsKey, value: enabled ? 'true' : 'false');
   }
 
   static Future<bool> isBiometricsEnabled() async {
     final val = await _storage.read(key: _biometricsKey);
-    return val == 'true' || val == null; // default enabled
+    return val == 'true';
   }
 
   // ── Clear everything (corrupt storage / reset) ─────────
