@@ -110,6 +110,31 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .badge-violet { color: #7c3aed; background: #ede9fe; }
 .inventory-scope .badge-accent { color: var(--color-accent-high); background: var(--color-accent-soft); }
 .inventory-scope .badge-slate { color: var(--color-text-secondary); background: var(--color-neutral-soft); }
+.inventory-scope .inventory-badge-content {
+  position: relative;
+  display: inline-block;
+}
+.inventory-scope .inventory-badge-secondary-shine {
+  position: absolute;
+  z-index: 2;
+  top: -50%;
+  bottom: -50%;
+  left: -45%;
+  width: 42%;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, .2), transparent);
+  transform: skewX(-18deg);
+  animation: inventory-status-secondary-shine 6s ease-in-out infinite;
+}
+@keyframes inventory-status-secondary-shine {
+  0%, 12% { left: -45%; }
+  58%, 100% { left: 125%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inventory-scope .inventory-badge-secondary-shine {
+    animation: none;
+  }
+}
 
 /* KPI cards */
 .inventory-scope .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem; }
@@ -2306,6 +2331,19 @@ body:has(.inventory-scope) .app-content::after {
 .inventory-scope .badge-slate::before {
   animation: inventory-status-badge-dot 2.2s ease-in-out infinite;
 }
+.inventory-scope .badge-green::after,
+.inventory-scope .badge-amber::after,
+.inventory-scope .badge-red::after,
+.inventory-scope .badge-blue::after,
+.inventory-scope .badge-violet::after,
+.inventory-scope .badge-slate::after {
+  display: block;
+  animation: inventory-badge-shimmer 2.8s ease-in-out infinite;
+}
+.inventory-scope .inventory-badge-secondary-shine {
+  display: inline-block;
+  animation: inventory-status-secondary-shine 6s ease-in-out infinite;
+}
 @keyframes inventory-status-badge-breathe {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent); }
   50% { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent), 0 0 12px color-mix(in srgb, currentColor 16%, transparent); }
@@ -2326,7 +2364,14 @@ body:has(.inventory-scope) .app-content::after {
   .inventory-scope .badge-red::before,
   .inventory-scope .badge-blue::before,
   .inventory-scope .badge-violet::before,
-  .inventory-scope .badge-slate::before {
+  .inventory-scope .badge-slate::before,
+  .inventory-scope .badge-green::after,
+  .inventory-scope .badge-amber::after,
+  .inventory-scope .badge-red::after,
+  .inventory-scope .badge-blue::after,
+  .inventory-scope .badge-violet::after,
+  .inventory-scope .badge-slate::after,
+  .inventory-scope .inventory-badge-secondary-shine {
     animation: none !important;
   }
 }
@@ -2396,11 +2441,26 @@ body:has(.inventory-scope) .app-content::after {
 .inventory-scope .branch-category-warning { margin: .65rem 1.1rem 0; padding: .65rem .8rem; color: #825800; background: color-mix(in srgb, #e2a126 12%, var(--color-surface)); border: 1px solid color-mix(in srgb, #e2a126 30%, var(--color-border)); border-radius: .65rem; font-size: .76rem; }
 .inventory-scope .branch-item-category { display: block; margin-top: .2rem; color: var(--color-text-muted); font-size: .68rem; font-weight: 550; }
 .inventory-scope .branch-overview-page .branch-item-sku { padding: .18rem .35rem; color: var(--color-text-secondary); background: var(--color-surface-muted, color-mix(in srgb, var(--color-border) 36%, var(--color-surface))); border-radius: .35rem; font-size: .72rem; }
-.inventory-scope .branch-stock-status { display: inline-flex; align-items: center; padding: .24rem .5rem; border: 1px solid transparent; border-radius: 999px; font-size: .68rem; font-weight: 800; }
-.inventory-scope .branch-stock-status::before { width: .38rem; height: .38rem; margin-right: .35rem; content: ''; background: currentColor; border-radius: 50%; }
+.inventory-scope .branch-stock-status { position: relative; display: inline-flex; align-items: center; overflow: hidden; isolation: isolate; padding: .24rem .5rem; border: 1px solid transparent; border-radius: 999px; font-size: .68rem; font-weight: 800; animation: branch-stock-status-glow 3s ease-in-out infinite; }
+.inventory-scope .branch-stock-status::before { position: relative; z-index: 1; width: .38rem; height: .38rem; flex: 0 0 auto; margin-right: .35rem; content: ''; background: currentColor; border-radius: 50%; animation: branch-stock-status-dot 2.2s ease-in-out infinite; }
+.inventory-scope .branch-stock-status::after { position: absolute; z-index: 2; inset: -45% auto -45% -45%; width: 38%; content: ''; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(255,255,255,.42), transparent); transform: skewX(-20deg) translateX(-180%); animation: branch-stock-status-shine 3.4s ease-in-out infinite; }
+.inventory-scope .branch-stock-status.is-low::after,
+.inventory-scope .branch-stock-status.is-out::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,.32), transparent); }
+.inventory-scope .branch-stock-status.is-low { animation-delay: .35s; }
+.inventory-scope .branch-stock-status.is-out { animation-delay: .7s; }
+@keyframes branch-stock-status-glow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent); } 50% { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent), 0 0 12px color-mix(in srgb, currentColor 16%, transparent); } }
+@keyframes branch-stock-status-dot { 0%, 100% { transform: scale(.9); } 50% { transform: scale(1.12); } }
+@keyframes branch-stock-status-shine { 0%, 18% { transform: skewX(-20deg) translateX(-180%); } 62%, 100% { transform: skewX(-20deg) translateX(520%); } }
 .inventory-scope .branch-stock-status.is-ok { color: #08764f; background: rgba(23,174,131,.1); border-color: rgba(23,174,131,.2); }
 .inventory-scope .branch-stock-status.is-low { color: #986000; background: rgba(226,161,38,.12); border-color: rgba(226,161,38,.24); }
 .inventory-scope .branch-stock-status.is-out { color: #b52e42; background: rgba(228,78,99,.1); border-color: rgba(228,78,99,.22); }
+@media (prefers-reduced-motion: reduce) {
+  .inventory-scope .branch-stock-status,
+  .inventory-scope .branch-stock-status::before,
+  .inventory-scope .branch-stock-status::after {
+    animation: none;
+  }
+}
 .inventory-scope .branch-overview-page .comparison-table-wrap .data-table { min-width: 1040px; }
 @media (max-width: 900px) {
   .inventory-scope .branch-directory-pulse { grid-template-columns: repeat(2, minmax(0, 1fr)); }
