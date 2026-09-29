@@ -171,7 +171,8 @@ class _PurchaseOrderApprovalScreenState
   String? _error;
   StreamSubscription? _notifSub;
 
-  String _selectedFilter = 'all'; // 'all', 'needs_action', 'fulfillment', 'history'
+  String _selectedFilter =
+      'all'; // 'all', 'needs_action', 'fulfillment', 'history'
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -395,7 +396,6 @@ class _PurchaseOrderApprovalScreenState
   int get _completedCount =>
       _allOrders.where((o) => o.status.isTerminal).length;
 
-
   List<_PurchaseOrder> get _filteredOrders {
     List<_PurchaseOrder> base;
     switch (_selectedFilter) {
@@ -586,8 +586,7 @@ class _PurchaseOrderApprovalScreenState
           _buildFilterChip(
             'needs_action',
             'Needs Action ($_needsActionCount)',
-            badgeColor:
-                _needsActionCount > 0 ? const Color(0xFFFBBF24) : null,
+            badgeColor: _needsActionCount > 0 ? const Color(0xFFFBBF24) : null,
           ),
           const SizedBox(width: 8),
           _buildFilterChip(
@@ -650,12 +649,13 @@ class _PurchaseOrderApprovalScreenState
   }
 
   Widget _buildExecutiveSummary() {
-    final totalValue =
-        _allOrders.fold(0.0, (acc, o) => acc + o.amount);
-    final receivedCount =
-        _allOrders.where((o) => o.status == PurchaseOrderStatus.received).length;
-    final cancelledCount =
-        _allOrders.where((o) => o.status == PurchaseOrderStatus.cancelled).length;
+    final totalValue = _allOrders.fold(0.0, (acc, o) => acc + o.amount);
+    final receivedCount = _allOrders
+        .where((o) => o.status == PurchaseOrderStatus.received)
+        .length;
+    final cancelledCount = _allOrders
+        .where((o) => o.status == PurchaseOrderStatus.cancelled)
+        .length;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -679,8 +679,9 @@ class _PurchaseOrderApprovalScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Top row: badge + role chip
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            runSpacing: 8,
             children: [
               Container(
                 padding:
@@ -717,8 +718,7 @@ class _PurchaseOrderApprovalScreenState
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: widget.canApprove
                       ? const Color(0xFF10B981).withValues(alpha: 0.18)
@@ -932,8 +932,7 @@ class _PurchaseOrderApprovalScreenState
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.receipt_rounded,
-                          size: 15, color: statusColor),
+                      Icon(Icons.receipt_rounded, size: 15, color: statusColor),
                       const SizedBox(width: 6),
                       Text(
                         order.number,
@@ -966,8 +965,8 @@ class _PurchaseOrderApprovalScreenState
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: statusColor.withValues(alpha: 0.45)),
+                    border:
+                        Border.all(color: statusColor.withValues(alpha: 0.45)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1091,8 +1090,8 @@ class _PurchaseOrderApprovalScreenState
         decoration: BoxDecoration(
           color: const Color(0xFFF43F5E).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-              color: const Color(0xFFF43F5E).withValues(alpha: 0.3)),
+          border:
+              Border.all(color: const Color(0xFFF43F5E).withValues(alpha: 0.3)),
         ),
         child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1523,10 +1522,28 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
   final _unitPriceController = TextEditingController();
 
   bool _loading = false;
+  bool _loadingOptions = true;
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _suppliers = [];
+  List<Map<String, dynamic>> _inventoryItems = [];
   String? _selectedBranchId;
   String? _selectedSupplierId;
+  String? _selectedItemId;
+  String? _optionsError;
+
+  List<Map<String, dynamic>> get _supplierItems {
+    final supplierId = _selectedSupplierId;
+    if (supplierId == null) return const [];
+    return _inventoryItems
+        .where((item) => '${item['supplierId'] ?? ''}' == supplierId)
+        .toList();
+  }
+
+  double get _lineTotal {
+    final quantity = double.tryParse(_quantityController.text.trim()) ?? 0;
+    final unitPrice = double.tryParse(_unitPriceController.text.trim()) ?? 0;
+    return quantity * unitPrice;
+  }
 
   @override
   void initState() {
@@ -1539,28 +1556,71 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
   Future<void> _fetchOptions() async {
     try {
       final res = await widget.client.get('/api/purchase-orders/options');
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final branches = ((data['branches'] as List?) ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .toList();
-        final suppliers = ((data['suppliers'] as List?) ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .toList();
-        if (mounted) {
-          setState(() {
-            _branches = branches;
-            _suppliers = suppliers;
-            if (branches.isNotEmpty) {
-              _selectedBranchId = '${branches.first['id']}';
-            }
-            if (suppliers.isNotEmpty) {
-              _selectedSupplierId = '${suppliers.first['id']}';
-            }
-          });
-        }
+      if (res.statusCode != 200) {
+        throw StateError(
+          'Could not load suppliers and catalog items (${res.statusCode}).',
+        );
       }
-    } catch (_) {}
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final branches = ((data['branches'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      final suppliers = ((data['suppliers'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      final items = ((data['items'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      if (mounted) {
+        setState(() {
+          _branches = branches;
+          _suppliers = suppliers;
+          _inventoryItems = items;
+          _selectedBranchId =
+              branches.isNotEmpty ? '${branches.first['id']}' : null;
+          _selectedSupplierId =
+              suppliers.isNotEmpty ? '${suppliers.first['id']}' : null;
+          _optionsError = null;
+          _loadingOptions = false;
+          _selectSupplierItem(
+              _supplierItems.isEmpty ? null : _supplierItems.first);
+        });
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingOptions = false;
+        _optionsError = error.toString().replaceFirst('Bad state: ', '');
+      });
+    }
+  }
+
+  void _selectSupplier(String? supplierId) {
+    setState(() {
+      _selectedSupplierId = supplierId;
+      final items = _supplierItems;
+      _selectSupplierItem(items.isEmpty ? null : items.first);
+    });
+  }
+
+  void _selectSupplierItem(Map<String, dynamic>? item) {
+    _selectedItemId = item == null ? null : '${item['id']}';
+    _itemNameController.text = item == null
+        ? ''
+        : '${item['name'] ?? ''}${(item['sku'] as String?)?.trim().isNotEmpty == true ? ' (${item['sku']})' : ''}';
+    final unitCost = (item?['unitCost'] as num?)?.toDouble();
+    _unitPriceController.text = unitCost == null ? '' : _money(unitCost);
+  }
+
+  String _money(double value) => value.toStringAsFixed(2);
+
+  String _formatTotal(double value) => 'LKR ${_money(value)}';
+
+  Map<String, dynamic>? _itemById(String? id) {
+    for (final item in _supplierItems) {
+      if ('${item['id']}' == id) return item;
+    }
+    return null;
   }
 
   @override
@@ -1575,6 +1635,20 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
   }
 
   Future<void> _submit() async {
+    if (_selectedSupplierId == null) {
+      showAppNotification(
+        'Choose a supplier before creating a purchase order.',
+        tone: AppNotificationTone.error,
+      );
+      return;
+    }
+    if (_selectedItemId == null || _supplierItems.isEmpty) {
+      showAppNotification(
+        'Choose an inventory item linked to this supplier.',
+        tone: AppNotificationTone.error,
+      );
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
 
@@ -1588,6 +1662,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
         'supplierId': _selectedSupplierId,
         'items': [
           {
+            'inventoryItemId': _selectedItemId,
             'description': _itemNameController.text.trim(),
             'quantity': qty,
             'unitPrice': price,
@@ -1642,14 +1717,15 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Create Purchase Order',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
+                  const Expanded(
+                    child: Text(
+                      'Create Purchase Order',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                   IconButton(
@@ -1674,6 +1750,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
               // Supplier Dropdown or Text
               if (_suppliers.isNotEmpty) ...[
                 DropdownButtonFormField<String>(
+                  key: const Key('po-supplier-dropdown'),
                   initialValue: _selectedSupplierId,
                   dropdownColor: const Color(0xFF17263C),
                   decoration: _inputDec('SUPPLIER'),
@@ -1688,8 +1765,8 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
                             ),
                           ))
                       .toList(),
-                  onChanged: (val) =>
-                      setState(() => _selectedSupplierId = val),
+                  onChanged:
+                      _loading || _loadingOptions ? null : _selectSupplier,
                 ),
               ] else ...[
                 TextFormField(
@@ -1717,8 +1794,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
                             ),
                           ))
                       .toList(),
-                  onChanged: (val) =>
-                      setState(() => _selectedBranchId = val),
+                  onChanged: (val) => setState(() => _selectedBranchId = val),
                 ),
               ] else ...[
                 TextFormField(
@@ -1737,37 +1813,88 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
                       letterSpacing: 0.8)),
               const SizedBox(height: 8),
 
-              TextFormField(
-                controller: _itemNameController,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-                decoration: _inputDec('ITEM DESCRIPTION'),
-                validator: (val) =>
-                    (val == null || val.trim().isEmpty) ? 'Required' : null,
-              ),
+              if (_loadingOptions)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_optionsError != null)
+                Text(
+                  _optionsError!,
+                  key: const Key('po-options-error'),
+                  style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                )
+              else if (_selectedSupplierId == null)
+                const Text(
+                  'No supplier is available. Add a supplier before creating a purchase order.',
+                  key: Key('po-no-suppliers'),
+                  style: TextStyle(color: AppColors.warning, fontSize: 12),
+                )
+              else if (_supplierItems.isEmpty)
+                const Text(
+                  'This supplier has no linked inventory items. Assign this supplier to its inventory items in Inventory before creating a purchase order.',
+                  key: Key('po-no-supplier-items'),
+                  style: TextStyle(
+                    color: AppColors.warning,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  key: ValueKey('po-item-dropdown-$_selectedSupplierId'),
+                  initialValue: _selectedItemId,
+                  isExpanded: true,
+                  dropdownColor: const Color(0xFF17263C),
+                  decoration: _inputDec('SUPPLIER ITEM'),
+                  items: _supplierItems
+                      .map((item) => DropdownMenuItem<String>(
+                            value: '${item['id']}',
+                            child: Text(
+                              '${item['name']} · ${item['sku']}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: _loading
+                      ? null
+                      : (id) {
+                          setState(() => _selectSupplierItem(_itemById(id)));
+                        },
+                  validator: (id) =>
+                      id == null ? 'Choose an item from this supplier' : null,
+                ),
               const SizedBox(height: 10),
 
               Row(
                 children: [
                   Expanded(
                     child: TextFormField(
+                      key: const Key('po-quantity-field'),
                       controller: _quantityController,
                       keyboardType: TextInputType.number,
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 14),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: _inputDec('QTY'),
                       validator: (val) => (double.tryParse(val ?? '') ?? 0) <= 0
                           ? 'Must be > 0'
                           : null,
+                      onChanged: (_) => setState(() {}),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: TextFormField(
+                      key: const Key('po-unit-price-field'),
                       controller: _unitPriceController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 14),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      readOnly: true,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: _inputDec('UNIT PRICE (LKR)'),
                       validator: (val) => (double.tryParse(val ?? '') ?? -1) < 0
                           ? 'Invalid'
@@ -1776,13 +1903,51 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              Container(
+                key: const Key('po-order-total'),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.cyan.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.cyan.withValues(alpha: 0.24),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'TOTAL PRICE',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      _formatTotal(_lineTotal),
+                      key: const Key('po-order-total-value'),
+                      style: const TextStyle(
+                        color: AppColors.cyan,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 20),
 
               NeonButton(
                 label: _loading ? 'Creating...' : 'Create Purchase Order',
                 isLoading: _loading,
                 icon: Icons.check_rounded,
-                onPressed: _loading ? null : _submit,
+                onPressed: _loading || _loadingOptions || _optionsError != null
+                    ? null
+                    : _submit,
               ),
             ],
           ),
@@ -1797,8 +1962,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
       labelStyle: const TextStyle(color: AppColors.textMuted, fontSize: 11),
       filled: true,
       fillColor: Colors.white.withValues(alpha: 0.05),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.glassBorder),
@@ -1838,15 +2002,13 @@ class _PurchaseOrder {
   factory _PurchaseOrder.fromJson(Map<String, dynamic> json) => _PurchaseOrder(
         id: '${json['id']}',
         number: '${json['number']}',
-        supplier: json['supplier'] as String? ??
-            json['supplierName'] as String?,
-        branch: json['branch'] as String? ??
-            json['branchName'] as String?,
+        supplier:
+            json['supplier'] as String? ?? json['supplierName'] as String?,
+        branch: json['branch'] as String? ?? json['branchName'] as String?,
         status: PurchaseOrderStatus.parse(json['status'] as String?),
         createdAt: json['createdAt'] as String? ?? '',
-        updatedAt: json['updatedAt'] as String? ??
-            json['createdAt'] as String? ??
-            '',
+        updatedAt:
+            json['updatedAt'] as String? ?? json['createdAt'] as String? ?? '',
         amount: (json['amount'] as num?)?.toDouble() ??
             (json['totalAmount'] as num?)?.toDouble() ??
             0,
