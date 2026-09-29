@@ -434,6 +434,7 @@ export default function LandingPage() {
             <button type="button" onClick={() => scrollToId('faq')}>
               FAQ
             </button>
+            <Link to="/pricing">Pricing</Link>
           </div>
 
           <div className="lp-nav-right">
@@ -1038,6 +1039,7 @@ export default function LandingPage() {
             <div>
               <b>Get Started</b>
               <Link to="/register">Create an account</Link>
+              <Link to="/pricing">Pricing</Link>
               <Link to="/login">Sign in</Link>
               <Link to="/embed/book/demo">Public Booking Demo</Link>
               <a href="mailto:hello@unify.work">Contact Support</a>
