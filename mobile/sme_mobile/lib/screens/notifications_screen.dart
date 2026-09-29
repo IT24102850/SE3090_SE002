@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../inventory/app_notifications.dart';
 import '../models/notification_model.dart';
 import '../providers/api_service_provider.dart';
 import '../providers/notification_providers.dart';
@@ -50,7 +51,25 @@ class NotificationsScreen extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                 itemCount: items.isEmpty ? 2 : items.length + 1,
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (context, i) => _NotificationTile(notification: items[i]),
+                // Row 0 is the live-updates banner, so the tiles are offset by
+                // one; with no notifications the second row carries the empty
+                // state instead, which is why itemCount is 2 in that case.
+                itemBuilder: (context, i) {
+                  if (i == 0) {
+                    return _LiveUpdatesBanner(unreadCount: unreadCount);
+                  }
+                  if (items.isEmpty) {
+                    return const SizedBox(
+                      height: 300,
+                      child: EmptyState(
+                        icon: Icons.notifications_none_rounded,
+                        message:
+                            'Nothing here yet. New updates will appear automatically.',
+                      ),
+                    );
+                  }
+                  return _NotificationTile(notification: items[i - 1]);
+                },
               ),
             );
           },

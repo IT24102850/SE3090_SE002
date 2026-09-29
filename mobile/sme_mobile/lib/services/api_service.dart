@@ -4,15 +4,17 @@ import 'secure_storage_service.dart';
 /// Central HTTP client for the ASP.NET Core backend.
 /// Automatically attaches JWT from secure storage on every request.
 class ApiService {
-
-
-  static String get baseUrl => _dio.options.baseUrl;
-
-  static set baseUrl(String url) {
-    var u = url.trim();
-    if (u.endsWith('/')) u = u.substring(0, u.length - 1);
-    _dio.options.baseUrl = u;
-  }
+  /// Set with `--dart-define=API_BASE_URL=https://your-api.example.com/api`.
+  /// The default points at the repository's Render service so an APK never
+  /// silently targets a developer machine.
+  ///
+  /// A compile-time constant, not a getter reading _dio.options.baseUrl: that
+  /// getter is what BaseOptions below is initialised from, so reading it while
+  /// _dio is still being created throws on the first request.
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://sme-backend-lxsp.onrender.com/api',
+  );
 
   static final Dio _dio = Dio(
     BaseOptions(

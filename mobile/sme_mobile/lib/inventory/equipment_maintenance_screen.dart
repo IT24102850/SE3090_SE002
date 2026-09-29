@@ -224,7 +224,7 @@ class _EquipmentMaintenanceScreenState
                   const SizedBox(height: 8),
                   _formLabel('BRANCH'),
                   DropdownButtonFormField<String>(
-                    initialValue: selectedBranchId,
+                    value: selectedBranchId,
                     dropdownColor: const Color(0xFF17233A),
                     decoration: _maintenanceInputDecoration(),
                     items: branches
@@ -397,7 +397,7 @@ class _EquipmentMaintenanceScreenState
                   const SizedBox(height: 18),
                   _formLabel('EQUIPMENT'),
                   DropdownButtonFormField<String>(
-                    initialValue: selectedEquipmentId,
+                    value: selectedEquipmentId,
                     dropdownColor: const Color(0xFF17233A),
                     decoration: _maintenanceInputDecoration(),
                     items: _equipment

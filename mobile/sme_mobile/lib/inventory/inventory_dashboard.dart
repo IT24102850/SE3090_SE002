@@ -1992,7 +1992,7 @@ class _InventoryDashboardState extends State<InventoryDashboard>
           const SizedBox(width: 10),
           Expanded(
             child: DropdownButtonFormField<String>(
-              initialValue: _sortMode,
+              value: _sortMode,
               isExpanded: true,
               dropdownColor: const Color(0xFF172235),
               style: AppTextStyles.caption.copyWith(color: Colors.white),

@@ -42,6 +42,14 @@ dependencies:
   # to keep a partial count across a restart: lib/inventory/stock_count_screen.dart
   connectivity_plus: ^6.1.0
   shared_preferences: ^2.3.2
+  # Social sign-in and biometric unlock (services/social_auth_service.dart,
+  # services/biometric_auth_service.dart, widgets/unify_auth/ios_passcode_pad.dart)
+  # and the PDF sale receipt (inventory/sale_receipt.dart). The branch these
+  # came from imported all four without declaring them.
+  google_sign_in: ^7.2.0
+  flutter_appauth: ^8.0.3
+  local_auth: ^2.3.0
+  pdf: ^3.11.1
 
 dev_dependencies:
   flutter_test:

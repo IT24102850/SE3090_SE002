@@ -23,6 +23,7 @@ import 'customer/ai_planner_screen.dart';
 import 'customer/book_business_list_screen.dart';
 import 'customer/my_bookings_screen.dart';
 import 'notifications_screen.dart';
+import 'security_pin_screen.dart';
 import 'profile_screen.dart';
 import 'owner/automation/agent_workflows_screen.dart';
 import 'owner/owner_home_screen.dart';
@@ -461,7 +462,6 @@ class _DashboardDrawer extends ConsumerWidget {
                       Navigator.of(context).push(slideFadeRoute<void>(const OwnerHomeScreen()));
                     },
                   ),
-                ],
                 if (user.role != 'Customer')
                   const _DrawerSectionLabel(label: 'MANAGE INVENTORY'),
                 if (user.role != 'Customer')
@@ -852,8 +852,20 @@ const _quickActionImages = <String, String>{
 /// dashboard is itself reachable from it ("Business Dashboard"), so a tile
 /// that does nothing is a dead end in the middle of the app. Each one now
 /// opens the workspace screen that does the job it names.
-List<Widget> _quickActionsFor(BuildContext context, String role, Color color,
-    {bool clinic = false}) {
+List<_QuickActionGroup> _quickActionsFor(
+  BuildContext context,
+  String role,
+  Color color, {
+  required bool compact,
+  required double tileSpacing,
+  bool clinic = false,
+}) {
+  final groupedActions = <String, List<Widget>>{};
+
+  void addAction(String group, Widget action) {
+    groupedActions.putIfAbsent(group, () => <Widget>[]).add(action);
+  }
+
   if (role == 'Customer') {
     addAction(
       'Appointments',

@@ -1,3 +1,11 @@
+// pdf 3.11 is the newest release that still supports the Flutter version this
+// project pins, and its pw.TextStyle constructor asserts `fontNormal != null`
+// on a Font? - a comparison Dart refuses to evaluate in a constant expression.
+// Every `const pw.TextStyle(...)` here is therefore a compile error, while the
+// linter goes on recommending one. Built at runtime until the pdf constraint
+// can move with the SDK.
+// ignore_for_file: prefer_const_constructors
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -106,7 +114,7 @@ class SaleReceiptPdfGenerator {
                     children: [
                       pw.Text(
                         'SALES RECEIPT',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: PdfColors.white,
                           fontSize: 10,
                           fontWeight: pw.FontWeight.bold,
@@ -116,7 +124,7 @@ class SaleReceiptPdfGenerator {
                       pw.SizedBox(height: 7),
                       pw.Text(
                         'Sale recorded',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: PdfColors.white,
                           fontSize: 23,
                           fontWeight: pw.FontWeight.bold,
@@ -125,7 +133,7 @@ class SaleReceiptPdfGenerator {
                       pw.SizedBox(height: 5),
                       pw.Text(
                         'Inventory transaction receipt',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: PdfColor.fromInt(0xFFC3D1E1),
                           fontSize: 10,
                         ),
@@ -144,7 +152,7 @@ class SaleReceiptPdfGenerator {
                   ),
                   child: pw.Text(
                     'PAID STATUS NOT RECORDED',
-                    style: const pw.TextStyle(
+                    style: pw.TextStyle(
                       color: PdfColor.fromInt(0xFF8CEBFA),
                       fontSize: 7,
                       fontWeight: pw.FontWeight.bold,
@@ -210,7 +218,7 @@ class SaleReceiptPdfGenerator {
                           children: [
                             pw.Text(
                               receipt.itemName,
-                              style: const pw.TextStyle(
+                              style: pw.TextStyle(
                                 color: _ink,
                                 fontSize: 12,
                                 fontWeight: pw.FontWeight.bold,
@@ -221,7 +229,7 @@ class SaleReceiptPdfGenerator {
                               pw.SizedBox(height: 4),
                               pw.Text(
                                 'SKU ${receipt.sku}',
-                                style: const pw.TextStyle(
+                                style: pw.TextStyle(
                                   color: _muted,
                                   fontSize: 9,
                                 ),
@@ -235,19 +243,19 @@ class SaleReceiptPdfGenerator {
                         receipt.unitPrice == null
                             ? 'Qty ${_quantity(receipt.quantity)}'
                             : '${_quantity(receipt.quantity)} ${receipt.unit}',
-                        style: const pw.TextStyle(color: _ink, fontSize: 9),
+                        style: pw.TextStyle(color: _ink, fontSize: 9),
                       ),
                       if (receipt.unitPrice != null) ...[
                         pw.SizedBox(width: 18),
                         pw.Text(
                           'LKR ${_money(receipt.unitPrice!)}',
-                          style: const pw.TextStyle(color: _ink, fontSize: 9),
+                          style: pw.TextStyle(color: _ink, fontSize: 9),
                         ),
                       ],
                       pw.SizedBox(width: 18),
                       pw.Text(
                         'LKR ${_money(receipt.total)}',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: _ink,
                           fontSize: 9,
                           fontWeight: pw.FontWeight.bold,
@@ -283,7 +291,7 @@ class SaleReceiptPdfGenerator {
                         receipt.remainingQuantity == null
                             ? 'Saved sale transaction'
                             : 'Stock remaining: ${_quantity(receipt.remainingQuantity!)} ${receipt.unit}',
-                        style: const pw.TextStyle(color: _ink, fontSize: 9),
+                        style: pw.TextStyle(color: _ink, fontSize: 9),
                       ),
                     ],
                   ),
@@ -302,7 +310,7 @@ class SaleReceiptPdfGenerator {
                   children: [
                     pw.Text(
                       'TOTAL',
-                      style: const pw.TextStyle(
+                      style: pw.TextStyle(
                         color: PdfColor.fromInt(0xFFC3D1E1),
                         fontSize: 9,
                         fontWeight: pw.FontWeight.bold,
@@ -312,7 +320,7 @@ class SaleReceiptPdfGenerator {
                     pw.SizedBox(height: 7),
                     pw.Text(
                       'LKR ${_money(receipt.total)}',
-                      style: const pw.TextStyle(
+                      style: pw.TextStyle(
                         color: PdfColors.white,
                         fontSize: 19,
                         fontWeight: pw.FontWeight.bold,
@@ -330,13 +338,13 @@ class SaleReceiptPdfGenerator {
           pw.Text(
             'This receipt confirms an inventory sale record only. It does not confirm that payment was collected.',
             textAlign: pw.TextAlign.center,
-            style: const pw.TextStyle(color: _muted, fontSize: 8),
+            style: pw.TextStyle(color: _muted, fontSize: 8),
           ),
           pw.SizedBox(height: 5),
           pw.Text(
             'Generated by SME Mobile',
             textAlign: pw.TextAlign.center,
-            style: const pw.TextStyle(color: _cyan, fontSize: 8),
+            style: pw.TextStyle(color: _cyan, fontSize: 8),
           ),
         ],
       ),
@@ -351,7 +359,7 @@ class SaleReceiptPdfGenerator {
           pw.SizedBox(height: 5),
           pw.Text(
             value,
-            style: const pw.TextStyle(
+            style: pw.TextStyle(
               color: _ink,
               fontSize: 10,
               fontWeight: pw.FontWeight.bold,
@@ -362,7 +370,7 @@ class SaleReceiptPdfGenerator {
 
   static pw.Widget _tableHeader(String value) => pw.Text(
         value,
-        style: const pw.TextStyle(
+        style: pw.TextStyle(
           color: _muted,
           fontSize: 7,
           fontWeight: pw.FontWeight.bold,
@@ -386,7 +394,7 @@ class SaleReceiptPdfGenerator {
         ),
         child: pw.Text(
           'LOW STOCK  |  Remaining quantity is at or below the reorder level.',
-          style: const pw.TextStyle(
+          style: pw.TextStyle(
             color: _amber,
             fontSize: 9,
             fontWeight: pw.FontWeight.bold,
