@@ -18,6 +18,7 @@ enum PurchaseOrderStatus {
   inReview,
   placed,
   inTransit,
+  partiallyReceived,
   received,
   cancelled;
 
@@ -31,6 +32,8 @@ enum PurchaseOrderStatus {
         return 'Placed';
       case PurchaseOrderStatus.inTransit:
         return 'In Transit';
+      case PurchaseOrderStatus.partiallyReceived:
+        return 'Partially Received';
       case PurchaseOrderStatus.received:
         return 'Received';
       case PurchaseOrderStatus.cancelled:
@@ -48,6 +51,8 @@ enum PurchaseOrderStatus {
         return 'Placed';
       case PurchaseOrderStatus.inTransit:
         return 'InTransit';
+      case PurchaseOrderStatus.partiallyReceived:
+        return 'PartiallyReceived';
       case PurchaseOrderStatus.received:
         return 'Received';
       case PurchaseOrderStatus.cancelled:
@@ -65,6 +70,8 @@ enum PurchaseOrderStatus {
         return const Color(0xFFA78BFA); // Violet
       case PurchaseOrderStatus.inTransit:
         return const Color(0xFF38BDF8); // Sky blue
+      case PurchaseOrderStatus.partiallyReceived:
+        return const Color(0xFFFBBF24);
       case PurchaseOrderStatus.received:
         return const Color(0xFF10B981); // Emerald
       case PurchaseOrderStatus.cancelled:
@@ -82,6 +89,8 @@ enum PurchaseOrderStatus {
         return Icons.verified_rounded;
       case PurchaseOrderStatus.inTransit:
         return Icons.local_shipping_rounded;
+      case PurchaseOrderStatus.partiallyReceived:
+        return Icons.inventory_rounded;
       case PurchaseOrderStatus.received:
         return Icons.check_circle_rounded;
       case PurchaseOrderStatus.cancelled:
@@ -108,6 +117,9 @@ enum PurchaseOrderStatus {
       case 'shipped':
       case 'dispatched':
         return PurchaseOrderStatus.inTransit;
+      case 'partiallyreceived':
+      case 'partial':
+        return PurchaseOrderStatus.partiallyReceived;
       case 'received':
       case 'fulfilled':
       case 'completed':
@@ -129,7 +141,8 @@ enum PurchaseOrderStatus {
       this == PurchaseOrderStatus.draft || this == PurchaseOrderStatus.inReview;
   bool get inFulfillment =>
       this == PurchaseOrderStatus.placed ||
-      this == PurchaseOrderStatus.inTransit;
+      this == PurchaseOrderStatus.inTransit ||
+      this == PurchaseOrderStatus.partiallyReceived;
 
   int get stepIndex {
     switch (this) {
@@ -140,6 +153,8 @@ enum PurchaseOrderStatus {
       case PurchaseOrderStatus.placed:
         return 2;
       case PurchaseOrderStatus.inTransit:
+        return 3;
+      case PurchaseOrderStatus.partiallyReceived:
         return 3;
       case PurchaseOrderStatus.received:
         return 4;
@@ -154,10 +169,12 @@ class PurchaseOrderApprovalScreen extends StatefulWidget {
     super.key,
     required this.client,
     required this.canApprove,
-  });
+    bool? canReceive,
+  }) : canReceive = canReceive ?? canApprove;
 
   final AuthenticatedApiClient client;
   final bool canApprove;
+  final bool canReceive;
 
   @override
   State<PurchaseOrderApprovalScreen> createState() =>
@@ -438,6 +455,69 @@ class _PurchaseOrderApprovalScreenState
         onCreated: () => _load(showSuccess: true),
       ),
     );
+  }
+
+  Future<void> _receiveOrder(_PurchaseOrder order) async {
+    if (!widget.canReceive || order.approving) return;
+    var inventoryItems = <Map<String, dynamic>>[];
+    if (order.items
+        .any((item) => !item.receivingClosed && item.inventoryItemId == null)) {
+      try {
+        final response =
+            await widget.client.get('/api/purchase-orders/options');
+        if (response.statusCode != 200) {
+          throw StateError(_apiError(response.body, response.statusCode));
+        }
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        inventoryItems = ((data['items'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      } catch (error) {
+        if (!mounted) return;
+        showAppNotification(
+          'Could not load destination-branch inventory items. ${error is StateError ? error.message : 'Please retry.'}',
+          tone: AppNotificationTone.error,
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
+    final receiptItems = await showModalBottomSheet<List<Map<String, dynamic>>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _ReceivePurchaseOrderSheet(
+        order: order,
+        inventoryItems: inventoryItems,
+      ),
+    );
+    if (receiptItems == null || receiptItems.isEmpty || !mounted) return;
+
+    setState(() => order.approving = true);
+    try {
+      final response = await widget.client.post(
+        '/api/purchase-orders/${order.id}/receive',
+        body: {'items': receiptItems},
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError(_apiError(response.body, response.statusCode));
+      }
+      await _load();
+      if (!mounted) return;
+      showAppNotification(
+        '${order.number} receipt saved. Accepted units were added to inventory.',
+        tone: AppNotificationTone.success,
+      );
+    } catch (error) {
+      if (mounted) {
+        showAppNotification(
+          'Could not record receipt. ${error is StateError ? error.message : 'Please retry.'}',
+          tone: AppNotificationTone.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => order.approving = false);
+    }
   }
 
   @override
@@ -1243,6 +1323,16 @@ class _PurchaseOrderApprovalScreenState
                               fontSize: 11,
                             ),
                           ),
+                          if (item.receivedQuantity > 0 ||
+                              item.damagedQuantity > 0 ||
+                              item.shortageQuantity > 0)
+                            Text(
+                              'Accepted ${item.receivedQuantity} · Damaged ${item.damagedQuantity} · Short ${item.shortageQuantity}',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textMuted,
+                                fontSize: 10,
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -1276,7 +1366,10 @@ class _PurchaseOrderApprovalScreenState
   Widget _buildActionSection(_PurchaseOrder order) {
     final status = order.status;
 
-    if (!widget.canApprove) {
+    final canReceiveThisOrder = widget.canReceive &&
+        (status == PurchaseOrderStatus.inTransit ||
+            status == PurchaseOrderStatus.partiallyReceived);
+    if (!widget.canApprove && !canReceiveThisOrder) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         alignment: Alignment.center,
@@ -1291,6 +1384,28 @@ class _PurchaseOrderApprovalScreenState
           textAlign: TextAlign.center,
           style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
         ),
+      );
+    }
+
+    if (status == PurchaseOrderStatus.inTransit ||
+        status == PurchaseOrderStatus.partiallyReceived) {
+      if (!widget.canReceive) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          alignment: Alignment.center,
+          child: Text(
+            'Waiting for a staff member or Manager to record delivery quantities.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+          ),
+        );
+      }
+      return NeonButton(
+        label: order.approving ? 'Recording receipt…' : 'Receive items',
+        isLoading: order.approving,
+        icon: Icons.inventory_rounded,
+        height: 44,
+        onPressed: order.approving ? null : () => _receiveOrder(order),
       );
     }
 
@@ -1408,27 +1523,6 @@ class _PurchaseOrderApprovalScreenState
       );
     }
 
-    // 4. IN TRANSIT: Confirm Receipt & Stock Update
-    if (status == PurchaseOrderStatus.inTransit) {
-      return NeonButton(
-        label: order.approving ? 'Receiving...' : 'Confirm Stock Receipt',
-        isLoading: order.approving,
-        icon: Icons.inventory_rounded,
-        height: 44,
-        onPressed: order.approving
-            ? null
-            : () => _advanceOrderStatus(
-                  order,
-                  PurchaseOrderStatus.received,
-                  confirmTitle: 'Confirm Stock Receipt?',
-                  confirmMessage:
-                      'Has order ${order.number} arrived at ${order.branch ?? 'Main Branch'}? Confirming receipt will update warehouse stock levels.',
-                  confirmLabel: 'Confirm & Receive Stock',
-                  confirmAccent: const Color(0xFF10B981),
-                ),
-      );
-    }
-
     // 5. TERMINAL: Received or Cancelled
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
@@ -1537,9 +1631,12 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
 
   List<Map<String, dynamic>> get _supplierItems {
     final supplierId = _selectedSupplierId;
-    if (supplierId == null) return const [];
+    final branchId = _selectedBranchId;
+    if (supplierId == null || branchId == null) return const [];
     return _inventoryItems
-        .where((item) => '${item['supplierId'] ?? ''}' == supplierId)
+        .where((item) =>
+            '${item['supplierId'] ?? ''}' == supplierId &&
+            '${item['branchId'] ?? ''}' == branchId)
         .toList();
   }
 
@@ -1798,7 +1895,11 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
                             ),
                           ))
                       .toList(),
-                  onChanged: (val) => setState(() => _selectedBranchId = val),
+                  onChanged: (val) => setState(() {
+                    _selectedBranchId = val;
+                    final items = _supplierItems;
+                    _selectSupplierItem(items.isEmpty ? null : items.first);
+                  }),
                 ),
               ] else ...[
                 TextFormField(
@@ -1979,10 +2080,371 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
   }
 }
 
+class _ReceivePurchaseOrderSheet extends StatefulWidget {
+  const _ReceivePurchaseOrderSheet({
+    required this.order,
+    required this.inventoryItems,
+  });
+
+  final _PurchaseOrder order;
+  final List<Map<String, dynamic>> inventoryItems;
+
+  @override
+  State<_ReceivePurchaseOrderSheet> createState() =>
+      _ReceivePurchaseOrderSheetState();
+}
+
+class _ReceivePurchaseOrderSheetState
+    extends State<_ReceivePurchaseOrderSheet> {
+  final _delivered = <String, TextEditingController>{};
+  final _damaged = <String, TextEditingController>{};
+  final _notes = <String, TextEditingController>{};
+  final _closedAsShort = <String>{};
+  final _linkedInventoryItemIds = <String, String>{};
+
+  List<Map<String, dynamic>> get _branchInventoryItems => widget.inventoryItems
+      .where((item) => '${item['branchId'] ?? ''}' == widget.order.branchId)
+      .toList();
+
+  @override
+  void initState() {
+    super.initState();
+    for (final item in widget.order.items) {
+      _delivered[item.id] = TextEditingController(text: '0');
+      _damaged[item.id] = TextEditingController(text: '0');
+      _notes[item.id] = TextEditingController();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in [
+      ..._delivered.values,
+      ..._damaged.values,
+      ..._notes.values,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _submit() {
+    final receiptItems = <Map<String, dynamic>>[];
+    for (final item in widget.order.items) {
+      if (item.receivingClosed) continue;
+      final delivered = double.tryParse(_delivered[item.id]!.text.trim());
+      final damaged = double.tryParse(_damaged[item.id]!.text.trim());
+      if (delivered == null ||
+          damaged == null ||
+          delivered < 0 ||
+          damaged < 0 ||
+          damaged > delivered) {
+        showAppNotification(
+          'Enter valid quantities. Damaged quantity cannot exceed delivered quantity.',
+          tone: AppNotificationTone.warning,
+        );
+        return;
+      }
+      if (delivered > item.remainingQuantity) {
+        showAppNotification(
+          '${item.name} has only ${item.remainingQuantity} units remaining on this order.',
+          tone: AppNotificationTone.warning,
+        );
+        return;
+      }
+
+      final closeShort = _closedAsShort.contains(item.id);
+      if (delivered == 0 && !closeShort) continue;
+      final inventoryItemId =
+          item.inventoryItemId ?? _linkedInventoryItemIds[item.id];
+      if (delivered > damaged && inventoryItemId == null) {
+        showAppNotification(
+          'Choose a destination-branch inventory item for ${item.name}.',
+          tone: AppNotificationTone.warning,
+        );
+        return;
+      }
+      receiptItems.add({
+        'purchaseOrderItemId': item.id,
+        'deliveredQuantity': delivered,
+        'damagedQuantity': damaged,
+        'closeRemainingAsShort': closeShort,
+        'notes': _notes[item.id]!.text.trim(),
+        if (item.inventoryItemId == null && inventoryItemId != null)
+          'inventoryItemId': inventoryItemId,
+      });
+    }
+
+    if (receiptItems.isEmpty) {
+      showAppNotification(
+        'Enter a delivered quantity or mark an item’s remaining balance as short.',
+        tone: AppNotificationTone.warning,
+      );
+      return;
+    }
+    Navigator.of(context).pop(receiptItems);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+      ),
+      padding: EdgeInsets.only(
+        left: 18,
+        right: 18,
+        top: 18,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 18,
+      ),
+      decoration: const BoxDecoration(
+        color: Color(0xFF132032),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Receive ${widget.order.number}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Close',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded, color: Colors.white70),
+              ),
+            ],
+          ),
+          const Text(
+            'Record what arrived for each item. Only accepted units are added to stock.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          Flexible(
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: widget.order.items.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final item = widget.order.items[index];
+                if (item.receivingClosed) {
+                  return _receiptLineCard(
+                    item,
+                    const Text(
+                      'Fully accounted for',
+                      style: TextStyle(
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                }
+                final delivered =
+                    double.tryParse(_delivered[item.id]!.text.trim()) ?? 0;
+                final damaged =
+                    double.tryParse(_damaged[item.id]!.text.trim()) ?? 0;
+                final accepted = max(0.0, delivered - damaged);
+                final remainingAfterDelivery =
+                    max(0.0, item.remainingQuantity - delivered);
+                return _receiptLineCard(
+                  item,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (item.inventoryItemId == null) ...[
+                        if (_branchInventoryItems.isEmpty)
+                          const Text(
+                            'No inventory items are assigned to this destination branch. Accepted units cannot be stocked until an item is available.',
+                            style: TextStyle(
+                              color: AppColors.warning,
+                              fontSize: 12,
+                            ),
+                          )
+                        else
+                          DropdownButtonFormField<String>(
+                            initialValue: _linkedInventoryItemIds[item.id],
+                            isExpanded: true,
+                            dropdownColor: const Color(0xFF17263C),
+                            decoration: InputDecoration(
+                              labelText: 'INVENTORY ITEM FOR ACCEPTED STOCK',
+                              labelStyle: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 11,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            items: _branchInventoryItems
+                                .map(
+                                    (inventoryItem) => DropdownMenuItem<String>(
+                                          value: '${inventoryItem['id']}',
+                                          child: Text(
+                                            '${inventoryItem['name'] ?? 'Inventory item'} · ${inventoryItem['sku'] ?? ''}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ))
+                                .toList(),
+                            onChanged: (id) => setState(() {
+                              if (id == null) {
+                                _linkedInventoryItemIds.remove(item.id);
+                              } else {
+                                _linkedInventoryItemIds[item.id] = id;
+                              }
+                            }),
+                          ),
+                        const SizedBox(height: 8),
+                      ],
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: [
+                          SizedBox(
+                            width: 125,
+                            child: _receiptQuantityField(
+                              label: 'DELIVERED',
+                              controller: _delivered[item.id]!,
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 125,
+                            child: _receiptQuantityField(
+                              label: 'DAMAGED',
+                              controller: _damaged[item.id]!,
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Accepted to stock: $accepted · Remaining: $remainingAfterDelivery',
+                        style: const TextStyle(
+                          color: AppColors.cyan,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        value: _closedAsShort.contains(item.id),
+                        onChanged: (value) => setState(() {
+                          if (value == true) {
+                            _closedAsShort.add(item.id);
+                          } else {
+                            _closedAsShort.remove(item.id);
+                          }
+                        }),
+                        title: Text(
+                          'No more delivery expected; close remaining $remainingAfterDelivery as short',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      TextField(
+                        controller: _notes[item.id],
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 13),
+                        decoration: InputDecoration(
+                          labelText: 'Condition / supplier notes',
+                          labelStyle:
+                              const TextStyle(color: AppColors.textMuted),
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: NeonButton(
+              label: 'Record receipt and update stock',
+              icon: Icons.inventory_rounded,
+              height: 46,
+              onPressed: _submit,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _receiptLineCard(_PurchaseOrderLine item, Widget child) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.glassFill,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              item.name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Ordered ${item.quantity} · Accepted ${item.receivedQuantity} · Damaged ${item.damagedQuantity} · Short ${item.shortageQuantity} · Remaining ${item.remainingQuantity}',
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 8),
+            child,
+          ],
+        ),
+      );
+
+  Widget _receiptQuantityField({
+    required String label,
+    required TextEditingController controller,
+    required ValueChanged<String> onChanged,
+  }) =>
+      TextField(
+        controller: controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        style: const TextStyle(color: Colors.white, fontSize: 13),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+          isDense: true,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+        onChanged: onChanged,
+      );
+}
+
 class _PurchaseOrder {
   _PurchaseOrder({
     required this.id,
     required this.number,
+    this.branchId = '',
     this.supplier,
     this.branch,
     this.amount = 0,
@@ -1994,6 +2456,7 @@ class _PurchaseOrder {
   });
 
   final String id, number;
+  final String branchId;
   final String? supplier, branch;
   final double amount;
   final int lineItems;
@@ -2006,6 +2469,7 @@ class _PurchaseOrder {
   factory _PurchaseOrder.fromJson(Map<String, dynamic> json) => _PurchaseOrder(
         id: '${json['id']}',
         number: '${json['number']}',
+        branchId: '${json['branchId'] ?? ''}',
         supplier:
             json['supplier'] as String? ?? json['supplierName'] as String?,
         branch: json['branch'] as String? ?? json['branchName'] as String?,
@@ -2028,24 +2492,47 @@ class _PurchaseOrder {
 
 class _PurchaseOrderLine {
   const _PurchaseOrderLine({
+    required this.id,
+    this.inventoryItemId,
     required this.name,
     required this.quantity,
     required this.unitPrice,
     required this.lineTotal,
+    required this.receivedQuantity,
+    required this.damagedQuantity,
+    required this.shortageQuantity,
+    required this.receivingClosed,
   });
 
+  final String id;
+  final String? inventoryItemId;
   final String name;
   final double quantity;
   final double unitPrice;
   final double lineTotal;
+  final double receivedQuantity;
+  final double damagedQuantity;
+  final double shortageQuantity;
+  final bool receivingClosed;
+
+  double get remainingQuantity =>
+      (quantity - receivedQuantity - damagedQuantity - shortageQuantity)
+          .clamp(0, double.infinity)
+          .toDouble();
 
   factory _PurchaseOrderLine.fromJson(Map<String, dynamic> json) =>
       _PurchaseOrderLine(
+        id: '${json['id']}',
+        inventoryItemId: json['inventoryItemId'] as String?,
         name: json['itemName'] as String? ??
             json['description'] as String? ??
             'Purchase item',
         quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
         unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0,
         lineTotal: (json['lineTotal'] as num?)?.toDouble() ?? 0,
+        receivedQuantity: (json['receivedQuantity'] as num?)?.toDouble() ?? 0,
+        damagedQuantity: (json['damagedQuantity'] as num?)?.toDouble() ?? 0,
+        shortageQuantity: (json['shortageQuantity'] as num?)?.toDouble() ?? 0,
+        receivingClosed: json['receivingClosed'] as bool? ?? false,
       );
 }

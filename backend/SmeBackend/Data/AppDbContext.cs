@@ -52,6 +52,8 @@ public class AppDbContext : DbContext
     public DbSet<Supplier> Suppliers { get; set; } = null!;
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; } = null!;
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; } = null!;
+    public DbSet<PurchaseOrderReceipt> PurchaseOrderReceipts { get; set; } = null!;
+    public DbSet<PurchaseOrderReceiptItem> PurchaseOrderReceiptItems { get; set; } = null!;
     public DbSet<StockMovement> StockMovements { get; set; } = null!;
     public DbSet<Sale> Sales { get; set; } = null!;
 
@@ -414,6 +416,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Supplier>().HasQueryFilter(supplier => supplier.TenantId == CurrentTenantId && supplier.IsActive);
         modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(order => order.TenantId == CurrentTenantId);
         modelBuilder.Entity<PurchaseOrderItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
+        modelBuilder.Entity<PurchaseOrderReceipt>().HasQueryFilter(receipt => receipt.TenantId == CurrentTenantId);
+        modelBuilder.Entity<PurchaseOrderReceiptItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
         modelBuilder.Entity<StockMovement>().HasQueryFilter(movement => movement.TenantId == CurrentTenantId);
         modelBuilder.Entity<Sale>().HasQueryFilter(sale => sale.TenantId == CurrentTenantId);
         modelBuilder.Entity<Subscription>().HasQueryFilter(s => s.TenantId == CurrentTenantId);
@@ -470,6 +474,7 @@ public class AppDbContext : DbContext
             entity.Property(movement => movement.UnitCost).HasPrecision(18, 2);
             entity.Property(movement => movement.Reference).HasMaxLength(100);
             entity.Property(movement => movement.Notes).HasMaxLength(2000);
+            entity.Property(movement => movement.PerformedBy).HasMaxLength(150);
             entity.HasOne<Branch>().WithMany().HasForeignKey(movement => movement.BranchId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<InventoryItem>().WithMany().HasForeignKey(movement => movement.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Supplier>().WithMany().HasForeignKey(movement => movement.SupplierId).OnDelete(DeleteBehavior.SetNull);
@@ -550,9 +555,39 @@ public class AppDbContext : DbContext
             entity.Property(i => i.Quantity).HasPrecision(18, 3);
             entity.Property(i => i.UnitPrice).HasPrecision(18, 2);
             entity.Property(i => i.ReceivedQuantity).HasPrecision(18, 3);
+            entity.Property(i => i.DamagedQuantity).HasPrecision(18, 3);
+            entity.Property(i => i.ShortageQuantity).HasPrecision(18, 3);
             entity.HasOne<PurchaseOrder>().WithMany(p => p.Items).HasForeignKey(i => i.PurchaseOrderId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(i => i.PurchaseOrderId);
             entity.HasIndex(i => i.InventoryItemId);
+        });
+
+        modelBuilder.Entity<PurchaseOrderReceipt>(entity =>
+        {
+            entity.Property(receipt => receipt.ReceivedBy).HasMaxLength(150).IsRequired();
+            entity.HasOne<PurchaseOrder>()
+                .WithMany(order => order.Receipts)
+                .HasForeignKey(receipt => receipt.PurchaseOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(receipt => new { receipt.TenantId, receipt.PurchaseOrderId, receipt.ReceivedAt });
+        });
+
+        modelBuilder.Entity<PurchaseOrderReceiptItem>(entity =>
+        {
+            entity.Property(item => item.DeliveredQuantity).HasPrecision(18, 3);
+            entity.Property(item => item.AcceptedQuantity).HasPrecision(18, 3);
+            entity.Property(item => item.DamagedQuantity).HasPrecision(18, 3);
+            entity.Property(item => item.ShortageQuantity).HasPrecision(18, 3);
+            entity.Property(item => item.Notes).HasMaxLength(1000);
+            entity.HasOne<PurchaseOrderReceipt>()
+                .WithMany(receipt => receipt.Items)
+                .HasForeignKey(item => item.PurchaseOrderReceiptId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<PurchaseOrderItem>()
+                .WithMany()
+                .HasForeignKey(item => item.PurchaseOrderItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => item.PurchaseOrderItemId);
         });
 
             // ==================== BILLING ENGINE ====================

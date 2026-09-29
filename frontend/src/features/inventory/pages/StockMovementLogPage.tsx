@@ -16,6 +16,7 @@ type MovementEntry = {
   reasonLabel: string;
   reference?: string;
   notes?: string;
+  performedBy?: string;
 };
 
 const PAGE_SIZE = 8;
@@ -31,6 +32,7 @@ const typeTone: Record<MovementType, BadgeTone> = {
 };
 
 function normalizeMovementType(value: unknown): MovementType {
+  if (value === 'PurchaseReceived') return 'Receive';
   if (value === 'Receive' || value === 'Issue' || value === 'Waste' || value === 'Adjustment') return value;
   return 'Adjustment';
 }
@@ -76,6 +78,7 @@ export function StockMovementLogPage() {
         reasonLabel: movement.notes ?? movement.reference ?? movement.movementType ?? 'Stock movement',
         reference: movement.reference ?? undefined,
         notes: movement.notes ?? undefined,
+        performedBy: movement.performedBy ?? undefined,
       })));
       return true;
     } catch (error) {
@@ -239,7 +242,7 @@ export function StockMovementLogPage() {
 
         <div className="table-wrap">
           <table className="data-table movement-table">
-            <thead><tr><th>When</th><th>Item</th><th>Type</th><th>Quantity</th><th>Details</th><th>Reference</th></tr></thead>
+          <thead><tr><th>When</th><th>Item</th><th>Type</th><th>Quantity</th><th>Details</th><th>Reference</th><th>Recorded by</th></tr></thead>
             <tbody>
               {paged.map((row) => (
                 <tr key={row.id}>
@@ -258,10 +261,11 @@ export function StockMovementLogPage() {
                     <p className="movement-detail-text">{row.reasonLabel}</p>
                   </td>
                   <td className="movement-reference">{row.reference ?? '—'}</td>
+                  <td>{row.performedBy ?? 'Not recorded'}</td>
                 </tr>
               ))}
               {paged.length === 0 && (
-                <tr><td colSpan={6} className="empty-state">{movements.length === 0 ? 'No stock movement records are available yet.' : 'No movements match these filters. Try clearing a filter or changing the date range.'}</td></tr>
+                <tr><td colSpan={7} className="empty-state">{movements.length === 0 ? 'No stock movement records are available yet.' : 'No movements match these filters. Try clearing a filter or changing the date range.'}</td></tr>
               )}
             </tbody>
           </table>
