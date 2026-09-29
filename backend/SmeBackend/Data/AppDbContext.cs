@@ -55,6 +55,7 @@ public class AppDbContext : DbContext
     public DbSet<PurchaseOrderReceipt> PurchaseOrderReceipts { get; set; } = null!;
     public DbSet<PurchaseOrderReceiptItem> PurchaseOrderReceiptItems { get; set; } = null!;
     public DbSet<StockMovement> StockMovements { get; set; } = null!;
+    public DbSet<PhysicalStockCount> PhysicalStockCounts { get; set; } = null!;
     public DbSet<Sale> Sales { get; set; } = null!;
 
     // Memberships (gym / fitness): see Models/Subscription.cs.
@@ -419,6 +420,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<PurchaseOrderReceipt>().HasQueryFilter(receipt => receipt.TenantId == CurrentTenantId);
         modelBuilder.Entity<PurchaseOrderReceiptItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
         modelBuilder.Entity<StockMovement>().HasQueryFilter(movement => movement.TenantId == CurrentTenantId);
+        modelBuilder.Entity<PhysicalStockCount>().HasQueryFilter(count => count.TenantId == CurrentTenantId);
         modelBuilder.Entity<Sale>().HasQueryFilter(sale => sale.TenantId == CurrentTenantId);
         modelBuilder.Entity<Subscription>().HasQueryFilter(s => s.TenantId == CurrentTenantId);
 
@@ -429,6 +431,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<PurchaseOrder>().HasIndex(order => new { order.TenantId, order.Number }).IsUnique();
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.TenantId, movement.BranchId });
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.InventoryItemId, movement.OccurredAt });
+        modelBuilder.Entity<PhysicalStockCount>().HasIndex(count => new { count.TenantId, count.Reference }).IsUnique();
+        modelBuilder.Entity<PhysicalStockCount>().HasIndex(count => new { count.TenantId, count.BranchId, count.Status, count.CountedAt });
         modelBuilder.Entity<Notification>().HasIndex(notification => new { notification.TenantId, notification.BranchId, notification.IsRead });
         modelBuilder.Entity<Notification>().HasIndex(notification => notification.CreatedAt);
         modelBuilder.Entity<Sale>().HasIndex(sale => new { sale.TenantId, sale.BranchId, sale.OccurredAt });
@@ -589,6 +593,24 @@ public class AppDbContext : DbContext
                 .HasForeignKey(item => item.PurchaseOrderItemId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(item => item.PurchaseOrderItemId);
+        });
+
+        modelBuilder.Entity<PhysicalStockCount>(entity =>
+        {
+            entity.Property(count => count.ItemName).HasMaxLength(150).IsRequired();
+            entity.Property(count => count.Sku).HasMaxLength(64).IsRequired();
+            entity.Property(count => count.SystemQuantityAtCount).HasPrecision(18, 3);
+            entity.Property(count => count.CountedQuantity).HasPrecision(18, 3);
+            entity.Property(count => count.Variance).HasPrecision(18, 3);
+            entity.Property(count => count.Reason).HasMaxLength(40).IsRequired();
+            entity.Property(count => count.ReasonNotes).HasMaxLength(1000);
+            entity.Property(count => count.CountedBy).HasMaxLength(150).IsRequired();
+            entity.Property(count => count.Reference).HasMaxLength(100).IsRequired();
+            entity.Property(count => count.Status).HasMaxLength(30).IsRequired();
+            entity.Property(count => count.PhotoUrlsJson).HasColumnType("jsonb");
+            entity.Property(count => count.PhotoUploadKeysJson).HasColumnType("jsonb");
+            entity.Property(count => count.ReviewedBy).HasMaxLength(150);
+            entity.Property(count => count.ReviewNotes).HasMaxLength(1000);
         });
 
             // ==================== BILLING ENGINE ====================

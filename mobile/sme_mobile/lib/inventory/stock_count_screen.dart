@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -28,17 +29,24 @@ class _StockCountScreenState extends State<StockCountScreen>
   final _scanner = MobileScannerController();
   final _sku = TextEditingController();
   final _quantity = TextEditingController();
+  final _reasonNotes = TextEditingController();
+  final _picker = ImagePicker();
   final _store = _CountStore();
   final _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _connectionChanges;
   List<_CatalogItem> _catalog = [];
   List<_PendingCount> _pending = [];
+  List<Map<String, dynamic>> _approvalQueue = [];
   bool _loading = true,
       _syncing = false,
       _savingCount = false,
-      _torchOn = false;
+      _torchOn = false,
+      _approvalLoading = false;
   String? _scannedCode;
+  String? _reason;
   bool _isOnline = true;
+  bool _canApproveCounts = false;
+  List<XFile> _selectedPhotos = [];
   late final AnimationController _scanLineController;
 
   @override
@@ -71,6 +79,7 @@ class _StockCountScreenState extends State<StockCountScreen>
     _scanLineController.dispose();
     _sku.dispose();
     _quantity.dispose();
+    _reasonNotes.dispose();
     super.dispose();
   }
 
@@ -84,6 +93,7 @@ class _StockCountScreenState extends State<StockCountScreen>
     });
     await _refreshCatalog();
     await _sync(silent: true);
+    await _loadApprovalQueue();
   }
 
   Future<bool> _refreshCatalog() async {
@@ -126,6 +136,129 @@ class _StockCountScreenState extends State<StockCountScreen>
     if (confirmed && mounted) await _sync();
   }
 
+  Future<void> _loadApprovalQueue() async {
+    if (_approvalLoading) return;
+    setState(() => _approvalLoading = true);
+    try {
+      final response =
+          await widget.client.get('/api/inventory/physical-count-approvals');
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (response.statusCode == 403) {
+          if (mounted) setState(() => _approvalQueue = []);
+          return;
+        }
+        throw StateError(
+            'Could not load count approvals (server ${response.statusCode}).');
+      }
+      final payload = jsonDecode(response.body) as Map<String, dynamic>;
+      final items = ((payload['items'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      if (mounted) {
+        setState(() {
+          _approvalQueue = items;
+          _canApproveCounts = payload['canApprove'] == true;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        showAppNotification(
+          error is StateError
+              ? error.message
+              : 'Could not load manager approval queue.',
+          tone: AppNotificationTone.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _approvalLoading = false);
+    }
+  }
+
+  Future<void> _reviewCount(Map<String, dynamic> count, String decision) async {
+    final countId = count['id']?.toString();
+    if (countId == null) return;
+    final notesController = TextEditingController();
+    final notes = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.overlaySurface,
+        title: Text(
+          decision == 'Approve'
+              ? 'Approve stock adjustment?'
+              : 'Reject stock count?',
+          style: AppTextStyles.subtitle.copyWith(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${count['itemName']}: ${_formatAuditQuantity((count['variance'] as num?)?.toDouble() ?? 0)} units',
+              style:
+                  AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesController,
+              maxLength: 1000,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: decision == 'Reject'
+                    ? 'Reason for rejection (required)'
+                    : 'Review note (optional)',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final note = notesController.text.trim();
+              if (decision == 'Reject' && note.isEmpty) return;
+              Navigator.pop(dialogContext, note);
+            },
+            child: Text(decision),
+          ),
+        ],
+      ),
+    );
+    notesController.dispose();
+    if (notes == null || !mounted) return;
+    try {
+      final response = await widget.client.post(
+        '/api/inventory/physical-count-approvals/$countId/review',
+        body: {'decision': decision, 'notes': notes},
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        showAppNotification(
+          _error(response.body) ?? 'The stock count could not be reviewed.',
+          tone: AppNotificationTone.error,
+        );
+        await _loadApprovalQueue();
+        return;
+      }
+      showAppNotification(
+        decision == 'Approve'
+            ? 'Stock adjustment approved and applied.'
+            : 'Stock count rejected.',
+        tone: AppNotificationTone.success,
+      );
+      await _loadApprovalQueue();
+      await _refreshCatalog();
+    } catch (_) {
+      if (mounted) {
+        showAppNotification(
+          'Could not reach the approval service.',
+          tone: AppNotificationTone.error,
+        );
+      }
+    }
+  }
+
   Future<void> _sync({bool silent = false}) async {
     if (!mounted || _syncing) return;
     final queued = _pending.where((count) => !count.requiresReview).toList();
@@ -146,6 +279,9 @@ class _StockCountScreenState extends State<StockCountScreen>
     final queuedIds = queued.map((count) => count.id).toSet();
     setState(() => _syncing = true);
     try {
+      var appliedCount = 0;
+      var matchedCount = 0;
+      var approvalCount = 0;
       if (!await _refreshCatalog()) {
         if (!silent && mounted) {
           showAppNotification(
@@ -181,12 +317,61 @@ class _StockCountScreenState extends State<StockCountScreen>
             'systemQuantityAtCount': count.systemQuantityAtCount,
             'countedAt': count.recordedAt.toUtc().toIso8601String(),
             'reference': 'MOBILE-AUDIT-${count.id}',
+            'reason': count.reason,
+            'reasonNotes': count.reasonNotes,
           });
           if (response.statusCode < 200 || response.statusCode >= 300) {
+            final conflict = _decodeJsonMap(response.body);
             remaining.add(count.withError(
               _error(response.body) ?? 'Server rejected physical count.',
               requiresReview:
                   response.statusCode == 409 || response.statusCode == 404,
+              changedActivity: _formatChangedActivity(
+                conflict?['changedMovements'],
+              ),
+            ));
+            continue;
+          }
+          final audit = _decodeJsonMap(response.body);
+          final auditId = audit?['id']?.toString();
+          if (auditId == null) {
+            remaining.add(count.withError(
+              'Count was recorded, but the audit response did not include its ID. Sync again to safely verify it.',
+            ));
+            continue;
+          }
+          switch (audit?['status']) {
+            case 'Applied':
+              appliedCount++;
+            case 'Matched':
+              matchedCount++;
+            case 'PendingApproval':
+              approvalCount++;
+            default:
+              remaining.add(count.withError(
+                'The server returned an unknown count status. Sync again to verify it.',
+              ));
+              continue;
+          }
+          try {
+            for (var index = 0; index < count.evidence.length; index++) {
+              final evidence = count.evidence[index];
+              final upload = await widget.client.uploadPhysicalCountPhoto(
+                auditId,
+                base64Decode(evidence.bytesBase64),
+                evidence.fileName,
+                '${count.id}-$index',
+              );
+              if (upload.statusCode < 200 || upload.statusCode >= 300) {
+                throw StateError(
+                    _error(upload.body) ?? 'Evidence photo upload failed.');
+              }
+            }
+          } catch (error) {
+            remaining.add(count.withError(
+              error is StateError
+                  ? error.message
+                  : 'Count saved, but its evidence could not be uploaded. Sync again to retry.',
             ));
           }
         } catch (_) {
@@ -199,16 +384,25 @@ class _StockCountScreenState extends State<StockCountScreen>
       await _refreshCatalog();
       await _store.save(_catalog, pendingAfterSync);
       if (mounted) setState(() => _pending = pendingAfterSync);
+      await _loadApprovalQueue();
 
       if (!silent && mounted) {
         final recountCount =
             pendingAfterSync.where((count) => count.requiresReview).length;
+        final syncedSummary = [
+          if (appliedCount > 0) '$appliedCount adjustment(s) applied',
+          if (matchedCount > 0) '$matchedCount count(s) matched',
+          if (approvalCount > 0)
+            '$approvalCount large adjustment(s) awaiting manager approval',
+        ].join('; ');
         showAppNotification(
           pendingAfterSync.isEmpty
-              ? 'All physical counts synced to inventory ledger.'
+              ? (syncedSummary.isEmpty
+                  ? 'All physical counts synced to inventory ledger.'
+                  : syncedSummary)
               : recountCount > 0
                   ? '$recountCount count(s) changed since counting and need a fresh count.'
-                  : '${pendingAfterSync.length} count(s) pending sync retry.',
+                  : '${pendingAfterSync.length} count(s) pending sync retry.${syncedSummary.isEmpty ? '' : ' $syncedSummary.'}',
           tone: pendingAfterSync.isEmpty
               ? AppNotificationTone.success
               : AppNotificationTone.warning,
@@ -220,12 +414,38 @@ class _StockCountScreenState extends State<StockCountScreen>
   }
 
   String? _error(String body) {
+    final value = _decodeJsonMap(body);
+    return value?['message'] as String? ?? value?['title'] as String?;
+  }
+
+  Map<String, dynamic>? _decodeJsonMap(String body) {
     try {
-      final value = jsonDecode(body) as Map<String, dynamic>;
-      return value['message'] as String? ?? value['title'] as String?;
+      final value = jsonDecode(body);
+      return value is Map<String, dynamic> ? value : null;
     } catch (_) {
       return null;
     }
+  }
+
+  List<String> _formatChangedActivity(Object? payload) {
+    if (payload is! List) return const [];
+    return payload.whereType<Map<String, dynamic>>().map((movement) {
+      final quantity = (movement['quantity'] as num?)?.toDouble() ?? 0;
+      final sign = quantity > 0 ? '+' : '';
+      final type = movement['movementType']?.toString() ?? 'Stock change';
+      final reference = movement['reference']?.toString();
+      final actor = movement['performedBy']?.toString();
+      final occurredAt = DateTime.tryParse(
+        movement['occurredAt']?.toString() ?? '',
+      );
+      final details = [
+        if (reference != null && reference.isNotEmpty) reference,
+        if (actor != null && actor.isNotEmpty) 'by $actor',
+        if (occurredAt != null) occurredAt.toLocal().toString(),
+      ];
+      return '$type: $sign${_formatAuditQuantity(quantity)}'
+          '${details.isEmpty ? '' : ' · ${details.join(' · ')}'}';
+    }).toList();
   }
 
   void _onDetect(BarcodeCapture capture) {
@@ -282,12 +502,30 @@ class _StockCountScreenState extends State<StockCountScreen>
       return;
     }
     final item = matches.first;
+    final variance = quantity - item.quantity;
+    final reason = variance == 0 ? 'NoDiscrepancy' : _reason;
+    if (reason == null) {
+      showAppNotification(
+        'Choose a reason for the stock difference before saving.',
+        tone: AppNotificationTone.warning,
+      );
+      return;
+    }
+    if (variance != 0 &&
+        _reason == 'Other' &&
+        _reasonNotes.text.trim().isEmpty) {
+      showAppNotification(
+        'Add a short note when the reason is Other.',
+        tone: AppNotificationTone.warning,
+      );
+      return;
+    }
 
     final confirmed = await showAppConfirmation(
       context: context,
       title: 'Save physical count?',
       message:
-          'Record ${_formatAuditQuantity(quantity)} unit${quantity == 1 ? '' : 's'} for ${item.name} (${item.sku})? The system currently shows ${_formatAuditQuantity(item.quantity)}. If stock changes before sync, you will be asked to recount.',
+          'System quantity: ${_formatAuditQuantity(item.quantity)}\nCounted quantity: ${_formatAuditQuantity(quantity)}\nAdjustment: ${variance > 0 ? '+' : ''}${_formatAuditQuantity(variance)}\n\n${_isLargeVariance(variance, item.quantity) ? 'This large adjustment will wait for a manager approval.' : 'The adjustment will be applied when the count syncs.'}\nIf stock changes before sync, you will be asked to recount.',
       confirmLabel: 'Save Count',
       icon: Icons.fact_check_rounded,
       accent: AppColors.cyan,
@@ -303,6 +541,11 @@ class _StockCountScreenState extends State<StockCountScreen>
         quantity: quantity,
         systemQuantityAtCount: item.quantity,
         recordedAt: DateTime.now().toUtc(),
+        reason: reason,
+        reasonNotes: variance == 0 || _reasonNotes.text.trim().isEmpty
+            ? null
+            : _reasonNotes.text.trim(),
+        evidence: await _readSelectedEvidence(),
       );
       final pending = [
         ..._pending.where((c) => c.sku.toLowerCase() != item.sku.toLowerCase()),
@@ -315,11 +558,24 @@ class _StockCountScreenState extends State<StockCountScreen>
         _sku.clear();
         _quantity.clear();
         _scannedCode = null;
+        _reason = null;
+        _reasonNotes.clear();
+        _selectedPhotos = [];
       });
-      showAppNotification('${item.name} physical count recorded for sync.',
+      showAppNotification(
+          _isLargeVariance(variance, item.quantity)
+              ? '${item.name} count saved; the adjustment will wait for manager approval after sync.'
+              : '${item.name} physical count saved for sync.',
           tone: AppNotificationTone.success);
       _scanAgain();
       _sync(silent: true);
+    } catch (error) {
+      if (mounted) {
+        showAppNotification(
+          error is StateError ? error.message : 'Could not save the count.',
+          tone: AppNotificationTone.error,
+        );
+      }
     } finally {
       if (mounted) setState(() => _savingCount = false);
     }
@@ -329,6 +585,150 @@ class _StockCountScreenState extends State<StockCountScreen>
     final code = _sku.text.trim().toLowerCase();
     if (code.isEmpty) return null;
     return _catalog.where((i) => i.sku.toLowerCase() == code).firstOrNull;
+  }
+
+  bool _isLargeVariance(double variance, double systemQuantity) {
+    final absoluteVariance = variance.abs();
+    return absoluteVariance > 5 ||
+        (systemQuantity == 0
+            ? absoluteVariance > 0
+            : absoluteVariance / systemQuantity > 0.10);
+  }
+
+  Future<void> _pickEvidence(ImageSource source) async {
+    try {
+      final List<XFile> photos;
+      if (source == ImageSource.gallery) {
+        photos = await _picker.pickMultiImage(
+          imageQuality: 55,
+          maxWidth: 1200,
+        );
+      } else {
+        final photo = await _picker.pickImage(
+          source: source,
+          imageQuality: 55,
+          maxWidth: 1200,
+        );
+        photos = photo == null ? [] : [photo];
+      }
+      if (!mounted || photos.isEmpty) return;
+      final totalPhotos = _selectedPhotos.length + photos.length;
+      setState(() {
+        _selectedPhotos = [..._selectedPhotos, ...photos].take(3).toList();
+      });
+      if (totalPhotos > 3) {
+        showAppNotification(
+          'A maximum of 3 evidence photos can be attached.',
+          tone: AppNotificationTone.warning,
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        showAppNotification(
+          'Could not select evidence photos.',
+          tone: AppNotificationTone.error,
+        );
+      }
+    }
+  }
+
+  Future<List<_PendingEvidence>> _readSelectedEvidence() async {
+    final evidence = <_PendingEvidence>[];
+    for (final photo in _selectedPhotos.take(3)) {
+      final bytes = await photo.readAsBytes();
+      if (bytes.length > 5 * 1024 * 1024) {
+        throw StateError('${photo.name} exceeds the 5 MB photo limit.');
+      }
+      evidence.add(_PendingEvidence(
+        fileName: photo.name,
+        bytesBase64: base64Encode(bytes),
+      ));
+    }
+    return evidence;
+  }
+
+  Future<void> _showEvidenceSourcePicker() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppColors.overlaySurface,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined,
+                  color: AppColors.cyan),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.camera_alt_outlined, color: AppColors.cyan),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source != null) await _pickEvidence(source);
+  }
+
+  Widget _quantitySummary(
+    double systemQuantity,
+    double countedQuantity,
+    double adjustment,
+    String unit,
+  ) {
+    final adjustmentColor = adjustment == 0
+        ? AppColors.success
+        : adjustment > 0
+            ? AppColors.cyan
+            : AppColors.error;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.inputFill,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        children: [
+          _quantitySummaryRow(
+              'System quantity', systemQuantity, unit, AppColors.textPrimary),
+          const SizedBox(height: 7),
+          _quantitySummaryRow(
+              'Counted quantity', countedQuantity, unit, AppColors.textPrimary),
+          const Divider(height: 14, color: AppColors.hairline),
+          _quantitySummaryRow(
+            'Adjustment',
+            adjustment,
+            unit,
+            adjustmentColor,
+            signed: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _quantitySummaryRow(
+      String label, double quantity, String unit, Color color,
+      {bool signed = false}) {
+    final sign = signed && quantity > 0 ? '+' : '';
+    return Row(
+      children: [
+        Expanded(
+          child: Text(label,
+              style: AppTextStyles.caption
+                  .copyWith(color: AppColors.textSecondary)),
+        ),
+        Text(
+          '$sign${_formatAuditQuantity(quantity)} $unit',
+          style: AppTextStyles.body
+              .copyWith(color: color, fontWeight: FontWeight.w700),
+        ),
+      ],
+    );
   }
 
   @override
@@ -380,6 +780,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                     return;
                   }
                   await _sync();
+                  await _loadApprovalQueue();
                   if (mounted && !_syncing) {
                     showAppNotification(
                       _pending.isEmpty
@@ -455,6 +856,27 @@ class _StockCountScreenState extends State<StockCountScreen>
                     // Physical Count Form
                     _buildCountInputCard(),
                     const SizedBox(height: 22),
+
+                    if (_approvalLoading || _approvalQueue.isNotEmpty) ...[
+                      SectionHeader(
+                        'LARGE DISCREPANCIES',
+                        trailing: Text(
+                            '${_approvalQueue.length} awaiting review',
+                            style: AppTextStyles.caption
+                                .copyWith(color: AppColors.warning)),
+                      ),
+                      if (_approvalLoading)
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                                color: AppColors.cyan),
+                          ),
+                        )
+                      else
+                        ..._approvalQueue.map(_buildApprovalCard),
+                      const SizedBox(height: 14),
+                    ],
 
                     // Pending Queue List
                     AnimatedSize(
@@ -894,6 +1316,84 @@ class _StockCountScreenState extends State<StockCountScreen>
                 ],
               ),
             ),
+            if (hasVariance) ...[
+              const SizedBox(height: 10),
+              _quantitySummary(
+                matchedItem.quantity,
+                physicalQty,
+                variance,
+                matchedItem.unit,
+              ),
+            ],
+          ],
+
+          if (matchedItem != null && hasVariance && variance != 0) ...[
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _reason,
+              decoration: const InputDecoration(
+                labelText: 'Reason for discrepancy *',
+                filled: true,
+              ),
+              items: const [
+                DropdownMenuItem(
+                    value: 'DamagedStock', child: Text('Damaged stock')),
+                DropdownMenuItem(
+                    value: 'LostOrMissing', child: Text('Lost / missing')),
+                DropdownMenuItem(
+                    value: 'CountingError', child: Text('Counting error')),
+                DropdownMenuItem(
+                    value: 'SupplierShortage',
+                    child: Text('Supplier shortage')),
+                DropdownMenuItem(value: 'Other', child: Text('Other')),
+              ],
+              onChanged: (value) => setState(() => _reason = value),
+            ),
+            if (_reason == 'Other') ...[
+              const SizedBox(height: 10),
+              TextField(
+                controller: _reasonNotes,
+                maxLength: 1000,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Explain the discrepancy *',
+                  filled: true,
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _selectedPhotos.length >= 3
+                  ? null
+                  : () => _showEvidenceSourcePicker(),
+              icon: const Icon(Icons.add_a_photo_outlined),
+              label: Text(
+                _selectedPhotos.isEmpty
+                    ? 'Add evidence photos (optional)'
+                    : 'Evidence photos (${_selectedPhotos.length}/3)',
+              ),
+            ),
+            if (_selectedPhotos.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                children: List.generate(_selectedPhotos.length, (index) {
+                  return InputChip(
+                    label: Text(_selectedPhotos[index].name),
+                    onDeleted: () => setState(
+                      () => _selectedPhotos.removeAt(index),
+                    ),
+                  );
+                }),
+              ),
+            if (_isLargeVariance(variance, matchedItem.quantity))
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Manager approval required: adjustment is over 5 units or over 10% of system stock.',
+                  style:
+                      AppTextStyles.caption.copyWith(color: AppColors.warning),
+                ),
+              ),
           ],
 
           const SizedBox(height: 20),
@@ -904,6 +1404,93 @@ class _StockCountScreenState extends State<StockCountScreen>
             onPressed: _saveCount,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildApprovalCard(Map<String, dynamic> count) {
+    final variance = (count['variance'] as num?)?.toDouble() ?? 0;
+    final photos =
+        (count['photoUrls'] as List?)?.whereType<String>().toList() ??
+            const <String>[];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InventoryPanel(
+        padding: const EdgeInsets.all(14),
+        borderColor: AppColors.warning.withValues(alpha: 0.35),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${count['itemName'] ?? 'Unknown item'} (${count['sku'] ?? 'Unknown SKU'})',
+              style: AppTextStyles.subtitle.copyWith(fontSize: 14),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              'System ${count['systemQuantityAtCount']} → counted ${count['countedQuantity']} · adjustment ${variance > 0 ? '+' : ''}${_formatAuditQuantity(variance)}',
+              style: AppTextStyles.caption
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            Text(
+              'Reason: ${count['reason']}${count['reasonNotes'] == null ? '' : ' · ${count['reasonNotes']}'}',
+              style: AppTextStyles.caption
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            Text(
+              'Counted by ${count['countedBy'] ?? 'Unknown'} · ${count['countedAt'] ?? ''}',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+            ),
+            if (photos.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 72,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: photos.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) => ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      photos[index],
+                      width: 72,
+                      height: 72,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const SizedBox(
+                        width: 72,
+                        child: Icon(Icons.broken_image_outlined),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            if (_canApproveCounts)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _reviewCount(count, 'Reject'),
+                      child: const Text('Reject'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _reviewCount(count, 'Approve'),
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Approve'),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Text(
+                'Waiting for an Admin or Manager to review this adjustment.',
+                style: AppTextStyles.caption.copyWith(color: AppColors.warning),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -957,6 +1544,20 @@ class _StockCountScreenState extends State<StockCountScreen>
                             : AppColors.warning,
                         fontSize: 11,
                       ),
+                    ),
+                  for (final activity in entry.changedActivity)
+                    Text(
+                      '• $activity',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.textSecondary),
+                    ),
+                  if (entry.evidence.isNotEmpty)
+                    Text(
+                      '${entry.evidence.length} evidence photo(s) queued',
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.textSecondary),
                     ),
                 ],
               ),
@@ -1161,20 +1762,29 @@ class _PendingCount {
     required this.quantity,
     required this.systemQuantityAtCount,
     required this.recordedAt,
+    required this.reason,
+    required this.evidence,
     this.lastError,
     this.requiresReview = false,
+    this.reasonNotes,
+    this.changedActivity = const [],
   });
 
   final String id, sku, name;
   final double quantity;
   final double? systemQuantityAtCount;
   final DateTime recordedAt;
+  final String reason;
+  final String? reasonNotes;
+  final List<_PendingEvidence> evidence;
   final String? lastError;
   final bool requiresReview;
+  final List<String> changedActivity;
 
   _PendingCount withError(
     String error, {
     bool requiresReview = false,
+    List<String> changedActivity = const [],
   }) =>
       _PendingCount(
         id: id,
@@ -1183,8 +1793,13 @@ class _PendingCount {
         quantity: quantity,
         systemQuantityAtCount: systemQuantityAtCount,
         recordedAt: recordedAt,
+        reason: reason,
+        reasonNotes: reasonNotes,
+        evidence: evidence,
         lastError: error,
         requiresReview: requiresReview,
+        changedActivity:
+            changedActivity.isEmpty ? this.changedActivity : changedActivity,
       );
 
   factory _PendingCount.fromJson(Map<String, dynamic> json) {
@@ -1197,11 +1812,20 @@ class _PendingCount {
       quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
       systemQuantityAtCount: systemQuantity,
       recordedAt: DateTime.parse(json['recordedAt'] as String),
+      reason: json['reason'] as String? ?? 'Other',
+      reasonNotes: json['reasonNotes'] as String?,
+      evidence: ((json['evidence'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(_PendingEvidence.fromJson)
+          .toList(),
       lastError: lastError ??
           (systemQuantity == null
               ? 'Saved before count validation was added. Remove and recount.'
               : null),
       requiresReview: json['requiresReview'] == true || systemQuantity == null,
+      changedActivity: ((json['changedActivity'] as List?) ?? const [])
+          .whereType<String>()
+          .toList(),
     );
   }
 
@@ -1212,7 +1836,29 @@ class _PendingCount {
         'quantity': quantity,
         'systemQuantityAtCount': systemQuantityAtCount,
         'recordedAt': recordedAt.toIso8601String(),
+        'reason': reason,
+        'reasonNotes': reasonNotes,
+        'evidence': evidence.map((photo) => photo.toJson()).toList(),
         'lastError': lastError,
         'requiresReview': requiresReview,
+        'changedActivity': changedActivity,
+      };
+}
+
+class _PendingEvidence {
+  const _PendingEvidence({required this.fileName, required this.bytesBase64});
+
+  final String fileName;
+  final String bytesBase64;
+
+  factory _PendingEvidence.fromJson(Map<String, dynamic> json) =>
+      _PendingEvidence(
+        fileName: json['fileName'] as String? ?? 'evidence.jpg',
+        bytesBase64: json['bytesBase64'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'fileName': fileName,
+        'bytesBase64': bytesBase64,
       };
 }

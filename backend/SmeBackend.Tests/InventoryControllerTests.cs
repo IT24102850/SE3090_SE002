@@ -309,17 +309,22 @@ public class InventoryControllerTests
         {
             ControllerContext = new ControllerContext
             {
-                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, userId: Guid.NewGuid())
+                }
             }
         };
 
         var result = await controller.RecordPhysicalCount(
             item.Id,
-            new RecordPhysicalCountRequest(8m, 10m, countedAt, "MOBILE-AUDIT-COUNT-1"),
+            new RecordPhysicalCountRequest(
+                8m, 10m, countedAt, "MOBILE-AUDIT-COUNT-1", "LostOrMissing"),
             CancellationToken.None);
 
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);
+        Assert.NotNull(conflict.Value);
         Assert.Equal(10m, (await db.InventoryItems.SingleAsync()).Quantity);
         Assert.Equal(2, await db.StockMovements.CountAsync());
     }
@@ -352,32 +357,396 @@ public class InventoryControllerTests
         {
             ControllerContext = new ControllerContext
             {
-                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, userId: Guid.NewGuid())
+                }
             }
         };
         var request = new RecordPhysicalCountRequest(
-            8m,
+            9m,
             10m,
             DateTimeOffset.UtcNow.AddMinutes(-1),
-            "MOBILE-AUDIT-COUNT-2");
+            "MOBILE-AUDIT-COUNT-2",
+            "CountingError");
 
         var firstResult = await controller.RecordPhysicalCount(
             item.Id,
             request,
             CancellationToken.None);
-        var firstResponse = Assert.IsType<InventoryItemResponse>(
+        var firstResponse = Assert.IsType<PhysicalStockCountResponse>(
             Assert.IsType<OkObjectResult>(firstResult.Result).Value);
         var secondResult = await controller.RecordPhysicalCount(
             item.Id,
             request,
             CancellationToken.None);
 
-        Assert.Equal(8m, firstResponse.Quantity);
+        Assert.Equal(9m, firstResponse.CountedQuantity);
+        Assert.Equal("Applied", firstResponse.Status);
         Assert.IsType<OkObjectResult>(secondResult.Result);
         var movement = Assert.Single(await db.StockMovements.ToListAsync());
-        Assert.Equal(-2m, movement.Quantity);
+        Assert.Equal(-1m, movement.Quantity);
         Assert.Equal("Adjustment", movement.MovementType);
         Assert.Equal("MOBILE-AUDIT-COUNT-2", movement.Reference);
+        Assert.Contains("CountingError", movement.Notes);
+    }
+
+    [Fact]
+    public async Task RecordPhysicalCount_WhenVarianceHasNoReason_RejectsWithoutChangingStock()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var item = new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = Guid.NewGuid(),
+            Name = "Coffee Beans",
+            Sku = "SKU-COUNT-NO-REASON",
+            Quantity = 10m,
+            IsActive = true,
+        };
+        db.InventoryItems.Add(item);
+        await db.SaveChangesAsync();
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, userId: Guid.NewGuid())
+                }
+            }
+        };
+
+        var result = await controller.RecordPhysicalCount(
+            item.Id,
+            new RecordPhysicalCountRequest(
+                9m,
+                10m,
+                DateTimeOffset.UtcNow,
+                "MOBILE-AUDIT-NO-REASON",
+                null!),
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<ObjectResult>(result.Result);
+        var validation = Assert.IsType<ValidationProblemDetails>(badRequest.Value);
+        Assert.NotEmpty(validation.Errors);
+        Assert.Equal(10m, (await db.InventoryItems.SingleAsync()).Quantity);
+        Assert.Empty(await db.PhysicalStockCounts.ToListAsync());
+        Assert.Empty(await db.StockMovements.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ReviewPhysicalCount_WhenRejected_RecordsReviewerWithoutAdjustingStock()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var counterId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var item = new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = Guid.NewGuid(),
+            Name = "Coffee Beans",
+            Sku = "SKU-COUNT-REJECT",
+            Quantity = 100m,
+            IsActive = true,
+        };
+        var count = new PhysicalStockCount
+        {
+            TenantId = tenantId,
+            InventoryItemId = item.Id,
+            BranchId = item.BranchId.Value,
+            ItemName = item.Name,
+            Sku = item.Sku,
+            SystemQuantityAtCount = 100m,
+            CountedQuantity = 89m,
+            Variance = -11m,
+            Reason = "LostOrMissing",
+            CountedAt = DateTime.UtcNow.AddMinutes(-1),
+            CountedByUserId = counterId,
+            CountedBy = "Counter",
+            Reference = "MOBILE-AUDIT-REJECT",
+            Status = "PendingApproval",
+        };
+        db.InventoryItems.Add(item);
+        db.PhysicalStockCounts.Add(count);
+        await db.SaveChangesAsync();
+        var controller = new PhysicalStockCountsController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<ICloudinaryImageService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, UserRole.Manager, managerId)
+                }
+            }
+        };
+
+        var result = await controller.ReviewPhysicalCount(
+            count.Id,
+            new ReviewPhysicalStockCountRequest("Reject", "Count was not verified."),
+            CancellationToken.None);
+        var response = Assert.IsType<PhysicalStockCountResponse>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+
+        Assert.Equal("Rejected", response.Status);
+        Assert.Equal("Count was not verified.", response.ReviewNotes);
+        Assert.Equal(managerId, (await db.PhysicalStockCounts.SingleAsync()).ReviewedByUserId);
+        var notification = Assert.Single(await db.Notifications.ToListAsync());
+        Assert.Equal(counterId, notification.UserId);
+        Assert.Equal("PhysicalCountRejected", notification.Type);
+        Assert.Equal(100m, (await db.InventoryItems.SingleAsync()).Quantity);
+        Assert.Empty(await db.StockMovements.ToListAsync());
+    }
+
+    [Fact]
+    public async Task UploadPhoto_WhenImageServiceIsUnconfigured_ReturnsClearServiceUnavailable()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var count = new PhysicalStockCount
+        {
+            TenantId = tenantId,
+            InventoryItemId = Guid.NewGuid(),
+            BranchId = Guid.NewGuid(),
+            ItemName = "Coffee Beans",
+            Sku = "SKU-COUNT-PHOTO",
+            SystemQuantityAtCount = 10m,
+            CountedQuantity = 9m,
+            Variance = -1m,
+            Reason = "DamagedStock",
+            CountedAt = DateTime.UtcNow,
+            CountedBy = "Counter",
+            Reference = "MOBILE-AUDIT-PHOTO",
+            Status = "Applied",
+        };
+        db.PhysicalStockCounts.Add(count);
+        await db.SaveChangesAsync();
+        var imageService = new Mock<ICloudinaryImageService>();
+        imageService
+            .Setup(service => service.UploadAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CloudinaryNotConfiguredException());
+        var controller = new PhysicalStockCountsController(
+            db,
+            CreateAuthorizationService().Object,
+            imageService.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+        await using var stream = new MemoryStream(new byte[] { 1 });
+        var file = new FormFile(stream, 0, 1, "file", "evidence.jpg")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "image/jpeg",
+        };
+
+        var result = await controller.UploadPhoto(
+            count.Id,
+            file,
+            "local-count-1-0",
+            CancellationToken.None);
+
+        var unavailable = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, unavailable.StatusCode);
+        Assert.Contains("not configured", unavailable.Value!.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Null((await db.PhysicalStockCounts.SingleAsync()).PhotoUrlsJson);
+    }
+
+    [Fact]
+    public async Task UploadPhoto_WhenRetriedWithSameKey_DoesNotUploadDuplicateEvidence()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var count = new PhysicalStockCount
+        {
+            TenantId = tenantId,
+            InventoryItemId = Guid.NewGuid(),
+            BranchId = Guid.NewGuid(),
+            ItemName = "Coffee Beans",
+            Sku = "SKU-COUNT-PHOTO-RETRY",
+            SystemQuantityAtCount = 10m,
+            CountedQuantity = 9m,
+            Variance = -1m,
+            Reason = "DamagedStock",
+            CountedAt = DateTime.UtcNow,
+            CountedBy = "Counter",
+            Reference = "MOBILE-AUDIT-PHOTO-RETRY",
+            Status = "Applied",
+        };
+        db.PhysicalStockCounts.Add(count);
+        await db.SaveChangesAsync();
+        var imageService = new Mock<ICloudinaryImageService>();
+        imageService
+            .Setup(service => service.UploadAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                "stock-count-evidence",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UploadedImage(
+                "https://images.example.test/evidence.jpg",
+                "stock-count/evidence"));
+        var controller = new PhysicalStockCountsController(
+            db,
+            CreateAuthorizationService().Object,
+            imageService.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+        await using var stream = new MemoryStream(new byte[] { 1 });
+        var file = new FormFile(stream, 0, 1, "file", "evidence.jpg")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "image/jpeg",
+        };
+
+        var first = await controller.UploadPhoto(
+            count.Id,
+            file,
+            "local-count-1-0",
+            CancellationToken.None);
+        var retry = await controller.UploadPhoto(
+            count.Id,
+            file,
+            "local-count-1-0",
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(first.Result);
+        Assert.IsType<OkObjectResult>(retry.Result);
+        imageService.Verify(service => service.UploadAsync(
+            It.IsAny<Stream>(),
+            It.IsAny<string>(),
+            "stock-count-evidence",
+            It.IsAny<CancellationToken>()), Times.Once);
+        var savedCount = await db.PhysicalStockCounts.SingleAsync();
+        Assert.Single(System.Text.Json.JsonSerializer.Deserialize<List<string>>(
+            savedCount.PhotoUrlsJson!)!);
+        Assert.Single(System.Text.Json.JsonSerializer.Deserialize<List<string>>(
+            savedCount.PhotoUploadKeysJson!)!);
+    }
+
+    [Fact]
+    public async Task RecordPhysicalCount_LargeVarianceRequiresIndependentApproval()
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var counterId = Guid.NewGuid();
+        var managerId = Guid.NewGuid();
+        var item = new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = branchId,
+            Name = "Coffee Beans",
+            Sku = "SKU-COUNT-APPROVAL",
+            Quantity = 100m,
+            IsActive = true,
+        };
+        db.InventoryItems.Add(item);
+        await db.SaveChangesAsync();
+
+        var authorization = CreateAuthorizationService();
+        var counter = new InventoryController(
+            db,
+            authorization.Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, UserRole.Staff, counterId)
+                }
+            }
+        };
+        var request = new RecordPhysicalCountRequest(
+            89m,
+            100m,
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            "MOBILE-AUDIT-COUNT-APPROVAL",
+            "LostOrMissing");
+
+        var submitted = await counter.RecordPhysicalCount(
+            item.Id,
+            request,
+            CancellationToken.None);
+        var pending = Assert.IsType<PhysicalStockCountResponse>(
+            Assert.IsType<AcceptedResult>(submitted.Result).Value);
+        Assert.Equal("PendingApproval", pending.Status);
+        Assert.Equal(100m, (await db.InventoryItems.SingleAsync()).Quantity);
+        Assert.Empty(await db.StockMovements.ToListAsync());
+
+        var sameUserApprover = new PhysicalStockCountsController(
+            db,
+            authorization.Object,
+            Mock.Of<ICloudinaryImageService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, UserRole.Manager, counterId)
+                }
+            }
+        };
+        var selfApproval = await sameUserApprover.ReviewPhysicalCount(
+            pending.Id,
+            new ReviewPhysicalStockCountRequest("Approve"),
+            CancellationToken.None);
+        Assert.IsType<ForbidResult>(selfApproval.Result);
+
+        var approver = new PhysicalStockCountsController(
+            db,
+            authorization.Object,
+            Mock.Of<ICloudinaryImageService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, UserRole.Manager, managerId)
+                }
+            }
+        };
+        var approved = await approver.ReviewPhysicalCount(
+            pending.Id,
+            new ReviewPhysicalStockCountRequest("Approve", "Verified recount"),
+            CancellationToken.None);
+        var applied = Assert.IsType<PhysicalStockCountResponse>(
+            Assert.IsType<OkObjectResult>(approved.Result).Value);
+
+        Assert.Equal("Applied", applied.Status);
+        Assert.Equal("Authorized user", applied.ReviewedBy);
+        Assert.Equal(89m, (await db.InventoryItems.SingleAsync()).Quantity);
+        Assert.Equal(-11m, (await db.StockMovements.SingleAsync()).Quantity);
     }
 
     [Fact]
@@ -573,12 +942,19 @@ public class InventoryControllerTests
         return authorizationService;
     }
 
-    private static ClaimsPrincipal CreateUser(Guid tenantId)
+    private static ClaimsPrincipal CreateUser(
+        Guid tenantId,
+        UserRole role = UserRole.Admin,
+        Guid? userId = null)
     {
-        var identity = new ClaimsIdentity(new[]
+        var claims = new List<Claim>
         {
-            new Claim(InventoryAccessHandler.TenantIdClaimType, tenantId.ToString())
-        }, "TestAuth");
+            new(InventoryAccessHandler.TenantIdClaimType, tenantId.ToString()),
+            new(ClaimTypes.Role, role.ToString()),
+        };
+        if (userId.HasValue)
+            claims.Add(new Claim(ClaimTypes.NameIdentifier, userId.Value.ToString()));
+        var identity = new ClaimsIdentity(claims, "TestAuth");
 
         return new ClaimsPrincipal(identity);
     }

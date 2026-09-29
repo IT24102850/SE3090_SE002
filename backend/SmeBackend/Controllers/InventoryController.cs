@@ -1,4 +1,6 @@
 using System.Data;
+using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -667,18 +669,24 @@ public sealed class InventoryController(
 
     [HttpPost("{id:guid}/physical-count")]
     [Consumes("application/json")]
-    [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PhysicalStockCountResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PhysicalStockCountResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<InventoryItemResponse>> RecordPhysicalCount(
+    public async Task<ActionResult<PhysicalStockCountResponse>> RecordPhysicalCount(
         Guid id,
         RecordPhysicalCountRequest request,
         CancellationToken cancellationToken)
     {
         if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+        var countedByUserId = CurrentUserId();
+        if (!countedByUserId.HasValue)
         {
             return Unauthorized();
         }
@@ -714,9 +722,21 @@ public sealed class InventoryController(
         }
         if (request.CountedAt == default ||
             string.IsNullOrWhiteSpace(request.Reference) ||
-            request.Reference.Length > 100)
+            request.Reference.Length > 100 ||
+            string.IsNullOrWhiteSpace(request.Reason) ||
+            request.Reason.Length > 40 ||
+            (request.Reason == "Other" && string.IsNullOrWhiteSpace(request.ReasonNotes)) ||
+            request.ReasonNotes is { Length: > 1000 })
         {
-            ModelState.AddModelError("reference", "A count timestamp and unique reference are required.");
+            ModelState.AddModelError("reason", "Choose a reason for a discrepancy. Add notes when the reason is Other.");
+            return ValidationProblem(ModelState);
+        }
+        var requestedVariance = request.CountedQuantity - request.SystemQuantityAtCount;
+        if (!PhysicalStockCountReasons.All.Contains(request.Reason, StringComparer.Ordinal) ||
+            (requestedVariance == 0 && request.Reason != "NoDiscrepancy") ||
+            (requestedVariance != 0 && request.Reason == "NoDiscrepancy"))
+        {
+            ModelState.AddModelError("reason", "Choose a valid physical-count discrepancy reason.");
             return ValidationProblem(ModelState);
         }
         if (!item.BranchId.HasValue)
@@ -730,60 +750,101 @@ public sealed class InventoryController(
                 cancellationToken)
             : null;
 
-        var existingCount = await db.StockMovements.AsNoTracking()
-            .AnyAsync(
-                movement => movement.InventoryItemId == item.Id &&
-                            movement.MovementType == "Adjustment" &&
-                            movement.Reference == request.Reference,
+        var existingCount = await db.PhysicalStockCounts.AsNoTracking()
+            .SingleOrDefaultAsync(
+                count => count.Reference == request.Reference,
                 cancellationToken);
-        if (existingCount)
+        if (existingCount is not null)
         {
-            return Ok(ToResponse(item));
+            return Ok(ToPhysicalCountResponse(existingCount));
         }
 
         var countedAtUtc = request.CountedAt.UtcDateTime;
-        var changedSinceCount = await db.StockMovements.AsNoTracking()
-            .AnyAsync(
-                movement => movement.InventoryItemId == item.Id &&
-                            movement.OccurredAt > countedAtUtc,
-                cancellationToken);
-        if (changedSinceCount || item.Quantity != request.SystemQuantityAtCount)
+        var changedMovements = await GetMovementsAfterCountAsync(
+            item.Id,
+            countedAtUtc,
+            cancellationToken);
+        if (changedMovements.Count > 0 || item.Quantity != request.SystemQuantityAtCount)
         {
             return Conflict(new
             {
-                message = $"'{item.Name}' changed after this count was taken. Refresh inventory, recount the item, and save a new count. Current system quantity: {item.Quantity:0.###}."
+                message = $"'{item.Name}' changed after this count was taken. Refresh inventory, recount the item, and save a new count.",
+                currentQuantity = item.Quantity,
+                changedMovements
             });
         }
 
         var adjustment = request.CountedQuantity - request.SystemQuantityAtCount;
-        if (adjustment == 0)
+        var now = DateTime.UtcNow;
+        var count = new PhysicalStockCount
         {
+            TenantId = tenantId,
+            InventoryItemId = item.Id,
+            BranchId = item.BranchId.Value,
+            ItemName = item.Name,
+            Sku = item.Sku,
+            SystemQuantityAtCount = request.SystemQuantityAtCount,
+            CountedQuantity = request.CountedQuantity,
+            Variance = adjustment,
+            Reason = request.Reason,
+            ReasonNotes = string.IsNullOrWhiteSpace(request.ReasonNotes)
+                ? null
+                : request.ReasonNotes.Trim(),
+            CountedAt = countedAtUtc,
+            CountedByUserId = countedByUserId,
+            CountedBy = CurrentActorName(),
+            Reference = request.Reference,
+            Status = adjustment == 0 ? "Matched" : "Applied",
+        };
+        var requiresApproval = IsLargePhysicalCountVariance(
+            adjustment,
+            request.SystemQuantityAtCount);
+        if (requiresApproval)
+        {
+            NotificationHelper.Queue(
+                db,
+                tenantId,
+                null,
+                "PhysicalCountApproval",
+                "Physical stock count needs approval",
+                $"{item.Name}: {adjustment:+0.###;-0.###} adjustment requested by {count.CountedBy}.");
+            count.Status = "PendingApproval";
+            db.PhysicalStockCounts.Add(count);
+            await db.SaveChangesAsync(cancellationToken);
             if (transaction is not null)
-            {
                 await transaction.CommitAsync(cancellationToken);
-            }
-            return Ok(ToResponse(item));
+            return Accepted(ToPhysicalCountResponse(count));
         }
 
-        if (db.Database.IsRelational())
+        if (adjustment != 0)
         {
-            var updated = await db.InventoryItems
-                .Where(candidate =>
-                    candidate.Id == item.Id &&
-                    candidate.Quantity == request.SystemQuantityAtCount)
-                .ExecuteUpdateAsync(updates => updates
-                    .SetProperty(candidate => candidate.Quantity, request.CountedQuantity)
-                    .SetProperty(candidate => candidate.UpdatedAt, DateTime.UtcNow),
-                    cancellationToken);
-            if (updated == 0)
+            var notes = BuildPhysicalCountNotes(count);
+            if (db.Database.IsRelational())
             {
-                return Conflict(new
+                var updated = await db.InventoryItems
+                    .Where(candidate =>
+                        candidate.Id == item.Id &&
+                        candidate.Quantity == request.SystemQuantityAtCount)
+                    .ExecuteUpdateAsync(updates => updates
+                        .SetProperty(candidate => candidate.Quantity, request.CountedQuantity)
+                        .SetProperty(candidate => candidate.UpdatedAt, now),
+                        cancellationToken);
+                if (updated == 0)
                 {
-                    message = $"'{item.Name}' stock changed while this count was being saved. Refresh inventory, recount the item, and save a new count."
-                });
+                    return Conflict(new
+                    {
+                        message = $"'{item.Name}' stock changed while this count was being saved. Refresh inventory, recount the item, and save a new count.",
+                        currentQuantity = item.Quantity,
+                        changedMovements = await GetMovementsAfterCountAsync(item.Id, countedAtUtc, cancellationToken)
+                    });
+                }
+                db.Entry(item).State = EntityState.Detached;
             }
-
-            db.Entry(item).State = EntityState.Detached;
+            else
+            {
+                item.Quantity = request.CountedQuantity;
+                item.UpdatedAt = now;
+            }
             db.StockMovements.Add(new StockMovement
             {
                 TenantId = tenantId,
@@ -792,9 +853,9 @@ public sealed class InventoryController(
                 MovementType = "Adjustment",
                 Quantity = adjustment,
                 Reference = request.Reference,
-                Notes = $"Physical count: {request.CountedQuantity:0.###} counted; system quantity was {request.SystemQuantityAtCount:0.###} at {request.CountedAt:O}.",
-                OccurredAt = DateTime.UtcNow,
-                PerformedBy = CurrentActorName(),
+                Notes = notes,
+                OccurredAt = now,
+                PerformedBy = count.CountedBy,
             });
             NotificationHelper.Queue(
                 db,
@@ -803,40 +864,13 @@ public sealed class InventoryController(
                 "StockAdjusted",
                 "Physical stock count recorded",
                 $"{item.Name} stock adjusted by {adjustment:0.###} after physical counting.");
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        else
-        {
-            item.Quantity = request.CountedQuantity;
-            item.UpdatedAt = DateTime.UtcNow;
-            db.StockMovements.Add(new StockMovement
-            {
-                TenantId = tenantId,
-                InventoryItemId = item.Id,
-                BranchId = item.BranchId.Value,
-                MovementType = "Adjustment",
-                Quantity = adjustment,
-                Reference = request.Reference,
-                Notes = $"Physical count: {request.CountedQuantity:0.###} counted; system quantity was {request.SystemQuantityAtCount:0.###} at {request.CountedAt:O}.",
-                OccurredAt = DateTime.UtcNow,
-                PerformedBy = CurrentActorName(),
-            });
-            NotificationHelper.Queue(
-                db,
-                tenantId,
-                null,
-                "StockAdjusted",
-                "Physical stock count recorded",
-                $"{item.Name} stock adjusted by {adjustment:0.###} after physical counting.");
-            await db.SaveChangesAsync(cancellationToken);
         }
 
+        db.PhysicalStockCounts.Add(count);
+        await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
-        {
             await transaction.CommitAsync(cancellationToken);
-        }
-        var updatedItem = await LoadItemAsync(id, cancellationToken);
-        return updatedItem is null ? NotFound() : Ok(ToResponse(updatedItem));
+        return Ok(ToPhysicalCountResponse(count));
     }
 
     [HttpPost("{id:guid}/issue")]
@@ -1238,6 +1272,73 @@ public sealed class InventoryController(
         User.Identity?.Name ??
         "Authorized user";
 
+    private Guid? CurrentUserId() =>
+        Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId)
+            ? userId
+            : null;
+
+    private static bool IsLargePhysicalCountVariance(decimal variance, decimal systemQuantity)
+    {
+        var absoluteVariance = Math.Abs(variance);
+        return absoluteVariance > 5m ||
+               (systemQuantity == 0m
+                   ? absoluteVariance > 0m
+                   : absoluteVariance / systemQuantity > 0.10m);
+    }
+
+    private static string BuildPhysicalCountNotes(PhysicalStockCount count)
+    {
+        var reason = count.ReasonNotes is null
+            ? count.Reason
+            : $"{count.Reason}: {count.ReasonNotes}";
+        return $"Physical count {count.Reference}: counted {count.CountedQuantity:0.###}; system had {count.SystemQuantityAtCount:0.###}; reason: {reason}.";
+    }
+
+    public static PhysicalStockCountResponse ToPhysicalCountResponse(PhysicalStockCount count) =>
+        new(
+            count.Id,
+            count.InventoryItemId,
+            count.ItemName,
+            count.Sku,
+            count.SystemQuantityAtCount,
+            count.CountedQuantity,
+            count.Variance,
+            count.Reason,
+            count.ReasonNotes,
+            count.CountedAt,
+            count.CountedBy,
+            count.BranchId,
+            count.Reference,
+            count.Status,
+            DeserializePhotoUrls(count.PhotoUrlsJson),
+            count.ReviewedBy,
+            count.ReviewedAt,
+            count.ReviewNotes);
+
+    private async Task<IReadOnlyList<PhysicalCountChangedMovement>> GetMovementsAfterCountAsync(
+        Guid inventoryItemId,
+        DateTime countedAt,
+        CancellationToken cancellationToken) =>
+        await db.StockMovements.AsNoTracking()
+            .Where(movement =>
+                movement.InventoryItemId == inventoryItemId &&
+                movement.OccurredAt > countedAt)
+            .OrderBy(movement => movement.OccurredAt)
+            .Take(20)
+            .Select(movement => new PhysicalCountChangedMovement(
+                movement.MovementType,
+                movement.Quantity,
+                movement.OccurredAt,
+                movement.Reference,
+                movement.PerformedBy,
+                movement.Notes))
+            .ToListAsync(cancellationToken);
+
+    private static IReadOnlyList<string> DeserializePhotoUrls(string? photoUrlsJson) =>
+        string.IsNullOrWhiteSpace(photoUrlsJson)
+            ? []
+            : JsonSerializer.Deserialize<IReadOnlyList<string>>(photoUrlsJson) ?? [];
+
     private async Task<Guid?> ResolveCategoryIdAsync(
         Guid tenantId,
         Guid? categoryId,
@@ -1443,7 +1544,50 @@ public sealed record RecordPhysicalCountRequest(
     decimal CountedQuantity,
     decimal SystemQuantityAtCount,
     DateTimeOffset CountedAt,
-    string Reference);
+    string Reference,
+    string Reason,
+    string? ReasonNotes = null);
+
+public sealed record PhysicalStockCountResponse(
+    Guid Id,
+    Guid InventoryItemId,
+    string ItemName,
+    string Sku,
+    decimal SystemQuantityAtCount,
+    decimal CountedQuantity,
+    decimal Variance,
+    string Reason,
+    string? ReasonNotes,
+    DateTime CountedAt,
+    string CountedBy,
+    Guid BranchId,
+    string Reference,
+    string Status,
+    IReadOnlyList<string> PhotoUrls,
+    string? ReviewedBy,
+    DateTime? ReviewedAt,
+    string? ReviewNotes);
+
+public sealed record PhysicalCountChangedMovement(
+    string MovementType,
+    decimal Quantity,
+    DateTime OccurredAt,
+    string? Reference,
+    string? PerformedBy,
+    string? Notes);
+
+public static class PhysicalStockCountReasons
+{
+    public static readonly string[] All =
+    [
+        "NoDiscrepancy",
+        "DamagedStock",
+        "LostOrMissing",
+        "CountingError",
+        "SupplierShortage",
+        "Other",
+    ];
+}
 
 /// Reason is free text on purpose ("Spoiled", "Over-prepped", "Dropped",
 /// "Expired") - the waste report groups by it, and every kitchen names

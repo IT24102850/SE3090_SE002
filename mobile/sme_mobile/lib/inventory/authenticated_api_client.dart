@@ -44,6 +44,25 @@ class AuthenticatedApiClient {
     );
   }
 
+  Future<InventoryApiResponse> uploadPhysicalCountPhoto(
+    String countId,
+    Uint8List bytes,
+    String fileName,
+    String evidenceKey,
+  ) async {
+    final form = FormData.fromMap({
+      'file': MultipartFile.fromBytes(bytes, filename: fileName),
+      'evidenceKey': evidenceKey,
+    });
+    return _send(
+      () => _dio.post(
+        _normalize('/api/inventory/physical-count-audits/$countId/photos'),
+        data: form,
+        options: Options(contentType: 'multipart/form-data'),
+      ),
+    );
+  }
+
   Future<InventoryApiResponse> put(String path, {Object? body}) async {
     return _send(() => _dio.put(_normalize(path), data: body));
   }
