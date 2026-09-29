@@ -245,9 +245,10 @@ For an Android emulator, use `http://10.0.2.2:5298`; for a physical device, use 
 ### Database setup and demo data
 
 The backend applies migrations automatically when it starts. To use a separate database manually:
+To load a SQL seed file into a separate database manually:
 
 ```powershell
-psql "<postgres-connection-string>" -f scripts/seed-demo-data.sql
+psql "<postgres-connection-string>" -f scripts/seed-spice-garden-sample-records.sql
 ```
 
 The main demo PowerShell scripts should be run from the repository root after the API has started, for example:
