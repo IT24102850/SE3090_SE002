@@ -21,7 +21,7 @@ namespace SmeBackend.Controllers;
 [ApiController]
 [Route("api/platform/revenue")]
 [Authorize(Policy = PlatformOwnerPolicy.Name)]
-public sealed class PlatformRevenueController(AppDbContext db, IPlatformSubscriptionService subscriptions,
+public sealed class PlatformRevenueController(AppDbContext db,
     IEntitlementService entitlements, IPlatformSecretProtector protector) : ControllerBase
 {
     /// Figures are reported in one currency. Subscriptions sold in another
