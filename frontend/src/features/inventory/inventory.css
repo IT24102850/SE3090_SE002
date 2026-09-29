@@ -1178,12 +1178,22 @@ body:has(.inventory-scope) .app-shell::after,
   .inventory-scope .sales-receipt-line-items.has-unit-price .sales-receipt-line-head > :nth-child(3), .inventory-scope .sales-receipt-line-items.has-unit-price .sales-receipt-line > :nth-child(3) { display: none; }
 }
 @media print {
-  @page { size: A4; margin: 12mm; }
-  body:has(.sales-receipt-overlay) * { visibility: hidden !important; }
-  body:has(.sales-receipt-overlay) .sales-receipt-overlay,
-  body:has(.sales-receipt-overlay) .sales-receipt-paper,
-  body:has(.sales-receipt-overlay) .sales-receipt-paper * { visibility: visible !important; }
-  body:has(.sales-receipt-overlay) { background: #fff !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  @page { size: A4 portrait; margin: 12mm; }
+  body:has(.sales-receipt-overlay) {
+    color: #172033 !important;
+    background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  body:has(.sales-receipt-overlay) .inventory-scope,
+  body:has(.sales-receipt-overlay) .app-shell,
+  body:has(.sales-receipt-overlay) .app-main,
+  body:has(.sales-receipt-overlay) .app-content,
+  body:has(.sales-receipt-overlay) .sales-page { display: contents !important; }
+  body:has(.sales-receipt-overlay) .app-shell > :not(.app-main),
+  body:has(.sales-receipt-overlay) .app-main > :not(.app-content),
+  body:has(.sales-receipt-overlay) .app-content > :not(.sales-page),
+  body:has(.sales-receipt-overlay) .sales-page > :not(.sales-receipt-overlay) { display: none !important; }
   .inventory-scope .sales-receipt-overlay { position: static !important; display: block !important; width: 100% !important; min-height: 0 !important; padding: 0 !important; overflow: visible !important; background: #fff !important; }
   .inventory-scope .sales-receipt-modal { display: block !important; width: 100% !important; max-width: none !important; margin: 0 !important; }
   .inventory-scope .sales-receipt-toolbar { display: none !important; }
@@ -2123,7 +2133,7 @@ body:has(.inventory-scope) .app-content::after {
 .inventory-scope .po-print-note { display: none; }
 
 /* Purchase order printout: a clean A4 document focused on the selected order. */
-@page { size: A4; margin: 14mm 15mm; }
+@page { size: A4 portrait; margin: 14mm 15mm; }
 @media print {
   html, body, #root, .app-shell, .app-main, .app-content,
   .inventory-scope, .purchase-orders-page {
