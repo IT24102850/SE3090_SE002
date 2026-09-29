@@ -150,6 +150,7 @@ void Stars;
 
 function ItemModal({
   title,
+  isEditing,
   initial,
   onClose,
   onSave,
@@ -158,6 +159,7 @@ function ItemModal({
   categories: inventoryCategories,
 }: {
   title: string;
+  isEditing: boolean;
   initial: StockForm;
   onClose: () => void;
   onSave: (form: StockForm) => void;
@@ -179,7 +181,7 @@ function ItemModal({
       setError('Item name is required.');
       return;
     }
-    if (inventoryCategories.length && !form.categoryId) {
+    if (!isEditing && inventoryCategories.length && !form.categoryId) {
       setError('Choose a category for this inventory item.');
       return;
     }
@@ -220,7 +222,7 @@ function ItemModal({
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <p className="modal-error">{error}</p>}
+          {error && <p className="modal-error" role="alert">{error}</p>}
           <div className="form-grid">
             <label className="form-field form-field-wide">
               Item name
@@ -569,7 +571,7 @@ export function InventoryManagerPage() {
           sku: existing?.sku ?? nextSku(items),
           description: null,
           categoryId: form.categoryId ?? existing?.categoryId ?? null,
-          category: form.category,
+          category: existing && !form.categoryId ? null : form.category,
           unitId: existing?.unitId ?? null,
           branchId: existing?.branchId ?? user?.branchId ?? null,
           ...(existing ? {} : { quantity: form.qty }),
@@ -582,7 +584,13 @@ export function InventoryManagerPage() {
       });
       if (!response.ok) {
         const errJson = await response.json().catch(() => null);
-        const errDetail = errJson?.message || errJson?.title || `Save failed (${response.status})`;
+        const validationErrors = errJson?.errors;
+        const fieldErrors = validationErrors && typeof validationErrors === 'object'
+          ? Object.values(validationErrors).flat().filter((message): message is string => typeof message === 'string')
+          : [];
+        const errDetail = fieldErrors.length
+          ? fieldErrors.join(' ')
+          : errJson?.message || errJson?.title || `Save failed (${response.status})`;
         throw new Error(errDetail);
       }
       if (existing && form.qty !== existing.qty) {
@@ -835,6 +843,7 @@ export function InventoryManagerPage() {
       {modal && (
         <ItemModal
           title={modal.mode === 'add' ? 'Add inventory item' : 'Edit inventory item'}
+          isEditing={modal.mode === 'edit'}
           initial={modal.mode === 'edit' && editingItem
             ? { item: editingItem.item, category: editingItem.category, categoryId: editingItem.categoryId, unit: editingItem.unit, costPrice: editingItem.costPrice, sellingPrice: editingItem.sellingPrice, qty: editingItem.qty, reorder: editingItem.reorder, owner: editingItem.owner, supplierId: editingItem.supplierId }
             : { ...emptyForm, category: inventoryCategories[0]?.name ?? categoryOptions[0], categoryId: inventoryCategories[0]?.id }}
