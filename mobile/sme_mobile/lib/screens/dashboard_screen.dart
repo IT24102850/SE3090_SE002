@@ -443,6 +443,9 @@ class _DashboardDrawer extends ConsumerWidget {
                           client: AuthenticatedApiClient(),
                           canApprove:
                               user.role == 'Admin' || user.role == 'Manager',
+                          canReceive: user.role == 'Admin' ||
+                              user.role == 'Manager' ||
+                              user.role == 'Staff',
                         ),
                       ));
                     },
@@ -471,6 +474,7 @@ class _DashboardDrawer extends ConsumerWidget {
                         PurchaseOrderApprovalScreen(
                           client: AuthenticatedApiClient(),
                           canApprove: true,
+                          canReceive: true,
                         ),
                       ));
                     },
@@ -935,6 +939,7 @@ List<_QuickActionGroup> _quickActionsFor(
           InventoryDashboard(
             client: client,
             canApprove: role == 'Admin' || role == 'Manager',
+            canReceive: role == 'Admin' || role == 'Manager' || role == 'Staff',
           ),
         )),
       ));

@@ -121,6 +121,7 @@ class _PurchaseOrderApiAdapter implements HttpClientAdapter {
             'sku': 'COF-01',
             'unitCost': 120,
             'supplierId': supplierOneId,
+            'branchId': '3b4dbe2a-a430-40b1-afdb-fb2171cefb88',
           },
           {
             'id': teaItemId,
@@ -128,6 +129,7 @@ class _PurchaseOrderApiAdapter implements HttpClientAdapter {
             'sku': 'TEA-02',
             'unitCost': 75,
             'supplierId': supplierTwoId,
+            'branchId': '3b4dbe2a-a430-40b1-afdb-fb2171cefb88',
           },
         ],
       });

@@ -242,7 +242,8 @@ public sealed class InventoryController(
                 movement.Notes,
                 movement.SupplierId,
                 supplier?.Name,
-                supplier?.LeadTimeDays);
+                supplier?.LeadTimeDays,
+                movement.PerformedBy);
         }).ToList());
     }
 
@@ -577,6 +578,7 @@ public sealed class InventoryController(
             Reference = reference,
             Notes = notes.Length <= 2000 ? notes : notes[..2000],
             OccurredAt = now,
+            PerformedBy = CurrentActorName(),
         });
 
         await db.SaveChangesAsync(cancellationToken);
@@ -654,9 +656,82 @@ public sealed class InventoryController(
             Reference = request.Reference,
             Notes = request.Notes,
             OccurredAt = DateTime.UtcNow,
+            PerformedBy = CurrentActorName(),
         });
 
         NotificationHelper.Queue(db, tenantId, null, "StockAdjusted", "Stock adjusted", $"{item.Name} stock changed by {request.Quantity}.");
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToResponse(item));
+    }
+
+    [HttpPost("{id:guid}/issue")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(InventoryItemResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<InventoryItemResponse>> IssueInventoryItem(
+        Guid id,
+        AdjustInventoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var item = await LoadItemAsync(id, cancellationToken);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        if (!await RequireItemAccessAsync(
+                InventoryAuthorizationPolicies.InventoryWrite,
+                item,
+                cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (request.Quantity <= 0)
+        {
+            ModelState.AddModelError("quantity", "Issue quantity must be greater than zero.");
+            return ValidationProblem(ModelState);
+        }
+        if (!item.BranchId.HasValue)
+        {
+            return Conflict(new { message = "Stock operations require the item to be assigned to a branch." });
+        }
+        if (item.Quantity < request.Quantity)
+        {
+            return Conflict(new { message = $"Cannot issue {request.Quantity} units of '{item.Name}'; only {item.Quantity} are in stock." });
+        }
+
+        item.Quantity -= request.Quantity;
+        item.UpdatedAt = DateTime.UtcNow;
+        db.StockMovements.Add(new StockMovement
+        {
+            InventoryItemId = item.Id,
+            BranchId = item.BranchId.Value,
+            MovementType = "Issue",
+            Quantity = -request.Quantity,
+            UnitCost = item.UnitCost,
+            Reference = request.Reference,
+            Notes = request.Notes,
+            OccurredAt = DateTime.UtcNow,
+            PerformedBy = CurrentActorName(),
+        });
+
+        NotificationHelper.Queue(
+            db,
+            tenantId,
+            null,
+            "StockIssued",
+            "Stock checked out",
+            $"{item.Name}: {request.Quantity} units issued.");
         await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(item));
     }
@@ -737,6 +812,7 @@ public sealed class InventoryController(
             Reference = request.Reference,
             Notes = request.Notes,
             OccurredAt = DateTime.UtcNow,
+            PerformedBy = CurrentActorName(),
         });
 
         NotificationHelper.Queue(db, tenantId, null, "StockReceived", "Stock received", $"{item.Name} received {request.Quantity} units.");
@@ -811,6 +887,7 @@ public sealed class InventoryController(
             Reference = string.IsNullOrWhiteSpace(request.Reference) ? $"WASTE-{DateTime.UtcNow:yyyyMMdd-HHmm}" : request.Reference.Trim(),
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? reason : $"{reason}: {request.Notes.Trim()}",
             OccurredAt = DateTime.UtcNow,
+            PerformedBy = CurrentActorName(),
         });
 
         NotificationHelper.Queue(db, tenantId, null, "StockWasted", "Waste logged", $"{item.Name}: {request.Quantity} written off ({reason}).");
@@ -981,6 +1058,11 @@ public sealed class InventoryController(
     private bool TryGetTenantId(out Guid tenantId) =>
         Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out tenantId);
 
+    private string CurrentActorName() =>
+        User.FindFirst("fullName")?.Value ??
+        User.Identity?.Name ??
+        "Authorized user";
+
     private async Task<Guid?> ResolveCategoryIdAsync(
         Guid tenantId,
         Guid? categoryId,
@@ -1146,7 +1228,8 @@ public sealed record InventoryMovementResponse(
     string? Notes,
     Guid? SupplierId,
     string? SupplierName,
-    int? SupplierLeadTimeDays);
+    int? SupplierLeadTimeDays,
+    string? PerformedBy);
 
 public sealed record CreateInventoryRequest(
     string Name,

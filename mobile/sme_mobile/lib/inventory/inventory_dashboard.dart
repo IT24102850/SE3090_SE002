@@ -40,11 +40,13 @@ class InventoryDashboard extends StatefulWidget {
     super.key,
     required this.client,
     required this.canApprove,
+    this.canReceive = false,
     this.onOpenStockOperations,
   });
 
   final AuthenticatedApiClient client;
   final bool canApprove;
+  final bool canReceive;
   final VoidCallback? onOpenStockOperations;
 
   @override
@@ -1862,7 +1864,11 @@ class _InventoryDashboardState extends State<InventoryDashboard>
               child: _ActionTile(
                 icon: Icons.approval_rounded,
                 title: 'PO Approvals',
-                subtitle: widget.canApprove ? 'Review & place' : 'View queue',
+                subtitle: widget.canApprove
+                    ? 'Review & place'
+                    : widget.canReceive
+                        ? 'View & receive'
+                        : 'View queue',
                 color: const Color(0xFF10B981),
                 onTap: () => Navigator.push(
                   context,
@@ -1870,6 +1876,7 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                     builder: (_) => PurchaseOrderApprovalScreen(
                       client: widget.client,
                       canApprove: widget.canApprove,
+                      canReceive: widget.canReceive,
                     ),
                   ),
                 ),

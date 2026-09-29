@@ -10,4 +10,5 @@ public class PurchaseOrder : BaseEntity, ITenantScoped
 
     // Line items
     public IList<PurchaseOrderItem> Items { get; set; } = new List<PurchaseOrderItem>();
+    public IList<PurchaseOrderReceipt> Receipts { get; set; } = new List<PurchaseOrderReceipt>();
 }

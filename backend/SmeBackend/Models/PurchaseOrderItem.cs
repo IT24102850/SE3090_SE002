@@ -11,4 +11,7 @@ public class PurchaseOrderItem : BaseEntity, ITenantScoped
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal ReceivedQuantity { get; set; }
+    public decimal DamagedQuantity { get; set; }
+    public decimal ShortageQuantity { get; set; }
+    public bool ReceivingClosed { get; set; }
 }
