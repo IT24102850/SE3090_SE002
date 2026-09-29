@@ -2284,7 +2284,8 @@ body:has(.inventory-scope) .app-content::after {
 }
 
 .inventory-scope .inventory-analytics-overview,
-.inventory-scope .inventory-analytics-movement-summary {
+.inventory-scope .inventory-analytics-movement-summary,
+.inventory-scope .inventory-analytics-sales-summary {
   display: grid;
   gap: .75rem;
 }
@@ -2358,7 +2359,8 @@ body:has(.inventory-scope) .app-content::after {
 .inventory-scope .inventory-analytics-health-count { color: #17ae83; font-size: .83rem; white-space: nowrap; }
 @media (max-width: 1100px) {
   .inventory-scope .inventory-analytics-snapshot,
-  .inventory-scope .inventory-analytics-movement-summary .inventory-analytics-metrics {
+  .inventory-scope .inventory-analytics-movement-summary .inventory-analytics-metrics,
+  .inventory-scope .inventory-analytics-sales-summary .inventory-analytics-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2390,7 +2392,8 @@ body:has(.inventory-scope) .app-content::after {
 /* Analytics refresh: clearer grouping from current stock to period activity. */
 .inventory-scope .inventory-analytics-page { gap: 1.15rem; }
 .inventory-scope .inventory-analytics-overview,
-.inventory-scope .inventory-analytics-movement-summary {
+.inventory-scope .inventory-analytics-movement-summary,
+.inventory-scope .inventory-analytics-sales-summary {
   gap: .9rem;
   padding: 1rem;
   border: 1px solid color-mix(in srgb, var(--color-primary) 15%, var(--color-border));
@@ -2450,22 +2453,38 @@ body:has(.inventory-scope) .app-content::after {
 .inventory-scope .inventory-movers-table-wrap .data-table th { white-space: nowrap; }
 .inventory-scope .inventory-movers-table-wrap .data-table tbody tr { transition: background .16s ease; }
 .inventory-scope .inventory-movers-table-wrap .data-table tbody tr:hover { background: color-mix(in srgb, var(--color-primary) 5%, transparent); }
+.inventory-scope .inventory-sales-activity-table-wrap {
+  margin: .8rem 1rem 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: .85rem;
+}
+.inventory-scope .inventory-sales-activity-table-wrap .data-table { min-width: 690px; }
+.inventory-scope .inventory-sales-activity-table-wrap .data-table th { white-space: nowrap; }
+.inventory-scope .inventory-sales-activity-table-wrap .data-table tbody tr { transition: background .16s ease; }
+.inventory-scope .inventory-sales-activity-table-wrap .data-table tbody tr:hover { background: color-mix(in srgb, var(--color-primary) 5%, transparent); }
+.inventory-scope .inventory-sales-amount,
+.inventory-scope .inventory-sales-amount-heading { text-align: right; }
+.inventory-scope .inventory-sales-amount { color: var(--color-success, #17ae83); font-weight: 750; white-space: nowrap; }
 .inventory-scope .inventory-analytics-disclaimer { text-align: left; }
 @media (max-width: 840px) {
   .inventory-scope .inventory-analytics-hero-foot > span:last-child { margin-left: 0; }
 }
 @media (max-width: 560px) {
   .inventory-scope .inventory-analytics-overview,
-  .inventory-scope .inventory-analytics-movement-summary { padding: .75rem; border-radius: 1rem; }
+  .inventory-scope .inventory-analytics-movement-summary,
+  .inventory-scope .inventory-analytics-sales-summary { padding: .75rem; border-radius: 1rem; }
   .inventory-scope .inventory-analytics-section-heading { align-items: flex-start; }
   .inventory-scope .inventory-analytics-section-heading > span { text-align: left; }
   .inventory-scope .inventory-analytics-panel-head { padding: .9rem; }
   .inventory-scope .inventory-movers-table-wrap { margin: .65rem; }
+  .inventory-scope .inventory-sales-activity-table-wrap { margin: .65rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .inventory-scope .inventory-analytics-panel,
   .inventory-scope .inventory-analytics-metric,
   .inventory-scope .inventory-reorder-item,
-  .inventory-scope .inventory-movers-table-wrap .data-table tbody tr { transition: none; }
+  .inventory-scope .inventory-movers-table-wrap .data-table tbody tr,
+  .inventory-scope .inventory-sales-activity-table-wrap .data-table tbody tr { transition: none; }
   .inventory-scope .inventory-analytics-panel:hover { transform: none; }
 }

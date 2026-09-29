@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -14,22 +13,6 @@ import 'inventory_panel.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA MODELS
 // ─────────────────────────────────────────────────────────────────────────────
-
-class RevenuePoint {
-  const RevenuePoint(this.label, this.date, this.revenue);
-  final String label;
-  final String date;
-  final double revenue;
-}
-
-class UsagePoint {
-  const UsagePoint(this.name, this.sku, this.received, this.issued, this.net);
-  final String name;
-  final String sku;
-  final double received;
-  final double issued;
-  final double net;
-}
 
 class LowStockPoint {
   const LowStockPoint(
@@ -83,14 +66,11 @@ class _InsightsScreenState extends State<InsightsScreen>
     AppColors.magenta,
     AppColors.electricBlue,
   ];
-  List<RevenuePoint> _revenue = const [];
-  List<UsagePoint> _usage = const [];
   List<LowStockPoint> _lowStock = const [];
   List<CategoryBreakdown> _categories = const [];
   List<String> _reportErrors = const [];
   bool _hasLiveData = false;
   bool _hasInventorySnapshot = false;
-  bool _hasRevenueReport = false;
   bool _hasMovementReport = false;
   bool _sessionExpired = false;
   int _totalSkus = 0;
@@ -144,7 +124,6 @@ class _InsightsScreenState extends State<InsightsScreen>
         ];
         _hasLiveData = false;
         _hasInventorySnapshot = false;
-        _hasRevenueReport = false;
         _hasMovementReport = false;
         _sessionExpired = false;
       });
@@ -160,14 +139,11 @@ class _InsightsScreenState extends State<InsightsScreen>
         '&to=${Uri.encodeQueryComponent(to.toIso8601String())}';
     setState(() {
       _loading = true;
-      _revenue = const [];
-      _usage = const [];
       _lowStock = const [];
       _categories = const [];
       _reportErrors = const [];
       _hasLiveData = false;
       _hasInventorySnapshot = false;
-      _hasRevenueReport = false;
       _hasMovementReport = false;
       _sessionExpired = false;
       _totalSkus = 0;
@@ -181,60 +157,13 @@ class _InsightsScreenState extends State<InsightsScreen>
     });
     final errors = <String>[];
 
-    try {
-      final data = await _getReport(client, '/api/reports/revenue$rangeQuery');
-      final buckets = data['buckets'];
-      if (buckets is! List) {
-        throw const FormatException('Revenue report has no daily buckets.');
-      }
-      final revenueBuckets = buckets.whereType<Map<String, dynamic>>().toList();
-      if (revenueBuckets.length != buckets.length) {
-        throw const FormatException('Revenue report contains invalid buckets.');
-      }
-      _revenue = revenueBuckets.map((bucket) {
-        final rawDate = bucket['date'];
-        final date = rawDate is String ? DateTime.tryParse(rawDate) : null;
-        return RevenuePoint(
-          bucket['label'] as String? ?? '',
-          date == null ? '' : _formatChartDate(date),
-          (bucket['revenue'] as num?)?.toDouble() ?? 0,
-        );
-      }).toList();
-      _hasRevenueReport = true;
-      _hasLiveData = true;
-    } catch (error) {
-      if (error is _InventorySessionExpiredException) {
-        _sessionExpired = true;
-      } else {
-        errors.add('Revenue: ${_friendlyError(error)}');
-      }
-    }
-
     if (!_sessionExpired) {
       try {
         final data =
             await _getReport(client, '/api/reports/inventory-usage$rangeQuery');
-        final items = data['items'];
-        if (items is! List) {
-          throw const FormatException('Movement report has no item rows.');
-        }
-        final movementItems = items.whereType<Map<String, dynamic>>().toList();
-        if (movementItems.length != items.length) {
-          throw const FormatException(
-              'Movement report contains invalid items.');
-        }
         _totalReceived =
             (data['totalReceivedQuantity'] as num?)?.toDouble() ?? 0;
         _totalIssued = (data['totalIssuedQuantity'] as num?)?.toDouble() ?? 0;
-        _usage = movementItems.take(5).map((item) {
-          return UsagePoint(
-            item['itemName'] as String? ?? 'Item',
-            item['sku'] as String? ?? '',
-            (item['receivedQuantity'] as num?)?.toDouble() ?? 0,
-            (item['issuedQuantity'] as num?)?.toDouble() ?? 0,
-            (item['netQuantity'] as num?)?.toDouble() ?? 0,
-          );
-        }).toList();
         _hasMovementReport = true;
         _hasLiveData = true;
       } catch (error) {
@@ -504,11 +433,6 @@ class _InsightsScreenState extends State<InsightsScreen>
     return message.length > 140 ? '${message.substring(0, 137)}…' : message;
   }
 
-  String _formatChartDate(DateTime date) => '${date.month}/${date.day}';
-
-  double get _totalRevenue =>
-      _revenue.fold(0, (sum, item) => sum + item.revenue);
-  double get _netQuantity => _totalReceived - _totalIssued;
   String get _selectedPeriodLabel =>
       _selectedTimeframe == 0 ? '7-day period' : '30-day period';
 
@@ -590,26 +514,16 @@ class _InsightsScreenState extends State<InsightsScreen>
 
             // ── Revenue Chart ────────────────────────────
             _buildAnalyticsSectionHeading(
-              icon: Icons.show_chart_rounded,
-              title: 'Sales activity',
-              subtitle: 'Recorded revenue in the selected period',
-              color: AppColors.violet,
-            ),
-            const SizedBox(height: 11),
-            _buildRevenueChart(),
-            const SizedBox(height: 25),
-
-            // ── Inventory Movement ───────────────────────
-            _buildAnalyticsSectionHeading(
-              icon: Icons.swap_vert_rounded,
-              title: 'Stock movement',
-              subtitle: 'All movement totals and the busiest items',
+              icon: Icons.inventory_2_rounded,
+              title: 'Inventory activity',
+              subtitle: 'Stock received and issued in the selected period',
               color: AppColors.success,
             ),
             const SizedBox(height: 11),
-            _buildMovementChart(),
+            _buildInventoryActivitySummary(),
             const SizedBox(height: 25),
 
+            // ── Inventory Movement ───────────────────────
             // ── Live category valuation ──────────────────
             _buildAnalyticsSectionHeading(
               icon: Icons.donut_large_rounded,
@@ -1255,184 +1169,32 @@ class _InsightsScreenState extends State<InsightsScreen>
   // ──────────────────────────────────────────────────────────────
   // REVENUE CHART
   // ──────────────────────────────────────────────────────────────
-  Widget _buildRevenueChart() {
+  Widget _buildInventoryActivitySummary() {
     return InventoryPanel(
       borderColor: const Color(0xFF29394D),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Daily revenue (LKR)',
-                        style: AppTextStyles.subtitle
-                            .copyWith(fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 3),
-                    Text('Trend across the selected period',
-                        style: AppTextStyles.caption
-                            .copyWith(color: AppColors.textMuted)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: AppColors.violet.withValues(alpha: .13),
-                  borderRadius: BorderRadius.circular(11),
-                  border:
-                      Border.all(color: AppColors.violet.withValues(alpha: .3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'TOTAL',
-                      style: AppTextStyles.label.copyWith(
-                        color: AppColors.textMuted,
-                        fontSize: 7,
-                        letterSpacing: .7,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _hasRevenueReport
-                          ? 'LKR ${_formatCompact(_totalRevenue)}'
-                          : '—',
-                      style: AppTextStyles.caption.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFFA78BFA),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+      padding: const EdgeInsets.all(14),
+      child: Row(children: [
+        Expanded(
+          child: _PeriodMovementMetric(
+            label: 'RECEIVED Â· $_selectedPeriodLabel',
+            value: _hasMovementReport ? _formatQuantity(_totalReceived) : 'â€”',
+            color: AppColors.success,
+            icon: Icons.south_west_rounded,
           ),
-          const SizedBox(height: 17),
-          if (!_hasRevenueReport)
-            _buildEmptyChart(
-              Icons.show_chart_rounded,
-              'Revenue report unavailable',
-              'Refresh to try loading revenue activity again',
-            )
-          else if (_revenue.isEmpty)
-            _buildEmptyChart(Icons.show_chart_rounded, 'No revenue recorded',
-                'No sales in the selected period')
-          else
-            SizedBox(
-              height: 190,
-              child: _RevenueAreaChart(
-                points: _revenue,
-                isDark: true,
-              ),
-            ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: _PeriodMovementMetric(
+            label: 'ISSUED Â· $_selectedPeriodLabel',
+            value: _hasMovementReport ? _formatQuantity(_totalIssued) : 'â€”',
+            color: AppColors.warning,
+            icon: Icons.north_east_rounded,
+          ),
+        ),
+      ]),
     );
   }
 
-  // ──────────────────────────────────────────────────────────────
-  // MOVEMENT CHART
-  // ──────────────────────────────────────────────────────────────
-  Widget _buildMovementChart() {
-    return InventoryPanel(
-      borderColor: const Color(0xFF29394D),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Received vs issued',
-              style:
-                  AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 3),
-          Text('Units moved across your most active items',
-              style:
-                  AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
-          const SizedBox(height: 13),
-          Row(
-            children: [
-              Expanded(
-                child: _PeriodMovementMetric(
-                  label: 'RECEIVED · $_selectedPeriodLabel',
-                  value: _hasMovementReport
-                      ? _formatQuantity(_totalReceived)
-                      : '—',
-                  color: AppColors.success,
-                  icon: Icons.south_west_rounded,
-                ),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: _PeriodMovementMetric(
-                  label: 'ISSUED · $_selectedPeriodLabel',
-                  value:
-                      _hasMovementReport ? _formatQuantity(_totalIssued) : '—',
-                  color: AppColors.warning,
-                  icon: Icons.north_east_rounded,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 9),
-          if (_hasMovementReport)
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                'Net movement  ${_netQuantity >= 0 ? '+' : ''}${_formatQuantity(_netQuantity)} units',
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          const SizedBox(height: 13),
-          const Wrap(
-            spacing: 14,
-            runSpacing: 6,
-            children: [
-              _ChartLegendDot(color: Color(0xFF10B981), label: 'Received'),
-              _ChartLegendDot(color: Color(0xFFF59E0B), label: 'Issued'),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_usage.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Text(
-                'Top 5 items by issued quantity',
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.textMuted,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          if (_usage.isEmpty)
-            _buildEmptyChart(Icons.bar_chart_rounded, 'No movement data',
-                'No recorded movements in this period')
-          else
-            SizedBox(
-              height: 185,
-              child: _InventoryDualBarChart(
-                usage: _usage,
-                isDark: true,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // ──────────────────────────────────────────────────────────────
-  // DONUT SECTION
-  // ──────────────────────────────────────────────────────────────
   Widget _buildDonutSection() {
     return InventoryPanel(
       borderColor: const Color(0xFF29394D),
@@ -1726,406 +1488,6 @@ class _InsightsScreenState extends State<InsightsScreen>
 // ─────────────────────────────────────────────────────────────────────────────
 // CUSTOM PAINTED REVENUE AREA CHART (unchanged logic)
 // ─────────────────────────────────────────────────────────────────────────────
-class _RevenueAreaChart extends StatefulWidget {
-  const _RevenueAreaChart({required this.points, required this.isDark});
-  final List<RevenuePoint> points;
-  final bool isDark;
-
-  @override
-  State<_RevenueAreaChart> createState() => _RevenueAreaChartState();
-}
-
-class _RevenueAreaChartState extends State<_RevenueAreaChart> {
-  int? _hoveredIndex;
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.points.isEmpty) {
-      return const Center(child: Text('No revenue data recorded'));
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final height = constraints.maxHeight;
-
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (details) => _updateTouch(details.localPosition.dx, width),
-          onHorizontalDragUpdate: (details) =>
-              _updateTouch(details.localPosition.dx, width),
-          onHorizontalDragEnd: (_) => setState(() => _hoveredIndex = null),
-          onTapUp: (_) => setState(() => _hoveredIndex = null),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              CustomPaint(
-                size: Size(width, height),
-                painter: _RevenueChartPainter(
-                  points: widget.points,
-                  selectedIndex: _hoveredIndex,
-                  isDark: widget.isDark,
-                ),
-              ),
-              if (_hoveredIndex != null &&
-                  _hoveredIndex! < widget.points.length)
-                Positioned(
-                  top: 0,
-                  left: math.max(
-                      0,
-                      math.min(
-                          width - 120,
-                          _getXForIndex(
-                                  _hoveredIndex!, width, widget.points.length) -
-                              60)),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color:
-                              const Color(0xFF0D0F2B).withValues(alpha: 0.85),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: AppColors.violet.withValues(alpha: 0.6)),
-                          boxShadow: [
-                            BoxShadow(
-                                color: AppColors.violet.withValues(alpha: 0.25),
-                                blurRadius: 12),
-                          ],
-                        ),
-                        child: Text(
-                          '${widget.points[_hoveredIndex!].label}: LKR ${widget.points[_hoveredIndex!].revenue.toInt()}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _updateTouch(double localX, double totalWidth) {
-    const leftPadding = 38.0;
-    const rightPadding = 16.0;
-    final chartWidth = totalWidth - leftPadding - rightPadding;
-    final count = widget.points.length;
-    if (count <= 1) return;
-    final step = chartWidth / (count - 1);
-    final relativeX = localX - leftPadding;
-    final index = (relativeX / step).round().clamp(0, count - 1);
-    if (_hoveredIndex != index) {
-      setState(() => _hoveredIndex = index);
-    }
-  }
-
-  double _getXForIndex(int i, double totalWidth, int count) {
-    const leftPadding = 38.0;
-    const rightPadding = 16.0;
-    final chartWidth = totalWidth - leftPadding - rightPadding;
-    final step = chartWidth / (count - 1);
-    return leftPadding + i * step;
-  }
-}
-
-class _RevenueChartPainter extends CustomPainter {
-  _RevenueChartPainter({
-    required this.points,
-    required this.selectedIndex,
-    required this.isDark,
-  });
-
-  final List<RevenuePoint> points;
-  final int? selectedIndex;
-  final bool isDark;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (points.isEmpty) return;
-
-    const leftPad = 38.0;
-    const rightPad = 16.0;
-    const topPad = 24.0;
-    const bottomPad = 24.0;
-
-    final chartW = size.width - leftPad - rightPad;
-    final chartH = size.height - topPad - bottomPad;
-
-    final maxVal = points.map((p) => p.revenue).reduce(math.max);
-    final ceiling = math.max(maxVal * 1.15, 1000.0);
-
-    final gridLinePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
-      ..strokeWidth = 1.0;
-
-    final labelStyle = TextStyle(
-      color: Colors.white.withValues(alpha: 0.45),
-      fontSize: 9.5,
-      fontWeight: FontWeight.w600,
-    );
-
-    for (int i = 0; i <= 3; i++) {
-      final yRatio = i / 3.0;
-      final y = topPad + chartH * (1.0 - yRatio);
-      final valueAtY = ceiling * yRatio;
-
-      canvas.drawLine(
-          Offset(leftPad, y), Offset(size.width - rightPad, y), gridLinePaint);
-
-      final label = '${(valueAtY / 1000).toStringAsFixed(0)}k';
-      final tp = TextPainter(
-        text: TextSpan(text: label, style: labelStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(leftPad - tp.width - 6, y - tp.height / 2));
-    }
-
-    final stepX = points.length == 1 ? 0.0 : chartW / (points.length - 1);
-    final coords = <Offset>[];
-    for (int i = 0; i < points.length; i++) {
-      final x = points.length == 1 ? leftPad + chartW / 2 : leftPad + i * stepX;
-      final ratio = (points[i].revenue / ceiling).clamp(0.0, 1.0);
-      final y = topPad + chartH * (1.0 - ratio);
-      coords.add(Offset(x, y));
-    }
-
-    final path = Path()..moveTo(coords.first.dx, coords.first.dy);
-    for (int i = 0; i < coords.length - 1; i++) {
-      final p0 = coords[i];
-      final p1 = coords[i + 1];
-      final cx1 = p0.dx + (p1.dx - p0.dx) / 2;
-      final cy1 = p0.dy;
-      final cx2 = p0.dx + (p1.dx - p0.dx) / 2;
-      final cy2 = p1.dy;
-      path.cubicTo(cx1, cy1, cx2, cy2, p1.dx, p1.dy);
-    }
-
-    final areaPath = Path.from(path)
-      ..lineTo(coords.last.dx, topPad + chartH)
-      ..lineTo(coords.first.dx, topPad + chartH)
-      ..close();
-
-    // Neon violet gradient fill
-    final fillPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          const Color(0xFF7A4DFF).withValues(alpha: 0.42),
-          const Color(0xFF7A4DFF).withValues(alpha: 0.02),
-        ],
-      ).createShader(Rect.fromLTWH(leftPad, topPad, chartW, chartH))
-      ..style = PaintingStyle.fill;
-    canvas.drawPath(areaPath, fillPaint);
-
-    // Neon violet stroke
-    final linePaint = Paint()
-      ..color = const Color(0xFF9D71FF)
-      ..strokeWidth = 2.8
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawPath(path, linePaint);
-
-    for (int i = 0; i < coords.length; i++) {
-      final pt = coords[i];
-      final isSel = selectedIndex == i;
-
-      if (i % 2 == 0 || i == coords.length - 1) {
-        final tp = TextPainter(
-          text: TextSpan(text: points[i].label, style: labelStyle),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        tp.paint(canvas, Offset(pt.dx - tp.width / 2, size.height - 14));
-      }
-
-      if (isSel) {
-        final guidePaint = Paint()
-          ..color = const Color(0xFF7A4DFF).withValues(alpha: 0.6)
-          ..strokeWidth = 1.2;
-        canvas.drawLine(
-            Offset(pt.dx, topPad), Offset(pt.dx, topPad + chartH), guidePaint);
-        canvas.drawCircle(
-            pt,
-            9.0,
-            Paint()
-              ..color = const Color(0xFF7A4DFF).withValues(alpha: 0.22)
-              ..style = PaintingStyle.fill);
-      }
-
-      canvas.drawCircle(
-          pt,
-          isSel ? 5.5 : 3.8,
-          Paint()
-            ..color = const Color(0xFF9D71FF)
-            ..style = PaintingStyle.fill);
-      canvas.drawCircle(
-          pt,
-          isSel ? 3.0 : 2.0,
-          Paint()
-            ..color = Colors.white
-            ..style = PaintingStyle.fill);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _RevenueChartPainter oldDelegate) =>
-      oldDelegate.selectedIndex != selectedIndex ||
-      oldDelegate.points != points ||
-      oldDelegate.isDark != isDark;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CUSTOM PAINTED INVENTORY MOVEMENT DUAL BAR CHART (unchanged logic)
-// ─────────────────────────────────────────────────────────────────────────────
-class _InventoryDualBarChart extends StatelessWidget {
-  const _InventoryDualBarChart({required this.usage, required this.isDark});
-  final List<UsagePoint> usage;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    if (usage.isEmpty) {
-      return const Center(child: Text('No inventory movement data'));
-    }
-    return CustomPaint(
-      size: Size.infinite,
-      painter: _InventoryDualBarPainter(usage: usage, isDark: isDark),
-    );
-  }
-}
-
-class _InventoryDualBarPainter extends CustomPainter {
-  _InventoryDualBarPainter({required this.usage, required this.isDark});
-  final List<UsagePoint> usage;
-  final bool isDark;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (usage.isEmpty) return;
-
-    const leftPad = 32.0;
-    const rightPad = 12.0;
-    const topPad = 22.0;
-    const bottomPad = 38.0;
-
-    final chartW = size.width - leftPad - rightPad;
-    final chartH = size.height - topPad - bottomPad;
-
-    double maxVal = 1;
-    for (final u in usage) {
-      maxVal = math.max(maxVal, math.max(u.received, u.issued));
-    }
-    final ceiling = (maxVal * 1.18).toDouble();
-
-    final gridLinePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
-      ..strokeWidth = 1.0;
-
-    final labelStyle = TextStyle(
-      color: Colors.white.withValues(alpha: 0.5),
-      fontSize: 9.5,
-      fontWeight: FontWeight.w600,
-    );
-
-    for (int i = 0; i <= 3; i++) {
-      final yRatio = i / 3.0;
-      final y = topPad + chartH * (1.0 - yRatio);
-      canvas.drawLine(
-          Offset(leftPad, y), Offset(size.width - rightPad, y), gridLinePaint);
-      final val = (ceiling * yRatio).toInt();
-      final tp = TextPainter(
-        text: TextSpan(text: '$val', style: labelStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(leftPad - tp.width - 5, y - tp.height / 2));
-    }
-
-    final slotW = chartW / usage.length;
-    final barW = math.min(slotW * 0.32, 14.0);
-    const gap = 3.0;
-
-    // Neon teal for received, amber for issued
-    final recPaint = Paint()..color = const Color(0xFF00E5FF);
-    final issPaint = Paint()..color = const Color(0xFFF59E0B);
-
-    final valueStyle = TextStyle(
-      color: Colors.white.withValues(alpha: 0.75),
-      fontSize: 9.0,
-      fontWeight: FontWeight.w800,
-    );
-
-    for (int i = 0; i < usage.length; i++) {
-      final u = usage[i];
-      final slotCenterX = leftPad + i * slotW + slotW / 2;
-
-      final recRatio = (u.received / ceiling).clamp(0.0, 1.0);
-      final recH = chartH * recRatio;
-      final recLeft = slotCenterX - barW - gap / 2;
-      final recTop = topPad + chartH - recH;
-      final recRect = RRect.fromRectAndCorners(
-        Rect.fromLTWH(recLeft, recTop, barW, recH),
-        topLeft: const Radius.circular(4),
-        topRight: const Radius.circular(4),
-      );
-      canvas.drawRRect(recRect, recPaint);
-
-      final recTp = TextPainter(
-        text: TextSpan(text: _formatQuantity(u.received), style: valueStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      recTp.paint(
-          canvas, Offset(recLeft + (barW - recTp.width) / 2, recTop - 13));
-
-      final issRatio = (u.issued / ceiling).clamp(0.0, 1.0);
-      final issH = chartH * issRatio;
-      final issLeft = slotCenterX + gap / 2;
-      final issTop = topPad + chartH - issH;
-      final issRect = RRect.fromRectAndCorners(
-        Rect.fromLTWH(issLeft, issTop, barW, issH),
-        topLeft: const Radius.circular(4),
-        topRight: const Radius.circular(4),
-      );
-      canvas.drawRRect(issRect, issPaint);
-
-      final issTp = TextPainter(
-        text: TextSpan(text: _formatQuantity(u.issued), style: valueStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      issTp.paint(
-          canvas, Offset(issLeft + (barW - issTp.width) / 2, issTop - 13));
-
-      final nameTp = TextPainter(
-        text: TextSpan(text: u.name, style: labelStyle),
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.center,
-        maxLines: 2,
-        ellipsis: '…',
-      )..layout(maxWidth: math.max(0, slotW - 6));
-      nameTp.paint(
-          canvas, Offset(slotCenterX - nameTp.width / 2, topPad + chartH + 4));
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _InventoryDualBarPainter oldDelegate) =>
-      oldDelegate.usage != usage || oldDelegate.isDark != isDark;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CUSTOM PAINTED DONUT CHART (unchanged logic, neon colors)
-// ─────────────────────────────────────────────────────────────────────────────
 class _DonutChart extends StatelessWidget {
   const _DonutChart({
     required this.slices,
@@ -2386,33 +1748,3 @@ class _AnalyticsTopicPill extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // CHART LEGEND DOT
 // ─────────────────────────────────────────────────────────────────────────────
-class _ChartLegendDot extends StatelessWidget {
-  const _ChartLegendDot({required this.color, required this.label});
-  final Color color;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 6),
-            ],
-          ),
-        ),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
-        ),
-      ],
-    );
-  }
-}

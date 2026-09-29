@@ -19,6 +19,7 @@ class InventoryItem {
     required this.reorderLevel,
     required this.unitCost,
     required this.branch,
+    this.branchId,
   });
 
   final String id;
@@ -30,6 +31,7 @@ class InventoryItem {
   final double reorderLevel;
   final double unitCost;
   final String branch;
+  final String? branchId;
 
   bool get isLowStock => quantity <= 0 || quantity <= reorderLevel;
   double get totalValue => quantity * unitCost;
@@ -44,6 +46,7 @@ class InventoryItem {
         reorderLevel: (json['reorderLevel'] as num?)?.toDouble() ?? 10,
         unitCost: (json['unitCost'] as num?)?.toDouble() ?? 0,
         branch: json['branch'] as String? ?? 'Main branch',
+        branchId: json['branchId'] as String?,
       );
 }
 

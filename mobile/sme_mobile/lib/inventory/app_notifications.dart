@@ -275,7 +275,11 @@ void _showOverlayNotification(
       ),
   };
 
-  _activeOverlayNotification?.remove();
+  final previousEntry = _activeOverlayNotification;
+  if (previousEntry != null) {
+    _removeOverlayEntry(previousEntry);
+    _activeOverlayNotification = null;
+  }
   late final OverlayEntry entry;
   entry = OverlayEntry(
     builder: (context) => _OverlayNotificationCard(
@@ -286,7 +290,7 @@ void _showOverlayNotification(
       glow: glow,
       duration: duration,
       onDismiss: () {
-        entry.remove();
+        _removeOverlayEntry(entry);
         _activeOverlayNotification = null;
         _notificationShowing = false;
         _pumpNotificationQueue();
@@ -297,12 +301,19 @@ void _showOverlayNotification(
   overlay.insert(entry);
   Future<void>.delayed(duration, () {
     if (identical(_activeOverlayNotification, entry)) {
-      entry.remove();
+      _removeOverlayEntry(entry);
       _activeOverlayNotification = null;
       _notificationShowing = false;
       _pumpNotificationQueue();
     }
   });
+}
+
+/// Overlay entries need disposal after removal so their subtree and inherited
+/// widget dependents are released when a timed notification goes away.
+void _removeOverlayEntry(OverlayEntry entry) {
+  if (entry.mounted) entry.remove();
+  entry.dispose();
 }
 
 class _OverlayNotificationCard extends StatefulWidget {

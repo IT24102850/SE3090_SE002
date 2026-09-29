@@ -2,10 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../services/api_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/ui/ui.dart';
@@ -444,119 +442,8 @@ class _PurchaseOrderApprovalScreenState
     );
   }
 
-  void _showServerToggleDialog() {
-    final currentBase = ApiService.baseUrl;
-    final isLocal = currentBase.contains('10.0.2.2') ||
-        currentBase.contains('localhost') ||
-        currentBase.contains('127.0.0.1');
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF132030),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: Color(0xFF263E56)),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.dns_rounded, color: AppColors.cyan, size: 22),
-            SizedBox(width: 8),
-            Text('API Server Scope',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Current Base URL:\n$currentBase',
-              style: AppTextStyles.caption.copyWith(
-                color: AppColors.textSecondary,
-                fontFamily: 'monospace',
-                fontSize: 11,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Quick Switch:',
-              style: AppTextStyles.caption.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              dense: true,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-                side: BorderSide(
-                  color: isLocal ? AppColors.cyan : Colors.white12,
-                ),
-              ),
-              tileColor: isLocal ? AppColors.cyan.withValues(alpha: 0.1) : null,
-              leading: Icon(Icons.computer_rounded,
-                  color: isLocal ? AppColors.cyan : AppColors.textMuted),
-              title: const Text('Localhost / Emulator',
-                  style: TextStyle(color: Colors.white, fontSize: 13)),
-              subtitle: const Text('http://10.0.2.2:5298/api (or localhost)',
-                  style: TextStyle(fontSize: 10)),
-              onTap: () {
-                ApiService.baseUrl = kIsWeb
-                    ? 'http://localhost:5298/api'
-                    : 'http://10.0.2.2:5298/api';
-                Navigator.pop(ctx);
-                _load(showSuccess: true);
-              },
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              dense: true,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-                side: BorderSide(
-                  color: !isLocal ? AppColors.cyan : Colors.white12,
-                ),
-              ),
-              tileColor:
-                  !isLocal ? AppColors.cyan.withValues(alpha: 0.1) : null,
-              leading: Icon(Icons.cloud_queue_rounded,
-                  color: !isLocal ? AppColors.cyan : AppColors.textMuted),
-              title: const Text('Railway Production',
-                  style: TextStyle(color: Colors.white, fontSize: 13)),
-              subtitle: const Text(
-                  'https://sef-project-production.up.railway.app/api',
-                  style: TextStyle(fontSize: 10)),
-              onTap: () {
-                ApiService.baseUrl =
-                    'https://sef-project-production.up.railway.app/api';
-                Navigator.pop(ctx);
-                _load(showSuccess: true);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close', style: TextStyle(color: AppColors.cyan)),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final currentBase = ApiService.baseUrl;
-    final isLocal = currentBase.contains('10.0.2.2') ||
-        currentBase.contains('localhost') ||
-        currentBase.contains('127.0.0.1');
-
     return AppBackgroundScaffold(
       showParticles: false,
       floatingActionButton: FloatingActionButton.extended(
@@ -570,44 +457,6 @@ class _PurchaseOrderApprovalScreenState
       appBar: GlassAppBar(
         title: 'Purchase Orders',
         actions: [
-          // Environment Indicator / Switcher in debug
-          IconButton(
-            tooltip: isLocal ? 'Connected: Local' : 'Connected: Cloud',
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  isLocal ? Icons.developer_board_rounded : Icons.cloud_rounded,
-                  color: isLocal ? const Color(0xFF10B981) : AppColors.cyan,
-                  size: 20,
-                ),
-                Positioned(
-                  right: -2,
-                  top: -2,
-                  child: Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isLocal
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFF60A5FA),
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isLocal
-                                  ? const Color(0xFF10B981)
-                                  : const Color(0xFF60A5FA))
-                              .withValues(alpha: 0.8),
-                          blurRadius: 4,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            onPressed: _showServerToggleDialog,
-          ),
           IconButton(
             tooltip: 'Refresh Queue',
             icon: const Icon(Icons.refresh_rounded, color: AppColors.cyan),

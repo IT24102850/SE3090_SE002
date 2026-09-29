@@ -30,6 +30,7 @@ import 'staff/my_schedule_screen.dart';
 import '../inventory/authenticated_api_client.dart';
 import '../inventory/app_notifications.dart';
 import '../inventory/inventory_dashboard.dart';
+import '../inventory/sales_screen.dart';
 import '../inventory/stock_count_screen.dart';
 import '../inventory/stock_check_screen.dart';
 import '../inventory/purchase_order_approval_screen.dart';
@@ -937,6 +938,7 @@ List<_QuickActionGroup> _quickActionsFor(
   }
 
   final client = AuthenticatedApiClient();
+
   addAction(
       'Inventory',
       _QuickActionCard(
@@ -950,6 +952,17 @@ List<_QuickActionGroup> _quickActionsFor(
             canApprove: role == 'Admin' || role == 'Manager',
           ),
         )),
+      ));
+  addAction(
+      'Inventory',
+      _QuickActionCard(
+        label: 'Sales',
+        icon: Icons.point_of_sale_rounded,
+        color: AppColors.violet,
+        imageUrl: _quickActionImages['Inventory dashboard'],
+        onTap: () => Navigator.of(context).push(
+          slideFadeRoute(SalesScreen(client: client)),
+        ),
       ));
   addAction(
       'Inventory',
