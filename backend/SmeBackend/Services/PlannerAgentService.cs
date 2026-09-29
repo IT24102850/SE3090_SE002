@@ -46,9 +46,21 @@ public partial class PlannerAgentService : IPlannerAgentService
     public PlannerAgentService(HttpClient http, IConfiguration config)
     {
         _config = config;
-        var baseUrl = config["AgentService:BaseUrl"] ?? "http://localhost:8001";
+        var baseUrl = config["AgentService:BaseUrl"] ?? "https://sme-agentic-ai.onrender.com";
         http.BaseAddress = new Uri(baseUrl);
-        http.Timeout = TimeSpan.FromSeconds(config.GetValue("AgentService:TimeoutSeconds", 60));
+        // 60s was not enough and produced a confusing failure: the pipeline
+        // went on to finish and return 200 while this client had already
+        // given up, so a booking the agents had planned was reported as
+        // unreachable. A full run is four agents, up to six tool turns each,
+        // and a Gemini call that is allowed 30s and retried across three
+        // models - comfortably past a minute whenever the free tier is
+        // rate-limiting.
+        //
+        // The budget is layered so the innermost failure is the one the user
+        // sees: Gemini 30s per call < this 150s < the mobile client's 180s.
+        // Raising this above the client's budget would only swap a clear
+        // message for a silent client-side timeout.
+        http.Timeout = TimeSpan.FromSeconds(config.GetValue("AgentService:TimeoutSeconds", 150));
         _http = http;
     }
 
@@ -119,8 +131,8 @@ public partial class PlannerAgentService
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             return ScheduleCopilotResult.Failed(
-                $"Could not reach the Schedule Copilot at {_http.BaseAddress}. Start the agent service " +
-                $"(uvicorn main:app --port 8001) and retry. {ex.Message}");
+                $"Could not reach the deployed Schedule Copilot at {_http.BaseAddress}. " +
+                $"Verify the agent service is running and retry. {ex.Message}");
         }
 
         // Every outcome of a run - ready, awaiting approval, rejected by the

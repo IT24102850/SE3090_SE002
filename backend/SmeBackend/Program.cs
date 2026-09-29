@@ -73,9 +73,42 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+builder.Services.AddMemoryCache();
+
+// SMS through text.lk (Sri Lankan numbers), and the keyless public-holiday
+// feed. Both are advisory paths, so both get short timeouts.
+builder.Services.AddHttpClient(SmeBackend.Services.TextLkSmsGateway.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddScoped<SmeBackend.Services.ISmsGateway, SmeBackend.Services.TextLkSmsGateway>();
+
+builder.Services.AddHttpClient(SmeBackend.Services.GoogleCalendarHolidayService.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<SmeBackend.Services.IPublicHolidayService,
+    SmeBackend.Services.GoogleCalendarHolidayService>();
+
+builder.Services.AddHttpClient(SmeBackend.Services.OpenRouteTravelTimeService.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<SmeBackend.Services.ITravelTimeService,
+    SmeBackend.Services.OpenRouteTravelTimeService>();
+
+// Open-Meteo: no API key, so the forecast works from a clean clone. A short
+// timeout keeps an advisory call from holding up the screen that asked for it.
+builder.Services.AddHttpClient(SmeBackend.Services.OpenMeteoForecastService.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(8));
+builder.Services.AddScoped<SmeBackend.Services.IWeatherForecastService,
+    SmeBackend.Services.OpenMeteoForecastService>();
+
+// Live notifications. The stream is a singleton because connections outlive
+// any one request; the interceptor publishes a Notification row the moment its
+// transaction commits, so every site that raises one is covered without having
+// to remember to announce it.
+builder.Services.AddSingleton<SmeBackend.Services.INotificationStream, SmeBackend.Services.NotificationStream>();
+builder.Services.AddSingleton<SmeBackend.Services.NotificationPublishInterceptor>();
+
 // PostgreSQL
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+           .AddInterceptors(sp.GetRequiredService<SmeBackend.Services.NotificationPublishInterceptor>()));
 
 // JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -131,10 +164,19 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<ICustomerAccountService, CustomerAccountService>();
+
+// Pay to confirm a booking: the booking half of the payment flow, built on
+// the billing engine's gateways rather than beside them (Services/Booking).
+builder.Services.AddScoped<SmeBackend.Services.BookingPayments.IBookingCheckoutService, SmeBackend.Services.BookingPayments.BookingCheckoutService>();
+builder.Services.AddScoped<SmeBackend.Services.BookingPayments.IBookingPaymentListener, SmeBackend.Services.BookingPayments.BookingPaymentListener>();
+builder.Services.AddHostedService<SmeBackend.Services.BookingPayments.BookingHoldExpiryService>();
 builder.Services.AddHostedService<SmeBackend.Services.ReminderDispatchService>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPlannerAgentService, SmeBackend.Services.PlannerAgentService>();
 builder.Services.AddHttpClient<SmeBackend.Services.IInventoryAgentService, SmeBackend.Services.InventoryAgentService>();
-builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.StubReminderChannelSender>();
+// Real Twilio (SMS/WhatsApp) and SendGrid (email) delivery, reusing the
+// gateway code billing already ships. Without credentials it records
+// Simulated rather than pretending the reminder was sent.
+builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.ReminderChannelSender>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPushNotificationSender, SmeBackend.Services.FcmPushNotificationSender>();
 builder.Services.AddScoped<SmeBackend.Services.ICloudinaryImageService, SmeBackend.Services.CloudinaryImageService>();
 // Billing & payments engine (component 3). Integrations (Stripe, PayPal,
@@ -163,6 +205,22 @@ builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, Sme
 builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.ManualPaymentProcessor>();
 builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessorFactory, SmeBackend.Services.Billing.PaymentProcessorFactory>();
 builder.Services.AddHostedService<SmeBackend.Services.Billing.BillingAutomationService>();
+
+// Unify's own subscription: what a tenant admin pays US for the platform, as
+// opposed to the billing engine above, which is what a tenant charges their
+// own customers. The two never share credentials - see
+// Services/PlatformBilling/PlatformGatewayProvider.cs - but they do share the
+// IPaymentProcessor implementations registered just above, so Stripe and
+// PayPal are implemented once.
+builder.Services.AddSingleton<SmeBackend.Services.PlatformBilling.IPlatformGatewayProvider,
+    SmeBackend.Services.PlatformBilling.PlatformGatewayProvider>();
+builder.Services.AddScoped<SmeBackend.Services.PlatformBilling.IEntitlementService,
+    SmeBackend.Services.PlatformBilling.EntitlementService>();
+builder.Services.AddScoped<SmeBackend.Services.PlatformBilling.IPlatformSubscriptionService,
+    SmeBackend.Services.PlatformBilling.PlatformSubscriptionService>();
+builder.Services.AddScoped<SmeBackend.Services.PlatformBilling.IPlatformCheckoutService,
+    SmeBackend.Services.PlatformBilling.PlatformCheckoutService>();
+builder.Services.AddHostedService<SmeBackend.Services.PlatformBilling.PlatformRenewalService>();
 
 // The public website booking widget is anonymous, so it gets a per-IP
 // budget that no signed-in endpoint needs: enough for a family working
@@ -274,6 +332,13 @@ using (var scope = app.Services.CreateScope())
         db,
         app.Configuration,
         scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PlatformOwnerSeeder"));
+
+    // The price list is code, not data: syncing it on every boot is what
+    // makes a pricing change a reviewable commit. See Data/PlatformPlanCatalog.
+    var catalogueLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PlatformCatalog");
+    await PlatformPlanCatalog.SyncAsync(db, catalogueLogger);
+    await PlatformAddOnCatalog.SyncAsync(db, catalogueLogger);
+    await PlatformPromotionSeeder.SeedAsync(db, catalogueLogger);
 
     if (app.Environment.IsDevelopment())
     {

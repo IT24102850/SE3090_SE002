@@ -46,7 +46,7 @@ DROP TABLE IF EXISTS _slot_params;
 
 CREATE TEMP TABLE _slot_params AS
 SELECT
-  'd303c4ef-6eb9-4189-95e0-b537d2134ba9'::uuid AS tenant_id,
+  'f15bae97-fa7e-42f5-95b7-b624db319ad2'::uuid AS tenant_id,
   -- '%' for every resource, or a LIKE pattern for one.
   '%'::text                                    AS resource_name,
   7::int                                       AS days_back,
@@ -120,7 +120,7 @@ SELECT r."Name"                                             AS resource,
        max(s."Date")::date                                   AS to_date
 FROM availability_slots s
 JOIN resources r ON r."Id" = s."ResourceId"
-WHERE r."TenantId" = 'd303c4ef-6eb9-4189-95e0-b537d2134ba9'::uuid
+WHERE r."TenantId" = 'f15bae97-fa7e-42f5-95b7-b624db319ad2'::uuid
 GROUP BY r."Name"
 ORDER BY r."Name";
 
@@ -131,6 +131,6 @@ ORDER BY r."Name";
 -- DELETE FROM availability_slots s
 -- USING resources r
 -- WHERE r."Id" = s."ResourceId"
---   AND r."TenantId" = 'd303c4ef-6eb9-4189-95e0-b537d2134ba9'::uuid
+--   AND r."TenantId" = 'f15bae97-fa7e-42f5-95b7-b624db319ad2'::uuid
 --   AND s."Date" BETWEEN (current_date - 7) AND (current_date + 20)
 --   AND NOT s."IsBooked";

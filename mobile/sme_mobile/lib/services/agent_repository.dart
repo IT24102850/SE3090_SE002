@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../models/agent_workflow_model.dart';
 import '../models/copilot_trace.dart';
+import 'api_service.dart';
 
 /// The scheduling agents — the mobile twin of the web app's Schedule Copilot and
 /// Agent Workflows screens. Every plan the agent produces is proposed, not
@@ -28,7 +29,11 @@ class AgentRepository {
     String? branchId,
     int withinDays = 14,
   }) async {
-    final response = await _dio.post('/agent/workflow/propose', data: {
+    final response = await _dio.post(
+      '/agent/workflow/propose',
+      // Runs the LLM pipeline: needs minutes, not the CRUD default.
+      options: ApiService.aiPipelineOptions,
+      data: {
       'tenantId': tenantId,
       'objective': objective,
       'count': count,
@@ -68,7 +73,7 @@ class AgentRepository {
         if (branchId != null) 'branchId': branchId,
       },
       // The four agents run synchronously; a model retry can take a while.
-      options: Options(receiveTimeout: const Duration(seconds: 120)),
+      options: ApiService.aiPipelineOptions,
     );
     final data = response.data as Map<String, dynamic>;
     return (

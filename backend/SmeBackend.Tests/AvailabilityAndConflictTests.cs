@@ -33,7 +33,7 @@ public class AvailabilityAndConflictTests
     public void A_nine_to_five_day_at_sixty_minutes_yields_eight_slots()
     {
         var (isOpen, slots) = SlotCalculator.Calculate(
-            Monday, NineToFive(), 60, 0, 0, Array.Empty<(DateTime, DateTime)>(), EarlyMorning);
+            Monday, NineToFive(), 60, 0, 0, Array.Empty<SlotBooking>(), EarlyMorning);
 
         Assert.True(isOpen);
         Assert.Equal(8, slots.Count);
@@ -47,7 +47,7 @@ public class AvailabilityAndConflictTests
         // 90-minute slots into an 8-hour day: 5 fit (09:00-16:30), the sixth
         // would end at 18:00 and must not be sold.
         var (_, slots) = SlotCalculator.Calculate(
-            Monday, NineToFive(), 90, 0, 0, Array.Empty<(DateTime, DateTime)>(), EarlyMorning);
+            Monday, NineToFive(), 90, 0, 0, Array.Empty<SlotBooking>(), EarlyMorning);
 
         Assert.Equal(5, slots.Count);
         Assert.All(slots, s => Assert.True(s.EndTime <= Monday.AddHours(17)));
@@ -60,7 +60,7 @@ public class AvailabilityAndConflictTests
         closed.IsAvailable = false;
 
         var (isOpen, slots) = SlotCalculator.Calculate(
-            Monday, closed, 60, 0, 0, Array.Empty<(DateTime, DateTime)>(), EarlyMorning);
+            Monday, closed, 60, 0, 0, Array.Empty<SlotBooking>(), EarlyMorning);
 
         Assert.False(isOpen);
         Assert.Empty(slots);
@@ -71,7 +71,7 @@ public class AvailabilityAndConflictTests
     {
         // FR-AS6: a holiday closes a day the weekly schedule says is open.
         var (isOpen, slots) = SlotCalculator.Calculate(
-            Monday, NineToFive(), 60, 0, 0, Array.Empty<(DateTime, DateTime)>(), EarlyMorning, isClosedException: true);
+            Monday, NineToFive(), 60, 0, 0, Array.Empty<SlotBooking>(), EarlyMorning, isClosedException: true);
 
         Assert.False(isOpen);
         Assert.Empty(slots);
@@ -81,7 +81,7 @@ public class AvailabilityAndConflictTests
     public void A_day_with_no_schedule_falls_back_to_nine_to_five()
     {
         var (isOpen, slots) = SlotCalculator.Calculate(
-            Monday, null, 60, 0, 0, Array.Empty<(DateTime, DateTime)>(), EarlyMorning);
+            Monday, null, 60, 0, 0, Array.Empty<SlotBooking>(), EarlyMorning);
 
         Assert.True(isOpen);
         Assert.Equal(8, slots.Count);
@@ -92,7 +92,7 @@ public class AvailabilityAndConflictTests
     [Fact]
     public void An_existing_booking_makes_its_own_slot_unavailable()
     {
-        var existing = new[] { (Monday.AddHours(10), Monday.AddHours(11)) };
+        var existing = new[] { new SlotBooking(Monday.AddHours(10), Monday.AddHours(11)) };
 
         var (_, slots) = SlotCalculator.Calculate(
             Monday, NineToFive(), 60, 0, 0, existing, EarlyMorning);
@@ -109,7 +109,7 @@ public class AvailabilityAndConflictTests
         // 10:30-11:30 touches both the 10:00 and the 11:00 slot. Treating
         // an overlap as "free because it did not start here" is exactly how
         // a double booking gets sold.
-        var existing = new[] { (Monday.AddHours(10).AddMinutes(30), Monday.AddHours(11).AddMinutes(30)) };
+        var existing = new[] { new SlotBooking(Monday.AddHours(10).AddMinutes(30), Monday.AddHours(11).AddMinutes(30)) };
 
         var (_, slots) = SlotCalculator.Calculate(
             Monday, NineToFive(), 60, 0, 0, existing, EarlyMorning);
@@ -124,7 +124,7 @@ public class AvailabilityAndConflictTests
     {
         // 09:00-10:00 ends exactly as the 10:00 slot begins. Back-to-back is
         // normal trading, not a clash.
-        var existing = new[] { (Monday.AddHours(9), Monday.AddHours(10)) };
+        var existing = new[] { new SlotBooking(Monday.AddHours(9), Monday.AddHours(10)) };
 
         var (_, slots) = SlotCalculator.Calculate(
             Monday, NineToFive(), 60, 0, 0, existing, EarlyMorning);
@@ -138,7 +138,7 @@ public class AvailabilityAndConflictTests
     {
         // 15 minutes of turnaround either side of an 11:00-12:00 booking
         // spills into the neighbouring hours.
-        var existing = new[] { (Monday.AddHours(11), Monday.AddHours(12)) };
+        var existing = new[] { new SlotBooking(Monday.AddHours(11), Monday.AddHours(12)) };
 
         var (_, slots) = SlotCalculator.Calculate(
             Monday, NineToFive(), 60, 15, 15, existing, EarlyMorning);
@@ -154,7 +154,7 @@ public class AvailabilityAndConflictTests
     {
         // Asking at 13:00 must not offer this morning.
         var (_, slots) = SlotCalculator.Calculate(
-            Monday, NineToFive(), 60, 0, 0, Array.Empty<(DateTime, DateTime)>(), Monday.AddHours(13));
+            Monday, NineToFive(), 60, 0, 0, Array.Empty<SlotBooking>(), Monday.AddHours(13));
 
         Assert.All(slots.Where(s => s.StartTime < Monday.AddHours(13)), s => Assert.False(s.IsAvailable));
         Assert.True(slots.Single(s => s.StartTime == Monday.AddHours(13)).IsAvailable);
@@ -355,5 +355,111 @@ public class AvailabilityAndConflictTests
         await AvailabilitySlotService.MarkBookedAsync(db, booking);
         await db.SaveChangesAsync();
         return booking;
+    }
+
+    // ── Shared vessels: seats, not exclusive occupancy ──────────────────
+    // A 120-seat whale watching boat is not full because four people booked
+    // it. Before this, one booking closed the sailing in the customer's date
+    // picker while Availability.CheckAsync would still have taken the
+    // booking - the picker said "no open slots" on a boat with 116 seats
+    // free.
+
+    /// The Morning Cruise as it is actually configured: open 10:00-14:00 for
+    /// a 240-minute tour, so the window holds exactly one sailing a day.
+    private static ResourceSchedule MorningCruise(int dayOfWeek = 1) => new()
+    {
+        DayOfWeek = dayOfWeek,
+        StartTime = TimeSpan.FromHours(10),
+        EndTime = TimeSpan.FromHours(14),
+        IsAvailable = true,
+    };
+
+    [Fact]
+    public void A_shared_sailing_with_seats_left_stays_open()
+    {
+        var existing = new[] { new SlotBooking(Monday.AddHours(10), Monday.AddHours(14), 4) };
+
+        var (isOpen, slots) = SlotCalculator.Calculate(
+            Monday, MorningCruise(), 240, 0, 30, existing, EarlyMorning, capacity: 120);
+
+        Assert.True(isOpen);
+        var sailing = Assert.Single(slots);
+        Assert.True(sailing.IsAvailable);
+        Assert.Equal(120, sailing.Capacity);
+        Assert.Equal(116, sailing.SeatsRemaining);
+    }
+
+    [Fact]
+    public void A_shared_sailing_closes_only_once_its_seats_are_gone()
+    {
+        var existing = new[]
+        {
+            new SlotBooking(Monday.AddHours(10), Monday.AddHours(14), 100),
+            new SlotBooking(Monday.AddHours(10), Monday.AddHours(14), 20),
+        };
+
+        var (_, slots) = SlotCalculator.Calculate(
+            Monday, MorningCruise(), 240, 0, 30, existing, EarlyMorning, capacity: 120);
+
+        var sailing = Assert.Single(slots);
+        Assert.False(sailing.IsAvailable);
+        Assert.Equal(0, sailing.SeatsRemaining);
+    }
+
+    [Fact]
+    public void An_overbooked_sailing_reports_no_seats_rather_than_a_negative_count()
+    {
+        var existing = new[] { new SlotBooking(Monday.AddHours(10), Monday.AddHours(14), 130) };
+
+        var (_, slots) = SlotCalculator.Calculate(
+            Monday, MorningCruise(), 240, 0, 30, existing, EarlyMorning, capacity: 120);
+
+        Assert.Equal(0, Assert.Single(slots).SeatsRemaining);
+    }
+
+    [Fact]
+    public void Buffers_do_not_shrink_a_shared_sailing()
+    {
+        // The 30-minute turnaround is time between two parties on an
+        // exclusive resource. Applying it to guests sharing one departure
+        // would count a booking that merely abuts the window.
+        var existing = new[] { new SlotBooking(Monday.AddHours(14), Monday.AddHours(15), 10) };
+
+        var (_, slots) = SlotCalculator.Calculate(
+            Monday, MorningCruise(), 240, 0, 30, existing, EarlyMorning, capacity: 120);
+
+        var sailing = Assert.Single(slots);
+        Assert.True(sailing.IsAvailable);
+        Assert.Equal(120, sailing.SeatsRemaining);
+    }
+
+    [Fact]
+    public void A_shared_sailing_in_the_past_is_still_closed()
+    {
+        var (_, slots) = SlotCalculator.Calculate(
+            Monday, MorningCruise(), 240, 0, 30, Array.Empty<SlotBooking>(),
+            Monday.AddHours(13), capacity: 120);
+
+        Assert.False(Assert.Single(slots).IsAvailable);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(1)]
+    public void A_resource_booked_one_party_at_a_time_keeps_exclusive_occupancy(int? capacity)
+    {
+        // The guard that keeps every consulting room, hire car and treatment
+        // chair behaving exactly as it did: one booking takes the slot,
+        // whatever the party size, and no seat count is reported.
+        var existing = new[] { new SlotBooking(Monday.AddHours(10), Monday.AddHours(11), 1) };
+
+        var (_, slots) = SlotCalculator.Calculate(
+            Monday, NineToFive(), 60, 0, 0, existing, EarlyMorning, capacity: capacity);
+
+        var taken = Assert.Single(slots, s => s.StartTime == Monday.AddHours(10));
+        Assert.False(taken.IsAvailable);
+        Assert.Null(taken.Capacity);
+        Assert.Null(taken.SeatsRemaining);
+        Assert.True(Assert.Single(slots, s => s.StartTime == Monday.AddHours(11)).IsAvailable);
     }
 }

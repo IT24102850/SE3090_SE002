@@ -319,7 +319,15 @@ public record CheckoutResponse(
     string? RedirectUrl,
     string? PublicKey,
     string? ExternalReference,
-    bool Simulated
+    bool Simulated,
+
+    // What the card will actually be charged, when the gateway cannot take
+    // the invoice's currency. Null means the two are the same. The payment
+    // screen must show these before the customer commits - being charged
+    // USD 12.40 against an LKR 3,750 bill is a surprise otherwise.
+    string? SettlementCurrency = null,
+    decimal? SettlementAmount = null,
+    decimal? ExchangeRate = null
 );
 
 public record ConfirmCheckoutRequest(
@@ -703,7 +711,18 @@ public record UpsertPaymentGatewayRequest(
     string? ApiKey = null,
 
     [MaxLength(500)]
-    string? WebhookSecret = null
+    string? WebhookSecret = null,
+
+    // What this gateway is actually charged in, when it cannot take the
+    // currency the tenant invoices in - Stripe will not take LKR at all.
+    // Both are needed together; either omitted means no conversion.
+    // SettlementRate is units of the invoice currency per one unit of
+    // SettlementCurrency (302.50 rupees to the dollar).
+    [MaxLength(3)]
+    string? SettlementCurrency = null,
+
+    [Range(0.000001, double.MaxValue, ErrorMessage = "SettlementRate must be greater than zero.")]
+    decimal? SettlementRate = null
 );
 
 public record GatewayTestResult(bool Ok, bool Simulated, string Message);

@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Services;
 
 namespace SmeBackend.Controllers;
 
@@ -14,7 +16,13 @@ namespace SmeBackend.Controllers;
 public class NotificationsController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public NotificationsController(AppDbContext db) => _db = db;
+    private readonly INotificationStream _stream;
+
+    public NotificationsController(AppDbContext db, INotificationStream stream)
+    {
+        _db = db;
+        _stream = stream;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetMine([FromQuery] int page = 1, [FromQuery] int pageSize = 30)
@@ -65,6 +73,92 @@ public class NotificationsController : ControllerBase
         notification.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return NoContent();
+    }
+
+    /// <summary>Live notification stream (Server-Sent Events). Stays open and pushes each notification as it is committed.</summary>
+    /// <remarks>
+    /// SSE rather than WebSockets: notifications only ever travel server to
+    /// client, so a one-way stream is the whole requirement, and it rides on
+    /// plain HTTP - no extra package on any of the three clients, and no
+    /// second protocol to secure. The durable record stays the Notifications
+    /// table; this only removes the delay between a row being written and the
+    /// client hearing about it. A client that misses events while disconnected
+    /// refetches on reconnect and loses nothing.
+    /// </remarks>
+    [HttpGet("stream")]
+    public async Task Stream(CancellationToken cancellationToken)
+    {
+        var (userId, tenantId, isStaff) = CallerContext();
+        if (userId is null || tenantId is null)
+        {
+            Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        Response.ContentType = "text/event-stream";
+        Response.Headers.CacheControl = "no-cache, no-transform";
+        Response.Headers.Connection = "keep-alive";
+        // Nginx and similar buffer by default, which would hold events back
+        // until the buffer filled - the exact delay this endpoint removes.
+        Response.Headers["X-Accel-Buffering"] = "no";
+
+        using var subscription = _stream.Subscribe(new StreamAudience(tenantId.Value, userId.Value, isStaff));
+
+        // Tell the client it is connected before anything happens, so the UI
+        // can show a live indicator rather than guessing.
+        await WriteEventAsync("ready", new { connectedAt = DateTime.UtcNow }, cancellationToken);
+
+        // A heartbeat keeps proxies and phone radios from closing an idle
+        // connection, and gives the client a way to notice a silent death.
+        using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(20));
+        var beating = Task.Run(async () =>
+        {
+            try
+            {
+                while (await heartbeat.WaitForNextTickAsync(cancellationToken))
+                {
+                    await Response.WriteAsync(": keep-alive\n\n", cancellationToken);
+                    await Response.Body.FlushAsync(cancellationToken);
+                }
+            }
+            catch (OperationCanceledException) { /* client went away */ }
+            catch (ObjectDisposedException) { /* response already closed */ }
+        }, cancellationToken);
+
+        try
+        {
+            await foreach (var notification in subscription.ReadAllAsync(cancellationToken))
+            {
+                await WriteEventAsync("notification", new
+                {
+                    id = notification.Id,
+                    type = notification.Type,
+                    title = notification.Title,
+                    message = notification.Message,
+                    createdAt = notification.CreatedAt,
+                    isRead = false,
+                }, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal: the browser tab closed or the phone lost signal.
+        }
+        finally
+        {
+            heartbeat.Dispose();
+            await Task.WhenAny(beating, Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None));
+        }
+    }
+
+    private async Task WriteEventAsync(string name, object payload, CancellationToken ct)
+    {
+        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        });
+        await Response.WriteAsync($"event: {name}\ndata: {json}\n\n", ct);
+        await Response.Body.FlushAsync(ct);
     }
 
     private (Guid? UserId, Guid? TenantId, bool IsStaff) CallerContext()

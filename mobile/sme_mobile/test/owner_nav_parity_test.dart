@@ -38,6 +38,7 @@ void main() {
     'Agent Workflows': ['Admin', 'Manager', 'Staff'],
     'Business Profile': ['Admin', 'Manager'],
     'Business Settings': ['Admin'],
+    'Your Unify Plan': ['Admin', 'Manager'],
   };
 
   Map<String, OwnerDestination> byLabel() => {

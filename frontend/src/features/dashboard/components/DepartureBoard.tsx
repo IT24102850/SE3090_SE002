@@ -12,6 +12,7 @@ import {
   type DepartureStatus,
   type DepartureSummary,
 } from '../../booking/types';
+import { DepartureForecastPanel } from './DepartureForecastPanel';
 
 /* The departure operations board: one card per sailing, with the one-click
  * actions an operator needs between the office and the jetty.
@@ -242,6 +243,7 @@ export default function DepartureBoard({
                 ))}
                 {!cancelled && (
                   <>
+                    <DepartureForecastPanel departure={departure} onCancelWeather={onCancelWeather} />
                     <button className="btn btn-secondary btn-sm" onClick={() => onLogSighting(departure)}>
                       Log sighting
                     </button>

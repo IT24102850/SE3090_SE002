@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,10 +13,10 @@ import 'purchase_order_approval_screen.dart';
 import 'stock_check_screen.dart';
 import 'stock_count_screen.dart';
 
-const apiBaseUrl = kIsWeb
-    ? 'http://localhost:5298'
-    : String.fromEnvironment('API_BASE_URL',
-        defaultValue: 'http://10.0.2.2:5298');
+const apiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'https://sme-backend-lxsp.onrender.com',
+);
 const navy = Color(0xFF131B2E),
     mint = Color(0xFF10B981),
     canvas = Color(0xFF0B0F19),
@@ -128,7 +127,10 @@ ThemeData appTheme(AppThemeChoice choice) {
           onSurfaceVariant: onSurfaceVariant),
       scaffoldBackgroundColor: background,
       fontFamily: 'Roboto',
-      textTheme: ThemeData(brightness: isDark ? Brightness.dark : Brightness.light).textTheme.apply(bodyColor: onSurface, displayColor: onSurface),
+      textTheme:
+          ThemeData(brightness: isDark ? Brightness.dark : Brightness.light)
+              .textTheme
+              .apply(bodyColor: onSurface, displayColor: onSurface),
       appBarTheme: AppBarTheme(
           backgroundColor: background.withValues(alpha: .92),
           foregroundColor: onSurface,
@@ -177,24 +179,9 @@ ThemeData appTheme(AppThemeChoice choice) {
           titleTextStyle: TextStyle(
               color: onSurface, fontSize: 20, fontWeight: FontWeight.w800),
           contentTextStyle: TextStyle(color: onSurfaceVariant)),
-      bottomSheetTheme: BottomSheetThemeData(
-          backgroundColor: surface,
-          surfaceTintColor: Colors.transparent,
-          shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)))),
-      navigationBarTheme: NavigationBarThemeData(
-          height: 72,
-          backgroundColor: isDark ? const Color(0xFF101936) : Colors.white,
-          indicatorColor: primary.withValues(alpha: .18),
-          indicatorShape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
-          labelTextStyle: WidgetStateProperty.all(
-              const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800)),
-          iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
-              size: 23,
-              color: states.contains(WidgetState.selected)
-                  ? primary
-                  : onSurfaceVariant))),
+      bottomSheetTheme:
+          BottomSheetThemeData(backgroundColor: surface, surfaceTintColor: Colors.transparent, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24)))),
+      navigationBarTheme: NavigationBarThemeData(height: 72, backgroundColor: isDark ? const Color(0xFF101936) : Colors.white, indicatorColor: primary.withValues(alpha: .18), indicatorShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), labelTextStyle: WidgetStateProperty.all(const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800)), iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(size: 23, color: states.contains(WidgetState.selected) ? primary : onSurfaceVariant))),
       pageTransitionsTheme: const PageTransitionsTheme(builders: {
         TargetPlatform.android: _SharedAxisPageTransitionsBuilder(),
         TargetPlatform.iOS: _SharedAxisPageTransitionsBuilder(),
@@ -212,12 +199,16 @@ class _SharedAxisPageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
     Widget child,
-  ) => FadeTransition(
-      opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-      child: SlideTransition(
-          position: Tween<Offset>(begin: const Offset(.035, .02), end: Offset.zero)
-              .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-          child: child));
+  ) =>
+      FadeTransition(
+          opacity:
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          child: SlideTransition(
+              position: Tween<Offset>(
+                      begin: const Offset(.035, .02), end: Offset.zero)
+                  .animate(CurvedAnimation(
+                      parent: animation, curve: Curves.easeOutCubic)),
+              child: child));
 }
 
 class LoginScreen extends StatefulWidget {
@@ -499,33 +490,66 @@ class _LoginWelcomeCard extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(28),
           boxShadow: const [
-            BoxShadow(color: Color(0x553B82F6), blurRadius: 28, offset: Offset(0, 14)),
+            BoxShadow(
+                color: Color(0x553B82F6),
+                blurRadius: 28,
+                offset: Offset(0, 14)),
           ],
         ),
         child: Stack(children: [
-          Positioned(right: -34, top: -48, child: _LoginOrb(size: 154, color: Colors.white.withValues(alpha: .13))),
-          Positioned(right: 42, bottom: -64, child: _LoginOrb(size: 126, color: const Color(0xFFFDE68A).withValues(alpha: .2))),
+          Positioned(
+              right: -34,
+              top: -48,
+              child: _LoginOrb(
+                  size: 154, color: Colors.white.withValues(alpha: .13))),
+          Positioned(
+              right: 42,
+              bottom: -64,
+              child: _LoginOrb(
+                  size: 126,
+                  color: const Color(0xFFFDE68A).withValues(alpha: .2))),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Container(
               width: 46,
               height: 46,
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(15)),
-              child: const Icon(Icons.auto_awesome_rounded, color: Colors.white),
+              decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .18),
+                  borderRadius: BorderRadius.circular(15)),
+              child:
+                  const Icon(Icons.auto_awesome_rounded, color: Colors.white),
             ),
             const SizedBox(height: 20),
             const Text('One calm place\nfor busy work.',
-                style: TextStyle(color: Colors.white, fontSize: 27, height: 1.05, fontWeight: FontWeight.w900, letterSpacing: -.8)),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 27,
+                    height: 1.05,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -.8)),
             const SizedBox(height: 9),
-            Text('Track stock, coordinate purchasing, and see what matters next.',
-                style: TextStyle(color: Colors.white.withValues(alpha: .86), fontSize: 13, height: 1.4)),
+            Text(
+                'Track stock, coordinate purchasing, and see what matters next.',
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: .86),
+                    fontSize: 13,
+                    height: 1.4)),
             const SizedBox(height: 18),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: .15), border: Border.all(color: Colors.white.withValues(alpha: .22)), borderRadius: BorderRadius.circular(99)),
+              decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .15),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: .22)),
+                  borderRadius: BorderRadius.circular(99)),
               child: const Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Icons.bolt_rounded, color: Color(0xFFFDE68A), size: 15),
                 SizedBox(width: 6),
-                Text('LIVE BUSINESS WORKSPACE', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: .7)),
+                Text('LIVE BUSINESS WORKSPACE',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: .7)),
               ]),
             ),
           ]),
@@ -538,7 +562,10 @@ class _LoginOrb extends StatelessWidget {
   final double size;
   final Color color;
   @override
-  Widget build(BuildContext context) => Container(width: size, height: size, decoration: BoxDecoration(shape: BoxShape.circle, color: color));
+  Widget build(BuildContext context) => Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: color));
 }
 
 class _LoginTrustRow extends StatelessWidget {
@@ -548,11 +575,18 @@ class _LoginTrustRow extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(color: const Color(0xFF10B981).withValues(alpha: .09), borderRadius: BorderRadius.circular(15)),
+      decoration: BoxDecoration(
+          color: const Color(0xFF10B981).withValues(alpha: .09),
+          borderRadius: BorderRadius.circular(15)),
       child: Row(children: [
         const Icon(Icons.verified_user_outlined, color: mint, size: 20),
         const SizedBox(width: 10),
-        Expanded(child: Text('Secure access for your operations and team.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600, fontSize: 12.5))),
+        Expanded(
+            child: Text('Secure access for your operations and team.',
+                style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12.5))),
       ]),
     );
   }
@@ -700,9 +734,13 @@ class _ShellState extends State<Shell> {
                 transitionBuilder: (child, animation) => FadeTransition(
                     opacity: animation,
                     child: SlideTransition(
-                        position: Tween<Offset>(begin: const Offset(.025, .015), end: Offset.zero).animate(animation),
+                        position: Tween<Offset>(
+                                begin: const Offset(.025, .015),
+                                end: Offset.zero)
+                            .animate(animation),
                         child: child)),
-                child: KeyedSubtree(key: ValueKey(index), child: pages[index]))),
+                child:
+                    KeyedSubtree(key: ValueKey(index), child: pages[index]))),
         bottomNavigationBar: NavigationBar(
             selectedIndex: index,
             onDestinationSelected: (v) => setState(() => index = v),

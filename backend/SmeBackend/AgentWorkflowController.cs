@@ -6,12 +6,17 @@ using SmeBackend.Models;
 using SmeBackend.Services;
 using SmeBackend.Shared;
 using System.Text.Json;
+using SmeBackend.Authorization;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
 [ApiController]
 [Route("api/agent/workflow")]
 [Authorize]
+// Schedule Copilot and customer find-and-book are AI surfaces: gated by
+// plan, with the model calls counted against the monthly allowance.
+[RequiresPlanFeature(PlanFeatures.AiAgents)]
 public class AgentWorkflowController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -47,6 +52,7 @@ public class AgentWorkflowController : ControllerBase
     // priority rules goes to the Schedule Copilot (POST plan-schedule), where
     // the four agents actually run.
     [HttpPost("propose")]
+    [MetersPlanQuota(UsageMetrics.AiRuns)]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> ProposeSchedule([FromBody] ProposeScheduleDto dto)
     {
@@ -73,13 +79,14 @@ public class AgentWorkflowController : ControllerBase
             .ToDictionary(g => g.Key, g => g.ToDictionary(s => s.DayOfWeek));
 
         var bookingsByResource = (await _db.Bookings.AsNoTracking()
-            .Where(b => resourceIds.Contains(b.ResourceId) && b.DeletedAt == null
-                && b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.Rejected
+            .HoldingSeats(DateTime.UtcNow)
+            .Where(b => resourceIds.Contains(b.ResourceId) && b.Status != BookingStatus.Rejected
                 && b.StartTime.Date >= today && b.StartTime.Date < horizonEnd)
-            .Select(b => new { b.ResourceId, b.StartTime, b.EndTime })
+            .Select(b => new { b.ResourceId, b.StartTime, b.EndTime, b.TicketBreakdown, b.AttendeeCount })
             .ToListAsync())
             .GroupBy(b => b.ResourceId)
-            .ToDictionary(g => g.Key, g => g.Select(b => (b.StartTime, b.EndTime)).ToList());
+            .ToDictionary(g => g.Key, g => g.Select(b => new SlotBooking(
+                b.StartTime, b.EndTime, TicketPricing.SeatsUsed(b.TicketBreakdown, b.AttendeeCount))).ToList());
 
         var proposedSteps = new List<StepDto>();
         var now = DateTime.UtcNow;
@@ -99,21 +106,26 @@ public class AgentWorkflowController : ControllerBase
 
                 if (!bookingsByResource.TryGetValue(resource.Id, out var existingForResource))
                 {
-                    existingForResource = new List<(DateTime, DateTime)>();
+                    existingForResource = new List<SlotBooking>();
                     bookingsByResource[resource.Id] = existingForResource;
                 }
-                var existingForDay = existingForResource.Where(b => b.Item1.Date == day).ToList();
+                var existingForDay = existingForResource.Where(b => b.StartTime.Date == day).ToList();
 
                 var (isOpen, slots) = SlotCalculator.Calculate(
                     day, schedule, duration, bookingType.BufferMinutesBefore, bookingType.BufferMinutesAfter,
-                    existingForDay, now);
+                    existingForDay, now, false,
+                    // A shared vessel is only full once its seats are gone, so
+                    // the planner can keep filling one sailing.
+                    CapacityRules.Resolve(resource, bookingType));
                 if (!isOpen) continue;
 
                 var openSlot = slots.FirstOrDefault(s => s.IsAvailable);
                 if (openSlot == null) continue;
 
                 // Reserve it locally so a later resource/day this same pass doesn't propose it twice.
-                existingForResource.Add((openSlot.StartTime, openSlot.EndTime));
+                // On a shared vessel this is one seat off the sailing, not the
+                // whole boat, so the pass can keep filling it.
+                existingForResource.Add(new SlotBooking(openSlot.StartTime, openSlot.EndTime, 1));
 
                 proposedSteps.Add(new StepDto(
                     "Planner",
@@ -165,6 +177,7 @@ public class AgentWorkflowController : ControllerBase
 
     /// <summary>Runs the multi-agent Schedule Copilot for a scheduling objective and stores the auditable result.</summary>
     [HttpPost("plan-schedule")]
+    [MetersPlanQuota(UsageMetrics.AiRuns)]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> PlanSchedule([FromBody] PlanScheduleDto dto, CancellationToken ct)
     {
@@ -442,6 +455,7 @@ public class AgentWorkflowController : ControllerBase
     // slots) but converges on the same AgentWorkflow table, PlanDto shape,
     // and approve/reject/apply endpoints.
     [HttpPost("~/api/agent/find-and-book")]
+    [MetersPlanQuota(UsageMetrics.AiRuns)]
     [Authorize(Roles = Roles.Customer)]
     public async Task<IActionResult> FindAndBook([FromBody] FindAndBookDto dto)
     {

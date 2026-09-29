@@ -78,6 +78,18 @@ def _is_quota_exhausted(error: Exception) -> bool:
     return _status_code(error) == 429 and "quota" in str(error).lower()
 
 
+def _is_malformed_request(error: Exception) -> bool:
+    """A 400 INVALID_ARGUMENT means we built the request wrong - an
+    unsupported role, a bad schema, an oversized payload. No model in the
+    chain will like it any better, and no amount of waiting changes it, so it
+    is the one failure worth failing fast and loudly on.
+
+    A 400 without INVALID_ARGUMENT is left to the normal path: it may be
+    model-specific (an unsupported parameter), where the next model can work.
+    """
+    return _status_code(error) == 400 and "INVALID_ARGUMENT" in str(error).upper()
+
+
 def _is_transient(error: Exception) -> bool:
     """503 overloaded, 429 rate-limited, 500/504 server-side: worth retrying
     on the SAME model. A 404 (model not available to this key), a 400/401/403,
@@ -166,6 +178,16 @@ def _call_with_resilience(attempt_once: Callable[[str], Any], *, model: str) -> 
                     model=candidate, attempt=attempt,
                     duration_ms=int((time.monotonic() - started) * 1000), ok=False, error=str(e)[:200],
                 )
+                if _is_malformed_request(e):
+                    # Our fault, not the model's: the same request will be
+                    # rejected identically by every model in the chain, so
+                    # walking it only burns seconds and quota to reach the
+                    # same place. Surface it straight away, with the reason
+                    # intact so the bug is visible rather than buried under
+                    # "tried three models".
+                    raise AgentSafeFailure(
+                        f"Gemini rejected the request as malformed (not retryable): {e}"
+                    ) from e
                 if not _is_transient(e):
                     _trip_breaker(candidate, e)
                     break  # next model; waiting will not help
@@ -254,6 +276,33 @@ def generate_structured(
     return _parse_json_response(text, response_schema)
 
 
+def _with_schema_contract(system_instruction: str, response_schema: type[BaseModel]) -> str:
+    """Spell out the exact answer shape in the instruction.
+
+    `generate_structured` hands Gemini a `response_schema` and the SDK
+    constrains the output to it. A tool-calling call cannot: Gemini rejects
+    structured output alongside function declarations, so the final answer is
+    whatever the model decides to emit, and prose alone is a weak contract.
+    Every agent prompt here names a field or two in passing and leaves the
+    rest implicit, which is exactly how find-and-book died - the model
+    returned `ranked_resources` where `DomainAnalysisOutput` requires
+    `ranked_candidates`, a reasonable guess given every tool it had was named
+    after resources.
+
+    Emitting the real JSON Schema removes the guess for every tool-using
+    agent at once, rather than one prompt at a time.
+    """
+    schema = json.dumps(response_schema.model_json_schema(), separators=(",", ":"))
+    return (
+        f"{system_instruction}\n\n"
+        "FINAL ANSWER FORMAT — once you have finished calling tools, reply "
+        "with ONLY a JSON object matching this JSON Schema. Use these field "
+        "names exactly as written, include every required field, and invent "
+        "no others. No prose, no markdown fences.\n"
+        f"{schema}"
+    )
+
+
 def generate_with_tools(
     *,
     system_instruction: str,
@@ -276,6 +325,7 @@ def generate_with_tools(
     ]
     handlers = {t.name: t.handler for t in tools}
     tool_config = types.Tool(function_declarations=declarations)
+    instruction = _with_schema_contract(system_instruction, response_schema)
 
     contents: list[types.Content] = [types.Content(role="user", parts=[types.Part.from_text(text=user_content)])]
 
@@ -285,7 +335,7 @@ def generate_with_tools(
                 model=candidate_model,
                 contents=_contents,
                 config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
+                    system_instruction=instruction,
                     tools=[tool_config],
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                     temperature=0.2,
@@ -324,7 +374,11 @@ def generate_with_tools(
                 continue
             result = _run_tool_with_one_retry(handler, dict(call.args or {}))
             response_parts.append(types.Part.from_function_response(name=call.name, response=result))
-        contents.append(types.Content(role="tool", parts=response_parts))
+        # Gemini has no "tool" role - that is the OpenAI convention, and it is
+        # rejected with 400 INVALID_ARGUMENT on every model. Function results
+        # go back as the user turn; the parts being function_response is what
+        # marks them as tool output, not the role.
+        contents.append(types.Content(role="user", parts=response_parts))
 
     raise AgentSafeFailure(f"Exceeded max agent turns ({max_turns}) without a final answer.")
 

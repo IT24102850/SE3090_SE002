@@ -1,0 +1,182 @@
+/* Unify's own plan screens - the pricing page, the subscription console and
+ * the paywall. Prefixed sub- and built on the shared tokens
+ * (shared/style/tokens.css), so both themes come for free. */
+
+.sub-page { display: flex; flex-direction: column; gap: 22px; }
+
+.sub-muted { color: var(--color-text-muted); }
+.sub-small { font-size: 12px; }
+.sub-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sub-spread { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.sub-stack { display: flex; flex-direction: column; gap: 12px; }
+.sub-num { font-variant-numeric: tabular-nums; }
+
+/* ── The term toggle ─────────────────────────────────────────────────────
+ * Three segments, because three is what makes the middle one a choice
+ * rather than a binary. The saving lives on the segment itself: the whole
+ * point of the ladder is that you cannot look at "12 months" without also
+ * seeing what it saves. */
+.sub-terms {
+  display: inline-flex; padding: 4px; gap: 4px;
+  background: var(--color-surface-muted); border: 1px solid var(--color-border);
+  border-radius: 999px;
+}
+.sub-term {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  border: none; background: none; cursor: pointer;
+  padding: 8px 18px; border-radius: 999px;
+  color: var(--color-text-secondary); font-weight: 600; font-size: 14px;
+  transition: background 0.15s, color 0.15s;
+}
+.sub-term:hover { color: var(--color-text); }
+.sub-term[aria-pressed='true'] {
+  background: var(--color-surface); color: var(--color-text);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+.sub-term-save {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--color-good);
+}
+
+/* ── Tab counts ───────────────────────────────────────────────────────── */
+/* A bare number beside a tab label reads as part of the word - "Add-ons11".
+   A pill separates it and gives it a job. */
+.sub-tab-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px; margin-left: 8px;
+  border-radius: 999px;
+  background: var(--color-surface-muted); color: var(--color-text-secondary);
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.bl-tab[aria-selected='true'] .sub-tab-count {
+  background: var(--color-primary-soft); color: var(--color-primary);
+}
+
+/* The tab strip itself comes from billing.css, which these screens import.
+   If that import is ever dropped, these keep the row looking like tabs
+   rather than a line of default browser buttons - which is exactly how it
+   failed the first time. */
+.sub-page .bl-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.sub-page .bl-tab {
+  display: inline-flex; align-items: center;
+  background: none; border: none; cursor: pointer;
+}
+
+/* ── Plan cards ───────────────────────────────────────────────────────── */
+.sub-plans {
+  display: grid; gap: 16px; align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.sub-plan {
+  position: relative; display: flex; flex-direction: column; gap: 14px;
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: 16px; padding: 22px 20px;
+}
+/* The one card the page pushes. A ring rather than a different colour, so a
+ * tenant reading it in dark mode sees the same emphasis. */
+.sub-plan-featured {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary), 0 8px 24px rgb(0 0 0 / 0.08);
+}
+.sub-plan-current { border-color: var(--color-good); }
+
+.sub-plan-flag {
+  position: absolute; top: -11px; left: 20px;
+  padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  /* primary-contrast, not white: in dark mode primary is a light sky
+     blue and white-on-it is unreadable. */
+  background: var(--color-primary); color: var(--color-primary-contrast);
+}
+.sub-plan-flag-current { background: var(--color-good); color: var(--color-bg); }
+
+.sub-plan-name { font-size: 19px; font-weight: 700; color: var(--color-text); }
+.sub-plan-tag { font-size: 13px; color: var(--color-text-secondary); min-height: 2.6em; }
+
+.sub-price { display: flex; flex-direction: column; gap: 2px; }
+.sub-price-main { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.sub-price-amount { font-size: 30px; font-weight: 800; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.sub-price-unit { font-size: 13px; color: var(--color-text-muted); }
+.sub-price-was {
+  font-size: 13px; color: var(--color-text-muted); text-decoration: line-through;
+  font-variant-numeric: tabular-nums;
+}
+.sub-price-term { font-size: 12px; color: var(--color-text-secondary); }
+.sub-price-free { font-size: 30px; font-weight: 800; color: var(--color-text); }
+
+.sub-bullets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.sub-bullets li {
+  display: flex; gap: 8px; font-size: 13.5px; color: var(--color-text);
+  line-height: 1.45;
+}
+.sub-bullets li::before {
+  content: '✓'; color: var(--color-good); font-weight: 700; flex: 0 0 auto;
+}
+
+.sub-plan-cta { margin-top: auto; }
+
+/* ── Add-on store ────────────────────────────────────────────────────── */
+.sub-addons { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.sub-addon {
+  position: relative; display: flex; flex-direction: column; gap: 10px;
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: 14px; padding: 16px;
+}
+.sub-addon-best { border-color: var(--color-good); }
+.sub-addon-name { font-weight: 700; font-size: 15px; color: var(--color-text); }
+.sub-addon-price { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.sub-addon-amount { font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-text); }
+.sub-addon-locked { opacity: 0.62; }
+
+.sub-save-badge {
+  display: inline-flex; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+  background: var(--color-good-soft); color: var(--color-good);
+}
+
+/* ── Usage meters ────────────────────────────────────────────────────── */
+.sub-meters { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.sub-meter {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;
+}
+.sub-meter-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.sub-meter-label { font-size: 13px; font-weight: 600; color: var(--color-text-secondary); }
+.sub-meter-value { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-text); }
+.sub-bar { height: 7px; border-radius: 999px; background: var(--color-surface-muted); overflow: hidden; }
+.sub-bar-fill { height: 100%; border-radius: 999px; background: var(--color-primary); transition: width 0.3s; }
+/* Nearly out, and out. Colour is never the only signal - the number above
+ * says the same thing in words. */
+.sub-bar-fill-warn { background: var(--color-warning); }
+.sub-bar-fill-full { background: var(--color-critical); }
+
+/* ── Plan header on the subscription console ─────────────────────────── */
+.sub-hero {
+  display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: space-between;
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: 16px; padding: 20px 22px;
+}
+.sub-hero-plan { font-size: 24px; font-weight: 800; color: var(--color-text); }
+.sub-hero-meta { font-size: 13px; color: var(--color-text-secondary); }
+
+/* ── Paywall sheet ───────────────────────────────────────────────────── */
+.sub-paywall { display: flex; flex-direction: column; gap: 16px; }
+.sub-paywall-lead { font-size: 15px; color: var(--color-text); line-height: 1.5; }
+.sub-paywall-plan {
+  border: 1px solid var(--color-primary); border-radius: 12px; padding: 14px 16px;
+  background: var(--color-primary-soft); display: flex; flex-direction: column; gap: 6px;
+}
+
+/* ── Revenue console ─────────────────────────────────────────────────── */
+.sub-mix { display: flex; flex-direction: column; gap: 8px; }
+.sub-mix-row { display: grid; grid-template-columns: 90px 1fr 120px; gap: 10px; align-items: center; font-size: 13px; }
+.sub-mix-bar { height: 10px; border-radius: 999px; background: var(--color-surface-muted); overflow: hidden; }
+.sub-mix-fill { height: 100%; background: var(--color-primary); border-radius: 999px; }
+
+@media (max-width: 700px) {
+  .sub-terms { width: 100%; justify-content: stretch; }
+  .sub-term { flex: 1; padding: 8px 10px; }
+  .sub-mix-row { grid-template-columns: 74px 1fr; }
+  .sub-mix-row > :last-child { grid-column: 1 / -1; text-align: right; }
+}

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useGetNotificationsQuery, useGetUnreadNotificationCountQuery, useMarkNotificationReadMutation } from '../../api/bookingApi';
+import { useNotificationStream } from '../useNotificationStream';
+import { useToast } from './Toast';
 
 function relativeTime(value: string) {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
@@ -12,22 +14,26 @@ function relativeTime(value: string) {
 /* In-app centre for booking confirmations, reminders, cancellations and
  * workflow updates.
  *
- * "Live" here is three things, not one. A booking changed from this tab
- * invalidates the Notification tags and lands immediately; one changed
- * elsewhere - the customer's phone, another member of staff - arrives on
- * the poll below; and coming back to a tab that was left open refetches at
- * once rather than waiting out the remainder of an interval. Polling stops
- * while the tab is in the background so an unattended dashboard is not
- * requesting all night.
+ * Live for real: an open Server-Sent Events connection pushes each
+ * notification the moment its row commits, wherever it was raised - this tab,
+ * another member of staff, a customer's phone, or one of the agents. The event
+ * invalidates the Notification tags, so the badge and the list are still
+ * served by the REST endpoints and remain the source of truth.
  *
- * The badge polls on its own short interval because it is on screen
- * constantly; the list is the heavier request and is only fetched once the
- * panel has been opened. */
-const COUNT_POLL_MS = 15_000;
-const LIST_POLL_MS = 30_000;
+ * The polls below are now a safety net rather than the mechanism, and are
+ * deliberately slow: they cover the seconds between losing the connection and
+ * the reconnect succeeding. They pause while the tab is in the background, so
+ * an unattended dashboard is not requesting all night, and a tab returning to
+ * focus refetches at once instead of waiting out an interval. */
+const COUNT_POLL_MS = 120_000;
+const LIST_POLL_MS = 120_000;
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const { show } = useToast();
+  // Arriving notifications refresh the cache; the toast is so a manager
+  // watching another part of the screen still notices.
+  const streamStatus = useNotificationStream((n) => show(n.title, 'info'));
   const { data: countData } = useGetUnreadNotificationCountQuery(undefined, {
     pollingInterval: COUNT_POLL_MS,
     skipPollingIfUnfocused: true,
@@ -45,7 +51,7 @@ export default function NotificationBell() {
   const [markRead] = useMarkNotificationReadMutation();
   const unread = countData?.count ?? 0;
 
-  return <div className="notification-center">
+  return <div className="notification-center" data-live={streamStatus}>
     <button className={`notification-trigger${unread > 0 ? ' has-unread' : ''}`} type="button" onClick={() => setOpen((value) => !value)} aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`} aria-expanded={open}>
       <span aria-hidden="true">🔔</span><small>Updates</small>{unread > 0 && <b>{unread > 9 ? '9+' : unread}</b>}
     </button>

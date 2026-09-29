@@ -19,7 +19,18 @@ public enum BookingStatus
     // the churn/no-show numbers. Appended last - BookingStatus is persisted
     // by name (HasConversion<string>), so existing rows are unaffected, and
     // the mobile app's status switch already has a default branch.
-    WeatherCancelled
+    WeatherCancelled,
+
+    // Pay-to-confirm: the seat is held while the customer is at the payment
+    // screen. It counts as taken until HoldExpiresAt passes, so two people
+    // cannot pay for the same slot, and becomes Confirmed the moment the
+    // gateway reports the money in (BookingPaymentListener).
+    PendingPayment,
+
+    // A hold nobody paid for. Kept rather than deleted so the seat's
+    // history is honest and abandoned-checkout rates are measurable;
+    // released by BookingHoldExpiryService.
+    Expired
 }
 
 public enum BookingPriority
@@ -72,6 +83,24 @@ public class Booking
     public BookingPriority Priority { get; set; } = BookingPriority.Normal;
 
     public int? AttendeeCount { get; set; }
+
+    // ── Pay to confirm ─────────────────────────────────────────────
+    // Set only on the PendingPayment path. When the hold lapses the seat
+    // goes back on sale; see Shared/BookingPaymentRules.cs for where the
+    // window comes from.
+    public DateTime? HoldExpiresAt { get; set; }
+
+    /// What the server priced this booking at - never what the client sent.
+    public decimal? AmountDue { get; set; }
+
+    /// The part taken up front when the booking type asks for a deposit;
+    /// equal to AmountDue when the whole fare is payable on booking.
+    public decimal? DepositAmount { get; set; }
+
+    /// Full | Deposit | PayAtVenue - resolved from the booking type at the
+    /// moment of booking, so changing the policy later cannot rewrite what
+    /// an existing guest agreed to.
+    public string? PaymentMode { get; set; }
 
     public DateTime? CheckInAt { get; set; }
 
