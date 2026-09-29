@@ -115,9 +115,15 @@ public sealed class PurchaseOrdersController(
             .Select(supplier => new PurchaseOrderOption(supplier.Id, supplier.Name))
             .ToListAsync(cancellationToken);
         var items = await db.InventoryItems.AsNoTracking()
-            .Where(item => item.IsActive)
+            .Where(item => item.TenantId == tenantId && item.IsActive)
             .OrderBy(item => item.Name)
-            .Select(item => new PurchaseOrderItemOption(item.Id, item.Name, item.Sku, item.UnitCost, item.BranchId))
+            .Select(item => new PurchaseOrderItemOption(
+                item.Id,
+                item.Name,
+                item.Sku,
+                item.UnitCost,
+                item.BranchId,
+                item.SupplierId))
             .ToListAsync(cancellationToken);
 
         return Ok(new PurchaseOrderOptionsResponse(branches, suppliers, items));
@@ -562,7 +568,8 @@ public sealed record PurchaseOrderItemOption(
     string Name,
     string Sku,
     decimal? UnitCost,
-    Guid? BranchId);
+    Guid? BranchId,
+    Guid? SupplierId);
 
 public sealed record PurchaseOrderOptionsResponse(
     IReadOnlyList<PurchaseOrderOption> Branches,
