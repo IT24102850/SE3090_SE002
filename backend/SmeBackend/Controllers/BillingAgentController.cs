@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SmeBackend.DTOs;
 using SmeBackend.Services.Billing;
+using SmeBackend.Authorization;
+using SmeBackend.Models;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
@@ -11,6 +14,9 @@ namespace SmeBackend.Controllers;
 [Route("api/billing-agent")]
 [Authorize(Policy = "ManagerPlus")]
 [Produces("application/json")]
+// The billing copilot is an AI surface: gated by plan, and each model
+// call counted against the monthly allowance.
+[RequiresPlanFeature(PlanFeatures.AiAgents)]
 public class BillingAgentController : BillingControllerBase
 {
     private readonly IBillingAgentService _agent;
@@ -30,6 +36,7 @@ public class BillingAgentController : BillingControllerBase
     /// Every run is recorded in AgentWorkflows; actionable recommendations
     /// become approval requests.</remarks>
     [HttpPost("analyze")]
+    [MetersPlanQuota(UsageMetrics.AiRuns)]
     [ProducesResponseType(typeof(BillingAnalysisResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BillingAnalysisResponse>> Analyze([FromBody] BillingAnalysisRequest request, CancellationToken ct = default)
@@ -53,6 +60,7 @@ public class BillingAgentController : BillingControllerBase
     /// Anything it tried and was not allowed comes back in plannerWarnings.
     /// </remarks>
     [HttpPost("plan-analysis")]
+    [MetersPlanQuota(UsageMetrics.AiRuns)]
     [ProducesResponseType(typeof(BillingPlannedAnalysisResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]

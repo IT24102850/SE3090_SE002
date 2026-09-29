@@ -1,24 +1,22 @@
+import 'dart:io' show Platform;
+
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'secure_storage_service.dart';
 
 /// Central HTTP client for the ASP.NET Core backend.
 /// Automatically attaches JWT from secure storage on every request.
 class ApiService {
-  /// Set with `--dart-define=API_BASE_URL=https://your-api.example.com/api`.
-  /// The default points at the repository's Render service so an APK never
-  /// silently targets a developer machine.
-  ///
-  /// A compile-time constant, not a getter reading _dio.options.baseUrl: that
-  /// getter is what BaseOptions below is initialised from, so reading it while
-  /// _dio is still being created throws on the first request.
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://sme-backend-lxsp.onrender.com/api',
-  );
+  static String get baseUrl => _dio.options.baseUrl;
+
+  static set baseUrl(String url) {
+    _dio.options.baseUrl = _normaliseBaseUrl(url);
+  }
 
   static final Dio _dio = Dio(
     BaseOptions(
-      baseUrl: baseUrl,
+      baseUrl: _defaultBaseUrl(),
       // Generous on purpose. A free-tier host (Render, Railway) parks an
       // idle instance and takes 30-60s to wake on the next request -
       // measured at 41s cold against 6s warm. At the old 15s the very
@@ -33,6 +31,22 @@ class ApiService {
       },
     ),
   );
+
+  static String _defaultBaseUrl() {
+    const configured = String.fromEnvironment('API_BASE_URL');
+    if (configured.isNotEmpty) return _normaliseBaseUrl(configured);
+    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5298/api';
+    return 'http://localhost:5298/api';
+  }
+
+  static String _normaliseBaseUrl(String url) {
+    var normalised = url.trim();
+    while (normalised.endsWith('/')) {
+      normalised = normalised.substring(0, normalised.length - 1);
+    }
+    if (!normalised.endsWith('/api')) normalised = '$normalised/api';
+    return normalised;
+  }
 
   /// Per-request options for the endpoints that run an LLM pipeline.
   ///
@@ -81,13 +95,13 @@ class ApiService {
           },
           onError: (DioException error, handler) async {
             if (error.response?.statusCode == 401) {
-              // Token expired / invalid → clear the account session, then tell the app so
+              // Token expired / invalid → clear storage, then tell the app so
               // it can send the user back to the login screen. Guarded so a
               // burst of concurrent 401s (a screen fires several requests at
               // once) only tears the session down once.
               if (!_sessionExpiring) {
                 _sessionExpiring = true;
-                await SecureStorageService.clearSession();
+                await SecureStorageService.clearAll();
                 try {
                   onUnauthorized?.call();
                 } finally {

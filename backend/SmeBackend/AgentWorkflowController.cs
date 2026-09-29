@@ -6,12 +6,17 @@ using SmeBackend.Models;
 using SmeBackend.Services;
 using SmeBackend.Shared;
 using System.Text.Json;
+using SmeBackend.Authorization;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
 [ApiController]
 [Route("api/agent/workflow")]
 [Authorize]
+// Schedule Copilot and customer find-and-book are AI surfaces: gated by
+// plan, with the model calls counted against the monthly allowance.
+[RequiresPlanFeature(PlanFeatures.AiAgents)]
 public class AgentWorkflowController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -47,6 +52,7 @@ public class AgentWorkflowController : ControllerBase
     // priority rules goes to the Schedule Copilot (POST plan-schedule), where
     // the four agents actually run.
     [HttpPost("propose")]
+    [MetersPlanQuota(UsageMetrics.AiRuns)]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> ProposeSchedule([FromBody] ProposeScheduleDto dto)
     {
@@ -171,6 +177,7 @@ public class AgentWorkflowController : ControllerBase
 
     /// <summary>Runs the multi-agent Schedule Copilot for a scheduling objective and stores the auditable result.</summary>
     [HttpPost("plan-schedule")]
+    [MetersPlanQuota(UsageMetrics.AiRuns)]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> PlanSchedule([FromBody] PlanScheduleDto dto, CancellationToken ct)
     {
@@ -448,6 +455,7 @@ public class AgentWorkflowController : ControllerBase
     // slots) but converges on the same AgentWorkflow table, PlanDto shape,
     // and approve/reject/apply endpoints.
     [HttpPost("~/api/agent/find-and-book")]
+    [MetersPlanQuota(UsageMetrics.AiRuns)]
     [Authorize(Roles = Roles.Customer)]
     public async Task<IActionResult> FindAndBook([FromBody] FindAndBookDto dto)
     {

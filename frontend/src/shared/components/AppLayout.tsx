@@ -118,6 +118,9 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: '/business-profile', label: 'Business Profile', icon: '🏪', roles: ['Admin', 'Manager'] },
       { path: '/settings', label: 'Business Settings', icon: '⚙️', roles: ['Admin'] },
+      // What this business pays Unify. Not /subscriptions, which is the
+      // memberships this business sells to its own customers.
+      { path: '/subscription', label: 'Your Unify Plan', icon: '✨', roles: ['Admin', 'Manager'] },
     ],
   },
 ];

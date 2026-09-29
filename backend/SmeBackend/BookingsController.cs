@@ -5,6 +5,8 @@ using SmeBackend.Data;
 using SmeBackend.Models;
 using SmeBackend.Services;
 using SmeBackend.Shared;
+using SmeBackend.Authorization;
+using SmeBackend.Services.PlatformBilling;
 using System.Text.Json;
 
 namespace SmeBackend.Controllers;
@@ -186,7 +188,13 @@ public class BookingsController : ControllerBase
     // ignored from the payload and forced to the caller's own id. Staff can
     // still book on behalf of a patient via BookedBy/BookedFor.
     /// <summary>FR-B2: creates a booking, after conflict detection and business-rule validation.</summary>
+    //
+    // The free plan caps bookings per month. The meter is applied here, on
+    // the one path every booking goes through, rather than counting rows:
+    // a booking that was later cancelled still used the capacity, and a
+    // tenant who could delete their way under the cap would not have a cap.
     [HttpPost]
+    [MetersPlanQuota(UsageMetrics.Bookings)]
     public async Task<IActionResult> Create([FromBody] CreateBookingDto dto)
     {
         var (callerId, callerRole) = CallerIdentity();

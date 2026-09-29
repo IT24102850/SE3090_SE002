@@ -4,12 +4,16 @@ using Microsoft.EntityFrameworkCore;
 using SmeBackend.Authorization;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
 [ApiController]
 [Authorize]
 [Route("api/suppliers")]
+// Paid feature: the tenant's Unify plan decides whether this module is
+// available at all (Authorization/RequiresPlanAttribute.cs).
+[RequiresPlanFeature(PlanFeatures.InventoryPro)]
 public sealed class SuppliersController(
     AppDbContext db,
     IAuthorizationService authorizationService) : ControllerBase
