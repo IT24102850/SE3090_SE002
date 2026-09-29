@@ -653,6 +653,7 @@ export function PurchaseOrderManagerPage() {
   const { notify } = useToast();
   const token = getStoredToken();
   const { user } = useSelector((state: RootState) => state.auth);
+  const canManagePurchaseOrders = user?.role === 'Admin' || user?.role === 'Manager';
   const [searchParams] = useSearchParams();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [options, setOptions] = useState<PurchaseOrderOptionsResponse>({ branches: [], suppliers: [] });
@@ -691,7 +692,7 @@ export function PurchaseOrderManagerPage() {
       setOrders(loadedOrders);
       setOptions(referenceData);
       setSelectedId((current) => current && loadedOrders.some((order) => order.id === current) ? current : loadedOrders[0]?.id ?? null);
-      if (reorderItemId && referenceData.items?.some((item) => item.id === reorderItemId)) setShowCreate(true);
+      if (canManagePurchaseOrders && reorderItemId && referenceData.items?.some((item) => item.id === reorderItemId)) setShowCreate(true);
       if (!referenceData.branches.length || !referenceData.suppliers.length) {
         setLoadError('Orders loaded, but branches or suppliers are unavailable. Refresh the data or add the missing records before creating an order.');
       }
@@ -705,7 +706,7 @@ export function PurchaseOrderManagerPage() {
     } finally {
       if (isActive()) setLoading(false);
     }
-  }, [notify, reorderItemId, token]);
+  }, [canManagePurchaseOrders, notify, reorderItemId, token]);
 
   useEffect(() => {
     let active = true;
@@ -762,7 +763,7 @@ export function PurchaseOrderManagerPage() {
   }), [orders]);
 
   async function advanceStatus(order: PurchaseOrder) {
-    if (statusSavingId) return;
+    if (!canManagePurchaseOrders || statusSavingId) return;
     const next = nextStatus(order.status);
     if (!next) return;
 
@@ -790,7 +791,7 @@ export function PurchaseOrderManagerPage() {
   }
 
   async function cancelOrder(order: PurchaseOrder) {
-    if (statusSavingId || order.status === 'Received' || order.status === 'Cancelled') return;
+    if (!canManagePurchaseOrders || statusSavingId || order.status === 'Received' || order.status === 'Cancelled') return;
     const now = new Date().toISOString();
     const timelineEvent: TimelineEvent = { status: 'Cancelled', at: now, by: performer, note: 'Cancelled by user' };
     setOrders((prev) => prev.map((candidate) => (
@@ -820,6 +821,7 @@ export function PurchaseOrderManagerPage() {
     number: string;
     items: Array<{ inventoryItemId?: string; description?: string; quantity: number; unitPrice: number }>;
   }) {
+    if (!canManagePurchaseOrders) return;
     const supplier = options.suppliers.find((option) => option.id === draft.supplierId);
     const branch = options.branches.find((option) => option.id === draft.branchId);
     if (!supplier || !branch) {
@@ -887,7 +889,7 @@ export function PurchaseOrderManagerPage() {
         <div className="purchase-orders-hero-art" aria-hidden="true"><span className="purchase-orders-art-ring" /><span className="purchase-orders-art-icon">▤</span><i /><i /><i /></div>
         <div className="purchase-orders-hero-actions">
           <button className="btn purchase-orders-refresh" type="button" onClick={() => { void loadOrders().then((ok) => { if (ok) notify('Purchase order data refreshed.', 'success'); }); }} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh data'}</button>
-          <button className="btn purchase-orders-create" type="button" onClick={() => setShowCreate(true)} disabled={!options.branches.length || !options.suppliers.length}>＋ Create order</button>
+          {canManagePurchaseOrders && <button className="btn purchase-orders-create" type="button" onClick={() => setShowCreate(true)} disabled={!options.branches.length || !options.suppliers.length}>＋ Create order</button>}
         </div>
       </header>
 
@@ -1017,15 +1019,19 @@ export function PurchaseOrderManagerPage() {
                 </dl>
 
                 <div className="po-actions">
-                  {selected.status === 'InReview' ? (
+                  {selected.status === 'InReview' && !canManagePurchaseOrders ? (
                     <p className="cell-sub" role="status">
-                      Manager approval is available only in the mobile app. Web users cannot place orders awaiting review.
+                      Awaiting approval by a Manager or Admin.
                     </p>
-                  ) : nextStatus(selected.status) && (
+                  ) : canManagePurchaseOrders && nextStatus(selected.status) ? (
                     <button type="button" className="btn btn-primary" onClick={() => advanceStatus(selected)} disabled={statusSavingId !== null}>
-                      {statusSavingId === selected.id ? 'Saving…' : `Advance to ${statusLabels[nextStatus(selected.status)!]}`}
+                      {statusSavingId === selected.id
+                        ? 'Saving…'
+                        : selected.status === 'InReview'
+                          ? 'Approve & place order'
+                          : `Advance to ${statusLabels[nextStatus(selected.status)!]}`}
                     </button>
-                  )}
+                  ) : null}
                   <button
                     type="button"
                     className="btn btn-secondary"
@@ -1034,7 +1040,7 @@ export function PurchaseOrderManagerPage() {
                   >
                     🖨️ Print PO
                   </button>
-                  {selected.status !== 'Received' && selected.status !== 'Cancelled' && (
+                  {canManagePurchaseOrders && selected.status !== 'Received' && selected.status !== 'Cancelled' && (
                     <button type="button" className="btn btn-secondary" onClick={() => cancelOrder(selected)} disabled={statusSavingId !== null}>{statusSavingId === selected.id ? 'Saving…' : 'Cancel PO'}</button>
                   )}
                 </div>

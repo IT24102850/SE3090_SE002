@@ -311,8 +311,8 @@ public sealed class PurchaseOrdersController(
         }
 
         if (string.Equals(status, "Placed", StringComparison.Ordinal) &&
-            (!IsMobileApprovalClient() ||
-             (!User.IsInRole(UserRole.Admin.ToString()) && !User.IsInRole(UserRole.Manager.ToString()))))
+            !User.IsInRole(UserRole.Admin.ToString()) &&
+            !User.IsInRole(UserRole.Manager.ToString()))
         {
             return Forbid();
         }
@@ -506,13 +506,6 @@ public sealed class PurchaseOrdersController(
 
     private void AddStatusValidationError() =>
         ModelState.AddModelError("status", $"Status must be one of: {string.Join(", ", AllowedStatuses)}.");
-
-    private bool IsMobileApprovalClient() =>
-        string.Equals(
-            User.FindFirst(InventoryAccessHandler.ClientPlatformClaimType)?.Value,
-            "mobile",
-            StringComparison.Ordinal) &&
-        !Request.Headers.ContainsKey("Origin");
 
     private static bool IsAllowedStatusTransition(string current, string next)
     {

@@ -444,14 +444,16 @@ class _PurchaseOrderApprovalScreenState
   Widget build(BuildContext context) {
     return AppBackgroundScaffold(
       showParticles: false,
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.cyan,
-        foregroundColor: const Color(0xFF0A111E),
-        icon: const Icon(Icons.add_rounded, size: 20),
-        label: const Text('New PO',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-        onPressed: _showCreateOrderModal,
-      ),
+      floatingActionButton: widget.canApprove
+          ? FloatingActionButton.extended(
+              backgroundColor: AppColors.cyan,
+              foregroundColor: const Color(0xFF0A111E),
+              icon: const Icon(Icons.add_rounded, size: 20),
+              label: const Text('New PO',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+              onPressed: _showCreateOrderModal,
+            )
+          : null,
       appBar: GlassAppBar(
         title: 'Purchase Orders',
         actions: [
@@ -1274,44 +1276,7 @@ class _PurchaseOrderApprovalScreenState
   Widget _buildActionSection(_PurchaseOrder order) {
     final status = order.status;
 
-    // 1. IN REVIEW: Core Approval Flow
-    if (status == PurchaseOrderStatus.inReview) {
-      if (widget.canApprove) {
-        return Row(
-          children: [
-            Expanded(
-              child: GhostButton(
-                label: 'Reject',
-                icon: Icons.close_rounded,
-                color: const Color(0xFFF43F5E),
-                height: 44,
-                onPressed: order.approving ? null : () => _cancelOrder(order),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: 2,
-              child: NeonButton(
-                label: order.approving ? 'Authorizing...' : 'Approve & Place',
-                isLoading: order.approving,
-                icon: Icons.check_circle_rounded,
-                height: 44,
-                onPressed: order.approving
-                    ? null
-                    : () => _advanceOrderStatus(
-                          order,
-                          PurchaseOrderStatus.placed,
-                          confirmTitle: 'Approve Purchase Order?',
-                          confirmMessage:
-                              'Authorize order ${order.number} for LKR ${_formatCurrency(order.amount)}? This marks the PO as Placed.',
-                          confirmLabel: 'Approve & Place',
-                          confirmAccent: const Color(0xFF10B981),
-                        ),
-              ),
-            ),
-          ],
-        );
-      }
+    if (!widget.canApprove) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         alignment: Alignment.center,
@@ -1320,9 +1285,50 @@ class _PurchaseOrderApprovalScreenState
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          'Awaiting Manager or Admin authorization.',
+          status == PurchaseOrderStatus.inReview
+              ? 'Awaiting Manager or Admin authorization.'
+              : 'Read-only: purchase order updates require a Manager or Admin.',
+          textAlign: TextAlign.center,
           style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
         ),
+      );
+    }
+
+    // 1. IN REVIEW: Core Approval Flow
+    if (status == PurchaseOrderStatus.inReview) {
+      return Row(
+        children: [
+          Expanded(
+            child: GhostButton(
+              label: 'Reject',
+              icon: Icons.close_rounded,
+              color: const Color(0xFFF43F5E),
+              height: 44,
+              onPressed: order.approving ? null : () => _cancelOrder(order),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: NeonButton(
+              label: order.approving ? 'Authorizing...' : 'Approve & Place',
+              isLoading: order.approving,
+              icon: Icons.check_circle_rounded,
+              height: 44,
+              onPressed: order.approving
+                  ? null
+                  : () => _advanceOrderStatus(
+                        order,
+                        PurchaseOrderStatus.placed,
+                        confirmTitle: 'Approve Purchase Order?',
+                        confirmMessage:
+                            'Authorize order ${order.number} for LKR ${_formatCurrency(order.amount)}? This marks the PO as Placed.',
+                        confirmLabel: 'Approve & Place',
+                        confirmAccent: const Color(0xFF10B981),
+                      ),
+            ),
+          ),
+        ],
       );
     }
 
