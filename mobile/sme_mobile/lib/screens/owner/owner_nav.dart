@@ -26,6 +26,7 @@ import 'inventory/low_stock_alerts_screen.dart';
 import 'inventory/purchase_orders_screen.dart';
 import 'inventory/stock_movements_screen.dart';
 import 'inventory/suppliers_screen.dart';
+import 'inventory/stock_sense_ai_screen.dart';
 import 'owner_home_screen.dart';
 import 'reports/reports_screen.dart';
 import 'resources/branches_screen.dart';
@@ -216,6 +217,11 @@ const List<OwnerSection> ownerSections = [
         icon: Icons.inventory_2_outlined,
         roles: _staffUp,
         build: InventoryManagerScreen.new),
+    OwnerDestination(
+        label: 'StockSense AI',
+        icon: Icons.auto_awesome_outlined,
+        roles: _adminManager,
+        build: StockSenseAiScreen.new),
     OwnerDestination(
         label: 'Stock Movements',
         icon: Icons.swap_vert_outlined,
