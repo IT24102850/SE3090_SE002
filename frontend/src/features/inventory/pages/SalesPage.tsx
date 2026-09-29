@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../../../api/apiBaseUrl';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
@@ -130,6 +130,7 @@ export function SalesPage() {
   const [report, setReport] = useState<SalesReport | null>(null);
   const [selectedId, setSelectedId] = useState('');
   const [search, setSearch] = useState('');
+  const itemSearchRef = useRef<HTMLInputElement>(null);
   const [itemPickerOpen, setItemPickerOpen] = useState(false);
   const [activeItemOption, setActiveItemOption] = useState(0);
   const [amount, setAmount] = useState('1');
@@ -287,42 +288,65 @@ export function SalesPage() {
             }}
           >
             Search in-stock item
-            <input
-              role="combobox"
-              aria-label="Search in-stock item"
-              aria-autocomplete="list"
-              aria-expanded={itemPickerOpen && !loading && !saving}
-              aria-controls="sales-in-stock-item-options"
-              aria-activedescendant={itemPickerOpen && itemOptions[activeItemOption] ? `sales-item-option-${itemOptions[activeItemOption].id}` : undefined}
-              value={search}
-              onFocus={() => setItemPickerOpen(true)}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setSelectedId('');
-                setActiveItemOption(0);
-                setItemPickerOpen(true);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  setItemPickerOpen(false);
-                  return;
-                }
-                if (!itemPickerOpen || itemOptions.length === 0) return;
-                if (event.key === 'ArrowDown') {
-                  event.preventDefault();
-                  setActiveItemOption((current) => (current + 1) % itemOptions.length);
-                } else if (event.key === 'ArrowUp') {
-                  event.preventDefault();
-                  setActiveItemOption((current) => (current - 1 + itemOptions.length) % itemOptions.length);
-                } else if (event.key === 'Enter') {
-                  event.preventDefault();
-                  selectItem(itemOptions[activeItemOption]);
-                }
-              }}
-              placeholder="Search name, SKU, category or branch"
-              disabled={loading || saving}
-              autoComplete="off"
-            />
+            <div className="sales-item-search-control">
+              <input
+                ref={itemSearchRef}
+                role="combobox"
+                aria-label="Search in-stock item"
+                aria-autocomplete="list"
+                aria-expanded={itemPickerOpen && !loading && !saving}
+                aria-controls="sales-in-stock-item-options"
+                aria-activedescendant={itemPickerOpen && itemOptions[activeItemOption] ? `sales-item-option-${itemOptions[activeItemOption].id}` : undefined}
+                value={search}
+                onFocus={() => setItemPickerOpen(true)}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setSelectedId('');
+                  setActiveItemOption(0);
+                  setItemPickerOpen(true);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    setItemPickerOpen(false);
+                    return;
+                  }
+                  if (!itemPickerOpen || itemOptions.length === 0) return;
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    setActiveItemOption((current) => (current + 1) % itemOptions.length);
+                  } else if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    setActiveItemOption((current) => (current - 1 + itemOptions.length) % itemOptions.length);
+                  } else if (event.key === 'Enter') {
+                    event.preventDefault();
+                    selectItem(itemOptions[activeItemOption]);
+                  }
+                }}
+                placeholder="Search name, SKU, category or branch"
+                disabled={loading || saving}
+                autoComplete="off"
+              />
+              {search && (
+                <button
+                  type="button"
+                  className="sales-item-clear"
+                  aria-label="Clear selected item"
+                  title="Clear selected item"
+                  disabled={loading || saving}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    setSearch('');
+                    setSelectedId('');
+                    setAmount('1');
+                    setActiveItemOption(0);
+                    setItemPickerOpen(true);
+                    itemSearchRef.current?.focus();
+                  }}
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+              )}
+            </div>
             {itemPickerOpen && !loading && !saving && (
               <div id="sales-in-stock-item-options" className="sales-item-options" role="listbox" aria-label="Matching in-stock items">
                 {itemOptions.length > 0 ? itemOptions.map((item, index) => (
@@ -426,16 +450,16 @@ export function SalesPage() {
             <article className="sales-receipt-paper">
               <header className="sales-receipt-paper-header">
                 <div>
-                  <span className="sales-receipt-kicker">SALES RECEIPT</span>
+                  <span className="sales-receipt-kicker">UNIFY · SALES RECEIPT</span>
                   <h2 id="sales-receipt-title">Sale recorded</h2>
-                  <p>Inventory transaction receipt</p>
+                  <p>Official inventory sale record</p>
                 </div>
-                <span className="sales-receipt-status">PAID STATUS NOT RECORDED</span>
+                <span className="sales-receipt-status">SALE RECORDED</span>
               </header>
               <div className="sales-receipt-metadata">
                 <div><span>REFERENCE</span><strong>{receipt.reference}</strong></div>
                 <div><span>DATE &amp; TIME</span><strong>{receiptDate(receipt.occurredAt)}</strong></div>
-                <div><span>BRANCH</span><strong>{'branch' in receipt ? receipt.branch : 'Not included in the sales report'}</strong></div>
+                {'branch' in receipt && <div><span>BRANCH</span><strong>{receipt.branch}</strong></div>}
               </div>
               <div className={`sales-receipt-line-items${'itemName' in receipt ? ' has-unit-price' : ''}`}>
                 <div className="sales-receipt-line-head">
@@ -459,8 +483,8 @@ export function SalesPage() {
                 <p className="sales-receipt-low-stock">LOW STOCK | Remaining quantity is at or below the reorder level.</p>
               )}
               <footer className="sales-receipt-footer">
-                <p>This receipt confirms an inventory sale record only. It does not confirm that payment was collected.</p>
-                <span>Generated by SME Web</span>
+                <p>This receipt confirms that the inventory sale was recorded in Unify. Payment collection is not recorded by this receipt.</p>
+                <span>Generated by Unify</span>
               </footer>
             </article>
           </section>

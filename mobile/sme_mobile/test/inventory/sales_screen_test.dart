@@ -77,9 +77,11 @@ void main() {
     expect(find.textContaining('Sale recorded successfully'), findsOneWidget);
     expect(find.byKey(const Key('sale-receipt-dialog')), findsOneWidget);
     expect(find.text('SALE-20260929-000001'), findsOneWidget);
+    expect(find.text('UNIFY · SALES RECEIPT'), findsOneWidget);
+    expect(find.text('Sale recorded'), findsOneWidget);
     expect(find.text('TOTAL'), findsOneWidget);
     expect(
-      find.textContaining('Payment collection is not handled'),
+      find.textContaining('Payment collection is not recorded'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('sale-receipt-low-stock')), findsOneWidget);
