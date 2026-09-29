@@ -338,7 +338,12 @@ password lives only as a hash in the database and is rotated from
 Security → Change password.
 
 ## Getting Started
-See `/docs/` for setup instructions.
+See [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md) for the
+complete project overview, architecture, installation, environment variables,
+API, testing, deployment, accounts, contribution record, security notes, and
+AI usage declaration. Component-specific details remain in
+[`agentic-ai-service/README.md`](agentic-ai-service/README.md) and
+[`mobile/README.md`](mobile/README.md).
 
 ## Railway deployment
 
