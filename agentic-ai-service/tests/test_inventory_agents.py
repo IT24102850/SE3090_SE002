@@ -6,6 +6,7 @@ from agents.inventory_agents import (
     analyze_inventory_domain,
     recommend_replenishment,
 )
+from tools.inventory_tools import InventoryToolsClient
 
 
 def _item(*, quantity: float, reorder: float = 10) -> dict:
@@ -95,3 +96,43 @@ def test_domain_analyst_uses_authorized_api_snapshots_without_rewriting_them():
 
     assert result.items[0]["quantity"] == 4
     assert result.movements[0]["quantity"] == -1
+
+
+def test_stock_movement_tool_reads_paginated_inventory_api_response():
+    movement = _movement("Issue", -1)
+    client = InventoryToolsClient("https://example.test", "test-token")
+    client._get = lambda path, params: {
+        "items": [movement],
+        "page": 1,
+        "pageSize": 100,
+        "totalCount": 1,
+        "totalPages": 1,
+    }
+    try:
+        assert client.query_stock_movements() == [movement]
+    finally:
+        client.close()
+
+
+def test_stock_movement_tool_still_accepts_legacy_list_response():
+    movement = _movement("Issue", -1)
+    client = InventoryToolsClient("https://example.test", "test-token")
+    client._get = lambda path, params: [movement]
+    try:
+        assert client.query_stock_movements() == [movement]
+    finally:
+        client.close()
+
+
+def test_stock_movement_tool_rejects_unrecognized_response():
+    client = InventoryToolsClient("https://example.test", "test-token")
+    client._get = lambda path, params: {"movements": []}
+    try:
+        try:
+            client.query_stock_movements()
+        except ValueError as error:
+            assert str(error) == "Inventory API returned an invalid stock movement list."
+        else:
+            raise AssertionError("Expected invalid stock movement response to fail.")
+    finally:
+        client.close()
