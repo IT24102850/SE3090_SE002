@@ -1,11 +1,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Every screen in this app talks to the API, so without this a release
+         build is a shell: Flutter injects INTERNET into the debug and profile
+         manifests only, which is why it works under `flutter run` and fails
+         the moment you install a real APK. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <!-- FR-B7: camera access for the staff QR check-in scanner -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="Unify"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
             android:exported="true"
