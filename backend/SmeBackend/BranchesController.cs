@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.Models;
 using SmeBackend.Shared;
+using SmeBackend.Authorization;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
@@ -15,7 +17,13 @@ namespace SmeBackend.Controllers;
 public class BranchesController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public BranchesController(AppDbContext db) => _db = db;
+    private readonly IEntitlementService _entitlements;
+
+    public BranchesController(AppDbContext db, IEntitlementService entitlements)
+    {
+        _db = db;
+        _entitlements = entitlements;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] Guid tenantId)
@@ -31,8 +39,15 @@ public class BranchesController : ControllerBase
 
     [HttpPost]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<IActionResult> Create([FromBody] CreateBranchDto dto)
+    public async Task<IActionResult> Create([FromBody] CreateBranchDto dto, CancellationToken ct)
     {
+        // How many branches a business may run is a plan limit, and the
+        // count that matters is the live one - a branch that was closed
+        // gives its slot back.
+        var live = await _db.Branches.CountAsync(b => b.TenantId == dto.TenantId && b.IsActive, ct);
+        if (await _entitlements.CheckCapAsync(dto.TenantId, EntitlementService.CapBranches, live, ct) is { } paywall)
+            return PlanGate.PaymentRequired(paywall);
+
         var branch = new Branch
         {
             TenantId = dto.TenantId,
@@ -43,7 +58,8 @@ public class BranchesController : ControllerBase
         };
 
         _db.Branches.Add(branch);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(ct);
+        _entitlements.Invalidate(dto.TenantId);
         return Ok(branch);
     }
 
