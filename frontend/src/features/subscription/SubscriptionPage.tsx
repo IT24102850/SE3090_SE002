@@ -8,6 +8,10 @@ import { errorMessage } from '../billing/billingApi';
 import { money, date, dateTime } from '../billing/format';
 import { useAsync } from '../billing/useAsync';
 import { PlanLadder } from './PlanCards';
+// The bl-* utilities (tabs, notices, tables, badges, totals) live with the
+// billing feature but are the shared surface layer these screens are built
+// on. Without this import the route ships with no styles at all.
+import '../billing/billing.css';
 import {
   CREDIT_LABELS,
   limitLabel,
@@ -360,10 +364,12 @@ export default function SubscriptionPage() {
               Plans
             </button>
             <button role="tab" aria-selected={tab === 'addons'} className="bl-tab" onClick={() => setTab('addons')}>
-              Add-ons<span className="bl-tab-count">{cat?.addOns.length ?? 0}</span>
+              Add-ons
+              {cat?.addOns.length ? <span className="sub-tab-count">{cat.addOns.length}</span> : null}
             </button>
             <button role="tab" aria-selected={tab === 'invoices'} className="bl-tab" onClick={() => setTab('invoices')}>
-              Invoices<span className="bl-tab-count">{invoices.data?.length ?? 0}</span>
+              Invoices
+              {invoices.data?.length ? <span className="sub-tab-count">{invoices.data.length}</span> : null}
             </button>
           </div>
 

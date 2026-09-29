@@ -13,8 +13,8 @@ public sealed record PlanPriceResponse(
     decimal MonthlyEquivalent,
     int SavingsPercent,
     bool IsBestValue,
-    /// What the same term would cost at the monthly rate - the anchor the
-    /// saving is measured against, shown struck through on the card.
+    // What the same term would cost at the monthly rate - the anchor the
+    // saving is measured against, shown struck through on the card.
     decimal ComparedAtAmount);
 
 public sealed record PlanResponse(
@@ -47,7 +47,7 @@ public sealed record AddOnResponse(
     int ExpiryDays,
     decimal Amount,
     string Currency,
-    /// The same quantity bought one at a time, for the struck-through price.
+    // The same quantity bought one at a time, for the struck-through price.
     decimal ComparedAtAmount,
     int SavingsPercent,
     bool IsBestValue,
@@ -59,7 +59,7 @@ public sealed record PricingCatalogResponse(
     IReadOnlyList<string> Currencies,
     IReadOnlyList<PlanResponse> Plans,
     IReadOnlyList<AddOnResponse> AddOns,
-    /// The best offer this caller can take without typing a code.
+    // The best offer this caller can take without typing a code.
     PromotionResponse? FeaturedOffer);
 
 public sealed record PromotionResponse(
@@ -206,7 +206,7 @@ public sealed record PlatformCheckoutResponse(
     string? SettlementCurrency,
     decimal? SettlementAmount,
     decimal? ExchangeRate,
-    /// Set when the plan change needed no payment at all (a free plan, a
-    /// comped account, a promotion that covered the whole term): the
-    /// subscription is already live and there is nothing to redirect to.
+    // Set when the plan change needed no payment at all (a free plan, a
+    // comped account, a promotion that covered the whole term): the
+    // subscription is already live and there is nothing to redirect to.
     bool Completed);

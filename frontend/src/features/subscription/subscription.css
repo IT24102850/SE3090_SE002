@@ -38,6 +38,31 @@
   color: var(--color-good);
 }
 
+/* ── Tab counts ───────────────────────────────────────────────────────── */
+/* A bare number beside a tab label reads as part of the word - "Add-ons11".
+   A pill separates it and gives it a job. */
+.sub-tab-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px; margin-left: 8px;
+  border-radius: 999px;
+  background: var(--color-surface-muted); color: var(--color-text-secondary);
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.bl-tab[aria-selected='true'] .sub-tab-count {
+  background: var(--color-primary-soft); color: var(--color-primary);
+}
+
+/* The tab strip itself comes from billing.css, which these screens import.
+   If that import is ever dropped, these keep the row looking like tabs
+   rather than a line of default browser buttons - which is exactly how it
+   failed the first time. */
+.sub-page .bl-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.sub-page .bl-tab {
+  display: inline-flex; align-items: center;
+  background: none; border: none; cursor: pointer;
+}
+
 /* ── Plan cards ───────────────────────────────────────────────────────── */
 .sub-plans {
   display: grid; gap: 16px; align-items: start;

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -6,6 +9,7 @@ import '../../../models/billing_models.dart' show formatMoney;
 import '../../../models/unify_plan_models.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/unify_plan_providers.dart';
+import '../../../services/api_service.dart';
 import '../../../services/unify_plan_repository.dart';
 import '../../../shared/date_format.dart';
 import '../../../theme/app_colors.dart';
@@ -26,11 +30,42 @@ class UnifyPlanScreen extends ConsumerStatefulWidget {
   ConsumerState<UnifyPlanScreen> createState() => _UnifyPlanScreenState();
 }
 
-class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
+class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen>
+    with WidgetsBindingObserver {
   /// Annual first: it is the best-value rung, so anchoring on it makes the
   /// monthly price read as what flexibility costs rather than as the default.
   String _period = 'Annual';
   bool _busy = false;
+
+  /// A checkout that went out to the system browser and has not been
+  /// resolved yet. The card form runs outside the app, so nothing here knows
+  /// the outcome until we ask the server, which asks the gateway.
+  String? _pendingPaymentId;
+
+  /// Where the gateway sends the customer back to. A phone has nowhere of
+  /// its own to land without app-link registration, so it lands on a plain
+  /// page the API serves and then comes back to the app by hand.
+  String get _returnUrl => '${ApiService.origin}/payment-complete';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Coming back from the browser is the signal that a payment may have
+    // finished. Without this the payment sits Pending for ever on a phone:
+    // there is no redirect back into the app to trigger the check.
+    if (state == AppLifecycleState.resumed) unawaited(_confirmPending());
+  }
 
   bool get _isAdmin => ref.read(authProvider).user?.role == 'Admin';
 
@@ -67,7 +102,10 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
         data: (sub) => RefreshIndicator(
           color: AppColors.cyan,
           backgroundColor: AppColors.overlaySurface,
-          onRefresh: () async => _refresh(),
+          onRefresh: () async {
+            await _confirmPending();
+            _refresh();
+          },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
             children: [
@@ -183,6 +221,16 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
   List<Widget> _banners(UnifySubscription sub) {
     final banners = <Widget>[];
 
+    // A checkout is still out in the browser. The resume hook usually closes
+    // this out on its own, but a lifecycle callback is not something to bet a
+    // payment on - so there is always a button.
+    if (_pendingPaymentId != null) {
+      banners.add(_PendingNotice(
+        busy: _busy,
+        onCheck: () => unawaited(_confirmPending()),
+      ));
+    }
+
     if (sub.isPastDue) {
       banners.add(_Notice(
         tone: AppColors.warning,
@@ -254,6 +302,7 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
             period: _period,
             currency: currency,
             promotionCode: quote.promotionCode,
+            returnUrl: _returnUrl,
           );
       await _settle(checkout);
     } catch (error) {
@@ -280,8 +329,9 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
   Future<void> _payInvoice(UnifyInvoice invoice) async {
     setState(() => _busy = true);
     try {
-      final checkout =
-          await ref.read(unifyPlanRepositoryProvider).payInvoice(invoice.id);
+      final checkout = await ref
+          .read(unifyPlanRepositoryProvider)
+          .payInvoice(invoice.id, returnUrl: _returnUrl);
       await _settle(checkout);
     } catch (error) {
       _handleError(error, 'That invoice could not be paid.');
@@ -292,11 +342,11 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
 
   /// The one place a checkout ends up, whichever button started it.
   ///
-  /// A real gateway hands back a hosted page, which opens in the browser; the
-  /// plan only changes once the provider tells the server it was paid, so
-  /// coming back here we ask the server rather than assuming. The sandbox has
-  /// no page, so it is confirmed directly — which is what makes the whole
-  /// flow demonstrable without live credentials.
+  /// A real gateway hands back a hosted page, which opens in the system
+  /// browser. The plan only changes once the provider tells the server it
+  /// was paid, so on the way back we ask rather than assume. The sandbox has
+  /// no page to send anybody to, so it is confirmed inline - which is what
+  /// makes the whole flow demonstrable without live credentials.
   Future<void> _settle(PlanCheckout checkout) async {
     if (checkout.completed) {
       _say('Your plan is live.');
@@ -305,13 +355,19 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
     }
 
     if (checkout.redirectUrl != null && checkout.provider != 'Manual') {
+      // Remember it *before* leaving: once the browser is open this screen
+      // may be disposed and rebuilt, and the id is the only handle we have
+      // on a payment that is now happening somewhere else.
+      _pendingPaymentId = checkout.paymentId;
+
       final opened = await launchUrl(Uri.parse(checkout.redirectUrl!),
           mode: LaunchMode.externalApplication);
       if (!opened) {
+        _pendingPaymentId = null;
         _say('Could not open the payment page.', bad: true);
         return;
       }
-      _say('Finish the payment in your browser, then pull down to refresh.');
+      _say('Finish the payment in your browser, then come back here.');
       return;
     }
 
@@ -326,6 +382,41 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
           bad: true);
     }
     _refresh();
+  }
+
+  /// Asks the server what became of a checkout that finished in the browser.
+  ///
+  /// Run when the app comes back to the foreground and on pull-to-refresh.
+  /// The server reads the outcome back from the gateway; a still-pending
+  /// answer is left alone so a slow bank does not look like a failure, and
+  /// the next resume asks again.
+  Future<void> _confirmPending() async {
+    final paymentId = _pendingPaymentId;
+    if (paymentId == null || _busy) return;
+
+    setState(() => _busy = true);
+    try {
+      final invoice =
+          await ref.read(unifyPlanRepositoryProvider).confirm(paymentId);
+      switch (invoice.status) {
+        case 'Paid':
+          _pendingPaymentId = null;
+          _say('Payment received — ${invoice.number} settled.');
+        case 'Failed':
+          _pendingPaymentId = null;
+          _say(
+              'That payment did not go through. Nothing has changed on your plan.',
+              bad: true);
+        default:
+          // Still with the bank. Keep the id so the next resume re-checks.
+          _say('Your payment is still being processed.');
+      }
+      _refresh();
+    } catch (error) {
+      _handleError(error, 'We could not check that payment.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _startTrial(UnifySubscription sub) async {
@@ -411,20 +502,19 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
   }
 }
 
+/// The server's own message where there is one - the same rule
+/// `billingErrorMessage` follows, kept here so this screen does not drag in
+/// the whole billing repository for one function.
 String planErrorMessage(Object error, String fallback) {
-  final data = error is Exception ? null : null;
-  // Reuse the billing helper's shape without importing its whole file: the
-  // server's own message is the most useful thing we can show.
-  if (error.toString().isEmpty || data != null) return fallback;
-  final dynamic e = error;
-  try {
-    final response = e.response;
-    final body = response?.data;
+  if (error is DioException) {
+    final body = error.response?.data;
     if (body is Map && body['message'] is String) {
       return body['message'] as String;
     }
-  } catch (_) {
-    // Not a DioException; fall through.
+    if (error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout) {
+      return 'Could not reach the server. Check your connection.';
+    }
   }
   return fallback;
 }
@@ -453,6 +543,36 @@ class _Pill extends StatelessWidget {
         ),
         child: Text(label,
             style: AppTextStyles.caption.copyWith(color: AppColors.textBody)),
+      );
+}
+
+class _PendingNotice extends StatelessWidget {
+  final bool busy;
+  final VoidCallback onCheck;
+  const _PendingNotice({required this.busy, required this.onCheck});
+
+  @override
+  Widget build(BuildContext context) => GlassCard(
+        borderColor: AppColors.cyan,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Waiting for your payment',
+                style: AppTextStyles.subtitle.copyWith(color: AppColors.cyan)),
+            const SizedBox(height: 6),
+            Text(
+              'Finish it in the browser tab that opened. Once you are back here we check with '
+              'your bank automatically - or check now.',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textBody),
+            ),
+            const SizedBox(height: 12),
+            GhostButton(
+              label: 'Check payment status',
+              onPressed: busy ? null : onCheck,
+              height: 42,
+            ),
+          ],
+        ),
       );
 }
 

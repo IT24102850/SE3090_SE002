@@ -337,6 +337,50 @@ The owner is seeded on startup in every environment, once. After that the
 password lives only as a hash in the database and is rotated from
 Security → Change password.
 
+## Unify subscriptions (what a tenant pays us)
+
+A tenant admin has to hold a Unify subscription to get the platform. The price
+list, the payment gateways behind it, the gate that decides what a plan allows
+and the owner's revenue console are all described in
+[`docs/unify-subscription-pricing.md`](docs/unify-subscription-pricing.md).
+
+Not to be confused with `/subscriptions`, which is the memberships a tenant
+sells to *its own* customers (`Models/Subscription.cs`). Two different
+ledgers; they never share a table or a gateway credential.
+
+The ladder follows Tinder's playbook, because it is the best-documented
+consumer subscription funnel there is and most of it translates:
+
+| Plan | Monthly (LKR) | 12 months | Hook |
+|---|---|---|---|
+| **Starter** | Free forever | — | 1 branch, 2 team members, 60 bookings/month, a public listing. Capped, not crippled. |
+| **Grow** | 5,900 | 38,940 (−45%) | Unlimited bookings, card payments, SMS, the website widget |
+| **Pro** ★ | 14,900 | 98,340 (−45%) | The AI copilots and demand analytics — the "See Who Likes You" rung. 14-day free trial. |
+| **Prime** | 34,900 | 230,340 (−45%) | No ceilings, API access, 4-hour support |
+
+Plus consumables sold in packs where the bigger pack always wins on unit
+price — **Spotlight** (24 h at the top of the directory, on sale to free
+tenants too), AI credits, message credits and extra seats — and a 50% intro
+offer on a first term. USD pricing runs alongside LKR from the same catalogue.
+
+What Tinder's playbook is deliberately missing here: its age-tiered pricing,
+which produced a California class action and an ACCC finding. Offers here are
+earned by what a business *does* (never paid before, lapsed, anniversary), and
+no demographic value is an input to any price the system quotes.
+
+- Price list in code, synced every boot: `backend/SmeBackend/Data/PlatformPlanCatalog.cs`
+- The gate: `[RequiresPlanFeature]` / `[MetersPlanQuota]` answer **402** with
+  the exact limit hit and the cheapest plan that clears it; the apps render
+  that as a paywall over whatever the user was doing
+- Payments reuse the billing engine's Stripe/PayPal processors with
+  platform-level credentials from configuration (`Platform:Billing:*`); with
+  nothing configured the sandbox runs the whole flow and says so
+- Screens: `/pricing` (public), `/subscription` (tenant admin),
+  `/platform/revenue` (owner), and *Business → Your Unify Plan* in the Flutter app
+- A business that stops paying loses the paid features and keeps every row of
+  its data — a failed renewal opens a 14-day grace window, and cancelling
+  keeps every day already bought
+
 ## Getting Started
 See [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md) for the
 complete project overview, architecture, installation, environment variables,

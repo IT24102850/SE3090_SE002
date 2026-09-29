@@ -7,6 +7,7 @@ import { useAsync } from '../billing/useAsync';
 import { PlanLadder } from './PlanCards';
 import { subscriptionApi, type AddOn } from './subscriptionApi';
 import '../marketing/landing.css';
+import '../billing/billing.css';
 import './subscription.css';
 
 /* The public price list.

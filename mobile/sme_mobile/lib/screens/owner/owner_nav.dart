@@ -19,6 +19,7 @@ import 'billing/invoices_screen.dart';
 import 'billing/payment_gateways_screen.dart';
 import 'billing/subscription_manager_screen.dart';
 import 'business/business_settings_screen.dart';
+import 'business/unify_plan_screen.dart';
 import 'inventory/branch_overview_screen.dart';
 import 'inventory/inventory_analytics_screen.dart';
 import 'inventory/inventory_manager_screen.dart';
@@ -276,6 +277,13 @@ const List<OwnerSection> ownerSections = [
         icon: Icons.settings_outlined,
         roles: _admin,
         build: BusinessSettingsScreen.new),
+    // What this business pays Unify. Distinct from Billing > Subscriptions,
+    // which is the memberships this business sells to its own customers.
+    OwnerDestination(
+        label: 'Your Unify Plan',
+        icon: Icons.auto_awesome_outlined,
+        roles: _adminManager,
+        build: UnifyPlanScreen.new),
   ]),
 ];
 

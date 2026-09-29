@@ -29,6 +29,7 @@ public static class PlatformAddOnCatalog
     private sealed record AddOnSpec(
         string CreditType,
         string Category,
+        // Takes the quantity and a plural suffix: "{0} Spotlight{1}".
         string NameFormat,
         string Tagline,
         decimal UnitLkr,
@@ -41,28 +42,28 @@ public static class PlatformAddOnCatalog
     {
         new(
             PlatformCreditTypes.Spotlight, "Visibility",
-            "{0} Spotlight",
+            "{0} Spotlight{1}",
             "24 hours at the top of the Unify directory for your business.",
             1900m, 5.99m, ExpiryDays: 365, MinimumTier: 0,
             new[] { (1, 0m), (5, 0.28m), (10, 0.38m) }),
 
         new(
             PlatformCreditTypes.AiRun, "AI",
-            "{0} AI credits",
+            "{0} AI credit{1}",
             "Extra copilot runs once your plan allowance is spent.",
             29m, 0.09m, ExpiryDays: 365, MinimumTier: 1,
             new[] { (100, 0m), (500, 0.25m), (2000, 0.40m) }),
 
         new(
             PlatformCreditTypes.Sms, "Messaging",
-            "{0} message credits",
+            "{0} message credit{1}",
             "SMS and WhatsApp reminders beyond your plan allowance.",
             5m, 0.02m, ExpiryDays: 365, MinimumTier: 1,
             new[] { (500, 0m), (2000, 0.20m), (10000, 0.35m) }),
 
         new(
             PlatformCreditTypes.Seat, "Seats",
-            "{0} extra team seat",
+            "{0} extra team seat{1}",
             "One more person on your team, charged once and kept for as long as your plan stays active.",
             1200m, 3.99m, ExpiryDays: 0, MinimumTier: 1,
             new[] { (1, 0m), (5, 0.15m) }),
@@ -104,7 +105,9 @@ public static class PlatformAddOnCatalog
                     existing.Add(addOn);
                 }
 
-                addOn.Name = string.Format(spec.NameFormat, quantity == 1 ? "1" : quantity.ToString("N0"));
+                addOn.Name = string.Format(spec.NameFormat,
+                    quantity == 1 ? "1" : quantity.ToString("N0"),
+                    quantity == 1 ? "" : "s");
                 addOn.Tagline = spec.Tagline;
                 addOn.CreditType = spec.CreditType;
                 addOn.Quantity = quantity;

@@ -429,6 +429,9 @@ public sealed class PlatformSubscriptionService : IPlatformSubscriptionService
         var subscription = await _entitlements.EnsureSubscriptionAsync(tenantId, ct);
         var now = DateTime.UtcNow;
         var from = subscription.PlanCode;
+        // Read off the row before it is rewritten - the tier the tenant is
+        // actually on, rather than one inferred from a plan code.
+        var fromTier = subscription.Tier;
         var wasTrialing = subscription.Status == PlatformSubscriptionStatuses.Trialing;
 
         var price = plan.Prices.FirstOrDefault(p => p.IsActive && p.Currency == currency && p.Period == period);
@@ -458,9 +461,14 @@ public sealed class PlatformSubscriptionService : IPlatformSubscriptionService
         subscription.StartedAt ??= now;
         subscription.UpdatedAt = now;
 
+        // The event names are what the owner console's funnel is counted
+        // from, so they have to be exactly right: a downgrade recorded as an
+        // upgrade would flatter the revenue chart.
         var eventType = wasTrialing ? "trial.convert"
             : from == plan.Code ? "renew"
-            : plan.Tier > TierOf(from) ? "upgrade"
+            : fromTier == 0 ? "subscribe"
+            : plan.Tier > fromTier ? "upgrade"
+            : plan.Tier < fromTier ? "downgrade"
             : "subscribe";
 
         _db.PlatformSubscriptionEvents.Add(new PlatformSubscriptionEvent
@@ -487,14 +495,6 @@ public sealed class PlatformSubscriptionService : IPlatformSubscriptionService
 
         return await GetSubscriptionAsync(tenantId, ct);
     }
-
-    private static int TierOf(string planCode) => planCode switch
-    {
-        PlatformPlanCodes.Grow => 1,
-        PlatformPlanCodes.Pro => 2,
-        PlatformPlanCodes.Prime => 3,
-        _ => 0,
-    };
 
     /// The Spotlights a paid plan includes. Handed out at the start of every
     /// term and expiring with it, so they are a reason to come back this
