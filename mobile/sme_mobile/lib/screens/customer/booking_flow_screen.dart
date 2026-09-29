@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../models/available_slot_model.dart';
 import '../../models/booking_type_model.dart';
 import '../../models/public_tenant_model.dart';
@@ -11,6 +12,7 @@ import '../../models/tourism_subtype.dart';
 import '../../providers/api_service_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/booking_providers.dart';
+import '../../providers/tenant_profile_provider.dart';
 import '../../registry/tourism_dashboard_registry.dart';
 import '../../shared/color_utils.dart';
 import '../../shared/date_format.dart';
@@ -84,6 +86,16 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
       widget.subType == null ? const [] : TourismDashboardRegistry.configFor(widget.subType!).bookingFormFields;
 
   bool get _hasExtraStep => _extraFields.isNotEmpty;
+
+  Future<String> _uploadBookingImage(XFile file) async {
+    final uploaded = await uploadTenantMedia(
+      ref.read(apiServiceProvider),
+      bytes: await file.readAsBytes(),
+      fileName: file.name,
+      purpose: 'booking',
+    );
+    return uploaded.url;
+  }
 
   // Step after date/time is always index 2, whether that's the extra-fields
   // step (when the sub-type has any) or confirm directly (when it doesn't).
@@ -267,6 +279,7 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
                                 fields: _extraFields,
                                 accent: _accent,
                                 values: _extraFieldValues,
+                                onUpload: _uploadBookingImage,
                                 onChanged: (key, value) => setState(() => _extraFieldValues[key] = value),
                                 onContinue: () => setState(() => _step = _confirmStepIndex),
                               )
@@ -696,6 +709,7 @@ class _ExtraFieldsStep extends StatelessWidget {
   final Color accent;
   final Map<String, dynamic> values;
   final void Function(String key, dynamic value) onChanged;
+  final Future<String> Function(XFile file) onUpload;
   final VoidCallback onContinue;
 
   const _ExtraFieldsStep({
@@ -704,6 +718,7 @@ class _ExtraFieldsStep extends StatelessWidget {
     required this.accent,
     required this.values,
     required this.onChanged,
+    required this.onUpload,
     required this.onContinue,
   });
 
@@ -720,6 +735,7 @@ class _ExtraFieldsStep extends StatelessWidget {
                 field: f,
                 value: values[f.key],
                 onChanged: (v) => onChanged(f.key, v),
+                onUpload: onUpload,
               ),
             )),
         const SizedBox(height: 8),
