@@ -228,11 +228,20 @@ public static class PlatformPlanCatalog
 
             foreach (var currency in Currencies)
             {
-                var monthly = currency == "USD" ? spec.MonthlyUsd : spec.MonthlyLkr;
+                // Charm the monthly anchor once, then derive the longer terms
+                // from it exactly. Charm-rounding each term separately moved
+                // the price enough that a 30% discount printed as a 30% badge
+                // while only delivering 29.7% - small, but it is a number on a
+                // pricing page, and a customer who does the arithmetic should
+                // find it holds. This way "6 x 4,130" is literally the price.
+                var monthly = Charm(currency == "USD" ? spec.MonthlyUsd : spec.MonthlyLkr, currency);
+
                 foreach (var (period, discount, bestValue) in Terms)
                 {
                     var months = BillingPeriods.Months(period);
-                    var amount = Charm(monthly * months * (1 - discount), currency);
+                    var amount = period == BillingPeriods.Monthly
+                        ? monthly
+                        : Math.Round(monthly * months * (1 - discount), 2, MidpointRounding.AwayFromZero);
                     var perMonth = Math.Round(amount / months, 2, MidpointRounding.AwayFromZero);
                     var savings = monthly <= 0 ? 0 : (int)Math.Round((1 - perMonth / monthly) * 100, MidpointRounding.AwayFromZero);
 
@@ -270,9 +279,10 @@ public static class PlatformPlanCatalog
         }
     }
 
-    /// Prices that read as prices. LKR lands on a round hundred, nudged onto
-    /// a x900 ending when that is within 5% of the computed figure; USD
-    /// lands on .99, the way Tinder quotes every one of its own.
+    /// Prices that read as prices, applied to the monthly anchor only. LKR
+    /// lands on a round hundred, nudged onto a x900 ending when that is
+    /// within 5% of the computed figure; USD lands on .99, the way Tinder
+    /// quotes every one of its own.
     public static decimal Charm(decimal raw, string currency)
     {
         if (raw <= 0) return 0m;
