@@ -52,7 +52,8 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
   Widget build(BuildContext context) {
     final subscriptionAsync = ref.watch(unifySubscriptionProvider);
     final catalogAsync = ref.watch(pricingCatalogProvider);
-    final invoices = ref.watch(unifyInvoicesProvider).valueOrNull ?? const <UnifyInvoice>[];
+    final invoices =
+        ref.watch(unifyInvoicesProvider).valueOrNull ?? const <UnifyInvoice>[];
 
     return OwnerScaffold(
       title: 'Your Unify plan',
@@ -80,7 +81,6 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
                 onCancel: () => _cancel(sub),
               ),
               const SizedBox(height: 18),
-
               if (sub.usage.isNotEmpty) ...[
                 const SectionHeader('This month'),
                 for (final meter in sub.usage) ...[
@@ -89,7 +89,6 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
                 ],
                 const SizedBox(height: 8),
               ],
-
               if (sub.credits.isNotEmpty || sub.extraSeats > 0) ...[
                 const SectionHeader('Credits in hand'),
                 Wrap(
@@ -98,12 +97,12 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
                   children: [
                     for (final entry in sub.credits.entries)
                       _Pill('${entry.value} ${_creditLabel(entry.key)}'),
-                    if (sub.extraSeats > 0) _Pill('+${sub.extraSeats} extra seats'),
+                    if (sub.extraSeats > 0)
+                      _Pill('+${sub.extraSeats} extra seats'),
                   ],
                 ),
                 const SizedBox(height: 18),
               ],
-
               catalogAsync.when(
                 loading: () => const AppLoader(),
                 error: (error, _) => ErrorState(
@@ -139,14 +138,16 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
                     if (!_isAdmin)
                       Text(
                         'Only an Admin can change the plan.',
-                        style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+                        style: AppTextStyles.caption
+                            .copyWith(color: AppColors.textMuted),
                       ),
                     const SizedBox(height: 18),
                     const SectionHeader('Add-ons'),
                     Text(
                       'Bought once, used whenever. The bigger pack is always the better unit price, and pack credits '
                       'are only spent after your monthly allowance runs out.',
-                      style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.textMuted),
                     ),
                     const SizedBox(height: 12),
                     for (final addOn in catalog.addOns) ...[
@@ -160,7 +161,6 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
                   ],
                 ),
               ),
-
               if (invoices.isNotEmpty) ...[
                 const SizedBox(height: 18),
                 const SectionHeader('Unify invoices'),
@@ -196,32 +196,38 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
       banners.add(_Notice(
         tone: AppColors.success,
         title: 'You are trialling ${sub.planName}',
-        body: 'Until ${formatDayMonth(sub.trialEndsAt!)}. No card was taken, so nothing will be charged when it ends.',
+        body:
+            'Until ${formatDayMonth(sub.trialEndsAt!)}. No card was taken, so nothing will be charged when it ends.',
       ));
     }
     if (sub.cancelAtPeriodEnd && sub.currentPeriodEnd != null) {
       banners.add(_Notice(
         tone: AppColors.warning,
         title: 'This plan ends on ${formatDayMonth(sub.currentPeriodEnd!)}',
-        body: 'Until then nothing changes. You can undo the cancellation at any time.',
+        body:
+            'Until then nothing changes. You can undo the cancellation at any time.',
       ));
     }
     if (sub.status == 'Expired' && sub.isFree) {
-      banners.add(_Notice(
+      banners.add(const _Notice(
         tone: AppColors.textMuted,
         title: 'You are back on Starter',
-        body: 'Your paid plan has ended. All your data is still here — resubscribe and everything switches back on.',
+        body:
+            'Your paid plan has ended. All your data is still here — resubscribe and everything switches back on.',
       ));
     }
 
     return banners.isEmpty
         ? const []
-        : [...banners.expand((b) => [b, const SizedBox(height: 12)])];
+        : [
+            ...banners.expand((b) => [b, const SizedBox(height: 12)])
+          ];
   }
 
   // ── Actions ───────────────────────────────────────────────────────────
 
-  Future<void> _choose(UnifyPlan plan, UnifySubscription sub, String currency) async {
+  Future<void> _choose(
+      UnifyPlan plan, UnifySubscription sub, String currency) async {
     if (plan.isFree) {
       await _cancel(sub);
       return;
@@ -274,7 +280,8 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
   Future<void> _payInvoice(UnifyInvoice invoice) async {
     setState(() => _busy = true);
     try {
-      final checkout = await ref.read(unifyPlanRepositoryProvider).payInvoice(invoice.id);
+      final checkout =
+          await ref.read(unifyPlanRepositoryProvider).payInvoice(invoice.id);
       await _settle(checkout);
     } catch (error) {
       _handleError(error, 'That invoice could not be paid.');
@@ -298,7 +305,8 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
     }
 
     if (checkout.redirectUrl != null && checkout.provider != 'Manual') {
-      final opened = await launchUrl(Uri.parse(checkout.redirectUrl!), mode: LaunchMode.externalApplication);
+      final opened = await launchUrl(Uri.parse(checkout.redirectUrl!),
+          mode: LaunchMode.externalApplication);
       if (!opened) {
         _say('Could not open the payment page.', bad: true);
         return;
@@ -307,13 +315,15 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
       return;
     }
 
-    final invoice = await ref.read(unifyPlanRepositoryProvider).confirm(checkout.paymentId);
+    final invoice =
+        await ref.read(unifyPlanRepositoryProvider).confirm(checkout.paymentId);
     if (invoice.status == 'Paid') {
       _say(checkout.simulated
           ? 'Sandbox payment accepted — ${invoice.number} settled. No real money moved.'
           : 'Payment received — ${invoice.number} settled.');
     } else {
-      _say('That payment did not settle. Nothing has changed on your plan.', bad: true);
+      _say('That payment did not settle. Nothing has changed on your plan.',
+          bad: true);
     }
     _refresh();
   }
@@ -371,7 +381,8 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text('Cancel plan', style: TextStyle(color: AppColors.error)),
+            child: const Text('Cancel plan',
+                style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -409,7 +420,9 @@ String planErrorMessage(Object error, String fallback) {
   try {
     final response = e.response;
     final body = response?.data;
-    if (body is Map && body['message'] is String) return body['message'] as String;
+    if (body is Map && body['message'] is String) {
+      return body['message'] as String;
+    }
   } catch (_) {
     // Not a DioException; fall through.
   }
@@ -438,7 +451,8 @@ class _Pill extends StatelessWidget {
           borderRadius: BorderRadius.circular(999),
           border: Border.all(color: AppColors.glassBorder),
         ),
-        child: Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textBody)),
+        child: Text(label,
+            style: AppTextStyles.caption.copyWith(color: AppColors.textBody)),
       );
 }
 
@@ -456,7 +470,9 @@ class _Notice extends StatelessWidget {
           children: [
             Text(title, style: AppTextStyles.subtitle.copyWith(color: tone)),
             const SizedBox(height: 6),
-            Text(body, style: AppTextStyles.caption.copyWith(color: AppColors.textBody)),
+            Text(body,
+                style:
+                    AppTextStyles.caption.copyWith(color: AppColors.textBody)),
           ],
         ),
       );
@@ -472,7 +488,9 @@ class _OfferCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(offer.name, style: AppTextStyles.subtitle.copyWith(color: AppColors.success)),
+            Text(offer.name,
+                style:
+                    AppTextStyles.subtitle.copyWith(color: AppColors.success)),
             const SizedBox(height: 6),
             Text(
               '${offer.description}. Applied automatically at checkout'
@@ -519,12 +537,15 @@ class _CurrentPlanCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(sub.planName, style: AppTextStyles.headlineSmall)),
-              if (sub.isComplimentary) _Pill('Complimentary'),
+              Expanded(
+                  child:
+                      Text(sub.planName, style: AppTextStyles.headlineSmall)),
+              if (sub.isComplimentary) const _Pill('Complimentary'),
             ],
           ),
           const SizedBox(height: 6),
-          Text(meta, style: AppTextStyles.caption.copyWith(color: AppColors.textBody)),
+          Text(meta,
+              style: AppTextStyles.caption.copyWith(color: AppColors.textBody)),
           if (canManage) ...[
             const SizedBox(height: 14),
             if (sub.trialAvailable)
@@ -533,7 +554,8 @@ class _CurrentPlanCard extends StatelessWidget {
                 onPressed: busy ? null : onStartTrial,
               ),
             if (sub.cancelAtPeriodEnd)
-              GhostButton(label: 'Keep my plan', onPressed: busy ? null : onResume),
+              GhostButton(
+                  label: 'Keep my plan', onPressed: busy ? null : onResume),
             if (!sub.isFree && !sub.cancelAtPeriodEnd && !sub.isComplimentary)
               GhostButton(
                 label: 'Cancel plan',
@@ -578,11 +600,14 @@ class _MeterCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(meter.label, style: AppTextStyles.label.copyWith(color: AppColors.textMuted)),
+                child: Text(meter.label,
+                    style: AppTextStyles.label
+                        .copyWith(color: AppColors.textMuted)),
               ),
               Text(
                 '${meter.used} / ${meter.isUnlimited ? 'Unlimited' : meter.limit}',
-                style: AppTextStyles.caption.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w700),
+                style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textPrimary, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -599,7 +624,9 @@ class _MeterCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 6),
-          Text(note, style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+          Text(note,
+              style:
+                  AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
         ],
       ),
     );
@@ -611,7 +638,8 @@ class _TermPicker extends StatelessWidget {
   final String period;
   final ValueChanged<String> onChanged;
 
-  const _TermPicker({required this.catalog, required this.period, required this.onChanged});
+  const _TermPicker(
+      {required this.catalog, required this.period, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -621,7 +649,9 @@ class _TermPicker extends StatelessWidget {
       var best = 0;
       for (final plan in catalog.plans) {
         final price = plan.priceFor(term);
-        if (price != null && price.savingsPercent > best) best = price.savingsPercent;
+        if (price != null && price.savingsPercent > best) {
+          best = price.savingsPercent;
+        }
       }
       return best;
     }
@@ -639,13 +669,18 @@ class _TermPicker extends StatelessWidget {
                 showCheckmark: false,
                 backgroundColor: AppColors.glassFill,
                 selectedColor: AppColors.cyan,
-                side: BorderSide(color: term == period ? AppColors.cyan : AppColors.glassBorder),
+                side: BorderSide(
+                    color: term == period
+                        ? AppColors.cyan
+                        : AppColors.glassBorder),
                 label: Text(
                   saving(term) > 0
                       ? '${billingPeriodLabel(term)} · save ${saving(term)}%'
                       : billingPeriodLabel(term),
                   style: AppTextStyles.caption.copyWith(
-                    color: term == period ? AppColors.onPrimary : AppColors.textBody,
+                    color: term == period
+                        ? AppColors.onPrimary
+                        : AppColors.textBody,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -691,27 +726,33 @@ class _PlanCard extends StatelessWidget {
             children: [
               Expanded(child: Text(plan.name, style: AppTextStyles.title)),
               if (isCurrent)
-                _Pill('Your plan')
+                const _Pill('Your plan')
               else if (plan.isMostPopular)
-                _Pill('Most popular'),
+                const _Pill('Most popular'),
             ],
           ),
           const SizedBox(height: 4),
-          Text(plan.tagline, style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+          Text(plan.tagline,
+              style:
+                  AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
           const SizedBox(height: 12),
           if (plan.isFree)
             Text('Free', style: AppTextStyles.stat)
           else if (price == null)
             Text('Not sold in $currency on this term.',
-                style: AppTextStyles.caption.copyWith(color: AppColors.textMuted))
+                style:
+                    AppTextStyles.caption.copyWith(color: AppColors.textMuted))
           else ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(formatMoney(price!.monthlyEquivalent, currency), style: AppTextStyles.stat),
+                Text(formatMoney(price!.monthlyEquivalent, currency),
+                    style: AppTextStyles.stat),
                 const SizedBox(width: 6),
-                Text('/ month', style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+                Text('/ month',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.textMuted)),
                 if (price!.savingsPercent > 0) ...[
                   const SizedBox(width: 8),
                   _Pill('−${price!.savingsPercent}%'),
@@ -731,24 +772,31 @@ class _PlanCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.check_rounded, size: 16, color: AppColors.success),
+                  const Icon(Icons.check_rounded,
+                      size: 16, color: AppColors.success),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(highlight, style: AppTextStyles.caption.copyWith(color: AppColors.textBody)),
+                    child: Text(highlight,
+                        style: AppTextStyles.caption
+                            .copyWith(color: AppColors.textBody)),
                   ),
                 ],
               ),
             ),
           if (plan.trialDays > 0 && !isCurrent)
             Text('${plan.trialDays}-day free trial, no card needed.',
-                style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+                style:
+                    AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
           const SizedBox(height: 12),
           if (isCurrent)
-            GhostButton(label: 'Current plan', onPressed: null)
+            const GhostButton(label: 'Current plan', onPressed: null)
           else if (plan.isMostPopular)
             NeonButton(
-              label: plan.tier > currentTier ? 'Upgrade to ${plan.name}' : 'Switch to ${plan.name}',
-              onPressed: busy || (!plan.isFree && price == null) ? null : onChoose,
+              label: plan.tier > currentTier
+                  ? 'Upgrade to ${plan.name}'
+                  : 'Switch to ${plan.name}',
+              onPressed:
+                  busy || (!plan.isFree && price == null) ? null : onChoose,
             )
           else
             GhostButton(
@@ -757,7 +805,8 @@ class _PlanCard extends StatelessWidget {
                   : plan.tier > currentTier
                       ? 'Upgrade to ${plan.name}'
                       : 'Switch to ${plan.name}',
-              onPressed: busy || (!plan.isFree && price == null) ? null : onChoose,
+              onPressed:
+                  busy || (!plan.isFree && price == null) ? null : onChoose,
             ),
         ],
       ),
@@ -770,7 +819,8 @@ class _AddOnCard extends StatelessWidget {
   final bool busy;
   final VoidCallback onBuy;
 
-  const _AddOnCard({required this.addOn, required this.busy, required this.onBuy});
+  const _AddOnCard(
+      {required this.addOn, required this.busy, required this.onBuy});
 
   @override
   Widget build(BuildContext context) {
@@ -783,7 +833,7 @@ class _AddOnCard extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(addOn.name, style: AppTextStyles.subtitle)),
-              if (addOn.isBestValue) _Pill('Best value'),
+              if (addOn.isBestValue) const _Pill('Best value'),
             ],
           ),
           const SizedBox(height: 6),
@@ -791,7 +841,8 @@ class _AddOnCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(formatMoney(addOn.amount, addOn.currency), style: AppTextStyles.title),
+              Text(formatMoney(addOn.amount, addOn.currency),
+                  style: AppTextStyles.title),
               if (addOn.comparedAtAmount > addOn.amount) ...[
                 const SizedBox(width: 8),
                 Text(
@@ -807,11 +858,16 @@ class _AddOnCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(addOn.tagline, style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+          Text(addOn.tagline,
+              style:
+                  AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
           const SizedBox(height: 10),
           GhostButton(
             label: addOn.availableOnCurrentPlan ? 'Buy' : 'Needs a paid plan',
-            onPressed: busy || !addOn.availableOnCurrentPlan || addOn.amount <= 0 ? null : onBuy,
+            onPressed:
+                busy || !addOn.availableOnCurrentPlan || addOn.amount <= 0
+                    ? null
+                    : onBuy,
             height: 42,
           ),
         ],
@@ -825,7 +881,8 @@ class _InvoiceRow extends StatelessWidget {
   final bool busy;
   final VoidCallback onPay;
 
-  const _InvoiceRow({required this.invoice, required this.busy, required this.onPay});
+  const _InvoiceRow(
+      {required this.invoice, required this.busy, required this.onPay});
 
   @override
   Widget build(BuildContext context) {
@@ -849,7 +906,8 @@ class _InvoiceRow extends StatelessWidget {
                 Text(
                   '${invoice.kind == 'AddOn' ? 'Add-on' : invoice.planCode ?? 'Plan'} · '
                   '${formatDayMonth(invoice.issuedAt)}',
-                  style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -857,14 +915,20 @@ class _InvoiceRow extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(formatMoney(invoice.total, invoice.currency), style: AppTextStyles.body),
+              Text(formatMoney(invoice.total, invoice.currency),
+                  style: AppTextStyles.body),
               const SizedBox(height: 2),
-              Text(invoice.status, style: AppTextStyles.caption.copyWith(color: tone)),
+              Text(invoice.status,
+                  style: AppTextStyles.caption.copyWith(color: tone)),
             ],
           ),
           if (invoice.isPayable) ...[
             const SizedBox(width: 10),
-            GhostButton(label: 'Pay', onPressed: busy ? null : onPay, height: 38, expand: false),
+            GhostButton(
+                label: 'Pay',
+                onPressed: busy ? null : onPay,
+                height: 38,
+                expand: false),
           ],
         ],
       ),
@@ -886,9 +950,14 @@ class _QuoteSheet extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(label,
-                    style: strong ? AppTextStyles.subtitle : AppTextStyles.caption.copyWith(color: AppColors.textBody)),
+                    style: strong
+                        ? AppTextStyles.subtitle
+                        : AppTextStyles.caption
+                            .copyWith(color: AppColors.textBody)),
               ),
-              Text(value, style: strong ? AppTextStyles.subtitle : AppTextStyles.caption),
+              Text(value,
+                  style:
+                      strong ? AppTextStyles.subtitle : AppTextStyles.caption),
             ],
           ),
         );
@@ -900,15 +969,20 @@ class _QuoteSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('${quote.planName} · ${quote.periodLabel}', style: AppTextStyles.title),
+            Text('${quote.planName} · ${quote.periodLabel}',
+                style: AppTextStyles.title),
             const SizedBox(height: 14),
-            line('${quote.planName} — ${quote.periodLabel}', formatMoney(quote.listAmount, quote.currency)),
+            line('${quote.planName} — ${quote.periodLabel}',
+                formatMoney(quote.listAmount, quote.currency)),
             if (quote.prorationCredit > 0)
-              line('Credit for unused time', '−${formatMoney(quote.prorationCredit, quote.currency)}'),
+              line('Credit for unused time',
+                  '−${formatMoney(quote.prorationCredit, quote.currency)}'),
             if (quote.discount > 0)
-              line('Offer ${quote.promotionCode ?? ''}'.trim(), '−${formatMoney(quote.discount, quote.currency)}'),
+              line('Offer ${quote.promotionCode ?? ''}'.trim(),
+                  '−${formatMoney(quote.discount, quote.currency)}'),
             const Divider(height: 20),
-            line('Due now', formatMoney(quote.total, quote.currency), strong: true),
+            line('Due now', formatMoney(quote.total, quote.currency),
+                strong: true),
             const SizedBox(height: 12),
             Text(
               'Renews at ${formatMoney(quote.renewalAmount, quote.currency)} every '
@@ -918,15 +992,20 @@ class _QuoteSheet extends StatelessWidget {
             if (quote.promotionMessage != null) ...[
               const SizedBox(height: 6),
               Text(quote.promotionMessage!,
-                  style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textMuted)),
             ],
             const SizedBox(height: 18),
             NeonButton(
-              label: quote.total <= 0 ? 'Activate' : 'Pay ${formatMoney(quote.total, quote.currency)}',
+              label: quote.total <= 0
+                  ? 'Activate'
+                  : 'Pay ${formatMoney(quote.total, quote.currency)}',
               onPressed: () => Navigator.of(context).pop(true),
             ),
             const SizedBox(height: 8),
-            GhostButton(label: 'Not now', onPressed: () => Navigator.of(context).pop(false)),
+            GhostButton(
+                label: 'Not now',
+                onPressed: () => Navigator.of(context).pop(false)),
           ],
         ),
       ),

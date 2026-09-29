@@ -1,14 +1,22 @@
+import 'dart:io' show Platform;
+
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'secure_storage_service.dart';
 
 /// Central HTTP client for the ASP.NET Core backend.
 /// Automatically attaches JWT from secure storage on every request.
 class ApiService {
+  static String get baseUrl => _dio.options.baseUrl;
 
+  static set baseUrl(String url) {
+    _dio.options.baseUrl = _normaliseBaseUrl(url);
+  }
 
   static final Dio _dio = Dio(
     BaseOptions(
-      baseUrl: baseUrl,
+      baseUrl: _defaultBaseUrl(),
       // Generous on purpose. A free-tier host (Render, Railway) parks an
       // idle instance and takes 30-60s to wake on the next request -
       // measured at 41s cold against 6s warm. At the old 15s the very
@@ -23,6 +31,22 @@ class ApiService {
       },
     ),
   );
+
+  static String _defaultBaseUrl() {
+    const configured = String.fromEnvironment('API_BASE_URL');
+    if (configured.isNotEmpty) return _normaliseBaseUrl(configured);
+    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5298/api';
+    return 'http://localhost:5298/api';
+  }
+
+  static String _normaliseBaseUrl(String url) {
+    var normalised = url.trim();
+    while (normalised.endsWith('/')) {
+      normalised = normalised.substring(0, normalised.length - 1);
+    }
+    if (!normalised.endsWith('/api')) normalised = '$normalised/api';
+    return normalised;
+  }
 
   /// Per-request options for the endpoints that run an LLM pipeline.
   ///
