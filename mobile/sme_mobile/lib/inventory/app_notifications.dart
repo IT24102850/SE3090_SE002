@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/notification_sound_service.dart';
 import '../services/push_notification_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -21,6 +22,7 @@ void showAppNotification(
   Duration duration = const Duration(seconds: 5),
 }) {
   HapticFeedback.lightImpact();
+  playMobileNotificationSound();
   _notificationQueue.add(_QueuedNotification(
     message: message,
     tone: tone,

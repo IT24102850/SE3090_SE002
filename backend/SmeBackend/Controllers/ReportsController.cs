@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -165,6 +166,8 @@ public sealed class ReportsController(
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         [FromQuery] Guid? branchId = null,
+        [FromQuery, Range(1, int.MaxValue)] int page = 1,
+        [FromQuery, Range(1, 100)] int pageSize = 10,
         CancellationToken cancellationToken = default)
     {
         if (!TryGetTenantId(out var tenantId))
@@ -232,10 +235,13 @@ public sealed class ReportsController(
             ? totalRevenue - costOfGoodsSold.Value
             : (decimal?)null;
 
+        var totalPages = (int)Math.Ceiling(salesCount / (double)pageSize);
+        var skip = page > totalPages ? salesCount : (page - 1) * pageSize;
         var recentSales = await salesQuery
             .OrderByDescending(sale => sale.OccurredAt)
             .ThenByDescending(sale => sale.Id)
-            .Take(10)
+            .Skip(skip)
+            .Take(pageSize)
             .Select(sale => new
             {
                 sale.Id,
@@ -293,6 +299,9 @@ public sealed class ReportsController(
             salesCount == 0 ? 0 : totalRevenue / salesCount,
             costOfGoodsSold,
             grossProfit,
+            page,
+            pageSize,
+            totalPages,
             recent));
     }
 
@@ -461,6 +470,9 @@ public sealed record SalesActivityReportResponse(
     decimal AverageSale,
     decimal? CostOfGoodsSold,
     decimal? GrossProfit,
+    int Page,
+    int PageSize,
+    int TotalPages,
     IReadOnlyList<SalesActivityItemResponse> RecentSales);
 
 public sealed record SalesActivityItemResponse(

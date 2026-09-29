@@ -10,6 +10,7 @@ import '../widgets/ui/ui.dart';
 import 'authenticated_api_client.dart';
 import 'inventory_models.dart';
 import 'inventory_panel.dart';
+import 'sale_receipt.dart';
 
 enum _SalesFeedbackTone { info, success, error }
 
@@ -26,10 +27,12 @@ class _SalesScreenState extends State<SalesScreen> {
   final _quantityController = TextEditingController(text: '1');
   List<InventoryItem> _items = const [];
   List<_RevenueDay> _days = const [];
+  List<_RecentSale> _recentSales = const [];
   InventoryItem? _selectedItem;
   bool _loading = true;
   bool _saving = false;
   bool _inventoryLoaded = false;
+  bool _hasLoadedOnce = false;
   int _inventoryRevision = 0;
   double _totalRevenue = 0;
   double? _grossProfit;
@@ -130,13 +133,19 @@ class _SalesScreenState extends State<SalesScreen> {
         throw _apiError(activity.body, activity.statusCode);
       }
       final activityData = jsonDecode(activity.body) as Map<String, dynamic>;
+      final recentSales = ((activityData['recentSales'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(_RecentSale.fromJson)
+          .toList();
       if (!mounted) return;
       setState(() {
         _days = days;
+        _recentSales = recentSales;
         _totalRevenue = (data['totalRevenue'] as num?)?.toDouble() ??
             days.fold<double>(0, (sum, day) => sum + day.amount);
         _grossProfit = (activityData['grossProfit'] as num?)?.toDouble();
         _loading = false;
+        _hasLoadedOnce = true;
       });
       if (showRefreshFeedback) {
         _showFeedback('Sales and inventory refreshed successfully.',
@@ -311,12 +320,15 @@ class _SalesScreenState extends State<SalesScreen> {
       _saving = true;
     });
     try {
+      final saleReference =
+          'SALE-MOB-${DateTime.now().toUtc().microsecondsSinceEpoch}';
       final response = await widget.client.post(
         '/api/inventory/${item.id}/sell',
         body: {
           'quantity': quantity,
           'expectedSellingPrice': price,
           'expectedUnitCost': cost,
+          'reference': saleReference,
         },
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -331,6 +343,25 @@ class _SalesScreenState extends State<SalesScreen> {
           (saleData['amount'] as num?)?.toDouble() ?? quantity * price;
       final grossProfit = (saleData['grossProfit'] as num?)?.toDouble() ??
           quantity * (price - cost);
+      final occurredAt = DateTime.tryParse(
+            saleData['occurredAt'] as String? ?? '',
+          ) ??
+          DateTime.now();
+      final receipt = SaleReceipt(
+        reference: saleData['reference'] as String? ?? saleReference,
+        itemName: saleData['itemName'] as String? ?? item.name,
+        sku: item.sku,
+        branch: item.branch,
+        quantity: (saleData['quantity'] as num?)?.toDouble() ?? quantity,
+        unit: item.unit,
+        unitPrice: (saleData['unitPrice'] as num?)?.toDouble() ?? price,
+        total: saleAmount,
+        occurredAt: occurredAt,
+        remainingQuantity:
+            (saleData['remainingQuantity'] as num?)?.toDouble() ??
+                item.quantity - quantity,
+        reorderLevel: item.reorderLevel,
+      );
       _quantityController.text = '1';
       _showFeedback(
         'Sale recorded successfully: ${_quantity(quantity)} ${item.unit} '
@@ -340,6 +371,13 @@ class _SalesScreenState extends State<SalesScreen> {
         _SalesFeedbackTone.success,
       );
       await _load();
+      if (mounted) {
+        setState(() => _saving = false);
+        await showDialog<void>(
+          context: context,
+          builder: (_) => SaleReceiptDialog(receipt: receipt),
+        );
+      }
     } catch (error) {
       if (mounted) {
         _showFeedback(
@@ -551,8 +589,15 @@ class _SalesScreenState extends State<SalesScreen> {
             32,
           ),
           children: [
-            if (_loading) const LinearProgressIndicator(minHeight: 2),
             _buildSaleForm(),
+            const SizedBox(height: 24),
+            _sectionHeading(
+              Icons.receipt_long_rounded,
+              'Recent sales & receipts',
+              'Your latest saved sales. Tap one to view or share its receipt.',
+            ),
+            const SizedBox(height: 10),
+            _buildRecentSales(),
             const SizedBox(height: 24),
             _sectionHeading(Icons.show_chart_rounded, 'Sales performance',
                 'Sales revenue and gross profit from the last $_periodDays days.'),
@@ -613,6 +658,47 @@ class _SalesScreenState extends State<SalesScreen> {
                 'Choose an item; stock updates when saved.',
               ),
             ),
+            if (_saving) ...[
+              const SizedBox(height: 12),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: Container(
+                  key: const ValueKey('sale-saving-status'),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.cyan.withValues(alpha: .08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.cyan.withValues(alpha: .24),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.cyan,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Recording sale — please wait…',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.cyan,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             DropdownButtonFormField<InventoryItem>(
               key: ValueKey(_inventoryRevision),
@@ -887,105 +973,382 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Widget _buildRevenueChart(double maxRevenue) => InventoryPanel(
-        padding: const EdgeInsets.all(15),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('LKR ${_money(_totalRevenue)}',
-                style: AppTextStyles.headlineSmall.copyWith(
-                  fontSize: 25,
-                  fontWeight: FontWeight.w800,
-                )),
-            Text('Total revenue · $_periodDays days',
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.textMuted,
-                  fontSize: 10,
-                )),
-            Text(
-              _grossProfit == null
-                  ? 'Gross profit unavailable until all sold items have unit costs.'
-                  : 'Gross profit · LKR ${_money(_grossProfit!)}',
+  Widget _buildRevenueChart(double maxRevenue) {
+    if (_loading) {
+      return _buildSalesLoadingPanel();
+    }
+    final chartDays = _days;
+    final labelIndices = _periodDays <= 7
+        ? List<int>.generate(chartDays.length, (index) => index)
+        : <int>[
+            for (var index = 0; index < chartDays.length; index += 5) index,
+            if (chartDays.isNotEmpty && (chartDays.length - 1) % 5 != 0)
+              chartDays.length - 1,
+          ];
+    return InventoryPanel(
+      padding: const EdgeInsets.all(15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('LKR ${_money(_totalRevenue)}',
+              style: AppTextStyles.headlineSmall.copyWith(
+                fontSize: 25,
+                fontWeight: FontWeight.w800,
+              )),
+          Text('Total revenue · $_periodDays days',
               style: AppTextStyles.caption.copyWith(
-                color: _grossProfit == null
-                    ? AppColors.warning
-                    : AppColors.success,
+                color: AppColors.textMuted,
                 fontSize: 10,
+              )),
+          Text(
+            _grossProfit == null
+                ? 'Gross profit unavailable until all sold items have unit costs.'
+                : 'Gross profit · LKR ${_money(_grossProfit!)}',
+            style: AppTextStyles.caption.copyWith(
+              color:
+                  _grossProfit == null ? AppColors.warning : AppColors.success,
+              fontSize: 10,
+            ),
+          ),
+          const SizedBox(height: 11),
+          Row(
+            children: [
+              Expanded(
+                child: _chartStat(
+                  'ACTIVE DAYS',
+                  '${_days.where((day) => day.amount > 0).length}',
+                  Icons.event_available_outlined,
+                ),
               ),
-            ),
-            const SizedBox(height: 11),
-            Row(
-              children: [
-                Expanded(
-                  child: _chartStat(
-                    'ACTIVE DAYS',
-                    '${_days.where((day) => day.amount > 0).length}',
-                    Icons.event_available_outlined,
-                  ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: _chartStat(
+                  'BEST DAY',
+                  _days.isEmpty
+                      ? '—'
+                      : 'LKR ${_money(_days.fold<double>(0, (best, day) => best > day.amount ? best : day.amount))}',
+                  Icons.trending_up_rounded,
                 ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: _chartStat(
-                    'BEST DAY',
-                    _days.isEmpty
-                        ? '—'
-                        : 'LKR ${_money(_days.fold<double>(0, (best, day) => best > day.amount ? best : day.amount))}',
-                    Icons.trending_up_rounded,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 15),
-            if (_days.isEmpty || maxRevenue <= 0)
-              SizedBox(
-                height: 95,
-                child: Center(
-                  child: Text('No sales recorded in this period yet.',
-                      style: AppTextStyles.caption
-                          .copyWith(color: AppColors.textMuted)),
-                ),
-              )
-            else
-              SizedBox(
-                height: 130,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: _days.map((day) {
-                    final factor = (day.amount / maxRevenue).clamp(.04, 1.0);
-                    return Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 2),
-                        child: Column(
-                          children: [
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.bottomCenter,
-                                child: FractionallySizedBox(
-                                  heightFactor: day.amount <= 0 ? .025 : factor,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: AppColors.violet.withValues(
-                                          alpha: day.amount > 0 ? .9 : .14),
-                                      borderRadius: BorderRadius.circular(4),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          if (_days.isEmpty || maxRevenue <= 0)
+            SizedBox(
+              height: 95,
+              child: Center(
+                child: Text('No sales recorded in this period yet.',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.textMuted)),
+              ),
+            )
+          else
+            SizedBox(
+              height: 130,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Row(
+                      key: const Key('sales-chart-bars'),
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: chartDays.map((day) {
+                        final factor =
+                            (day.amount / maxRevenue).clamp(.04, 1.0);
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: _periodDays > 7 ? .75 : 2,
+                            ),
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: FractionallySizedBox(
+                                heightFactor: day.amount <= 0 ? .025 : factor,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: AppColors.violet.withValues(
+                                      alpha: day.amount > 0 ? .9 : .14,
                                     ),
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 5),
-                            Text(day.label,
-                                style: AppTextStyles.caption.copyWith(
-                                    color: AppColors.textMuted, fontSize: 7)),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  SizedBox(
+                    key: const Key('sales-chart-date-labels'),
+                    height: 14,
+                    child: Row(
+                      children: labelIndices.map((index) {
+                        return Expanded(
+                          child: Align(
+                            alignment: index == 0
+                                ? Alignment.centerLeft
+                                : index == labelIndices.last
+                                    ? Alignment.centerRight
+                                    : Alignment.center,
+                            child: Text(
+                              chartDays[index].label,
+                              key: Key('sales-chart-date-$index'),
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textMuted,
+                                fontSize: 8,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
               ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSalesLoadingPanel() => InventoryPanel(
+        key: const Key('sales-loading-panel'),
+        padding: const EdgeInsets.all(22),
+        child: SizedBox(
+          height: 236,
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 320),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(scale: animation, child: child),
+              ),
+              child: Column(
+                key: ValueKey(
+                    _hasLoadedOnce ? 'updating-sales' : 'loading-sales'),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 54,
+                    height: 54,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      backgroundColor: AppColors.violet.withValues(alpha: .16),
+                      valueColor:
+                          const AlwaysStoppedAnimation<Color>(AppColors.cyan),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    _hasLoadedOnce ? 'Updating sales…' : 'Loading sales…',
+                    key: const Key('sales-loading-message'),
+                    style: AppTextStyles.subtitle.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Please wait while we refresh your inventory and sales data.',
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _buildRecentSales() {
+    if (_loading) {
+      return InventoryPanel(
+        key: const Key('recent-sales-loading'),
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.cyan,
+              ),
+            ),
+            const SizedBox(width: 11),
+            Text(
+              'Loading recent sales…',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
           ],
         ),
       );
+    }
+    if (_recentSales.isEmpty) {
+      return InventoryPanel(
+        key: const Key('recent-sales-empty'),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.receipt_long_outlined,
+              color: AppColors.textMuted,
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'No sales recorded in the last $_periodDays days.',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textMuted,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return InventoryPanel(
+      key: const Key('recent-sales-list'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Column(
+        children: [
+          for (var index = 0; index < _recentSales.length; index++) ...[
+            if (index > 0) const Divider(height: 1, color: AppColors.hairline),
+            _recentSaleTile(_recentSales[index]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _recentSaleTile(_RecentSale sale) {
+    final itemSummary =
+        sale.items.isEmpty ? 'Inventory sale' : sale.items.join(', ');
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: Key('recent-sale-${sale.reference}'),
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _showHistoricalReceipt(sale),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 2),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.cyan.withValues(alpha: .1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.receipt_outlined,
+                  color: AppColors.cyan,
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      itemSummary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${sale.reference} · ${_dateTime(sale.occurredAt)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textMuted,
+                        fontSize: 9,
+                      ),
+                    ),
+                    if (sale.grossProfit != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        'Gross profit · LKR ${_money(sale.grossProfit!)}',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.success,
+                          fontSize: 9,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'LKR ${_money(sale.amount)}',
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.textMuted,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showHistoricalReceipt(_RecentSale sale) async {
+    final receipt = SaleReceipt(
+      reference: sale.reference,
+      itemName: sale.items.isEmpty ? 'Inventory sale' : sale.items.join(', '),
+      branch: 'Not included in the sales report',
+      quantity: sale.quantity,
+      unit: '',
+      total: sale.amount,
+      occurredAt: sale.occurredAt,
+    );
+    await showDialog<void>(
+      context: context,
+      builder: (_) => SaleReceiptDialog(receipt: receipt),
+    );
+  }
+
+  String _dateTime(DateTime value) {
+    final local = value.toLocal();
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$day/$month/${local.year} $hour:$minute';
+  }
 
   Widget _periodButton(int days) {
     final selected = _periodDays == days;
@@ -1042,4 +1405,35 @@ class _RevenueDay {
   const _RevenueDay(this.label, this.amount);
   final String label;
   final double amount;
+}
+
+class _RecentSale {
+  const _RecentSale({
+    required this.reference,
+    required this.occurredAt,
+    required this.amount,
+    required this.quantity,
+    required this.items,
+    required this.grossProfit,
+  });
+
+  final String reference;
+  final DateTime occurredAt;
+  final double amount;
+  final double quantity;
+  final List<String> items;
+  final double? grossProfit;
+
+  factory _RecentSale.fromJson(Map<String, dynamic> json) => _RecentSale(
+        reference: json['reference'] as String? ?? 'SALE',
+        occurredAt: DateTime.tryParse(json['occurredAt'] as String? ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
+        items: (json['items'] as List?)
+                ?.whereType<String>()
+                .toList(growable: false) ??
+            const [],
+        grossProfit: (json['grossProfit'] as num?)?.toDouble(),
+      );
 }
