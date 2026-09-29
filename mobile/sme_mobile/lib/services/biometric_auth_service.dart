@@ -41,9 +41,11 @@ class BiometricAuthService {
 
   /// Authenticate using device biometrics (Face ID or Fingerprint).
   static Future<bool> authenticate({
-    String localizedReason = 'Unlock Unify Enterprise Workspace with Biometrics',
+    String localizedReason =
+        'Unlock Unify Enterprise Workspace with Biometrics',
   }) async {
     try {
+      if (!await SecureStorageService.hasPin()) return false;
       final enabled = await SecureStorageService.isBiometricsEnabled();
       if (!enabled) return false;
 
@@ -57,6 +59,18 @@ class BiometricAuthService {
     } on PlatformException catch (_) {
       // Platform failure (e.g. user cancelled or biometric not enrolled)
       return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Returns whether biometric unlock is enabled, backed by a Quick PIN,
+  /// and supported by an enrolled biometric on this device.
+  static Future<bool> canUseBiometrics() async {
+    try {
+      if (!await SecureStorageService.hasPin()) return false;
+      if (!await SecureStorageService.isBiometricsEnabled()) return false;
+      return await isBiometricsAvailable();
     } catch (_) {
       return false;
     }

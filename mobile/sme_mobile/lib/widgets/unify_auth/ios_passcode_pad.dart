@@ -51,6 +51,7 @@ class _IosPasscodePadState extends State<IosPasscodePad>
   bool _hasBiometrics = false;
   bool _hasFingerprint = false;
   bool _hasFaceId = false;
+  bool _biometricsEnabled = false;
   String? _biometricMessage;
   _BiometricResult? _biometricResult;
 
@@ -111,6 +112,7 @@ class _IosPasscodePadState extends State<IosPasscodePad>
 
   Future<void> _checkHardwareBiometrics() async {
     final types = await BiometricAuthService.getAvailableBiometrics();
+    final enabled = await BiometricAuthService.canUseBiometrics();
     if (mounted) {
       setState(() {
         // Android reports enrolled biometrics as weak/strong rather than
@@ -119,6 +121,7 @@ class _IosPasscodePadState extends State<IosPasscodePad>
         _hasBiometrics = types.isNotEmpty;
         _hasFingerprint = types.contains(BiometricType.fingerprint);
         _hasFaceId = types.contains(BiometricType.face);
+        _biometricsEnabled = enabled;
       });
     }
   }
@@ -340,7 +343,7 @@ class _IosPasscodePadState extends State<IosPasscodePad>
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                _hasBiometrics
+                _biometricsEnabled
                     ? (_hasFingerprint
                         ? Icons.fingerprint_rounded
                         : (_hasFaceId
@@ -352,7 +355,7 @@ class _IosPasscodePadState extends State<IosPasscodePad>
               ),
               const SizedBox(width: 6),
               Text(
-                _hasBiometrics
+                _biometricsEnabled
                     ? '$_biometricLabel & PIN Protected'
                     : 'PIN Protected',
                 style: const TextStyle(
@@ -756,7 +759,10 @@ class _IosPasscodePadState extends State<IosPasscodePad>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Face ID / Touch ID Biometric Button
-            _buildBiometricActionKey(),
+            if (_biometricsEnabled)
+              _buildBiometricActionKey()
+            else
+              const SizedBox(width: 68, height: 68),
             const SizedBox(width: 22),
             // '0' Key
             _buildKey('0', '+'),
