@@ -151,4 +151,18 @@ describe('StockMovementLogPage', () => {
     expect(within(table).getByText('Last moment item')).toBeInTheDocument();
     expect(within(table).queryByText('Tomorrow item')).not.toBeInTheDocument();
   });
+
+  it('accepts the legacy API array response during backend rollout', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify([
+      movement('legacy', 'Receive', 2, 'Legacy API item'),
+    ]), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPage();
+
+    const table = screen.getByRole('table');
+    await waitFor(() => expect(within(table).getByText('Legacy API item')).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Movement request returned an invalid response.')).not.toBeInTheDocument();
+  });
 });

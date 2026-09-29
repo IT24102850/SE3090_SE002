@@ -90,15 +90,21 @@ export function StockMovementLogPage() {
         const response = await fetch(`/api/inventory/movements?page=${currentPage}&pageSize=100`, { headers });
         if (!response.ok) throw new Error(`Movement request failed (${response.status})`);
         const data: unknown = await response.json();
-        if (!data || typeof data !== 'object' || !('items' in data) || !Array.isArray(data.items)) {
+        let pageItems: unknown[];
+        if (Array.isArray(data)) {
+          pageItems = data;
+          totalPages = 1;
+        } else if (data && typeof data === 'object' && 'items' in data && Array.isArray(data.items)) {
+          const pageData = data as { items: unknown[]; totalPages: number };
+          if (!Number.isInteger(pageData.totalPages) || pageData.totalPages < 0) {
+            throw new Error('Movement request returned invalid pagination details.');
+          }
+          pageItems = pageData.items;
+          totalPages = pageData.totalPages;
+        } else {
           throw new Error('Movement request returned an invalid response.');
         }
-        const pageData = data as { items: unknown[]; totalPages: number };
-        if (!Number.isInteger(pageData.totalPages) || pageData.totalPages < 0) {
-          throw new Error('Movement request returned invalid pagination details.');
-        }
-        totalPages = pageData.totalPages;
-        allMovements.push(...pageData.items.map((value): MovementEntry => {
+        allMovements.push(...pageItems.map((value): MovementEntry => {
           if (!value || typeof value !== 'object') throw new Error('Movement request returned an invalid record.');
           const movement = value as Record<string, unknown>;
           const occurredAt = typeof movement.occurredAt === 'string' ? movement.occurredAt : '';
