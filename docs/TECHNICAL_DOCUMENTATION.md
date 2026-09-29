@@ -244,7 +244,6 @@ For an Android emulator, use `http://10.0.2.2:5298`; for a physical device, use 
 
 ### Database setup and demo data
 
-The backend applies migrations automatically when it starts. To use a separate database manually:
 To load a SQL seed file into a separate database manually:
 
 ```powershell
