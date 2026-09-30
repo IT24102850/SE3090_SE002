@@ -1261,7 +1261,7 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .sales-stat strong { overflow: hidden; color: var(--color-text); font-size: clamp(.95rem, 1.35vw, 1.3rem); font-weight: 850; font-variant-numeric: tabular-nums; line-height: 1.2; letter-spacing: -.025em; text-overflow: ellipsis; white-space: nowrap; }
 .inventory-scope .sales-stat-period { align-self: flex-start; margin-left: auto; padding: .28rem .4rem; color: color-mix(in srgb, var(--sales-stat-accent) 78%, var(--color-text)); background: color-mix(in srgb, var(--sales-stat-accent) 10%, var(--color-surface)); border: 1px solid color-mix(in srgb, var(--sales-stat-accent) 17%, var(--color-border)); border-radius: 999px; font-size: .52rem; font-weight: 850; letter-spacing: .06em; white-space: nowrap; }
 .inventory-scope .sales-stat-detail { position: relative; z-index: 1; display: flex; min-height: 25px; gap: .45rem; align-items: center; padding-top: .5rem; color: var(--color-text-secondary); border-top: 1px solid color-mix(in srgb, var(--sales-stat-accent) 17%, var(--color-border)); font-size: .66rem; line-height: 1.35; }
-.inventory-scope .sales-stat-detail-dot { width: 6px; height: 6px; flex: none; background: var(--sales-stat-accent); border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sales-stat-accent) 12%, transparent); }
+.inventory-scope .sales-stat-detail-dot { --sales-indicator-color: var(--sales-stat-accent); width: 6px; height: 6px; flex: none; background: var(--sales-stat-accent); border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sales-stat-accent) 12%, transparent); animation: sales-indicator-pulse 2s ease-out infinite; }
 .inventory-scope .sales-record-panel, .inventory-scope .sales-history-panel { min-width: 0; }
 .inventory-scope .sales-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding: 1.2rem; }
 .inventory-scope .sales-form .form-field { display: grid; align-content: start; gap: .45rem; color: var(--color-text); font-size: .9rem; font-weight: 700; }
@@ -1330,7 +1330,7 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .sales-history-empty { min-height: 205px; }
 .inventory-scope .sales-history-footer { display: flex; gap: .5rem 1rem; align-items: center; justify-content: space-between; padding: .7rem 1.1rem; color: var(--color-text-muted); background: color-mix(in srgb, var(--color-surface-muted) 54%, var(--color-surface)); border-top: 1px solid var(--color-border); font-size: .66rem; }
 .inventory-scope .sales-history-footer > span:first-child { display: inline-flex; gap: .45rem; align-items: center; }
-.inventory-scope .sales-history-footer i { width: 6px; height: 6px; flex: none; background: var(--color-good); border-radius: 50%; box-shadow: 0 0 0 3px var(--color-good-soft); }
+.inventory-scope .sales-history-footer i { --sales-indicator-color: var(--color-good); width: 6px; height: 6px; flex: none; background: var(--color-good); border-radius: 50%; box-shadow: 0 0 0 3px var(--color-good-soft); animation: sales-indicator-pulse 2s ease-out infinite; }
 .inventory-scope .sales-receipt-overlay { z-index: calc(var(--z-modal) + 2); overflow-y: auto; align-items: flex-start; }
 .inventory-scope .sales-receipt-modal { display: grid; gap: .8rem; width: min(100%, 760px); margin: auto; }
 .inventory-scope .sales-receipt-toolbar { display: flex; gap: .75rem; align-items: center; justify-content: space-between; padding: .7rem .9rem; color: var(--color-text-secondary); font-size: .82rem; font-weight: 700; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: .8rem; }
@@ -1370,6 +1370,11 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .po-detail-items-table td:first-child { white-space: normal; overflow-wrap: anywhere; }
 .inventory-scope .purchase-orders-layout .timeline-section { min-width: 0; }
 
+@keyframes sales-indicator-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--sales-indicator-color) 16%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--sales-indicator-color) 0%, transparent); }
+}
+
 @media (max-width: 760px) {
   .inventory-scope .sales-stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inventory-scope .sales-stat { min-height: 132px; padding: .85rem; }
@@ -1393,6 +1398,11 @@ body:has(.inventory-scope) .app-shell::after,
   .inventory-scope .sales-stat strong { font-size: 1.18rem; }
   .inventory-scope .sales-history-head { gap: .7rem; flex-direction: column; }
   .inventory-scope .sales-history-footer { padding-inline: .85rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inventory-scope .sales-stat-detail-dot,
+  .inventory-scope .sales-history-footer i { animation: none; }
 }
 @media print {
   @page sales-receipt { size: A4 portrait; margin: 0; }
