@@ -33,6 +33,31 @@ services:
         sync: false
       - key: Cloudinary__ApiSecret
         sync: false
+      # Unify's own subscription billing - what tenants pay US for the
+      # platform. These are the platform's merchant credentials and are
+      # deliberately separate from anything a tenant configures for charging
+      # their own customers. With the Stripe key unset the API falls back to
+      # its sandbox provider: the whole flow still runs and says plainly that
+      # it was simulated.
+      - key: Platform__Billing__Currency
+        value: LKR
+      - key: Platform__Billing__TestMode
+        value: "true"
+      # Stripe will not accept LKR, so an LKR invoice settles on its own
+      # amount while the card is charged the equivalent at this rate.
+      - key: Platform__Billing__SettlementCurrency
+        value: USD
+      - key: Platform__Billing__Rates__LKR
+        value: "300"
+      - key: Platform__Billing__Stripe__SecretKey
+        sync: false
+      - key: Platform__Billing__Stripe__PublicKey
+        sync: false
+      # Only this deployment can receive webhooks - it has a public URL,
+      # which a laptop does not. Point Stripe at
+      # https://<this-service>/api/subscription/webhooks/stripe
+      - key: Platform__Billing__Stripe__WebhookSecret
+        sync: false
   - type: web
     name: sme-agentic-ai
     runtime: docker

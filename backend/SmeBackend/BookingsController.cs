@@ -85,8 +85,23 @@ public class BookingsController : ControllerBase
     {
         date = DateTimeUtil.AsUtc(date);
 
-        var resource = await _db.Resources.AsNoTracking().FirstOrDefaultAsync(r => r.Id == resourceId);
+        // This endpoint is AllowAnonymous because the public booking widget
+        // lives on the business's own website and has no token. Anonymous
+        // requests carry no tenant context, so the global
+        // TenantId == CurrentTenantId filter on Resource matches nothing and
+        // every lookup came back 404 - which the widget renders as "No times
+        // available that day", so the business looks fully booked rather than
+        // broken. Filters off, with the soft-delete condition written out by
+        // hand, exactly as PublicBookingController already does.
+        var resource = await _db.Resources.IgnoreQueryFilters().AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == resourceId && r.DeletedAt == null);
         if (resource == null) return NotFound(new { message = "Resource not found." });
+
+        // A suspended business stops taking bookings, so its availability
+        // should not be readable either. The Tenant filter is IsActive, so a
+        // suspended tenant simply is not found here.
+        if (!await _db.Tenants.AsNoTracking().AnyAsync(t => t.Id == resource.TenantId))
+            return NotFound(new { message = "Resource not found." });
 
         var dayOfWeek = (int)date.DayOfWeek;
         var schedule = await _db.ResourceSchedules.AsNoTracking()
