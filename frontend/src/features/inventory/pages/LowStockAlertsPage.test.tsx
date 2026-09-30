@@ -133,6 +133,10 @@ describe('LowStockAlertsPage inventory scope', () => {
     expect(screen.getByText('Usage-backed suggestions')).toBeInTheDocument();
     expect(screen.getByText('Authorized inventory snapshot')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Short stock cover' })).toBeInTheDocument();
+    expect(screen.getByText((_, element) =>
+      element?.classList.contains('stocksense-recommendation-timing') === true
+      && element.textContent?.includes('Already below the reorder point (1 on hand; reorder at 3).') === true,
+    )).toBeInTheDocument();
     expect(screen.getByText('Some movement evidence')).toBeInTheDocument();
     expect(screen.getByText('Stock is below the reorder level.')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Why this was suggested and what to verify'));
@@ -145,5 +149,64 @@ describe('LowStockAlertsPage inventory scope', () => {
       'stocksense-analysis-progress',
       'stocksense-analysis-report',
     ]);
+  });
+
+  it('does not display a rounded near-zero estimate as zero days', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/inventory/agent/plan') {
+        return new Response(JSON.stringify({
+          workflow_id: 'workflow-2',
+          status: 'NeedsReview',
+          planner_summary: 'Review stock coverage.',
+          data_sources: [],
+          recommendations: [{
+            inventory_item_id: 'item-2',
+            item_name: 'Syringes',
+            sku: 'SURG-003',
+            on_hand: 48,
+            reorder_level: 50,
+            avg_daily_outflow: 0.29,
+            days_until_reorder: 0,
+            recommended_quantity: 2,
+            confidence: 0.4,
+            reason: 'Stock is below the reorder level.',
+            validation_notes: [],
+          }],
+          insights: [],
+          warnings: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        items: [{
+          id: 'item-2',
+          name: 'Syringes',
+          sku: 'SURG-003',
+          branch: 'Main branch',
+          branchId: 'branch-1',
+          quantity: 48,
+          reorderLevel: 50,
+        }],
+        totalPages: 1,
+        totalCount: 1,
+      }), { status: 200 });
+    }));
+
+    render(
+      <AppToastProvider>
+        <ToastProvider>
+          <MemoryRouter>
+            <LowStockAlertsPage />
+          </MemoryRouter>
+        </ToastProvider>
+      </AppToastProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Analyze inventory/i }));
+
+    expect(await screen.findByText((_, element) =>
+      element?.classList.contains('stocksense-recommendation-timing') === true
+      && element.textContent?.includes('Already below the reorder point (48 on hand; reorder at 50).') === true,
+    )).toBeInTheDocument();
+    expect(screen.queryByText(/0 days/)).not.toBeInTheDocument();
   });
 });

@@ -378,7 +378,17 @@ export function LowStockAlertsPage() {
                       <div><span>Suggested quantity</span><strong>{item.recommended_quantity}</strong></div>
                       <div><span>Estimated cost</span><strong>{item.estimated_total_cost == null ? 'Unit cost not set' : item.estimated_total_cost.toLocaleString('en-LK', { style: 'currency', currency: 'LKR' })}</strong></div>
                     </div>
-                    {item.days_until_reorder != null && <p className="stocksense-recommendation-timing">Estimated to reach reorder point in about <strong>{item.days_until_reorder} days</strong>.</p>}
+                    {(item.on_hand <= item.reorder_level || item.days_until_reorder != null) && (
+                      <p className="stocksense-recommendation-timing">
+                        {item.on_hand < item.reorder_level
+                          ? <>Already below the reorder point <strong>({item.on_hand} on hand; reorder at {item.reorder_level})</strong>.</>
+                          : item.on_hand === item.reorder_level
+                            ? <>At the reorder point now <strong>({item.on_hand} on hand)</strong>.</>
+                            : item.days_until_reorder === 0
+                              ? <>Projected to reach the reorder point in <strong>less than 0.1 days</strong>.</>
+                              : <>Projected to reach the reorder point in about <strong>{item.days_until_reorder} days</strong>.</>}
+                      </p>
+                    )}
                     <details className="stocksense-recommendation-details">
                       <summary>Why this was suggested and what to verify</summary>
                       <p>{item.reason}</p>
