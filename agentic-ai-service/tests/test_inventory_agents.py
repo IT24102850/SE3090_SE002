@@ -4,6 +4,7 @@ from agents.inventory_agents import (
     DomainSnapshot,
     InventoryPlan,
     analyze_inventory_domain,
+    analyze_inventory_health,
     recommend_replenishment,
 )
 from tools.inventory_tools import InventoryToolsClient
@@ -47,7 +48,7 @@ def test_recommendation_uses_negative_mobile_issue_adjustments_and_excludes_wast
     assert recommendation.avg_daily_outflow == 1
     assert recommendation.recommended_quantity == 9
     assert "negative manual-adjustment" in recommendation.validation_notes[0]
-    assert "no stock or purchase order was changed" in recommendation.validation_notes[1]
+    assert any("no stock or purchase order was changed" in note for note in recommendation.validation_notes)
 
 
 def test_no_usage_history_falls_back_to_reorder_level_with_low_confidence():
@@ -68,6 +69,39 @@ def test_projected_stock_cover_can_trigger_reorder_before_reorder_level():
 
     assert recommendation.days_until_reorder == 1
     assert recommendation.recommended_quantity == 16
+
+
+def test_below_reorder_point_is_not_described_as_zero_days():
+    snapshot = DomainSnapshot(items=[_item(quantity=48, reorder=50)], movements=[_movement("Issue", -4)])
+    [recommendation] = recommend_replenishment(
+        snapshot=snapshot, plan=_plan(), objective="reorder", workflow_id="wf",
+    )
+
+    [risk] = [
+        insight for insight in analyze_inventory_health(
+            snapshot=snapshot, plan=_plan(), recommendations=[recommendation],
+        )
+        if insight.category == "risk"
+    ]
+
+    assert recommendation.days_until_reorder == 0
+    assert "already below its reorder level (on hand 48; reorder at 50)" in recommendation.reason
+    assert "0.0 days" not in recommendation.reason
+    assert "Disposable" not in risk.detail
+    assert "Paper towels is already below its reorder level" in risk.detail
+    assert "0.0 days" not in risk.detail
+
+
+def test_positive_sub_tenth_day_estimate_is_not_reported_as_zero():
+    snapshot = DomainSnapshot(items=[_item(quantity=10.01, reorder=10)], movements=[_movement("Issue", -280)])
+    [recommendation] = recommend_replenishment(
+        snapshot=snapshot, plan=_plan(), objective="reorder", workflow_id="wf",
+    )
+    insights = analyze_inventory_health(snapshot=snapshot, plan=_plan(), recommendations=[recommendation])
+    [risk] = [insight for insight in insights if insight.category == "risk"]
+
+    assert recommendation.days_until_reorder == 0
+    assert "less than 0.1 days" in risk.detail
 
 
 def test_outflow_older_than_thirty_days_is_not_treated_as_recent_demand():
