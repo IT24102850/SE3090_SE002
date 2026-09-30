@@ -310,7 +310,9 @@ public static class DevelopmentUserSeeder
 
         var cbl = await db.Suppliers.SingleAsync(supplier => supplier.Name == "Ceylon Biscuits Limited");
         var keells = await db.Suppliers.SingleAsync(supplier => supplier.Name == "Keells Food Products PLC");
-        var items = await db.InventoryItems.ToDictionaryAsync(item => item.Sku);
+        var items = await db.InventoryItems
+            .Where(item => item.BranchId == branch.Id)
+            .ToDictionaryAsync(item => item.Sku);
         if (!items.TryGetValue("SKU-00451", out var biscuits) ||
             !items.TryGetValue("SKU-00902", out var sugar) ||
             !items.TryGetValue("SKU-00741", out var milk)) return;

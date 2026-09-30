@@ -5,11 +5,9 @@ import { Icon } from '../ui/Icon';
 import { useToast } from '../ui/ToastContext';
 import { getStoredToken } from '../authToken';
 import { scrollToId } from '../../marketing/scroll/useSmoothScroll';
+import Modal from '../../../shared/components/Modal';
 
-type InventoryBranch = {
-  branch: string;
-  branchId?: string;
-};
+type BranchOption = { id: string; name: string };
 
 const analysisStages = [
   'Reading your authorized inventory snapshot…',
@@ -44,8 +42,11 @@ function insightIcon(category: string) {
 export function LowStockAlertsPage() {
   const { notify } = useToast();
   const token = getStoredToken();
-  const [inventory, setInventory] = useState<InventoryBranch[]>([]);
-  const [branch, setBranch] = useState('All branches');
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
+  const [analysisScope, setAnalysisScope] = useState<'business' | 'branch'>('business');
+  const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [reportScope, setReportScope] = useState('Full business');
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [inventoryError, setInventoryError] = useState('');
@@ -57,35 +58,24 @@ export function LowStockAlertsPage() {
   const loadInventory = useCallback(async (showSuccess = false) => {
     setLoading(true);
     try {
-      const response = await fetch('/api/inventory?page=1&pageSize=100', {
+      const response = await fetch('/api/inventory/branches', {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
-      if (!response.ok) throw new Error(`Inventory request failed (${response.status})`);
-      const firstPage = await response.json();
-      const totalPages = Math.max(1, Number(firstPage.totalPages) || 1);
-      const remainingPages = await Promise.all(
-        Array.from({ length: totalPages - 1 }, async (_, index) => {
-          const page = index + 2;
-          const pageResponse = await fetch(`/api/inventory?page=${page}&pageSize=100`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          });
-          if (!pageResponse.ok) throw new Error(`Inventory page ${page} failed (${pageResponse.status})`);
-          return pageResponse.json();
-        }),
-      );
-      const pages = [firstPage, ...remainingPages];
-      const allItems = pages.flatMap((page) => page.items ?? []);
-      setInventory(allItems.map((item: any): InventoryBranch => ({
-        branch: item.branch ?? 'Unassigned',
-        branchId: item.branchId,
-      })));
+      if (!response.ok) throw new Error(`Branch list request failed (${response.status})`);
+      const branchData: unknown = await response.json();
+      if (!Array.isArray(branchData) || !branchData.every((entry) =>
+        typeof entry?.id === 'string' && typeof entry?.name === 'string',
+      )) {
+        throw new Error('Branch list response is invalid.');
+      }
+      setBranches(branchData as BranchOption[]);
       setLastUpdated(new Date());
       setInventoryError('');
-      if (showSuccess) notify('Inventory refreshed successfully. The stock health summary is up to date.', 'success');
+      if (showSuccess) notify('Branch list refreshed successfully.', 'success');
     } catch {
-      setInventory([]);
-      setInventoryError('Inventory data could not be synchronized.');
-      notify('Unable to load inventory health from the database.', 'error');
+      setBranches([]);
+      setInventoryError('Branch list could not be synchronized.');
+      notify('Unable to load authorized branches from the database.', 'error');
     } finally {
       setLoading(false);
     }
@@ -96,13 +86,19 @@ export function LowStockAlertsPage() {
     setPlanning(true);
     setPlanError('');
     try {
-      const selectedBranch = inventory.find((item) => item.branch === branch)?.branchId;
+      const selectedBranch = branches.find((option) => option.id === selectedBranchId);
+      if (analysisScope === 'branch' && !selectedBranch) {
+        throw new Error('Choose a branch before starting branch-specific analysis.');
+      }
+      const scopeLabel = analysisScope === 'business' ? 'Full business' : selectedBranch?.name ?? 'Selected branch';
+      setReportScope(scopeLabel);
+      setScopeDialogOpen(false);
       const response = await fetch('/api/inventory/agent/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           objective: 'Review overall inventory health, not only low stock. Identify stock coverage risks from recorded issue/sale/consumption, summarize items without recorded outflow and recent waste movements, and explain uncertainty. Do not infer demand from missing history.',
-          branchId: branch === 'All branches' ? undefined : selectedBranch,
+          branchId: analysisScope === 'business' ? undefined : selectedBranch?.id,
         }),
       });
       const responseBody = await response.text();
@@ -159,7 +155,6 @@ export function LowStockAlertsPage() {
     }
   }, [plan, planError]);
 
-  const branchOptions = ['All branches', ...Array.from(new Set(inventory.map((item) => item.branch)))];
   const recommendations = plan?.recommendations ?? [];
   const pricedRecommendations = recommendations.filter((item) => item.estimated_total_cost != null);
   const estimatedReorderCost = pricedRecommendations.reduce((sum, item) => sum + (item.estimated_total_cost ?? 0), 0);
@@ -185,7 +180,7 @@ export function LowStockAlertsPage() {
         </div>
         <div className="page-actions stocksense-hero-actions">
           <span className={`live-indicator stocksense-updated${inventoryError ? ' is-stale' : ''}`}><span aria-hidden="true" />{inventoryError ? 'Inventory sync needs attention' : 'Inventory data current'} · Updated {lastUpdated.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</span>
-          <button className="btn btn-primary stocksense-analyze-button" type="button" onClick={analyzeInventory} disabled={planning}><span className="stocksense-button-spark" aria-hidden="true">✦</span><span>{planning ? 'Analyzing inventory…' : 'Analyze inventory'}</span><span className="stocksense-button-arrow" aria-hidden="true">→</span></button>
+          <button className="btn btn-primary stocksense-analyze-button" type="button" onClick={() => setScopeDialogOpen(true)} disabled={planning}><span className="stocksense-button-spark" aria-hidden="true">✦</span><span>{planning ? 'Analyzing inventory…' : 'Analyze inventory'}</span><span className="stocksense-button-arrow" aria-hidden="true">→</span></button>
           <span className="stocksense-cta-hint">Get a clear stock health report</span>
           <button className="btn btn-secondary" type="button" onClick={() => { void loadInventory(true); }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh now'}</button>
         </div>
@@ -238,29 +233,6 @@ export function LowStockAlertsPage() {
 
       {inventoryError && <p className="page-notice stocksense-sync-notice" role="alert">{inventoryError} The timestamp above shows the last successful snapshot.</p>}
 
-      <section className="panel stocksense-scope-panel" aria-label="Inventory analysis scope">
-        <div className="panel-head">
-          <div>
-            <p className="eyebrow">ANALYSIS SCOPE</p>
-            <h2>Choose what StockSense reviews</h2>
-            <p className="hint">Stock details and editing stay in Inventory Manager; this page focuses on analysis and recommendations.</p>
-          </div>
-        </div>
-        <div className="toolbar toolbar-wrap">
-          <label className="stocksense-scope-label" htmlFor="stocksense-analysis-branch">Branch</label>
-          <select
-            id="stocksense-analysis-branch"
-            className="filter-select"
-            value={branch}
-            onChange={(event) => setBranch(event.target.value)}
-            aria-label="Select branch for analysis"
-          >
-            {branchOptions.map((entry) => <option key={entry}>{entry}</option>)}
-          </select>
-          <Link className="btn btn-secondary" to="/inventory">Open Inventory Manager</Link>
-        </div>
-      </section>
-
       {planning && <section id="stocksense-analysis-progress" className="stocksense-progress-panel" role="status" aria-live="polite">
         <div className="stocksense-progress-orbit"><div className="stocksense-progress-ring" /><Icon name="stocksense" size={50} /><span className="stocksense-orbit-dot" /></div>
         <div className="stocksense-progress-copy">
@@ -275,11 +247,32 @@ export function LowStockAlertsPage() {
 
       {plan && <section id="stocksense-analysis-report" className="panel stocksense-ai-panel">
         <div className="panel-head stocksense-ai-head">
-          <div className="stocksense-ai-title"><div className="stocksense-ai-orb"><span>✦</span></div><div><p className="eyebrow">STOCKSENSE AI REPORT</p><h2>Inventory health analysis</h2><p className="hint">{plan.planner_summary}</p></div></div>
+          <div className="stocksense-ai-title"><div className="stocksense-ai-orb"><span>✦</span></div><div><p className="eyebrow">STOCKSENSE AI REPORT · {reportScope.toUpperCase()}</p><h2>Inventory health analysis</h2><p className="hint">{plan.planner_summary}</p></div></div>
           <Badge tone={plan.status === 'NeedsReview' ? 'amber' : 'blue'}>{plan.status === 'NeedsReview' ? 'Review recommendations' : plan.insights?.length ? 'Review insights' : 'No action found'}</Badge>
         </div>
         <div className="stocksense-ai-body">
-          <p className="cell-sub">Read-only analysis using {plan.data_sources.join(' and ').toLowerCase()}. It has not changed stock or created purchase orders.</p>
+          <section className="stocksense-ai-response" aria-label="StockSense AI response">
+            <div className="stocksense-ai-response-copy">
+              <span className="stocksense-ai-response-kicker"><Icon name="stocksense" size={15} /> YOUR INVENTORY BRIEF</span>
+              <h3>Here’s what stands out</h3>
+              <p>{plan.planner_summary}</p>
+              <span className="stocksense-ai-response-foot"><i /> Evidence-led · Ready for your review</span>
+            </div>
+            <div className="stocksense-ai-response-visual" aria-hidden="true">
+              <img
+                src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=900&q=80"
+                alt=""
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }}
+              />
+              <span className="stocksense-ai-response-orbit" />
+              <span className="stocksense-ai-response-spark stocksense-ai-response-spark-one">✦</span>
+              <span className="stocksense-ai-response-spark stocksense-ai-response-spark-two">✧</span>
+              <span className="stocksense-ai-response-image-label"><Icon name="inventory" size={14} /> INVENTORY IN FOCUS</span>
+            </div>
+          </section>
+          <p className="cell-sub stocksense-ai-evidence-note">Read-only analysis using {plan.data_sources.join(' and ').toLowerCase()}. It has not changed stock or created purchase orders.</p>
           <section className="stocksense-report-snapshot" aria-label="AI report summary">
             <div className="stocksense-report-snapshot-heading">
               <div><p className="eyebrow">THE SIGNAL, AT A GLANCE</p><h3>What StockSense found</h3></div>
@@ -409,6 +402,60 @@ export function LowStockAlertsPage() {
 
 
       <p className="ai-disclaimer">Coverage and movement insights use the returned inventory snapshot and recent movement sample. Recommendations use explicit outflow history when available; where history is missing, reorder quantities fall back to reorder levels. Review supplier, lead time and budget before ordering.</p>
+      {scopeDialogOpen && <Modal
+        title="Choose AI analysis scope"
+        onClose={() => setScopeDialogOpen(false)}
+        className="stocksense-scope-modal"
+        footer={<>
+          <button className="btn btn-secondary" type="button" onClick={() => setScopeDialogOpen(false)}>Cancel</button>
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={() => { void analyzeInventory(); }}
+            disabled={analysisScope === 'branch' && (!selectedBranchId || branches.length === 0)}
+          >
+            {analysisScope === 'business' ? 'Analyze full business' : 'Analyze selected branch'}
+          </button>
+        </>}
+      >
+        <p>Would you like recommendations for the full business or for one specific branch?</p>
+        <fieldset className="stocksense-scope-options">
+          <legend>Choose a scope</legend>
+          <label>
+            <input
+              type="radio"
+              name="stocksense-analysis-scope"
+              value="business"
+              checked={analysisScope === 'business'}
+              onChange={() => setAnalysisScope('business')}
+            />
+            <span><strong>Full business</strong><small>Review all authorized branches together.</small></span>
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="stocksense-analysis-scope"
+              value="branch"
+              checked={analysisScope === 'branch'}
+              onChange={() => setAnalysisScope('branch')}
+            />
+            <span><strong>Specific branch</strong><small>Focus on one branch's stock and recommendations.</small></span>
+          </label>
+        </fieldset>
+        {analysisScope === 'branch' && <label className="form-field">
+          Branch
+          <select
+            aria-label="Select branch for analysis"
+            value={selectedBranchId}
+            onChange={(event) => setSelectedBranchId(event.target.value)}
+            disabled={loading || branches.length === 0}
+          >
+            <option value="">Select a branch</option>
+            {branches.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+          </select>
+          {branches.length === 0 && <small>No authorized branches are available to analyze.</small>}
+        </label>}
+      </Modal>}
     </div>
   );
 }

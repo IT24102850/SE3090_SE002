@@ -11,6 +11,7 @@ type MovementEntry = {
   occurredAt: string;
   item: string;
   sku: string;
+  branchId?: string;
   movementType: MovementType;
   quantity: number;
   reasonLabel: string;
@@ -22,14 +23,16 @@ type MovementEntry = {
   countStatus?: string;
 };
 
+type BranchOption = { id: string; name: string };
+
 const PAGE_SIZE = 8;
 
 const baseMovementTypes = ['Receive', 'Sale', 'Issue', 'Consumption', 'Waste', 'Adjustment'] as const;
-type MovementTypeFilter = 'All types' | 'Outbound' | MovementType;
+type MovementTypeFilter = 'All types' | 'Outbound' | 'Issued / consumed' | MovementType;
 
 const typeTone: Record<MovementType, BadgeTone> = {
   Receive: 'green',
-  Sale: 'red',
+  Sale: 'blue',
   Issue: 'red',
   Consumption: 'red',
   Waste: 'red',
@@ -86,13 +89,16 @@ async function fetchAllPages(
   headers: HeadersInit,
   recordName: string,
   activeCheck?: () => boolean,
+  branchId?: string,
 ): Promise<unknown[]> {
   const records: unknown[] = [];
   let page = 1;
   let totalPages = 1;
 
   do {
-    const response = await fetch(`${endpoint}?page=${page}&pageSize=100`, { headers });
+    const params = new URLSearchParams({ page: String(page), pageSize: '100' });
+    if (branchId) params.set('branchId', branchId);
+    const response = await fetch(`${endpoint}?${params.toString()}`, { headers });
     if (!response.ok) throw new Error(`${recordName} request failed (${response.status})`);
     const data: unknown = await response.json();
     if (Array.isArray(data)) {
@@ -118,6 +124,8 @@ export function StockMovementLogPage() {
   const token = getStoredToken();
   const { notify } = useToast();
   const [activities, setActivities] = useState<MovementEntry[]>([]);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState('');
@@ -131,11 +139,26 @@ export function StockMovementLogPage() {
     setLoadError('');
     try {
       const headers = { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' };
-      const [movementRecords, countRecords] = await Promise.all([
-        fetchAllPages('/api/inventory/movements', headers, 'Movement', activeCheck),
-        fetchAllPages('/api/inventory/physical-counts', headers, 'Physical count', activeCheck),
+      const branchResponsePromise = fetch('/api/inventory/branches', { headers });
+      const [branchResponse, movementRecords, countRecords] = await Promise.all([
+        branchResponsePromise,
+        fetchAllPages('/api/inventory/movements', headers, 'Movement', activeCheck, selectedBranchId || undefined),
+        fetchAllPages('/api/inventory/physical-counts', headers, 'Physical count', activeCheck, selectedBranchId || undefined),
       ]);
       if (activeCheck && !activeCheck()) return false;
+      if (!branchResponse.ok) throw new Error(`Branch request failed (${branchResponse.status})`);
+      const branchData: unknown = await branchResponse.json();
+      if (activeCheck && !activeCheck()) return false;
+      if (!Array.isArray(branchData)) throw new Error('Branch request returned an invalid response.');
+      const branchOptions = branchData.map((value): BranchOption => {
+        if (!value || typeof value !== 'object') throw new Error('Branch request returned an invalid record.');
+        const branch = value as Record<string, unknown>;
+        if (typeof branch.id !== 'string' || typeof branch.name !== 'string') {
+          throw new Error('Branch request returned an invalid record.');
+        }
+        return { id: branch.id, name: branch.name };
+      });
+      setBranches(branchOptions);
 
       const movementEntries = movementRecords.map((value): MovementEntry => {
         if (!value || typeof value !== 'object') throw new Error('Movement request returned an invalid record.');
@@ -153,6 +176,7 @@ export function StockMovementLogPage() {
           occurredAt,
           item: typeof movement.item === 'string' ? movement.item : 'Unknown item',
           sku: typeof movement.sku === 'string' ? movement.sku : 'Unknown SKU',
+          branchId: typeof movement.branchId === 'string' ? movement.branchId : undefined,
           movementType,
           quantity,
           reasonLabel: notes ?? reference ?? movementType,
@@ -187,6 +211,7 @@ export function StockMovementLogPage() {
           occurredAt,
           item: typeof count.itemName === 'string' ? count.itemName : 'Unknown item',
           sku: typeof count.sku === 'string' ? count.sku : 'Unknown SKU',
+          branchId: typeof count.branchId === 'string' ? count.branchId : undefined,
           movementType: 'Physical count',
           quantity,
           reasonLabel,
@@ -222,7 +247,7 @@ export function StockMovementLogPage() {
     } finally {
       if (!activeCheck || activeCheck()) setLoading(false);
     }
-  }, [token]);
+  }, [selectedBranchId, token]);
 
   useEffect(() => {
     let active = true;
@@ -234,6 +259,7 @@ export function StockMovementLogPage() {
     const queryLower = query.trim().toLowerCase();
     const fromMs = getDateBoundary(dateFrom);
     const toMs = getDateBoundary(dateTo, true);
+    const branchNames = new Map(branches.map((branch) => [branch.id, branch.name]));
 
     return activities.filter((row) => {
       const occurredMs = new Date(row.occurredAt).getTime();
@@ -246,17 +272,20 @@ export function StockMovementLogPage() {
         row.notes?.toLowerCase().includes(queryLower) ||
         row.movementType.toLowerCase().includes(queryLower) ||
         row.performedBy?.toLowerCase().includes(queryLower) ||
-        row.supplierName?.toLowerCase().includes(queryLower);
+        row.supplierName?.toLowerCase().includes(queryLower) ||
+        (row.branchId ? branchNames.get(row.branchId)?.toLowerCase().includes(queryLower) : false);
       const matchesFrom = fromMs === null || occurredMs >= fromMs;
       const matchesTo = toMs === null || occurredMs < toMs;
       return matchesQuery && matchesFrom && matchesTo;
     });
-  }, [activities, dateFrom, dateTo, query]);
+  }, [activities, branches, dateFrom, dateTo, query]);
   const filtered = useMemo(
     () => type === 'All types'
       ? contextFiltered
       : type === 'Outbound'
         ? contextFiltered.filter((row) => isOutboundMovement(row.movementType))
+        : type === 'Issued / consumed'
+          ? contextFiltered.filter((row) => row.movementType === 'Issue' || row.movementType === 'Consumption')
         : type === 'Adjustment'
           ? contextFiltered.filter((row) =>
             row.movementType === 'Adjustment' ||
@@ -272,7 +301,9 @@ export function StockMovementLogPage() {
   const movementTypeCounts = useMemo(() => ({
     all: contextFiltered.length,
     received: contextFiltered.filter((row) => row.movementType === 'Receive').length,
+    sold: contextFiltered.filter((row) => row.movementType === 'Sale').length,
     issued: contextFiltered.filter((row) => isOutboundMovement(row.movementType)).length,
+    issuedConsumed: contextFiltered.filter((row) => row.movementType === 'Issue' || row.movementType === 'Consumption').length,
     wasted: contextFiltered.filter((row) => row.movementType === 'Waste').length,
     adjusted: contextFiltered.filter((row) =>
       row.movementType === 'Adjustment' ||
@@ -291,7 +322,7 @@ export function StockMovementLogPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [query, type, dateFrom, dateTo]);
+  }, [query, type, dateFrom, dateTo, selectedBranchId]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -319,8 +350,8 @@ export function StockMovementLogPage() {
 
   const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
-  const physicalCountTotal = activities.filter((row) => row.isPhysicalCount).length;
-  const hasActiveFilters = query.trim() !== '' || type !== 'All types' || dateFrom !== '' || dateTo !== '';
+  const physicalCountTotal = contextFiltered.filter((row) => row.isPhysicalCount).length;
+  const hasActiveFilters = query.trim() !== '' || type !== 'All types' || dateFrom !== '' || dateTo !== '' || selectedBranchId !== '';
 
   async function handleRefresh() {
     const refreshed = await loadMovements();
@@ -335,7 +366,7 @@ export function StockMovementLogPage() {
         <div className="movement-hero-copy">
           <p className="movement-eyebrow"><span aria-hidden="true">↗</span> OPERATIONS / STOCK ACTIVITY</p>
           <h1>Physical counts &amp; stock activity</h1>
-          <p>Review physical counts alongside receipts, sales, issues, and adjustments across your inventory.</p>
+          <p>Review branch-specific physical counts alongside receipts, sales, issues, and adjustments.</p>
           <div className="movement-hero-meta"><span className={`movement-live-dot${loading ? ' is-loading' : ''}`} aria-hidden="true" />{loading ? 'Syncing recent activity…' : `${activities.length} records loaded`}<span className="movement-meta-separator">·</span>Newest first</div>
         </div>
         <div className="movement-hero-art" aria-hidden="true"><span className="movement-art-ring movement-art-ring-one" /><span className="movement-art-ring movement-art-ring-two" /><span className="movement-art-icon"><Icon name="movement" size={42} /></span><span className="movement-art-point movement-art-point-one" /><span className="movement-art-point movement-art-point-two" /></div>
@@ -364,7 +395,7 @@ export function StockMovementLogPage() {
       </section>
 
       <section className="panel movement-log-panel">
-        <div className="movement-panel-head"><div><span className="movement-panel-icon" aria-hidden="true"><Icon name="inventory" size={19} /></span><div><h2>Activity log</h2>        <p>Filter records by item, activity type, or date.</p></div></div><span className="movement-count-pill">{filtered.length} shown</span></div>
+        <div className="movement-panel-head"><div><span className="movement-panel-icon" aria-hidden="true"><Icon name="inventory" size={19} /></span><div><h2>Activity log</h2>        <p>Filter records by branch, item, activity type, or date.</p></div></div><span className="movement-count-pill">{filtered.length} shown</span></div>
         <div className="toolbar toolbar-wrap movement-toolbar">
           <div className="search-field">
             <span className="search-icon" aria-hidden="true">⌕</span>
@@ -376,6 +407,10 @@ export function StockMovementLogPage() {
               aria-label="Search movements"
             />
           </div>
+          <select className="filter-select" value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)} aria-label="Filter by branch">
+            <option value="">All branches</option>
+            {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+          </select>
           <select className="filter-select" value={type} onChange={(event) => setType(event.target.value as MovementTypeFilter)} aria-label="Filter by activity type">
             <option>All types</option>
             <option value="Outbound">Outbound</option>
@@ -389,21 +424,22 @@ export function StockMovementLogPage() {
             <span>To</span>
             <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} aria-label="To date" />
           </label>
-          {hasActiveFilters && <button type="button" className="movement-clear-filters" onClick={() => { setQuery(''); setType('All types'); setDateFrom(''); setDateTo(''); }}>Clear filters</button>}
+          {hasActiveFilters && <button type="button" className="movement-clear-filters" onClick={() => { setQuery(''); setType('All types'); setDateFrom(''); setDateTo(''); setSelectedBranchId(''); }}>Clear filters</button>}
         </div>
 
         <div className="movement-type-summary" aria-label="Activity type counts">
-          <button type="button" className={`movement-type-chip${type === 'All types' ? ' is-active' : ''}`} aria-pressed={type === 'All types'} onClick={() => setType('All types')}>All <strong>{movementTypeCounts.all}</strong></button>
-          <button type="button" className={`movement-type-chip movement-chip-receive${type === 'Receive' ? ' is-active' : ''}`} aria-pressed={type === 'Receive'} onClick={() => setType(type === 'Receive' ? 'All types' : 'Receive')}><i /> Received <strong>{movementTypeCounts.received}</strong></button>
-          <button type="button" className={`movement-type-chip movement-chip-issue${type === 'Outbound' ? ' is-active' : ''}`} aria-pressed={type === 'Outbound'} onClick={() => setType(type === 'Outbound' ? 'All types' : 'Outbound')}><i /> Issued / consumed <strong>{movementTypeCounts.issued}</strong></button>
-          <button type="button" className={`movement-type-chip movement-chip-waste${type === 'Waste' ? ' is-active' : ''}`} aria-pressed={type === 'Waste'} onClick={() => setType(type === 'Waste' ? 'All types' : 'Waste')}><i /> Wasted <strong>{movementTypeCounts.wasted}</strong></button>
-          <button type="button" className={`movement-type-chip movement-chip-adjust${type === 'Adjustment' ? ' is-active' : ''}`} aria-pressed={type === 'Adjustment'} onClick={() => setType(type === 'Adjustment' ? 'All types' : 'Adjustment')}><i /> Adjusted <strong>{movementTypeCounts.adjusted}</strong></button>
-          <button type="button" className={`movement-type-chip${type === 'Physical count' ? ' is-active' : ''}`} aria-pressed={type === 'Physical count'} onClick={() => setType(type === 'Physical count' ? 'All types' : 'Physical count')}>Physical counts <strong>{movementTypeCounts.physicalCounts}</strong></button>
+          <button type="button" className={`movement-type-chip${type === 'All types' ? ' is-active' : ''}`} aria-label={`All activities (${movementTypeCounts.all})`} aria-pressed={type === 'All types'} onClick={() => setType('All types')}><span className="movement-chip-label">All</span><strong>{movementTypeCounts.all}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-receive${type === 'Receive' ? ' is-active' : ''}`} aria-label={`Received (${movementTypeCounts.received})`} aria-pressed={type === 'Receive'} onClick={() => setType(type === 'Receive' ? 'All types' : 'Receive')}><span className="movement-chip-label"><i />Received</span><strong>{movementTypeCounts.received}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-sale${type === 'Sale' ? ' is-active' : ''}`} aria-label={`Sale (${movementTypeCounts.sold})`} aria-pressed={type === 'Sale'} onClick={() => setType(type === 'Sale' ? 'All types' : 'Sale')}><span className="movement-chip-label"><i />Sale</span><strong>{movementTypeCounts.sold}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-issue${type === 'Issued / consumed' ? ' is-active' : ''}`} aria-label={`Issued / consumed (${movementTypeCounts.issuedConsumed})`} aria-pressed={type === 'Issued / consumed'} onClick={() => setType(type === 'Issued / consumed' ? 'All types' : 'Issued / consumed')}><span className="movement-chip-label"><i />Issued / consumed</span><strong>{movementTypeCounts.issuedConsumed}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-waste${type === 'Waste' ? ' is-active' : ''}`} aria-label={`Wasted (${movementTypeCounts.wasted})`} aria-pressed={type === 'Waste'} onClick={() => setType(type === 'Waste' ? 'All types' : 'Waste')}><span className="movement-chip-label"><i />Wasted</span><strong>{movementTypeCounts.wasted}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-adjust${type === 'Adjustment' ? ' is-active' : ''}`} aria-label={`Adjusted (${movementTypeCounts.adjusted})`} aria-pressed={type === 'Adjustment'} onClick={() => setType(type === 'Adjustment' ? 'All types' : 'Adjustment')}><span className="movement-chip-label"><i />Adjusted</span><strong>{movementTypeCounts.adjusted}</strong></button>
+          <button type="button" className={`movement-type-chip movement-chip-count${type === 'Physical count' ? ' is-active' : ''}`} aria-label={`Physical counts (${movementTypeCounts.physicalCounts})`} aria-pressed={type === 'Physical count'} onClick={() => setType(type === 'Physical count' ? 'All types' : 'Physical count')}><span className="movement-chip-label"><i />Physical counts</span><strong>{movementTypeCounts.physicalCounts}</strong></button>
         </div>
 
         <div className="table-wrap">
           <table className="data-table movement-table">
-          <thead><tr><th>When</th><th>Item</th><th>Type</th><th>Quantity / variance</th><th>Details</th><th>Reference</th><th>Recorded by</th></tr></thead>
+          <thead><tr><th>When</th><th>Item</th><th>Branch</th><th>Type</th><th>Quantity / variance</th><th>Details</th><th>Reference</th><th>Recorded by</th></tr></thead>
             <tbody>
               {paged.map((row) => (
                 <tr key={row.id}>
@@ -412,6 +448,7 @@ export function StockMovementLogPage() {
                     <p className="cell-title">{row.item}</p>
                     <p className="cell-sub">{row.sku}</p>
                   </td>
+                  <td>{row.branchId ? branches.find((branch) => branch.id === row.branchId)?.name ?? 'Unknown branch' : 'Unassigned'}</td>
                   <td className={`movement-type-cell movement-type-cell-${row.movementType.toLowerCase().replace(/\s+/g, '-')}${row.isPhysicalCount ? ` movement-count-status-${(row.countStatus ?? 'unknown').toLowerCase()}` : ''}`}><Badge tone={row.isPhysicalCount ? countStatusTone(row.countStatus) : typeTone[row.movementType] ?? 'neutral'}>{row.movementType}</Badge></td>
                   <td>
                     <span className={`movement-quantity${row.quantity > 0 ? ' is-in' : row.quantity < 0 ? ' is-out' : ''}${row.isPhysicalCount && row.countStatus !== 'Applied' && row.countStatus !== 'Matched' ? ' is-count-pending' : ''}`}>
@@ -430,7 +467,7 @@ export function StockMovementLogPage() {
                 </tr>
               ))}
               {paged.length === 0 && (
-                <tr><td colSpan={7} className="empty-state">{loading ? 'Loading activity history…' : loadError ? 'Activity history could not be loaded. Refresh to retry.' : activities.length === 0 ? 'No stock activity records are available yet.' : 'No activity matches these filters. Try clearing a filter or changing the date range.'}</td></tr>
+                <tr><td colSpan={8} className="empty-state">{loading ? 'Loading activity history…' : loadError ? 'Activity history could not be loaded. Refresh to retry.' : activities.length === 0 ? 'No stock activity records are available yet.' : 'No activity matches these filters. Try clearing a filter or changing the date range.'}</td></tr>
               )}
             </tbody>
           </table>

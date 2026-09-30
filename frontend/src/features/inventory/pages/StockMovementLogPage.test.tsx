@@ -45,6 +45,7 @@ function movement(id: string, movementType: string, quantity: number, item: stri
     occurredAt: '2026-09-29T10:00:00Z',
     item,
     sku: `${id}-SKU`,
+    branchId: 'branch-1',
     movementType,
     quantity,
     reference: `REF-${id}`,
@@ -66,6 +67,13 @@ function emptyPhysicalCounts() {
   }), { status: 200 });
 }
 
+function branchesResponse() {
+  return new Response(JSON.stringify([
+    { id: 'branch-1', name: 'Main branch' },
+    { id: 'branch-2', name: 'North branch' },
+  ]), { status: 200 });
+}
+
 describe('StockMovementLogPage', () => {
   beforeEach(() => {
     localStorage.setItem('token', 'test-token');
@@ -81,6 +89,7 @@ describe('StockMovementLogPage', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       requestedUrls.push(url);
+      if (url.includes('/api/inventory/branches')) return branchesResponse();
       if (url.includes('/physical-counts')) return emptyPhysicalCounts();
       if (url.includes('page=1')) {
         return new Response(JSON.stringify({
@@ -114,18 +123,24 @@ describe('StockMovementLogPage', () => {
     const table = screen.getByRole('table');
     expect(within(table).getByText('Receive')).toBeInTheDocument();
     expect(within(table).getByText('Consumption')).toBeInTheDocument();
-    expect(requestedUrls).toHaveLength(3);
+    expect(screen.getByRole('button', { name: 'Sale (1)' })).toBeInTheDocument();
+    expect(requestedUrls).toHaveLength(4);
     expect(requestedUrls.some((url) => url.includes('/movements?page=2'))).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: /Issued \/ consumed/ }));
     expect(within(table).getByText('Used ingredient')).toBeInTheDocument();
-    expect(within(table).getByText('Sold item')).toBeInTheDocument();
+    expect(within(table).queryByText('Sold item')).not.toBeInTheDocument();
     expect(within(table).queryByText('Received item')).not.toBeInTheDocument();
-    expect(screen.getByText('−5')).toBeInTheDocument();
+    expect(screen.getByText('−3')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sale (1)' }));
+    expect(within(table).getByText('Sold item')).toBeInTheDocument();
+    expect(within(table).queryByText('Used ingredient')).not.toBeInTheDocument();
   });
 
   it('keeps unknown movement types visible rather than disguising them as adjustments', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/inventory/branches')) return branchesResponse();
       if (String(input).includes('/physical-counts')) return emptyPhysicalCounts();
       return new Response(JSON.stringify({
         items: [movement('transfer', 'Transfer', -1, 'Transferred item')],
@@ -148,6 +163,7 @@ describe('StockMovementLogPage', () => {
     const endOfDay = new Date(2026, 8, 29, 23, 59, 59, 999).toISOString();
     const nextDay = new Date(2026, 8, 30, 0, 0, 0, 0).toISOString();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/inventory/branches')) return branchesResponse();
       if (String(input).includes('/physical-counts')) return emptyPhysicalCounts();
       return new Response(JSON.stringify({
         items: [
@@ -172,6 +188,7 @@ describe('StockMovementLogPage', () => {
 
   it('accepts the legacy API array response during backend rollout', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/inventory/branches')) return branchesResponse();
       if (String(input).includes('/physical-counts')) return emptyPhysicalCounts();
       return new Response(JSON.stringify([
         movement('legacy', 'Receive', 2, 'Legacy API item'),
@@ -183,7 +200,7 @@ describe('StockMovementLogPage', () => {
 
     const table = screen.getByRole('table');
     await waitFor(() => expect(within(table).getByText('Legacy API item')).toBeInTheDocument());
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(screen.queryByText('Movement request returned an invalid response.')).not.toBeInTheDocument();
   });
 
@@ -214,6 +231,7 @@ describe('StockMovementLogPage', () => {
       reviewNotes: null,
     });
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/inventory/branches')) return branchesResponse();
       if (String(input).includes('/physical-counts')) {
         return new Response(JSON.stringify({
           items: [
@@ -253,7 +271,7 @@ describe('StockMovementLogPage', () => {
     expect(within(table).getAllByText('MOBILE-AUDIT-applied')).toHaveLength(1);
     expect(within(table).getByText(/Pending approval physical count/)).toBeInTheDocument();
     expect(within(table).getByText('Variance +7')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Physical counts 3/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Physical counts (3)' })).toBeInTheDocument();
     expect(within(table).getByText('-2')).toBeInTheDocument();
 
     const appliedRow = within(table).getByText('Counted applied').closest('tr');
@@ -266,5 +284,75 @@ describe('StockMovementLogPage', () => {
     expect(within(pendingRow!).getByText('Physical count').parentElement).toHaveClass('badge-amber');
     expect(within(pendingRow!).getByText('Variance +7')).toHaveClass('is-count-pending');
     expect(within(matchedRow!).getByText('Physical count').parentElement).toHaveClass('badge-blue');
+    expect(within(appliedRow!).getByText('Main branch')).toBeInTheDocument();
+  });
+
+  it('filters movements and physical counts by branch and labels each activity', async () => {
+    const urls: string[] = [];
+    const northCount = {
+      id: 'north-count',
+      inventoryItemId: 'item-north',
+      itemName: 'North counted stock',
+      sku: 'NORTH-COUNT',
+      systemQuantityAtCount: 8,
+      countedQuantity: 7,
+      variance: -1,
+      reason: 'LostOrMissing',
+      reasonNotes: null,
+      countedAt: '2026-09-29T12:00:00Z',
+      countedBy: 'Mobile Counter',
+      branchId: 'branch-2',
+      reference: 'MOBILE-COUNT-NORTH',
+      status: 'Applied',
+      photoUrls: [],
+      reviewedBy: null,
+      reviewedAt: null,
+      reviewNotes: null,
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes('/api/inventory/branches')) return branchesResponse();
+      if (url.includes('/physical-counts')) {
+        const items = url.includes('branchId=branch-2') ? [northCount] : [];
+        return new Response(JSON.stringify({
+          items,
+          page: 1,
+          pageSize: 100,
+          totalCount: items.length,
+          totalPages: items.length ? 1 : 0,
+        }), { status: 200 });
+      }
+      const records = url.includes('branchId=branch-2')
+        ? [movement('north', 'Receive', 4, 'North stock')]
+        : [
+          movement('main', 'Receive', 2, 'Main stock'),
+          { ...movement('north', 'Receive', 4, 'North stock'), branchId: 'branch-2' },
+        ];
+      return new Response(JSON.stringify({
+        items: records,
+        page: 1,
+        pageSize: 100,
+        totalCount: records.length,
+        totalPages: 1,
+      }), { status: 200 });
+    }));
+
+    renderPage();
+
+    const table = screen.getByRole('table');
+    expect(await within(table).findByText('North stock')).toBeInTheDocument();
+    expect(within(table).getByText('Main branch')).toBeInTheDocument();
+    expect(within(table).getByText('North branch')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filter by branch'), { target: { value: 'branch-2' } });
+
+    await waitFor(() => expect(within(table).getByText('North stock')).toBeInTheDocument());
+    expect(within(table).queryByText('Main stock')).not.toBeInTheDocument();
+    expect(within(table).getByText('North counted stock')).toBeInTheDocument();
+    expect(within(table).getByText('MOBILE-COUNT-NORTH')).toBeInTheDocument();
+    expect(within(table).getByText('Physical count')).toBeInTheDocument();
+    expect(urls.some((url) => url.includes('/movements?') && url.includes('branchId=branch-2'))).toBe(true);
+    expect(urls.some((url) => url.includes('/physical-counts?') && url.includes('branchId=branch-2'))).toBe(true);
   });
 });

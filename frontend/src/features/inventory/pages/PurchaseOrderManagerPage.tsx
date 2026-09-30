@@ -100,6 +100,7 @@ type PurchaseOrderItemOption = {
   sku: string;
   unitCost?: number | null;
   branchId?: string | null;
+  branchName?: string | null;
   supplierId?: string | null;
 };
 
@@ -362,6 +363,20 @@ function responseToOrder(response: PurchaseOrderResponse, existing?: PurchaseOrd
   };
 }
 
+function batchOrderBase(number: string) {
+  return number.match(/^(.*)-(\d{2})$/)?.[1] ?? null;
+}
+
+function PurchaseOrderTimestamp({ value, dateOnly = false }: { value: string; dateOnly?: boolean }) {
+  const label = dateOnly ? formatDate(value) : formatDateTime(value);
+  return (
+    <time className="purchase-order-timestamp" dateTime={value}>
+      <span aria-hidden="true">{dateOnly ? '▦' : '◷'}</span>
+      {label}
+    </time>
+  );
+}
+
 function LifecycleTracker({ status, compact = false }: { status: POStatus; compact?: boolean }) {
   if (status === 'Cancelled') {
     return <span className="lifecycle-cancelled">Cancelled</span>;
@@ -392,7 +407,7 @@ function LifecycleTracker({ status, compact = false }: { status: POStatus; compa
 type PoItemDraft = {
   inventoryItemId: string;
   description: string;
-  quantity: number;
+  quantities: Record<string, number>;
   unitPrice: number;
 };
 
@@ -410,10 +425,12 @@ function CreatePoModal({
 }: {
   onClose: () => void;
   onCreate: (draft: {
-    branchId: string;
+    branchOrders: Array<{
+      branchId: string;
+      items: Array<{ inventoryItemId?: string; description?: string; quantity: number; unitPrice: number }>;
+    }>;
     supplierId: string;
     number: string;
-    items: Array<{ inventoryItemId?: string; description?: string; quantity: number; unitPrice: number }>;
   }) => Promise<void>;
   branches: PurchaseOrderOption[];
   suppliers: PurchaseOrderOption[];
@@ -424,9 +441,10 @@ function CreatePoModal({
   initialQuantity?: number;
   creating: boolean;
 }) {
-  const [branchId, setBranchId] = useState(defaultBranchId && branches.some((branch) => branch.id === defaultBranchId)
+  const initialBranchId = defaultBranchId && branches.some((branch) => branch.id === defaultBranchId)
     ? defaultBranchId
-    : branches[0]?.id ?? '');
+    : branches[0]?.id ?? '';
+  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(initialBranchId ? [initialBranchId] : []);
   const itemForReorder = inventoryItems.find((item) => item.id === initialInventoryItemId);
   const initialSupplierId = suppliers.some((supplier) => supplier.id === itemForReorder?.supplierId)
     ? itemForReorder!.supplierId!
@@ -436,15 +454,19 @@ function CreatePoModal({
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const branchInventoryItems = inventoryItems.filter(
-    (item) => item.branchId === branchId && item.supplierId === supplierId,
+  const supplierCatalogItems = inventoryItems.filter(
+    (item) => item.supplierId === supplierId,
   );
-  const initialItem = branchInventoryItems.find((item) => item.id === initialInventoryItemId) ?? branchInventoryItems[0];
+  const initialItem = supplierCatalogItems.find((item) => item.id === initialInventoryItemId) ??
+    supplierCatalogItems[0];
   const [items, setItems] = useState<PoItemDraft[]>([
     {
       inventoryItemId: initialItem?.id ?? '',
       description: initialItem?.name ?? '',
-      quantity: initialQuantity && initialQuantity > 0 ? initialQuantity : 1,
+      quantities: Object.fromEntries(selectedBranchIds.map((id) => [
+        id,
+        initialQuantity && initialQuantity > 0 ? initialQuantity : 1,
+      ])),
       unitPrice: initialItem?.unitCost ?? 0,
     },
   ]);
@@ -455,7 +477,7 @@ function CreatePoModal({
       if (val === 'custom') {
         copy[index] = { ...copy[index], inventoryItemId: '', description: copy[index].description || '' };
       } else {
-        const found = branchInventoryItems.find((inv) => inv.id === val);
+        const found = supplierCatalogItems.find((inv) => inv.id === val);
         copy[index] = {
           ...copy[index],
           inventoryItemId: val,
@@ -476,43 +498,27 @@ function CreatePoModal({
   }
 
   function addItem() {
-    const nextItem = branchInventoryItems[0];
+    const nextItem = supplierCatalogItems[0];
     setItems((prev) => [
       ...prev,
       {
         inventoryItemId: nextItem?.id ?? '',
         description: nextItem?.name ?? '',
-        quantity: 1,
+        quantities: Object.fromEntries(selectedBranchIds.map((id) => [id, 0])),
         unitPrice: nextItem?.unitCost ?? 0,
       },
     ]);
   }
 
-  function changeBranch(nextBranchId: string) {
-    const nextBranchItems = inventoryItems.filter(
-      (item) => item.branchId === nextBranchId && item.supplierId === supplierId,
-    );
-    setBranchId(nextBranchId);
-    setItems((current) => current.map((row) => {
-      if (!row.inventoryItemId || inventoryItems.some((item) =>
-        item.id === row.inventoryItemId &&
-        item.branchId === nextBranchId &&
-        item.supplierId === supplierId)) {
-        return row;
-      }
-      const replacement = nextBranchItems[0];
-      return {
-        ...row,
-        inventoryItemId: replacement?.id ?? '',
-        description: replacement?.name ?? '',
-        unitPrice: replacement?.unitCost ?? 0,
-      };
-    }));
+  function changeBranches(branchId: string, checked: boolean) {
+    setSelectedBranchIds((current) => checked
+      ? current.includes(branchId) ? current : [...current, branchId]
+      : current.filter((id) => id !== branchId));
   }
 
   function changeSupplier(nextSupplierId: string) {
     const nextSupplierItems = inventoryItems.filter(
-      (item) => item.branchId === branchId && item.supplierId === nextSupplierId,
+      (item) => item.supplierId === nextSupplierId,
     );
     setSupplierId(nextSupplierId);
     setItems((current) => current.map((row) => {
@@ -532,14 +538,17 @@ function CreatePoModal({
     setItems((prev) => prev.filter((_, i) => i !== index));
   }
 
-  const grandTotal = items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
+  const grandTotal = items.reduce((sum, item) => {
+    const quantity = selectedBranchIds.reduce((total, id) => total + (Number(item.quantities[id]) || 0), 0);
+    return sum + quantity * (Number(item.unitPrice) || 0);
+  }, 0);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
 
-    if (!branchId) {
-      setError('Branch is required.');
+    if (selectedBranchIds.length === 0) {
+      setError('Select at least one destination branch.');
       return;
     }
     if (!supplierId) {
@@ -562,9 +571,9 @@ function CreatePoModal({
         return;
       }
       if (item.inventoryItemId) {
-        const catalogItem = branchInventoryItems.find((candidate) => candidate.id === item.inventoryItemId);
+        const catalogItem = supplierCatalogItems.find((candidate) => candidate.id === item.inventoryItemId);
         if (!catalogItem || catalogItem.unitCost == null) {
-          setError(`Item #${i + 1} is not linked to this supplier and branch or has no catalog unit cost.`);
+          setError(`Item #${i + 1} is not linked to this supplier or has no catalog unit cost.`);
           return;
         }
         if (Number(item.unitPrice) !== catalogItem.unitCost) {
@@ -572,14 +581,39 @@ function CreatePoModal({
           return;
         }
       }
-      if (Number(item.quantity) <= 0) {
-        setError(`Item #${i + 1} quantity must be greater than 0.`);
-        return;
+      for (const id of selectedBranchIds) {
+        const quantity = Number(item.quantities[id]) || 0;
+        if (quantity < 0) {
+          setError(`Item #${i + 1} quantity cannot be negative.`);
+          return;
+        }
+        if (!Number.isInteger(quantity)) {
+          setError(`Item #${i + 1} quantity must be a whole number.`);
+          return;
+        }
       }
       if (Number(item.unitPrice) < 0) {
         setError(`Item #${i + 1} unit price cannot be negative.`);
         return;
       }
+    }
+
+    const branchOrders = selectedBranchIds.map((id) => ({
+      branchId: id,
+      items: items
+        .filter((item) => (Number(item.quantities[id]) || 0) > 0)
+        .map((item) => ({
+          inventoryItemId: item.inventoryItemId || undefined,
+          description: item.description.trim() || undefined,
+          quantity: Number(item.quantities[id]),
+          unitPrice: Number(item.unitPrice),
+        })),
+    }));
+    const branchWithoutItems = branchOrders.find((order) => order.items.length === 0);
+    if (branchWithoutItems) {
+      const branchName = branches.find((branch) => branch.id === branchWithoutItems.branchId)?.name ?? 'Selected branch';
+      setError(`Enter a quantity for at least one item for ${branchName}.`);
+      return;
     }
 
     setConfirmOpen(true);
@@ -588,21 +622,25 @@ function CreatePoModal({
   async function confirmCreate() {
     setConfirmOpen(false);
     await onCreate({
-      branchId,
+      branchOrders: selectedBranchIds.map((id) => ({
+        branchId: id,
+        items: items
+          .filter((item) => (Number(item.quantities[id]) || 0) > 0)
+          .map((item) => ({
+            inventoryItemId: item.inventoryItemId || undefined,
+            description: item.description.trim() || undefined,
+            quantity: Number(item.quantities[id]),
+            unitPrice: Number(item.unitPrice),
+          })),
+      })),
       supplierId,
       number: poNumber.trim(),
-      items: items.map((i) => ({
-        inventoryItemId: i.inventoryItemId ? i.inventoryItemId : undefined,
-        description: i.description.trim() || undefined,
-        quantity: Number(i.quantity),
-        unitPrice: Number(i.unitPrice),
-      })),
     });
   }
 
   return (
     <div className="modal-overlay" onClick={onClose} role="presentation">
-      <div className="modal modal-lg" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-po-title">
+      <div className="modal modal-lg po-create-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-po-title">
         <div className="modal-head">
           <h2 id="create-po-title">Create Purchase Order</h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
@@ -620,12 +658,26 @@ function CreatePoModal({
                 required
               />
             </label>
-            <label className="form-field">
-              Destination Branch
-              <select value={branchId} onChange={(event) => changeBranch(event.target.value)} required>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </label>
+            <div className="form-field form-field-wide">
+              Destination branches
+              <div className="po-branch-options" role="group" aria-label="Destination branches">
+                {branches.map((branch) => (
+                  <label key={branch.id} className={`po-branch-option${selectedBranchIds.includes(branch.id) ? ' is-selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={selectedBranchIds.includes(branch.id)}
+                      onChange={(event) => changeBranches(branch.id, event.target.checked)}
+                      aria-label={`Order for ${branch.name}`}
+                    />
+                    <span>{branch.name}</span>
+                  </label>
+                ))}
+              </div>
+              <small className="po-branch-help">
+                Each selected branch gets its own purchase order and stock receipt.
+                {selectedBranchIds.length > 1 && ` Generated numbers: ${selectedBranchIds.map((_, index) => `${poNumber.trim() || 'PO'}-${String(index + 1).padStart(2, '0')}`).join(', ')}.`}
+              </small>
+            </div>
             <label className="form-field form-field-wide">
               Supplier
               <select value={supplierId} onChange={(event) => changeSupplier(event.target.value)} required>
@@ -642,91 +694,107 @@ function CreatePoModal({
               </button>
             </div>
 
-            <table className="po-items-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '38%' }}>Item / Description</th>
-                  <th style={{ width: '18%' }}>Quantity</th>
-                  <th style={{ width: '22%' }}>Unit Price (LKR)</th>
-                  <th style={{ width: '18%', textAlign: 'right' }}>Subtotal</th>
-                  <th className="cell-action"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((row, idx) => {
-                  const lineSubtotal = (Number(row.quantity) || 0) * (Number(row.unitPrice) || 0);
-                  const isCustom = !row.inventoryItemId;
+            <div className="po-items-table-wrap">
+              <table className="po-items-table">
+                <thead>
+                  <tr>
+                    <th>Item / Description</th>
+                    {selectedBranchIds.map((id) => (
+                      <th key={id}>{branches.find((branch) => branch.id === id)?.name ?? 'Branch'} qty</th>
+                    ))}
+                    <th>Unit Price (LKR)</th>
+                    <th>Subtotal</th>
+                    <th className="cell-action"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((row, idx) => {
+                    const lineQuantity = selectedBranchIds.reduce((sum, id) => sum + (Number(row.quantities[id]) || 0), 0);
+                    const lineSubtotal = lineQuantity * (Number(row.unitPrice) || 0);
+                    const isCustom = !row.inventoryItemId;
 
-                  return (
-                    <tr key={idx}>
-                      <td>
-                        <select
-                          value={row.inventoryItemId || 'custom'}
-                          onChange={(e) => handleItemSelect(idx, e.target.value)}
-                          aria-label={`Inventory item for line ${idx + 1}`}
-                          style={{ marginBottom: isCustom ? '0.35rem' : '0' }}
-                        >
-                          <option value="custom">-- Custom Description --</option>
-                          {branchInventoryItems.map((inv) => (
-                            <option key={inv.id} value={inv.id}>
-                              {inv.name} ({inv.sku}){inv.unitCost == null ? ' · cost not set' : ''}
-                            </option>
-                          ))}
-                        </select>
-                        {isCustom && (
+                    return (
+                      <tr key={idx}>
+                        <td>
+                          <select
+                            value={row.inventoryItemId || 'custom'}
+                            onChange={(e) => handleItemSelect(idx, e.target.value)}
+                            aria-label={`Inventory item for line ${idx + 1}`}
+                            style={{ marginBottom: isCustom ? '0.35rem' : '0' }}
+                          >
+                            <option value="custom">-- Custom Description --</option>
+                            {supplierCatalogItems.map((inv) => (
+                              <option key={inv.id} value={inv.id}>
+                                {inv.name} ({inv.sku})
+                                {inv.branchName ? ` · from ${inv.branchName}` : ''}
+                                {inv.unitCost == null ? ' · cost not set' : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {isCustom && (
+                            <input
+                              type="text"
+                              placeholder="Enter custom item description"
+                              value={row.description}
+                              onChange={(e) => handleFieldChange(idx, 'description', e.target.value)}
+                              required
+                            />
+                          )}
+                        </td>
+                        {selectedBranchIds.map((id) => {
+                          const branchName = branches.find((branch) => branch.id === id)?.name ?? 'branch';
+                          return (
+                            <td key={id}>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={row.quantities[id] ?? 0}
+                                onChange={(event) => {
+                                  const value = event.target.value;
+                                  if (value !== '' && !/^\d+$/.test(value)) return;
+                                  const quantity = Number(value) || 0;
+                                  setItems((prev) => prev.map((item, itemIndex) => itemIndex === idx
+                                    ? { ...item, quantities: { ...item.quantities, [id]: quantity } }
+                                    : item));
+                                }}
+                                aria-label={`Quantity for ${branchName}, line ${idx + 1}`}
+                              />
+                            </td>
+                          );
+                        })}
+                        <td>
                           <input
-                            type="text"
-                            placeholder="Enter custom item description"
-                            value={row.description}
-                            onChange={(e) => handleFieldChange(idx, 'description', e.target.value)}
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={row.unitPrice}
+                            onChange={(e) => handleFieldChange(idx, 'unitPrice', Number(e.target.value))}
+                            readOnly={!isCustom}
+                            aria-label={`Unit price for line ${idx + 1}${isCustom ? '' : ' (catalog locked)'}`}
+                            title={isCustom ? 'Custom line price' : 'Catalog unit cost is locked'}
                             required
                           />
-                        )}
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min="0.001"
-                          step="0.001"
-                          value={row.quantity}
-                          onChange={(e) => handleFieldChange(idx, 'quantity', Number(e.target.value))}
-                          aria-label={`Quantity for line ${idx + 1}`}
-                          required
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={row.unitPrice}
-                          onChange={(e) => handleFieldChange(idx, 'unitPrice', Number(e.target.value))}
-                          readOnly={!isCustom}
-                          aria-label={`Unit price for line ${idx + 1}${isCustom ? '' : ' (catalog locked)'}`}
-                          title={isCustom ? 'Custom line price' : 'Catalog unit cost is locked'}
-                          required
-                        />
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                        LKR {lineSubtotal.toLocaleString()}
-                      </td>
-                      <td className="cell-action">
-                        {items.length > 1 && (
-                          <button
-                            type="button"
-                            className="po-item-delete-btn"
-                            title="Remove item"
-                            onClick={() => removeItem(idx)}
-                          >
-                            ×
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="po-line-subtotal">LKR {lineSubtotal.toLocaleString()}</td>
+                        <td className="cell-action">
+                          {items.length > 1 && (
+                            <button
+                              type="button"
+                              className="po-item-delete-btn"
+                              title="Remove item"
+                              onClick={() => removeItem(idx)}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
             <div className="po-total-row">
               <span>Total Order Value ({items.length} {items.length === 1 ? 'item' : 'items'}):</span>
@@ -736,9 +804,9 @@ function CreatePoModal({
             </div>
             {confirmOpen && (
               <ConfirmDialog
-                title={`Create ${poNumber.trim()}?`}
-                message={`Create this purchase order for ${formatPrice(grandTotal)} with ${items.length} line item${items.length === 1 ? '' : 's'}? The order will be saved to the database as Draft.`}
-                confirmLabel="Create purchase order"
+                title={`Create ${selectedBranchIds.length} purchase order${selectedBranchIds.length === 1 ? '' : 's'}?`}
+                message={`Create separate branch orders from ${poNumber.trim()} for ${formatPrice(grandTotal)} across ${selectedBranchIds.length} branch${selectedBranchIds.length === 1 ? '' : 'es'}? Each branch order will be saved as Draft.`}
+                confirmLabel={`Create ${selectedBranchIds.length} order${selectedBranchIds.length === 1 ? '' : 's'}`}
                 onConfirm={() => { void confirmCreate(); }}
                 onCancel={() => setConfirmOpen(false)}
               />
@@ -762,7 +830,6 @@ function CreatePoModal({
 type ReceiptDraft = {
   acceptedQuantity: string;
   damagedQuantity: string;
-  closeRemainingAsShort: boolean;
   notes: string;
   inventoryItemId?: string;
 };
@@ -794,7 +861,6 @@ function ReceivePoModal({
     Object.fromEntries((order.items ?? []).map((item) => [item.id, {
       acceptedQuantity: '',
       damagedQuantity: '',
-      closeRemainingAsShort: false,
       notes: '',
       inventoryItemId: undefined,
     }])),
@@ -820,15 +886,22 @@ function ReceivePoModal({
       purchaseOrderItemId: item.id,
       acceptedQuantity: Number(lines[item.id]?.acceptedQuantity || 0),
       damagedQuantity: Number(lines[item.id]?.damagedQuantity || 0),
-      closeRemainingAsShort: lines[item.id]?.closeRemainingAsShort ?? false,
+      closeRemainingAsShort: false,
       notes: lines[item.id]?.notes.trim() ?? '',
       inventoryItemId: item.inventoryItemId ?? lines[item.id]?.inventoryItemId,
     }));
     const changed = payload.some((line) =>
-      line.acceptedQuantity > 0 || line.damagedQuantity > 0 || line.closeRemainingAsShort,
+      line.acceptedQuantity > 0 || line.damagedQuantity > 0,
     );
     if (!changed) {
       setError('Enter an accepted or damaged quantity, or confirm a remaining shortage for at least one item.');
+      return;
+    }
+    if (payload.some((line) =>
+      !Number.isInteger(line.acceptedQuantity) ||
+      !Number.isInteger(line.damagedQuantity),
+    )) {
+      setError('Accepted and damaged quantities must be whole numbers.');
       return;
     }
     const invalid = payload.find((line) => {
@@ -858,7 +931,7 @@ function ReceivePoModal({
         <div className="modal-head">
           <div>
             <h2 id="receive-po-title">Receive {order.number}</h2>
-            <p>Only accepted units are added to inventory. Record shortages to close a line when no more delivery is expected.</p>
+            <p>Only accepted units are added to inventory. Any remaining units stay open for a later delivery.</p>
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close" disabled={saving}>×</button>
         </div>
@@ -867,7 +940,7 @@ function ReceivePoModal({
           <div className="po-items-section">
             <table className="po-items-table">
               <thead>
-                <tr><th>Item</th><th>Ordered</th><th>Accepted so far</th><th>Remaining</th><th>Accepted now (good)</th><th>Damaged now</th></tr>
+                <tr><th>Item</th><th>Ordered</th><th>Accepted so far</th><th>Still due after this delivery</th><th>Accepted now (good)</th><th>Damaged now</th></tr>
               </thead>
               <tbody>
                 {(order.items ?? []).map((item) => {
@@ -875,24 +948,37 @@ function ReceivePoModal({
                   const line = lines[item.id] ?? {
                     acceptedQuantity: '',
                     damagedQuantity: '',
-                    closeRemainingAsShort: false,
                     notes: '',
                   };
+                  const remainingAfterDelivery = Math.max(
+                    0,
+                    left -
+                      (Number(line.acceptedQuantity) || 0) -
+                      (Number(line.damagedQuantity) || 0),
+                  );
                   return (
                     <tr key={item.id}>
                       <td>{item.itemName ?? item.description ?? 'Unnamed item'}</td>
                       <td>{item.quantity}</td>
                       <td>{item.receivedQuantity}</td>
-                      <td>{left}</td>
+                      <td className="po-receiving-remaining" aria-label={`Remaining after this delivery for ${item.itemName ?? item.description ?? 'item'}`}>
+                        <strong>{remainingAfterDelivery}</strong>
+                        <small>of {left} remaining before this delivery</small>
+                      </td>
                       <td>
                         <input
                           aria-label={`Accepted now ${item.itemName ?? item.description ?? ''}`}
                           type="number"
                           min="0"
                           max={Math.max(0, left - Number(line.damagedQuantity || 0))}
-                          step="0.001"
+                          step="1"
                           value={line.acceptedQuantity}
-                          onChange={(event) => updateLine(item.id, { acceptedQuantity: event.target.value })}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            if (value === '' || /^\d+$/.test(value)) {
+                              updateLine(item.id, { acceptedQuantity: value });
+                            }
+                          }}
                           disabled={saving || item.receivingClosed}
                         />
                       </td>
@@ -902,9 +988,14 @@ function ReceivePoModal({
                           type="number"
                           min="0"
                           max={Math.max(0, left - Number(line.acceptedQuantity || 0))}
-                          step="0.001"
+                          step="1"
                           value={line.damagedQuantity}
-                          onChange={(event) => updateLine(item.id, { damagedQuantity: event.target.value })}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            if (value === '' || /^\d+$/.test(value)) {
+                              updateLine(item.id, { damagedQuantity: value });
+                            }
+                          }}
                           disabled={saving || item.receivingClosed}
                         />
                       </td>
@@ -945,17 +1036,6 @@ function ReceivePoModal({
                       placeholder="Optional condition / supplier notes"
                       disabled={saving}
                     />
-                  </label>
-                  <label className="form-field form-field-wide">
-                    <span>
-                      <input
-                        type="checkbox"
-                        checked={line.closeRemainingAsShort}
-                        onChange={(event) => updateLine(item.id, { closeRemainingAsShort: event.target.checked })}
-                        disabled={saving}
-                      />{' '}
-                      No more delivery expected; record the remaining {Math.max(0, remaining(item) - Number(line.acceptedQuantity || 0) - Number(line.damagedQuantity || 0))} units as short
-                    </span>
                   </label>
                 </div>
               );
@@ -1107,6 +1187,24 @@ export function PurchaseOrderManagerPage() {
   }, [filtered, selectedId]);
 
   const selected = orders.find((order) => order.id === selectedId) ?? null;
+  const groupedOrdersById = useMemo(() => {
+    const groups = new Map<string, PurchaseOrder[]>();
+    for (const order of orders) {
+      const base = batchOrderBase(order.number);
+      if (!base) continue;
+      const key = `${base}|${order.supplier}|${order.createdAt.slice(0, 10)}`;
+      groups.set(key, [...(groups.get(key) ?? []), order]);
+    }
+    const grouped = new Map<string, PurchaseOrder[]>();
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      const orderedGroup = [...group].sort((left, right) =>
+        left.number.localeCompare(right.number, undefined, { numeric: true }));
+      for (const order of orderedGroup) grouped.set(order.id, orderedGroup);
+    }
+    return grouped;
+  }, [orders]);
+  const selectedOrderGroup = selected ? groupedOrdersById.get(selected.id) ?? [] : [];
 
   const stats = useMemo(() => ({
     total: orders.length,
@@ -1223,60 +1321,76 @@ export function PurchaseOrderManagerPage() {
   const [creating, setCreating] = useState(false);
 
   async function createOrder(draft: {
-    branchId: string;
+    branchOrders: Array<{
+      branchId: string;
+      items: Array<{ inventoryItemId?: string; description?: string; quantity: number; unitPrice: number }>;
+    }>;
     supplierId: string;
     number: string;
-    items: Array<{ inventoryItemId?: string; description?: string; quantity: number; unitPrice: number }>;
   }) {
     if (!canManagePurchaseOrders) return;
     const supplier = options.suppliers.find((option) => option.id === draft.supplierId);
-    const branch = options.branches.find((option) => option.id === draft.branchId);
-    if (!supplier || !branch) {
-      notify('Select a valid branch and supplier before creating a purchase order.', 'error');
+    const selectedBranches = draft.branchOrders.map((order) =>
+      options.branches.find((option) => option.id === order.branchId));
+    if (!supplier || selectedBranches.some((branch) => !branch)) {
+      notify('Select valid destination branches and a supplier before creating purchase orders.', 'error');
       return;
     }
     const now = new Date().toISOString();
-    const totalAmount = draft.items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
-    const created: PurchaseOrder = {
-      id: '',
-      number: draft.number,
-      supplier: supplier.name,
-      branchId: branch.id,
-      branch: branch.name,
-      status: 'Draft',
-      amount: totalAmount,
-      lineItems: draft.items.length,
-      createdAt: now,
-      updatedAt: now,
-      timeline: [{ status: 'Draft', at: now, by: performer }],
-      items: draft.items.map((i, idx) => ({
-        id: `temp-${idx}`,
-        inventoryItemId: i.inventoryItemId,
-        itemName: options.items?.find((inv) => inv.id === i.inventoryItemId)?.name ?? i.description,
-        description: i.description,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-        lineTotal: i.quantity * i.unitPrice,
-        receivedQuantity: 0,
-        damagedQuantity: 0,
-        shortageQuantity: 0,
-        receivingClosed: false,
-      })),
-    };
+    const fallbacks = draft.branchOrders.map((branchOrder, branchIndex): PurchaseOrder => {
+      const branch = selectedBranches[branchIndex]!;
+      const totalAmount = branchOrder.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+      return {
+        id: '',
+        number: draft.branchOrders.length === 1 ? draft.number : `${draft.number}-${String(branchIndex + 1).padStart(2, '0')}`,
+        supplier: supplier.name,
+        branchId: branch.id,
+        branch: branch.name,
+        status: 'Draft',
+        amount: totalAmount,
+        lineItems: branchOrder.items.length,
+        createdAt: now,
+        updatedAt: now,
+        timeline: [{ status: 'Draft', at: now, by: performer }],
+        items: branchOrder.items.map((item, itemIndex) => ({
+          id: `temp-${branchIndex}-${itemIndex}`,
+          inventoryItemId: item.inventoryItemId,
+          itemName: options.items?.find((inventoryItem) => inventoryItem.id === item.inventoryItemId)?.name ?? item.description,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.quantity * item.unitPrice,
+          receivedQuantity: 0,
+          damagedQuantity: 0,
+          shortageQuantity: 0,
+          receivingClosed: false,
+        })),
+      };
+    });
     setCreating(true);
     try {
-      const response = await apiPost<PurchaseOrderResponse>('/purchase-orders', token, {
-        branchId: draft.branchId,
-        supplierId: draft.supplierId,
-        number: draft.number,
-        status: 'Draft',
-        items: draft.items,
-      });
-      const liveOrder = responseToOrder(response, created);
-      setOrders((prev) => [liveOrder, ...prev]);
-      setSelectedId(liveOrder.id);
+      const responses = draft.branchOrders.length === 1
+        ? [await apiPost<PurchaseOrderResponse>('/purchase-orders', token, {
+          branchId: draft.branchOrders[0].branchId,
+          supplierId: draft.supplierId,
+          number: draft.number,
+          status: 'Draft',
+          items: draft.branchOrders[0].items,
+        })]
+        : await apiPost<PurchaseOrderResponse[]>('/purchase-orders/batch', token, {
+          number: draft.number,
+          supplierId: draft.supplierId,
+          branchOrders: draft.branchOrders,
+        });
+      if (responses.length !== draft.branchOrders.length) {
+        throw new Error('The server did not return an order for every selected branch.');
+      }
+      const liveOrders = responses.map((response, index) => responseToOrder(response, fallbacks[index]));
+      setOrders((prev) => [...liveOrders, ...prev]);
+      setSelectedId(liveOrders[0]?.id ?? null);
       setShowCreate(false);
-      notify(`Purchase order ${draft.number} was created successfully with ${draft.items.length} line items (Total: ${formatPrice(totalAmount)}).`, 'success');
+      const totalAmount = liveOrders.reduce((sum, order) => sum + order.amount, 0);
+      notify(`${liveOrders.length} purchase order${liveOrders.length === 1 ? '' : 's'} created successfully for ${selectedBranches.map((branch) => branch!.name).join(', ')} (Total: ${formatPrice(totalAmount)}).`, 'success');
     } catch (err: any) {
       console.error(err);
       notify(`Could not create ${draft.number}: ${err?.message || 'Check connection'}`, 'error');
@@ -1341,16 +1455,19 @@ export function PurchaseOrderManagerPage() {
             {hasActiveFilters && <button className="btn purchase-orders-clear" type="button" onClick={() => { setQuery(''); setStatusFilter('All statuses'); setSupplierFilter('All suppliers'); }}>Clear filters</button>}
           </div>
 
-          <div className="table-wrap">
-            <table className="data-table">
+          <div className="table-wrap purchase-orders-register-wrap">
+            <table className="data-table purchase-orders-register-table">
               <thead>
                 <tr><th>PO</th><th>Supplier</th><th>Amount</th><th>Status</th><th>Lifecycle</th></tr>
               </thead>
               <tbody>
-                {paged.map((order) => (
+                {paged.map((order) => {
+                  const group = groupedOrdersById.get(order.id) ?? [];
+                  const groupBase = batchOrderBase(order.number);
+                  return (
                   <tr
                     key={order.id}
-                    className={order.id === selectedId ? 'row-selected' : undefined}
+                    className={`${order.id === selectedId ? 'row-selected ' : ''}${group.length > 1 ? 'purchase-order-grouped-row' : ''}`}
                     onClick={() => setSelectedId(order.id)}
                     onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(order.id); } }}
                     tabIndex={0}
@@ -1358,7 +1475,10 @@ export function PurchaseOrderManagerPage() {
                   >
                     <td>
                       <p className="po-number">{order.number}</p>
-                      <p className="cell-sub">{formatDate(order.createdAt)}</p>
+                      <div className="purchase-order-register-meta">
+                        {group.length > 1 && <span>Group {groupBase}</span>}
+                        <PurchaseOrderTimestamp value={order.createdAt} dateOnly />
+                      </div>
                     </td>
                     <td>
                       <p className="cell-title">{order.supplier}</p>
@@ -1368,7 +1488,8 @@ export function PurchaseOrderManagerPage() {
                     <td><Badge tone={statusTone[order.status]}>{statusLabels[order.status]}</Badge></td>
                     <td><LifecycleTracker status={order.status} compact /></td>
                   </tr>
-                ))}
+                  );
+                })}
                 {loading && orders.length === 0 && <tr><td colSpan={5} className="empty-state">Loading purchase orders…</td></tr>}
                 {paged.length === 0 && !loading && (
                   <tr><td colSpan={5} className="empty-state">No purchase orders match your filters.</td></tr>
@@ -1422,13 +1543,43 @@ export function PurchaseOrderManagerPage() {
               </div>
 
               <div className="po-detail-body">
+                {selectedOrderGroup.length > 1 && (
+                  <section
+                    className="purchase-order-group-card"
+                    aria-label={`Grouped purchase request ${batchOrderBase(selected.number)}`}
+                  >
+                    <div className="purchase-order-group-heading">
+                      <div>
+                        <span className="purchase-order-group-kicker">ONE REQUEST · BRANCH-SPECIFIC ORDERS</span>
+                        <h3>{batchOrderBase(selected.number)}</h3>
+                      </div>
+                      <strong>{formatPrice(selectedOrderGroup.reduce((sum, order) => sum + order.amount, 0))}</strong>
+                    </div>
+                    <p>Each branch order has its own status and receipt, so record each delivery separately.</p>
+                    <div className="purchase-order-group-branches" aria-label="Branch orders in this request">
+                      {selectedOrderGroup.map((order, index) => (
+                        <button
+                          key={order.id}
+                          type="button"
+                          className={`purchase-order-group-branch${order.id === selected.id ? ' is-selected' : ''}`}
+                          aria-pressed={order.id === selected.id}
+                          onClick={() => setSelectedId(order.id)}
+                        >
+                          <span>{order.branch ?? `Branch ${index + 1}`}</span>
+                          <strong>{statusLabels[order.status]}</strong>
+                          <small>{formatPrice(order.amount)}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
                 <LifecycleTracker status={selected.status} />
 
                 <dl className="detail-grid">
                   <div><dt>Amount</dt><dd>{formatPrice(selected.amount)}</dd></div>
                   <div><dt>Branch</dt><dd>{selected.branch ?? '—'}</dd></div>
-                  <div><dt>Created</dt><dd>{formatDate(selected.createdAt)}</dd></div>
-                  <div><dt>Last updated</dt><dd>{formatDateTime(selected.updatedAt)}</dd></div>
+                  <div><dt>Created</dt><dd><PurchaseOrderTimestamp value={selected.createdAt} dateOnly /></dd></div>
+                  <div><dt>Last updated</dt><dd><PurchaseOrderTimestamp value={selected.updatedAt} /></dd></div>
                 </dl>
 
                 <div className="po-actions">
@@ -1477,15 +1628,23 @@ export function PurchaseOrderManagerPage() {
                           <div className="timeline-content">
                             <div className="timeline-head">
                               <Badge tone="green">Receipt</Badge>
-                              <span className="cell-sub">{formatDateTime(receipt.receivedAt)}</span>
+                              <PurchaseOrderTimestamp value={receipt.receivedAt} />
                             </div>
                             <p className="timeline-user">Recorded by {receipt.receivedBy}</p>
-                            {receipt.items.map((item) => (
-                              <p className="timeline-note" key={`${receipt.id}-${item.purchaseOrderItemId}`}>
-                                Delivered {item.deliveredQuantity}; accepted {item.acceptedQuantity}; damaged {item.damagedQuantity}; short {item.shortageQuantity}
-                                {item.notes ? ` · ${item.notes}` : ''}
-                              </p>
-                            ))}
+                            <div className="receipt-line-summaries">
+                              {receipt.items.map((item) => (
+                                <div className="receipt-line-summary" key={`${receipt.id}-${item.purchaseOrderItemId}`}>
+                                  <span>{item.itemName ?? 'Received item'}</span>
+                                  <div className="receipt-line-quantities">
+                                    <span><small>Delivered</small><strong>{item.deliveredQuantity}</strong></span>
+                                    <span><small>Accepted</small><strong>{item.acceptedQuantity}</strong></span>
+                                    <span><small>Damaged</small><strong>{item.damagedQuantity}</strong></span>
+                                    <span><small>Short</small><strong>{item.shortageQuantity}</strong></span>
+                                  </div>
+                                  {item.notes && <p>{item.notes}</p>}
+                                </div>
+                              ))}
+                            </div>
                             {!!receipt.photoUrls?.length && (
                               <div className="po-receipt-photos">
                                 {receipt.photoUrls.map((url) => (
@@ -1517,7 +1676,7 @@ export function PurchaseOrderManagerPage() {
                         <div className="timeline-content">
                           <div className="timeline-head">
                             <Badge tone={statusTone[event.status]}>{statusLabels[event.status]}</Badge>
-                            <span className="cell-sub">{formatDateTime(event.at)}</span>
+                            <PurchaseOrderTimestamp value={event.at} />
                           </div>
                           <p className="timeline-user">By {event.by}</p>
                           {event.note && <p className="timeline-note">{event.note}</p>}

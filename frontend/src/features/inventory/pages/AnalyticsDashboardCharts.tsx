@@ -14,6 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { Link } from 'react-router-dom';
 import { getStoredToken } from '../authToken';
 import { useChartTheme } from '../../../shared/useChartTheme';
 import { Badge, type BadgeTone } from '../ui/Badge';
@@ -702,6 +703,13 @@ export function AnalyticsDashboardPage() {
             <h2>What’s happening in sales</h2>
           </div>
           <span>{dateRangeLabel(range)} · recorded sales</span>
+        </div>
+        <div className="inventory-sales-branch-action">
+          <div>
+            <strong>Compare branch performance</strong>
+            <span>Explore branch sales, profit, stock value and health side by side.</span>
+          </div>
+          <Link to="/branch-performance" className="btn btn-secondary">View branch performance</Link>
         </div>
         <div className="inventory-analytics-metrics">
           <Metric

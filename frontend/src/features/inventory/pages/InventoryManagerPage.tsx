@@ -28,9 +28,12 @@ type StockRow = {
   owner: string;
 };
 
-type StockForm = Omit<StockRow, 'sku'>;
+type StockForm = Omit<StockRow, 'sku'> & {
+  branchStocks?: Array<{ branchId: string; quantity: number }>;
+};
 type SupplierOption = { id: string; name: string; leadTimeDays: number | null };
 type InventoryCategoryOption = { id: string; name: string };
+type InventoryBranchOption = { id: string; name: string };
 
 const PAGE_SIZE = 5;
 
@@ -126,16 +129,6 @@ function nextSku(items: StockRow[]) {
   return `SKU-${String(max + 1).padStart(5, '0')}`;
 }
 
-function StockLevelBar({ qty, reorder }: { qty: number; reorder: number }) {
-  const pct = reorder > 0 ? Math.min(100, (qty / reorder) * 100) : qty > 0 ? 100 : 0;
-  const tone = qty <= 0 ? 'red' : reorder > 0 && qty <= reorder ? 'amber' : 'green';
-  return (
-    <div className="stock-level stock-level-wide" role="progressbar" aria-label="Stock level relative to reorder point" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} aria-valuetext={`${qty} on hand; reorder point ${reorder}`} title={`${Math.round(pct)}% of reorder level`}>
-      <div className={`stock-level-fill stock-level-${tone}`} style={{ width: `${Math.max(4, pct)}%` }} />
-    </div>
-  );
-}
-
 function Stars({ rating }: { rating: number }) {
   return (
     <span className="stars" aria-label={`${rating} out of 5`}>
@@ -157,6 +150,8 @@ function ItemModal({
   saving,
   suppliers,
   categories: inventoryCategories,
+  branches,
+  defaultBranchId,
 }: {
   title: string;
   isEditing: boolean;
@@ -166,10 +161,23 @@ function ItemModal({
   saving: boolean;
   suppliers: SupplierOption[];
   categories: InventoryCategoryOption[];
+  branches: InventoryBranchOption[];
+  defaultBranchId?: string;
 }) {
   const [form, setForm] = useState(initial);
   const [error, setError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const defaultSelectedBranchId = initial.branchId ?? defaultBranchId ?? branches[0]?.id;
+  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(() =>
+    initial.branchStocks?.map((stock) => stock.branchId) ??
+      (defaultSelectedBranchId ? [defaultSelectedBranchId] : []),
+  );
+  const [branchQuantities, setBranchQuantities] = useState<Record<string, number>>(() =>
+    Object.fromEntries(
+      initial.branchStocks?.map((stock) => [stock.branchId, stock.quantity]) ??
+        (defaultSelectedBranchId ? [[defaultSelectedBranchId, initial.qty]] : []),
+    ),
+  );
 
   function update<K extends keyof StockForm>(key: K, value: StockForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -189,8 +197,8 @@ function ItemModal({
       setError('Unit is required.');
       return;
     }
-    if (!form.owner.trim()) {
-      setError('Owner is required.');
+    if (selectedBranchIds.length === 0) {
+      setError('Select at least one branch to update or add this item.');
       return;
     }
     if ((form.costPrice ?? 0) < 0 ||
@@ -198,6 +206,10 @@ function ItemModal({
         form.qty < 0 ||
         form.reorder < 0) {
       setError('Prices, quantity, and reorder level must be zero or greater.');
+      return;
+    }
+    if (selectedBranchIds.some((branchId) => (branchQuantities[branchId] ?? 0) < 0)) {
+      setError('Branch stock quantities cannot be negative.');
       return;
     }
     if (form.costPrice != null &&
@@ -211,7 +223,13 @@ function ItemModal({
 
   function confirmSave() {
     setConfirmOpen(false);
-    onSave(form);
+    onSave({
+      ...form,
+      branchStocks: selectedBranchIds.map((branchId) => ({
+        branchId,
+        quantity: Number(branchQuantities[branchId] ?? 0),
+      })),
+    });
   }
 
   return (
@@ -228,6 +246,59 @@ function ItemModal({
               Item name
               <input value={form.item} onChange={(event) => update('item', event.target.value)} placeholder="e.g. Premium Coffee Beans" />
             </label>
+            <fieldset className="form-field form-field-wide inventory-branch-stock-field">
+                <legend>{isEditing ? 'Branches and stock' : 'Branches and starting stock'}</legend>
+                <p>
+                  {isEditing
+                    ? 'Selected branches will be updated. Selecting another branch adds this item there; unselected branches stay unchanged.'
+                    : 'Choose where this item should be tracked. Each branch keeps its own stock quantity.'}
+                </p>
+                {branches.length === 0 ? (
+                  <p role="status">No branches are available for your account.</p>
+                ) : (
+                  <div className="inventory-branch-stock-list">
+                    {branches.map((branch) => {
+                      const selected = selectedBranchIds.includes(branch.id);
+                      return (
+                        <div className="inventory-branch-stock-row" key={branch.id}>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={(event) => {
+                                setSelectedBranchIds((current) =>
+                                  event.target.checked
+                                    ? [...current, branch.id]
+                                    : current.filter((id) => id !== branch.id),
+                                );
+                              }}
+                            />
+                            {branch.name}
+                          </label>
+                          {selected && (
+                            <label>
+                              {isEditing ? 'On-hand stock' : 'Starting stock'}
+                              <input
+                                aria-label={`${isEditing ? 'On-hand stock' : 'Starting stock'} for ${branch.name}`}
+                                type="number"
+                                min={0}
+                                step="0.001"
+                                value={branchQuantities[branch.id] ?? 0}
+                                onChange={(event) =>
+                                  setBranchQuantities((current) => ({
+                                    ...current,
+                                    [branch.id]: Number(event.target.value),
+                                  }))
+                                }
+                              />
+                            </label>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+            </fieldset>
             <label className="form-field">
               Category
               <select
@@ -262,16 +333,8 @@ function ItemModal({
               <input type="number" min={0} step="0.01" value={form.sellingPrice ?? ''} onChange={(event) => update('sellingPrice', event.target.value === '' ? null : Number(event.target.value))} />
             </label>
             <label className="form-field">
-              Quantity on hand
-              <input type="number" min={0} step={1} value={form.qty || ''} onChange={(event) => update('qty', Number(event.target.value))} />
-            </label>
-            <label className="form-field">
               Reorder level
               <input type="number" min={0} step={1} value={form.reorder || ''} onChange={(event) => update('reorder', Number(event.target.value))} />
-            </label>
-            <label className="form-field form-field-wide">
-              Owner
-              <input value={form.owner} onChange={(event) => update('owner', event.target.value)} placeholder="Staff member responsible" />
             </label>
             <label className="form-field form-field-wide">
               Preferred supplier for AI planning
@@ -298,8 +361,8 @@ function ItemModal({
         <ConfirmDialog
           title={title.startsWith('Add') ? 'Add this item to inventory?' : 'Save inventory changes?'}
           message={title.startsWith('Add')
-            ? `Create "${form.item}" with ${form.qty} ${form.unit} in the database?`
-            : `Update "${form.item}" and save the changes to the database?`}
+            ? `Create "${form.item}" for ${selectedBranchIds.length} ${selectedBranchIds.length === 1 ? 'branch' : 'branches'} with separate starting stock?`
+            : `Update "${form.item}" in ${selectedBranchIds.length} selected ${selectedBranchIds.length === 1 ? 'branch' : 'branches'}? Other branches will stay unchanged.`}
           confirmLabel={title.startsWith('Add') ? 'Add item' : 'Save changes'}
           onConfirm={confirmSave}
           onCancel={() => setConfirmOpen(false)}
@@ -317,16 +380,18 @@ export function InventoryManagerPage() {
   const [items, setItems] = useState<StockRow[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [inventoryCategories, setInventoryCategories] = useState<InventoryCategoryOption[]>([]);
+  const [branches, setBranches] = useState<InventoryBranchOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState(() => searchParams.get('search') ?? '');
   const [category, setCategory] = useState(categories[0]);
   const [status, setStatus] = useState<StatusFilter>(statusFilters[0]);
+  const [branchFilter, setBranchFilter] = useState('All branches');
   const [page, setPage] = useState(1);
-  const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; sku: string } | null>(null);
+  const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; id: string } | null>(null);
   const [qrItem, setQrItem] = useState<StockRow | null>(null);
-  const [deleteSku, setDeleteSku] = useState<string | null>(null);
+  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -351,21 +416,38 @@ export function InventoryManagerPage() {
         row.unit.toLowerCase().includes(queryLower);
       const matchesCategory = category === 'All categories' || row.category === category;
       const matchesStatus = status === 'All statuses' || rowStatus === status;
-      return matchesQuery && matchesCategory && matchesStatus;
+      const matchesBranch = branchFilter === 'All branches' || row.branchId === branchFilter;
+      return matchesQuery && matchesCategory && matchesStatus && matchesBranch;
     });
-  }, [category, items, query, status]);
+  }, [branchFilter, category, items, query, status]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const groupedFiltered = useMemo(() => {
+    const groups = new Map<string, StockRow[]>();
+    filtered.forEach((row) => {
+      const key = row.sku.trim().toLowerCase();
+      const rows = groups.get(key) ?? [];
+      rows.push(row);
+      groups.set(key, rows);
+    });
+    return Array.from(groups, ([key, rows]) => ({
+      key,
+      rows: rows.sort((first, second) => first.owner.localeCompare(second.owner)),
+      primary: rows[0],
+      totalQuantity: rows.reduce((total, row) => total + row.qty, 0),
+    }));
+  }, [filtered]);
+
+  const totalPages = Math.max(1, Math.ceil(groupedFiltered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
 
   const paged = useMemo(() => {
     const start = (safePage - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, safePage]);
+    return groupedFiltered.slice(start, start + PAGE_SIZE);
+  }, [groupedFiltered, safePage]);
 
   useEffect(() => {
     setPage(1);
-  }, [query, category, status]);
+  }, [query, category, status, branchFilter]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -373,14 +455,27 @@ export function InventoryManagerPage() {
 
   const stats = useMemo(() => {
     const total = items.reduce((sum, row) => sum + row.qty, 0);
-    const low = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Low stock').length;
-    const out = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Out of stock').length;
+    const productGroups = new Map<string, StockRow[]>();
+    items.forEach((row) => {
+      const key = row.sku.trim().toLowerCase();
+      const rows = productGroups.get(key) ?? [];
+      rows.push(row);
+      productGroups.set(key, rows);
+    });
+    const productRows = Array.from(productGroups.values());
+    const low = productRows.filter((rows) =>
+      rows.some((row) => deriveStatus(row.qty, row.reorder) === 'Low stock') &&
+      !rows.every((row) => deriveStatus(row.qty, row.reorder) === 'Out of stock'),
+    ).length;
+    const out = productRows.filter((rows) =>
+      rows.every((row) => deriveStatus(row.qty, row.reorder) === 'Out of stock'),
+    ).length;
     const value = items.reduce((sum, row) => sum + row.qty * (row.costPrice ?? 0), 0);
     const categories = new Set(items.map((row) => row.category).filter(Boolean)).size;
-    return { items: items.length, total, low, out, value, categories };
+    return { items: productRows.length, total, low, out, value, categories };
   }, [items]);
 
-  const editingItem = modal?.mode === 'edit' ? items.find((row) => row.sku === modal.sku) : undefined;
+  const editingItem = modal?.mode === 'edit' ? items.find((row) => row.id === modal.id) : undefined;
 
   async function loadInventory(categoryOptionsForItems = inventoryCategories): Promise<boolean> {
     setLoading(true);
@@ -541,6 +636,28 @@ export function InventoryManagerPage() {
 
   useEffect(() => {
     let active = true;
+    void fetch('/api/inventory/branches', {
+      headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Branch request failed (${response.status})`);
+        return response.json();
+      })
+      .then((result) => {
+        if (active) setBranches(Array.isArray(result) ? result : []);
+      })
+      .catch((error) => {
+        console.error(error);
+        if (active) {
+          const message = error instanceof Error ? error.message : 'Unable to load branches.';
+          notify(message, 'error');
+        }
+      });
+    return () => { active = false; };
+  }, [notify, token]);
+
+  useEffect(() => {
+    let active = true;
     void fetch('/api/suppliers', { headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' } })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Supplier request failed (${response.status})`);
@@ -560,7 +677,7 @@ export function InventoryManagerPage() {
   async function handleSave(form: StockForm) {
     setSaving(true);
     try {
-      const existing = modal?.mode === 'edit' ? items.find((row) => row.sku === modal.sku) : undefined;
+      const existing = modal?.mode === 'edit' ? items.find((row) => row.id === modal.id) : undefined;
       const path = existing?.id ? `/api/inventory/${existing.id}` : '/api/inventory';
       const method = existing?.id ? 'PUT' : 'POST';
       const response = await fetch(path, {
@@ -573,8 +690,8 @@ export function InventoryManagerPage() {
           categoryId: form.categoryId ?? existing?.categoryId ?? null,
           category: existing && !form.categoryId ? null : form.category,
           unitId: existing?.unitId ?? null,
-          branchId: existing?.branchId ?? user?.branchId ?? null,
-          ...(existing ? {} : { quantity: form.qty }),
+          branchId: null,
+          branchStocks: form.branchStocks,
           reorderLevel: form.reorder,
           unitCost: form.costPrice,
           sellingPrice: form.sellingPrice,
@@ -593,18 +710,6 @@ export function InventoryManagerPage() {
           : errJson?.message || errJson?.title || `Save failed (${response.status})`;
         throw new Error(errDetail);
       }
-      if (existing && form.qty !== existing.qty) {
-        const adjustment = await fetch(`/api/inventory/${existing.id}/adjust`, {
-          method: 'POST',
-          headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: token ? 'Bearer ' + token : '' },
-          body: JSON.stringify({ quantity: form.qty - existing.qty, reference: 'Inventory manager edit' }),
-        });
-        if (!adjustment.ok) {
-          const adjJson = await adjustment.json().catch(() => null);
-          const adjDetail = adjJson?.message || `Quantity adjustment failed (${adjustment.status})`;
-          throw new Error(adjDetail);
-        }
-      }
       await loadInventory();
       setModal(null);
       notify(`${form.item} was successfully ${existing ? 'updated' : 'added'} in inventory.`, 'success');
@@ -617,10 +722,10 @@ export function InventoryManagerPage() {
   }
 
   async function confirmDelete() {
-    if (!deleteSku) return;
-    const item = items.find((row) => row.sku === deleteSku);
+    if (!deleteItemId) return;
+    const item = items.find((row) => row.id === deleteItemId);
     if (!item?.id) {
-      setDeleteSku(null);
+      setDeleteItemId(null);
       notify('This inventory item is missing its database ID. Refresh and try again.', 'warning');
       return;
     }
@@ -634,7 +739,7 @@ export function InventoryManagerPage() {
         throw new Error(errJson?.message || `Delete failed (${response.status})`);
       }
       await loadInventory();
-      setDeleteSku(null);
+      setDeleteItemId(null);
       notify(`${item.item} was successfully deleted from inventory.`, 'success');
     } catch (error: any) {
       console.error(error);
@@ -642,9 +747,12 @@ export function InventoryManagerPage() {
     }
   }
 
-  const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
-  const hasActiveFilters = Boolean(query.trim()) || category !== categories[0] || status !== statusFilters[0];
+  const rangeStart = groupedFiltered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(safePage * PAGE_SIZE, groupedFiltered.length);
+  const hasActiveFilters = Boolean(query.trim()) ||
+    category !== categories[0] ||
+    status !== statusFilters[0] ||
+    branchFilter !== 'All branches';
 
   return (
     <div className="page inventory-manager-page">
@@ -657,7 +765,7 @@ export function InventoryManagerPage() {
           <p>One clear view of your stock, item health, and inventory value.</p>
           <div className="inventory-manager-health" aria-live="polite">
             <span className={`inventory-manager-health-dot${loading ? ' is-loading' : ''}`} aria-hidden="true" />
-            {loading ? 'Updating live inventory…' : `${stats.items} items tracked`}
+            {loading ? 'Updating live inventory…' : `${stats.items} ${stats.items === 1 ? 'product' : 'products'} tracked`}
             <span className="inventory-manager-health-separator">·</span>
             {stats.low + stats.out === 0 ? 'All stock levels look healthy' : `${stats.low + stats.out} items need attention`}
           </div>
@@ -688,8 +796,8 @@ export function InventoryManagerPage() {
 
       <section className="stat-strip" aria-label="Inventory summary">
         <article className="stat metric-card inventory-manager-metric inventory-manager-metric-items"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="inventory" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">CATALOGUE</span><strong className="inventory-manager-metric-value">{stats.items}</strong><span className="inventory-manager-metric-label">Items tracked</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">01</span></div><div className="inventory-manager-metric-detail">Organized across {stats.categories} {stats.categories === 1 ? 'category' : 'categories'}</div></article>
-        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-units"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="box" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">AVAILABLE STOCK</span><strong className="inventory-manager-metric-value">{stats.total.toLocaleString()}</strong><span className="inventory-manager-metric-label">Units on hand</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">02</span></div><div className="inventory-manager-metric-detail">Current recorded quantity across items</div></article>
-        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-attention"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="alert" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">STOCK HEALTH</span><strong className="inventory-manager-metric-value">{stats.low + stats.out}</strong><span className="inventory-manager-metric-label">Need attention</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">03</span></div><div className="inventory-manager-metric-detail">{stats.out} out of stock · {stats.low} running low</div></article>
+        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-units"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="box" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">AVAILABLE STOCK</span><strong className="inventory-manager-metric-value">{stats.total.toLocaleString()}</strong><span className="inventory-manager-metric-label">Units on hand</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">02</span></div>        <div className="inventory-manager-metric-detail">Total quantity across all branch stocks</div></article>
+        <article className="stat metric-card inventory-manager-metric inventory-manager-metric-attention"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="alert" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">STOCK HEALTH</span><strong className="inventory-manager-metric-value">{stats.low + stats.out}</strong><span className="inventory-manager-metric-label">Need attention</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">03</span></div>        <div className="inventory-manager-metric-detail">{stats.out} products out of stock · {stats.low} with low stock</div></article>
         <article className="stat metric-card inventory-manager-metric inventory-manager-metric-valuation"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="chart" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">VALUATION</span><strong className="inventory-manager-metric-value-number">LKR {stats.value.toLocaleString()}</strong><span className="inventory-manager-metric-label">Stock value</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">04</span></div><div className="inventory-manager-metric-detail">Calculated using recorded unit costs</div></article>
       </section>
 
@@ -697,8 +805,8 @@ export function InventoryManagerPage() {
         <section className="panel inventory-panel inventory-manager-table-panel">
           <div className="inventory-manager-panel-heading">
             <div className="inventory-manager-panel-icon" aria-hidden="true"><Icon name="inventory" size={19} /></div>
-            <div><h2>Stock catalogue</h2><p>Search, review, and manage individual inventory items.</p></div>
-            <span className="inventory-manager-total-pill">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
+            <div><h2>Stock catalogue</h2><p>One row per product, with each branch's stock shown separately.</p></div>
+            <span className="inventory-manager-total-pill">{stats.items} {stats.items === 1 ? 'product' : 'products'}</span>
           </div>
           <div className="toolbar">
             <div className="search-field">
@@ -717,11 +825,22 @@ export function InventoryManagerPage() {
             <select className="filter-select" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} aria-label="Filter by status">
               {statusFilters.map((option) => <option key={option}>{option}</option>)}
             </select>
+            {branches.length > 1 && (
+              <select
+                className="filter-select"
+                value={branchFilter}
+                onChange={(event) => setBranchFilter(event.target.value)}
+                aria-label="Filter by branch"
+              >
+                <option>All branches</option>
+                {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              </select>
+            )}
             {hasActiveFilters && (
               <button
                 type="button"
                 className="btn btn-ghost inventory-clear-filters"
-                onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); }}
+                onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); setBranchFilter('All branches'); }}
               >
                 Clear filters
               </button>
@@ -734,7 +853,7 @@ export function InventoryManagerPage() {
               aria-pressed={status === 'All statuses'}
               onClick={() => setStatus('All statuses')}
             >
-              All Items <strong>({stats.items})</strong>
+              All Products <strong>({stats.items})</strong>
             </button>
             <button
               type="button"
@@ -765,35 +884,58 @@ export function InventoryManagerPage() {
           <div className="table-wrap">
             <table className="data-table">
               <thead>
-                <tr><th>Item</th><th>Category</th><th>On hand</th><th>Stock level</th><th>Unit cost</th><th>Selling price</th><th>Status</th><th>Actions</th></tr>
+                <tr><th>Item</th><th>Category</th><th>Branch stock</th><th>Total on hand</th><th>Unit cost</th><th>Selling price</th><th>Actions</th></tr>
               </thead>
               <tbody>
-                {paged.map((row) => {
-                  const rowStatus = deriveStatus(row.qty, row.reorder);
+                {paged.map(({ key, rows, primary, totalQuantity }) => {
                   return (
-                    <tr key={row.sku}>
+                    <tr key={key}>
                       <td>
-                        <p className="cell-title">{row.item}</p>
-                        <p className="cell-sub">{row.sku} · {row.owner}</p>
+                        <p className="cell-title">{primary.item}</p>
+                        <div className="inventory-manager-item-meta">
+                          <code className="inventory-manager-item-sku">{primary.sku}</code>
+                          <span className="inventory-manager-item-branch-count">
+                            <span aria-hidden="true">⌖</span>
+                            {rows.length} {rows.length === 1 ? 'branch' : 'branches'}
+                          </span>
+                        </div>
                       </td>
-                      <td><span className="category-pill">{row.category}</span></td>
-                      <td><span className="qty">{row.qty}</span> <span className="cell-sub">{row.unit}</span></td>
-                      <td><StockLevelBar qty={row.qty} reorder={row.reorder} /></td>
-                      <td className="amount">{row.costPrice == null ? 'Not set' : formatPrice(row.costPrice)}</td>
-                      <td className="amount">{row.sellingPrice == null ? 'Not set' : formatPrice(row.sellingPrice)}</td>
-                      <td><Badge tone={statusTone[rowStatus]}>{rowStatus}</Badge></td>
+                      <td><span className="category-pill">{primary.category}</span></td>
+                      <td>
+                        <div className="inventory-product-branch-list">
+                          {rows.map((branchRow) => {
+                            const branchStatus = deriveStatus(branchRow.qty, branchRow.reorder);
+                            return (
+                              <div className="inventory-product-branch" key={branchRow.id ?? branchRow.branchId}>
+                                <span className="inventory-product-branch-name">{branchRow.owner}</span>
+                                <span className="inventory-product-branch-quantity">{branchRow.qty} {branchRow.unit}</span>
+                                <Badge tone={statusTone[branchStatus]}>{branchStatus}</Badge>
+                                <button
+                                  type="button"
+                                  className="row-action row-action-danger inventory-product-branch-delete"
+                                  aria-label={`Remove ${branchRow.item} from ${branchRow.owner}`}
+                                  title={`Remove from ${branchRow.owner}`}
+                                  onClick={() => branchRow.id && setDeleteItemId(branchRow.id)}
+                                >🗑</button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td><span className="qty">{totalQuantity}</span> <span className="cell-sub inventory-manager-unit-label">{primary.unit}</span></td>
+                      <td className="amount">{primary.costPrice == null ? 'Not set' : formatPrice(primary.costPrice)}</td>
+                      <td className="amount">{primary.sellingPrice == null ? 'Not set' : formatPrice(primary.sellingPrice)}</td>
                       <td>
                         <div className="row-actions">
-                          <button type="button" className="row-action" aria-label={`Show QR for ${row.item}`} title="Show item QR" onClick={() => setQrItem(row)}><QRCodeSVG value={row.sku} size={18} level="M" bgColor="#fff" fgColor="#111" /></button>
-                          <button type="button" className="row-action" aria-label={`Edit ${row.item}`} onClick={() => setModal({ mode: 'edit', sku: row.sku })}>✎</button>
-                          <button type="button" className="row-action row-action-danger" aria-label={`Delete ${row.item}`} onClick={() => setDeleteSku(row.sku)}>🗑</button>
+                          <button type="button" className="row-action" aria-label={`Show QR for ${primary.item}`} title="Show item QR" onClick={() => setQrItem(primary)}><QRCodeSVG value={primary.sku} size={18} level="M" bgColor="#fff" fgColor="#111" /></button>
+                          <button type="button" className="row-action" aria-label={`Edit ${primary.item} across branches`} onClick={() => primary.id && setModal({ mode: 'edit', id: primary.id })}>✎</button>
                         </div>
                       </td>
                     </tr>
                   );
                 })}
                 {paged.length === 0 && (
-                  <tr><td colSpan={8} className="empty-state"><div className="inventory-manager-empty"><strong>{items.length === 0 ? 'Your catalogue is ready for its first item' : 'No items match these filters'}</strong><span>{items.length === 0 ? 'Add an item to start tracking quantity, reorder levels, and stock value.' : 'Try another search or clear the active filters.'}</span>{items.length === 0 ? <button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'add' })}>Add first item</button> : hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); }}>Clear filters</button> : null}</div></td></tr>
+                  <tr><td colSpan={7} className="empty-state"><div className="inventory-manager-empty"><strong>{items.length === 0 ? 'Your catalogue is ready for its first item' : 'No items match these filters'}</strong><span>{items.length === 0 ? 'Add an item to start tracking quantity, reorder levels, and stock value.' : 'Try another search or clear the active filters.'}</span>{items.length === 0 ? <button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'add' })}>Add first item</button> : hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); setBranchFilter('All branches'); }}>Clear filters</button> : null}</div></td></tr>
                 )}
               </tbody>
             </table>
@@ -801,11 +943,11 @@ export function InventoryManagerPage() {
 
           <div className="table-footer">
             <p className="table-caption">
-              {filtered.length === 0
+              {groupedFiltered.length === 0
                 ? `No items · ${items.length} total in inventory`
-                : `Showing ${rangeStart}–${rangeEnd} of ${filtered.length} items · ${items.length} total in inventory`}
+                : `Showing ${rangeStart}–${rangeEnd} of ${groupedFiltered.length} products · ${items.length} branch stocks in inventory`}
             </p>
-            {filtered.length > PAGE_SIZE && (
+            {groupedFiltered.length > PAGE_SIZE && (
               <nav className="pagination" aria-label="Inventory pagination">
                 <button
                   type="button"
@@ -846,13 +988,32 @@ export function InventoryManagerPage() {
           title={modal.mode === 'add' ? 'Add inventory item' : 'Edit inventory item'}
           isEditing={modal.mode === 'edit'}
           initial={modal.mode === 'edit' && editingItem
-            ? { item: editingItem.item, category: editingItem.category, categoryId: editingItem.categoryId, unit: editingItem.unit, costPrice: editingItem.costPrice, sellingPrice: editingItem.sellingPrice, qty: editingItem.qty, reorder: editingItem.reorder, owner: editingItem.owner, supplierId: editingItem.supplierId }
+            ? {
+                item: editingItem.item,
+                category: editingItem.category,
+                categoryId: editingItem.categoryId,
+                unit: editingItem.unit,
+                costPrice: editingItem.costPrice,
+                sellingPrice: editingItem.sellingPrice,
+                qty: editingItem.qty,
+                reorder: editingItem.reorder,
+                owner: editingItem.owner,
+                supplierId: editingItem.supplierId,
+                branchId: editingItem.branchId,
+                branchStocks: items.flatMap((row) =>
+                  row.sku === editingItem.sku && row.branchId
+                    ? [{ branchId: row.branchId, quantity: row.qty }]
+                    : [],
+                ),
+              }
             : { ...emptyForm, category: inventoryCategories[0]?.name ?? categoryOptions[0], categoryId: inventoryCategories[0]?.id }}
           onClose={() => setModal(null)}
           onSave={handleSave}
           saving={saving}
           suppliers={suppliers}
           categories={inventoryCategories}
+          branches={branches}
+          defaultBranchId={user?.branchId ?? branches[0]?.id}
         />
       )}
 
@@ -891,19 +1052,19 @@ export function InventoryManagerPage() {
         </div>
       )}
 
-      {deleteSku && (
-        <div className="modal-overlay" onClick={() => setDeleteSku(null)} role="presentation">
+      {deleteItemId && (
+        <div className="modal-overlay" onClick={() => setDeleteItemId(null)} role="presentation">
           <div className="modal modal-sm" onClick={(event) => event.stopPropagation()} role="alertdialog" aria-modal="true" aria-labelledby="delete-title">
             <div className="modal-head">
               <h2 id="delete-title">Delete item?</h2>
-              <button type="button" className="modal-close" onClick={() => setDeleteSku(null)} aria-label="Close">×</button>
+              <button type="button" className="modal-close" onClick={() => setDeleteItemId(null)} aria-label="Close">×</button>
             </div>
             <div className="modal-body">
               <p className="delete-copy">
-                Remove <strong>{items.find((row) => row.sku === deleteSku)?.item}</strong> ({deleteSku}) from inventory? This cannot be undone.
+                Remove <strong>{items.find((row) => row.id === deleteItemId)?.item}</strong> ({items.find((row) => row.id === deleteItemId)?.sku}) from this branch’s inventory? This cannot be undone.
               </p>
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setDeleteSku(null)}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setDeleteItemId(null)}>Cancel</button>
                 <button type="button" className="btn btn-danger" onClick={confirmDelete}>Delete</button>
               </div>
             </div>

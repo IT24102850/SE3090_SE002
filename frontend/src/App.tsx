@@ -51,6 +51,7 @@ const AgentWorkflowMonitorPage = lazy(() => import('./features/inventory/pages/A
 const LowStockAlertsPage = lazy(() => import('./features/inventory/pages/LowStockAlertsPage').then((m) => ({ default: m.LowStockAlertsPage })));
 const BranchOverviewPage = lazy(() => import('./features/inventory/pages/BranchOverviewPage').then((m) => ({ default: m.BranchOverviewPage })));
 const AnalyticsDashboardPage = lazy(() => import('./features/inventory/pages/AnalyticsDashboardCharts').then((m) => ({ default: m.AnalyticsDashboardPage })));
+const BranchPerformancePage = lazy(() => import('./features/inventory/pages/BranchPerformancePage').then((m) => ({ default: m.BranchPerformancePage })));
 /* Billing & payments (component 3). */
 const BillingDashboardPage = lazy(() => import('./features/billing/pages/BillingDashboardPage'));
 const InvoicesPage = lazy(() => import('./features/billing/pages/InvoicesPage'));
@@ -384,7 +385,7 @@ function App() {
               <Route
                 path="/suppliers"
                 element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                  <ProtectedRoute allowedRoles={['Admin', 'Staff']}>
                     <InventoryShell><SuppliersPage /></InventoryShell>
                   </ProtectedRoute>
                 }
@@ -450,6 +451,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
                     <InventoryShell><AnalyticsDashboardPage /></InventoryShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/branch-performance"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <InventoryShell><BranchPerformancePage /></InventoryShell>
                   </ProtectedRoute>
                 }
               />

@@ -22,7 +22,24 @@ const inventoryItem = {
   sellingPrice: 75,
 };
 
-function renderPage() {
+const northInventoryItem = {
+  ...inventoryItem,
+  id: 'item-2',
+  name: 'North Tea Leaves',
+  sku: 'TEA-002',
+  branch: 'North branch',
+  branchId: 'branch-2',
+  quantity: 5,
+};
+
+function branchesResponse() {
+  return new Response(JSON.stringify([
+    { id: 'branch-1', name: 'Main branch' },
+    { id: 'branch-2', name: 'North branch' },
+  ]), { status: 200 });
+}
+
+function renderPage(userOverrides: { role?: 'Admin' | 'Manager' | 'Staff'; branchId?: string } = {}) {
   const store = configureStore({
     reducer: { auth: authReducer },
     preloadedState: {
@@ -31,8 +48,9 @@ function renderPage() {
           id: 'user-1',
           email: 'manager@example.test',
           fullName: 'Test Manager',
-          role: 'Manager' as const,
+          role: userOverrides.role ?? 'Manager' as const,
           tenantId: 'tenant-1',
+          ...userOverrides,
         },
         token: 'test-token',
         isAuthenticated: true,
@@ -60,6 +78,7 @@ describe('SalesPage', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     localStorage.clear();
   });
@@ -68,6 +87,7 @@ describe('SalesPage', () => {
     let saleRequest: Record<string, unknown> | undefined;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes('/api/inventory/branches')) return branchesResponse();
       if (url.includes('/api/inventory?page=')) {
         return new Response(JSON.stringify({ items: [inventoryItem], totalPages: 1 }), { status: 200 });
       }
@@ -111,7 +131,13 @@ describe('SalesPage', () => {
     expect(screen.getByLabelText('Unit selling price')).toHaveValue('Select an item');
     expect(screen.getByRole('button', { name: 'Review sale' })).toBeDisabled();
     fireEvent.click(await screen.findByRole('option', { name: /Tea Leaves/ }));
-    fireEvent.change(screen.getByLabelText('Quantity to sell'), { target: { value: '2' } });
+    const quantityInput = screen.getByLabelText('Quantity to sell');
+    expect(quantityInput).toHaveAttribute('step', '1');
+    expect(quantityInput).toHaveAttribute('min', '0');
+    fireEvent.change(quantityInput, { target: { value: '0.125' } });
+    expect(quantityInput).toHaveValue(0.125);
+    expect(screen.getByRole('button', { name: 'Review sale' })).toBeEnabled();
+    fireEvent.change(quantityInput, { target: { value: '2' } });
 
     expect(screen.getByLabelText('Unit selling price')).toHaveValue('LKR 75.00');
     expect(screen.getByLabelText('Unit selling price')).toHaveAttribute('readonly');
@@ -142,6 +168,7 @@ describe('SalesPage', () => {
   it('shows matching items while typing and explains when there are no matches', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes('/api/inventory/branches')) return branchesResponse();
       if (url.includes('/api/inventory?page=')) {
         return new Response(JSON.stringify({ items: [inventoryItem], totalPages: 1 }), { status: 200 });
       }
@@ -167,9 +194,72 @@ describe('SalesPage', () => {
     expect(await screen.findByText('No in-stock item matches this search.')).toBeInTheDocument();
   });
 
+  it('limits sellable products and sales totals to the selected branch', async () => {
+    const requestedUrls: string[] = [];
+    let resolveNorthInventory: ((response: Response) => void) | undefined;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      requestedUrls.push(url);
+      if (url.includes('/api/inventory/branches')) return Promise.resolve(branchesResponse());
+      if (url.includes('/api/inventory?')) {
+        if (url.includes('branchId=branch-2')) {
+          return new Promise<Response>((resolve) => { resolveNorthInventory = resolve; });
+        }
+        const branchItems = url.includes('branchId=branch-2')
+          ? [northInventoryItem]
+          : [inventoryItem, northInventoryItem];
+        return Promise.resolve(new Response(JSON.stringify({ items: branchItems, totalPages: 1 }), { status: 200 }));
+      }
+      if (url.includes('/api/reports/sales-activity?')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          salesCount: 0,
+          totalRevenue: 0,
+          averageSale: 0,
+          costOfGoodsSold: 0,
+          grossProfit: 0,
+          recentSales: [],
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Unexpected request', { status: 404 }));
+    }));
+
+    renderPage({ role: 'Admin', branchId: 'branch-1' });
+    const branchSelect = await screen.findByRole('combobox', { name: 'Sale branch' });
+    expect(branchSelect).toBeEnabled();
+    expect(branchSelect).toHaveValue('');
+    const itemSearch = await screen.findByRole('combobox', { name: 'Search in-stock item' });
+    fireEvent.focus(itemSearch);
+    expect(await screen.findByRole('option', { name: /Tea Leaves.*Main branch/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /North Tea Leaves.*North branch/ })).toBeInTheDocument();
+
+    const branchChangeStartedAt = Date.now();
+    fireEvent.change(branchSelect, { target: { value: 'branch-2' } });
+    await waitFor(() => expect(requestedUrls.some((url) =>
+      url.includes('/api/inventory?') && url.includes('branchId=branch-2'),
+    )).toBe(true));
+    expect(await screen.findByRole('status')).toHaveTextContent('Fetching North branch stock and sales data…');
+    expect(branchSelect).toBeEnabled();
+
+    resolveNorthInventory?.(new Response(JSON.stringify({
+      items: [northInventoryItem],
+      totalPages: 1,
+    }), { status: 200 }));
+    await waitFor(() => expect(requestedUrls.some((url) =>
+      url.includes('/api/reports/sales-activity?') && url.includes('branchId=branch-2'),
+    )).toBe(true));
+    const remainingBeforeMinimum = Math.max(0, 4_900 - (Date.now() - branchChangeStartedAt));
+    await new Promise((resolve) => setTimeout(resolve, remainingBeforeMinimum));
+    expect(screen.getByRole('status')).toHaveTextContent('Fetching North branch stock and sales data…');
+    fireEvent.focus(itemSearch);
+    expect(await screen.findByRole('option', { name: /North Tea Leaves.*North branch/ })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument(), { timeout: 1_000 });
+    expect(screen.queryByRole('option', { name: /Tea Leaves.*Main branch/ })).not.toBeInTheDocument();
+  }, 10_000);
+
   it('omits unavailable branch details from historical receipts', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes('/api/inventory/branches')) return branchesResponse();
       if (url.includes('/api/inventory?page=')) {
         return new Response(JSON.stringify({ items: [], totalPages: 1 }), { status: 200 });
       }

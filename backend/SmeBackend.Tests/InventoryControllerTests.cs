@@ -73,6 +73,7 @@ public class InventoryControllerTests
         Assert.Equal(2, response.Page);
         Assert.Single(response.Items);
         Assert.Equal("PurchaseReceived", response.Items[0].MovementType);
+        Assert.Equal(branchId, response.Items[0].BranchId);
     }
 
     [Fact]
@@ -245,6 +246,58 @@ public class InventoryControllerTests
     }
 
     [Fact]
+    public async Task CreateInventory_WithMultipleBranches_CreatesSeparateStockRecords()
+    {
+        var tenantId = Guid.NewGuid();
+        var mainBranchId = Guid.NewGuid();
+        var kandyBranchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        db.Tenants.Add(new Tenant { Id = tenantId, Name = "Clinic", BusinessType = "clinic" });
+        db.Branches.AddRange(
+            new Branch { Id = mainBranchId, TenantId = tenantId, Name = "Main branch" },
+            new Branch { Id = kandyBranchId, TenantId = tenantId, Name = "Kandy branch" });
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) },
+            },
+        };
+
+        var result = await controller.CreateInventory(
+            new CreateInventoryRequest(
+                "Wireless Mouse",
+                "MOUSE-001",
+                null,
+                null,
+                null,
+                null,
+                ReorderLevel: 2m,
+                BranchStocks:
+                [
+                    new InventoryBranchStockRequest(mainBranchId, 8m),
+                    new InventoryBranchStockRequest(kandyBranchId, 4m),
+                ]),
+            CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        var branchItems = await db.InventoryItems.OrderBy(item => item.BranchId).ToListAsync();
+        Assert.Equal(2, branchItems.Count);
+        Assert.All(branchItems, item => Assert.Equal("MOUSE-001", item.Sku));
+        Assert.Equal(8m, branchItems.Single(item => item.BranchId == mainBranchId).Quantity);
+        Assert.Equal(4m, branchItems.Single(item => item.BranchId == kandyBranchId).Quantity);
+    }
+
+    [Fact]
     public async Task UpdateInventoryItem_WhenCategoryNameIsProvidedWithoutId_AssignsCategory()
     {
         var tenantId = Guid.NewGuid();
@@ -291,6 +344,101 @@ public class InventoryControllerTests
         Assert.NotNull(updated);
         Assert.Equal("Diagnostic Equipment", updated.Category);
         Assert.NotNull(updated.CategoryId);
+    }
+
+    [Fact]
+    public async Task UpdateInventoryItem_WithBranchStocksUpdatesSelectedBranchesAndPreservesOthers()
+    {
+        var tenantId = Guid.NewGuid();
+        var mainBranchId = Guid.NewGuid();
+        var kandyBranchId = Guid.NewGuid();
+        var colomboBranchId = Guid.NewGuid();
+        var galleBranchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        db.Branches.AddRange(
+            new Branch { Id = mainBranchId, TenantId = tenantId, Name = "Main branch" },
+            new Branch { Id = kandyBranchId, TenantId = tenantId, Name = "Kandy branch" },
+            new Branch { Id = colomboBranchId, TenantId = tenantId, Name = "Colombo branch" },
+            new Branch { Id = galleBranchId, TenantId = tenantId, Name = "Galle branch" });
+        var mainItem = new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = mainBranchId,
+            Name = "Wireless Mouse",
+            Sku = "MOUSE-001",
+            Quantity = 10m,
+            ReorderLevel = 2m,
+        };
+        var kandyItem = new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = kandyBranchId,
+            Name = "Wireless Mouse",
+            Sku = "MOUSE-001",
+            Quantity = 6m,
+            ReorderLevel = 2m,
+        };
+        var colomboItem = new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = colomboBranchId,
+            Name = "Wireless Mouse",
+            Sku = "MOUSE-001",
+            Quantity = 9m,
+            ReorderLevel = 2m,
+        };
+        db.InventoryItems.AddRange(mainItem, kandyItem, colomboItem);
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) },
+            },
+        };
+
+        var result = await controller.UpdateInventoryItem(
+            mainItem.Id,
+            new UpdateInventoryRequest(
+                "Wireless Mouse Pro",
+                "MOUSE-001",
+                null,
+                null,
+                null,
+                null,
+                ReorderLevel: 3m,
+                BranchStocks:
+                [
+                    new InventoryBranchStockRequest(mainBranchId, 8m),
+                    new InventoryBranchStockRequest(kandyBranchId, 4m),
+                    new InventoryBranchStockRequest(galleBranchId, 3m),
+                ]),
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var updatedItems = await db.InventoryItems.OrderBy(item => item.BranchId).ToListAsync();
+        Assert.Equal(4, updatedItems.Count);
+        Assert.All(updatedItems.Where(item => item.BranchId != colomboBranchId), item =>
+        {
+            Assert.Equal("Wireless Mouse Pro", item.Name);
+            Assert.Equal(3m, item.ReorderLevel);
+        });
+        Assert.Equal(8m, updatedItems.Single(item => item.BranchId == mainBranchId).Quantity);
+        Assert.Equal(4m, updatedItems.Single(item => item.BranchId == kandyBranchId).Quantity);
+        Assert.Equal(3m, updatedItems.Single(item => item.BranchId == galleBranchId).Quantity);
+        Assert.Equal("Wireless Mouse", colomboItem.Name);
+        Assert.Equal(9m, colomboItem.Quantity);
+        Assert.Equal(2, await db.StockMovements.CountAsync());
+        Assert.All(await db.StockMovements.ToListAsync(), movement =>
+            Assert.Equal(-2m, movement.Quantity));
     }
 
     [Fact]
@@ -1084,6 +1232,146 @@ public class InventoryControllerTests
         Assert.Equal(5m, item.Quantity);
     }
 
+    [Fact]
+    public async Task GetInventory_WhenQuantityEqualsReorderLevel_ReturnsLowStock()
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        db.InventoryItems.Add(new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = branchId,
+            Name = "Tea",
+            Sku = "SKU-REORDER-LEVEL",
+            Quantity = 3m,
+            ReorderLevel = 3m,
+            IsActive = true,
+        });
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.GetInventory(
+            category: null,
+            lowStock: true,
+            branchId,
+            page: 1,
+            pageSize: 20,
+            CancellationToken.None);
+
+        var response = Assert.IsType<InventoryListResponse>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal("LowStock", Assert.Single(response.Items).Status);
+    }
+
+    [Fact]
+    public async Task GetPurchaseOrderOptions_ManagerReceivesOnlyAssignedBranchOptions()
+    {
+        var tenantId = Guid.NewGuid();
+        var managerBranchId = Guid.NewGuid();
+        var otherBranchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        db.Branches.AddRange(
+            new Branch { TenantId = tenantId, Id = managerBranchId, Name = "Manager branch" },
+            new Branch { TenantId = tenantId, Id = otherBranchId, Name = "Other branch" });
+        db.Suppliers.Add(new Supplier { TenantId = tenantId, Name = "Shared supplier" });
+        db.InventoryItems.AddRange(
+            new InventoryItem
+            {
+                TenantId = tenantId,
+                BranchId = managerBranchId,
+                Name = "Manager branch item",
+                Sku = "SKU-MANAGER",
+                IsActive = true,
+            },
+            new InventoryItem
+            {
+                TenantId = tenantId,
+                BranchId = otherBranchId,
+                Name = "Other branch item",
+                Sku = "SKU-OTHER",
+                IsActive = true,
+            });
+        await db.SaveChangesAsync();
+
+        var controller = new PurchaseOrdersController(db, CreateAuthorizationService().Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, UserRole.Manager, branchId: managerBranchId)
+                }
+            }
+        };
+
+        var result = await controller.GetOptions(cancellationToken: CancellationToken.None);
+
+        var response = Assert.IsType<PurchaseOrderOptionsResponse>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(managerBranchId, Assert.Single(response.Branches).Id);
+        Assert.Equal("Shared supplier", Assert.Single(response.Suppliers).Name);
+        Assert.Equal("Manager branch item", Assert.Single(response.Items).Name);
+    }
+
+    [Fact]
+    public async Task PurchaseOrder_ConcurrentUpdatesRejectStaleReceiptVersion()
+    {
+        var tenantId = Guid.NewGuid();
+        var databaseName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(databaseName)
+            .Options;
+        var seedContext = new TenantContext();
+        seedContext.SetTenantId(tenantId);
+        var order = new PurchaseOrder
+        {
+            TenantId = tenantId,
+            BranchId = Guid.NewGuid(),
+            SupplierId = Guid.NewGuid(),
+            Number = "PO-CONCURRENT",
+            Status = "InTransit",
+        };
+        await using (var seedDb = new AppDbContext(options, seedContext))
+        {
+            seedDb.PurchaseOrders.Add(order);
+            await seedDb.SaveChangesAsync();
+        }
+
+        var firstTenantContext = new TenantContext();
+        firstTenantContext.SetTenantId(tenantId);
+        var secondTenantContext = new TenantContext();
+        secondTenantContext.SetTenantId(tenantId);
+        await using var firstDb = new AppDbContext(options, firstTenantContext);
+        await using var secondDb = new AppDbContext(options, secondTenantContext);
+        var firstCopy = await firstDb.PurchaseOrders.SingleAsync();
+        var staleCopy = await secondDb.PurchaseOrders.SingleAsync();
+
+        firstCopy.Status = "PartiallyReceived";
+        firstCopy.UpdatedAt = firstCopy.UpdatedAt.AddMilliseconds(1);
+        await firstDb.SaveChangesAsync();
+
+        staleCopy.Status = "Received";
+        staleCopy.UpdatedAt = staleCopy.UpdatedAt.AddMilliseconds(2);
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
+            () => secondDb.SaveChangesAsync());
+    }
+
     private static Mock<IAuthorizationService> CreateAuthorizationService()
     {
         var authorizationService = new Mock<IAuthorizationService>();
@@ -1097,7 +1385,8 @@ public class InventoryControllerTests
     private static ClaimsPrincipal CreateUser(
         Guid tenantId,
         UserRole role = UserRole.Admin,
-        Guid? userId = null)
+        Guid? userId = null,
+        Guid? branchId = null)
     {
         var claims = new List<Claim>
         {
@@ -1106,6 +1395,8 @@ public class InventoryControllerTests
         };
         if (userId.HasValue)
             claims.Add(new Claim(ClaimTypes.NameIdentifier, userId.Value.ToString()));
+        if (branchId.HasValue)
+            claims.Add(new Claim(InventoryAccessHandler.BranchIdClaimType, branchId.Value.ToString()));
         var identity = new ClaimsIdentity(claims, "TestAuth");
 
         return new ClaimsPrincipal(identity);
@@ -1232,6 +1523,73 @@ public class PurchaseOrdersControllerTests
         Assert.Equal(5m, customItem.Quantity);
         Assert.Equal(800m, customItem.UnitPrice);
         Assert.Equal(4000m, customItem.LineTotal);
+    }
+
+    [Fact]
+    public async Task CreatePurchaseOrdersForBranches_CreatesBranchScopedOrdersWithSeparateQuantities()
+    {
+        var tenantId = Guid.NewGuid();
+        var mainBranchId = Guid.NewGuid();
+        var northBranchId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        var itemId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        db.Branches.AddRange(
+            new Branch { Id = mainBranchId, TenantId = tenantId, Name = "Main Branch" },
+            new Branch { Id = northBranchId, TenantId = tenantId, Name = "North Branch" });
+        db.Suppliers.Add(new Supplier { Id = supplierId, TenantId = tenantId, Name = "Acme Supplies" });
+        db.InventoryItems.Add(new InventoryItem
+        {
+            Id = itemId,
+            TenantId = tenantId,
+            BranchId = mainBranchId,
+            SupplierId = supplierId,
+            Name = "Organic Coffee",
+            Sku = "SKU-COF-BATCH",
+            Quantity = 10,
+            UnitCost = 1500m,
+            IsActive = true,
+        });
+        await db.SaveChangesAsync();
+
+        var authorizationService = new Mock<IAuthorizationService>();
+        authorizationService.Setup(x => x.AuthorizeAsync(
+                It.IsAny<ClaimsPrincipal>(),
+                It.IsAny<object?>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(AuthorizationResult.Success());
+        var controller = new PurchaseOrdersController(db, authorizationService.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.CreatePurchaseOrdersForBranches(
+            new CreatePurchaseOrdersForBranchesRequest(
+                "PO-BATCH-001",
+                supplierId,
+                [
+                    new BranchPurchaseOrderRequest(mainBranchId, [new PurchaseOrderItemRequest(itemId, null, 3m, 1500m)]),
+                    new BranchPurchaseOrderRequest(northBranchId, [new PurchaseOrderItemRequest(itemId, null, 7m, 1500m)]),
+                ]),
+            CancellationToken.None);
+
+        var createdResult = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var responses = Assert.IsAssignableFrom<IReadOnlyList<PurchaseOrderResponse>>(createdResult.Value);
+        Assert.Equal(2, responses.Count);
+        Assert.Equal(["PO-BATCH-001-01", "PO-BATCH-001-02"], responses.Select(order => order.Number));
+        Assert.Equal([mainBranchId, northBranchId], responses.Select(order => order.BranchId));
+        Assert.Equal([4500m, 10500m], responses.Select(order => order.TotalAmount));
+
+        var persistedOrders = await db.PurchaseOrders.Include(order => order.Items).ToListAsync();
+        Assert.Equal(2, persistedOrders.Count);
+        Assert.Equal(3m, persistedOrders.Single(order => order.BranchId == mainBranchId).Items.Single().Quantity);
+        Assert.Equal(7m, persistedOrders.Single(order => order.BranchId == northBranchId).Items.Single().Quantity);
     }
 
     [Theory]
@@ -1443,6 +1801,87 @@ public class PurchaseOrdersControllerTests
 
         Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal("Placed", (await db.PurchaseOrders.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task ReceivePurchaseOrder_FromAnotherBranch_CreatesDestinationInventoryAndUpdatesOnlyDestinationStock()
+    {
+        var tenantId = Guid.NewGuid();
+        var sourceBranchId = Guid.NewGuid();
+        var destinationBranchId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        var inventoryItemId = Guid.NewGuid();
+        var poItemId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var order = new PurchaseOrder
+        {
+            TenantId = tenantId,
+            BranchId = destinationBranchId,
+            SupplierId = supplierId,
+            Number = "PO-CROSS-BRANCH-001",
+            Status = "InTransit",
+        };
+        var sourceInventoryItem = new InventoryItem
+        {
+            Id = inventoryItemId,
+            TenantId = tenantId,
+            BranchId = sourceBranchId,
+            Name = "Samsung Monitor",
+            Sku = "MONITOR-001",
+            Quantity = 3m,
+            UnitCost = 100m,
+            SupplierId = supplierId,
+            IsActive = true,
+        };
+        var orderItem = new PurchaseOrderItem
+        {
+            Id = poItemId,
+            TenantId = tenantId,
+            PurchaseOrderId = order.Id,
+            InventoryItemId = sourceInventoryItem.Id,
+            Description = sourceInventoryItem.Name,
+            Quantity = 5m,
+            UnitPrice = 110m,
+        };
+        db.PurchaseOrders.Add(order);
+        db.PurchaseOrderItems.Add(orderItem);
+        db.InventoryItems.Add(sourceInventoryItem);
+        await db.SaveChangesAsync();
+
+        var authorizationService = new Mock<IAuthorizationService>();
+        authorizationService.Setup(service => service.AuthorizeAsync(
+                It.IsAny<ClaimsPrincipal>(),
+                It.IsAny<object?>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(AuthorizationResult.Success());
+        var controller = new PurchaseOrdersController(db, authorizationService.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) },
+            },
+        };
+
+        var result = await controller.ReceivePurchaseOrder(
+            order.Id,
+            new ReceivePurchaseOrderRequest(
+            [
+                new ReceivePurchaseOrderItemRequest(poItemId, 2m, 0m, false, null),
+            ]),
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var destinationInventoryItem = await db.InventoryItems.SingleAsync(item =>
+            item.TenantId == tenantId && item.BranchId == destinationBranchId && item.Sku == "MONITOR-001");
+        Assert.NotEqual(sourceInventoryItem.Id, destinationInventoryItem.Id);
+        Assert.Equal(2m, destinationInventoryItem.Quantity);
+        Assert.Equal(3m, sourceInventoryItem.Quantity);
+        Assert.Equal(destinationInventoryItem.Id, orderItem.InventoryItemId);
+        var movement = await db.StockMovements.SingleAsync();
+        Assert.Equal(destinationBranchId, movement.BranchId);
+        Assert.Equal(destinationInventoryItem.Id, movement.InventoryItemId);
     }
 
     [Fact]

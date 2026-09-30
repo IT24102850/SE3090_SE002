@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider as AppToastProvider } from '../../../shared/components/Toast';
 import { AnalyticsDashboardPage } from './AnalyticsDashboardCharts';
 import { ToastProvider } from '../ui/ToastContext';
+import { MemoryRouter } from 'react-router-dom';
 
 describe('inventory sales activity', () => {
   beforeEach(() => {
@@ -83,11 +84,11 @@ describe('inventory sales activity', () => {
     );
 
     render(
-      <AppToastProvider>
+      <MemoryRouter><AppToastProvider>
         <ToastProvider>
           <AnalyticsDashboardPage />
         </ToastProvider>
-      </AppToastProvider>,
+      </AppToastProvider></MemoryRouter>,
     );
 
     expect(await screen.findByText('What’s happening in sales')).toBeInTheDocument();
@@ -106,6 +107,41 @@ describe('inventory sales activity', () => {
       expect.anything(),
     );
     await waitFor(() => expect(screen.getByText('Recent sales')).toBeInTheDocument());
+  });
+
+  it('links to the dedicated branch performance report', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      const body = path.startsWith('/api/reports/sales-activity')
+        ? { salesCount: 0, totalRevenue: 0, averageSale: 0, costOfGoodsSold: 0, grossProfit: 0, page: 1, pageSize: 5, totalPages: 0, recentSales: [] }
+        : path.startsWith('/api/reports/inventory-usage')
+          ? { totalReceivedQuantity: 0, totalIssuedQuantity: 0, netQuantity: 0, items: [] }
+          : { items: [], totalCount: 0, totalPages: 0 };
+      return { ok: true, json: async () => body } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: false,
+      media: '(prefers-color-scheme: dark)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(() => false),
+    })));
+
+    render(
+      <MemoryRouter><AppToastProvider>
+        <ToastProvider>
+          <AnalyticsDashboardPage />
+        </ToastProvider>
+      </AppToastProvider></MemoryRouter>,
+    );
+
+    const branchLink = await screen.findByRole('link', { name: 'View branch performance' });
+    expect(branchLink).toHaveAttribute('href', '/branch-performance');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/inventory/branches', expect.anything());
   });
 
   it('opens a printable receipt from recent sales', async () => {
@@ -160,11 +196,11 @@ describe('inventory sales activity', () => {
     );
 
     render(
-      <AppToastProvider>
+      <MemoryRouter><AppToastProvider>
         <ToastProvider>
           <AnalyticsDashboardPage />
         </ToastProvider>
-      </AppToastProvider>,
+      </AppToastProvider></MemoryRouter>,
     );
 
     fireEvent.click(await screen.findByRole('button', {
@@ -239,11 +275,11 @@ describe('inventory sales activity', () => {
     );
 
     render(
-      <AppToastProvider>
+      <MemoryRouter><AppToastProvider>
         <ToastProvider>
           <AnalyticsDashboardPage />
         </ToastProvider>
-      </AppToastProvider>,
+      </AppToastProvider></MemoryRouter>,
     );
 
     expect(await screen.findByText('SALE-1')).toBeInTheDocument();

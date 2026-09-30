@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -76,13 +76,16 @@ describe('InventoryManagerPage price editing', () => {
       if (url === '/api/inventory/categories') {
         return new Response(JSON.stringify([{ id: 'category-1', name: 'Tea' }]), { status: 200 });
       }
+      if (url === '/api/inventory/branches') {
+        return new Response(JSON.stringify([{ id: 'branch-1', name: 'Main branch' }]), { status: 200 });
+      }
       if (url === '/api/suppliers') {
         return new Response(JSON.stringify({ items: [] }), { status: 200 });
       }
       if (url.startsWith('/api/inventory?page=')) {
         return new Response(JSON.stringify({ items: [item], totalPages: 1 }), { status: 200 });
       }
-      if (url === `/api/inventory/${itemId}` && init?.method === 'PUT') {
+      if (url.startsWith('/api/inventory/') && init?.method === 'PUT') {
         updateBody = JSON.parse(String(init.body)) as Record<string, unknown>;
         item = { ...item, sellingPrice: Number(updateBody.sellingPrice) };
         return new Response(JSON.stringify(item), { status: 200 });
@@ -93,7 +96,7 @@ describe('InventoryManagerPage price editing', () => {
     renderPage();
     await screen.findByText('Tea Leaves');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Tea Leaves' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Tea Leaves across branches' }));
     fireEvent.change(screen.getByLabelText('Selling price (LKR)'), {
       target: { value: '75' },
     });
@@ -106,6 +109,139 @@ describe('InventoryManagerPage price editing', () => {
     await waitFor(() => {
       expect(updateBody?.sellingPrice).toBe(75);
       expect(screen.getByText('LKR 75')).toBeInTheDocument();
+    });
+  });
+
+  it('creates the same catalog item with separate starting stock for selected branches', async () => {
+    let createBody: Record<string, unknown> | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/inventory/categories') {
+        return new Response(JSON.stringify([{ id: 'category-1', name: 'Technology' }]), { status: 200 });
+      }
+      if (url === '/api/inventory/branches') {
+        return new Response(JSON.stringify([
+          { id: 'branch-1', name: 'Main branch' },
+          { id: 'branch-2', name: 'Kandy branch' },
+        ]), { status: 200 });
+      }
+      if (url === '/api/suppliers') {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url.startsWith('/api/inventory?page=')) {
+        return new Response(JSON.stringify({ items: [], totalPages: 1 }), { status: 200 });
+      }
+      if (url === '/api/inventory' && init?.method === 'POST') {
+        createBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return new Response(JSON.stringify({ id: 'created-item' }), { status: 201 });
+      }
+      return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
+    }));
+
+    renderPage();
+    await screen.findByRole('button', { name: /Add item/ });
+    fireEvent.click(screen.getByRole('button', { name: /Add item/ }));
+    fireEvent.change(screen.getByLabelText('Item name'), { target: { value: 'Wireless Mouse' } });
+    fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'piece' } });
+    fireEvent.change(screen.getByLabelText('Starting stock for Main branch'), { target: { value: '8' } });
+    fireEvent.click(screen.getByLabelText('Kandy branch'));
+    fireEvent.change(screen.getByLabelText('Starting stock for Kandy branch'), { target: { value: '4' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
+    const confirmation = await screen.findByRole('alertdialog');
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Add item' }));
+
+    await waitFor(() => {
+      expect(createBody?.branchStocks).toEqual([
+        { branchId: 'branch-1', quantity: 8 },
+        { branchId: 'branch-2', quantity: 4 },
+      ]);
+      expect(createBody?.branchId).toBeNull();
+    });
+  });
+
+  it('updates selected branch stock and adds another branch while leaving other branches untouched', async () => {
+    const items = [
+      {
+        id: itemId,
+        name: 'Wireless Mouse',
+        sku: 'MOUSE-001',
+        categoryId: 'category-1',
+        category: 'Technology',
+        unitId: null,
+        unit: 'piece',
+        branchId: 'branch-1',
+        branch: 'Main branch',
+        quantity: 8,
+        reorderLevel: 2,
+        unitCost: 50,
+        sellingPrice: 75,
+      },
+      {
+        id: 'kandy-item',
+        name: 'Wireless Mouse',
+        sku: 'MOUSE-001',
+        categoryId: 'category-1',
+        category: 'Technology',
+        unitId: null,
+        unit: 'piece',
+        branchId: 'branch-2',
+        branch: 'Kandy branch',
+        quantity: 4,
+        reorderLevel: 2,
+        unitCost: 50,
+        sellingPrice: 75,
+      },
+    ];
+    let updateBody: Record<string, unknown> | undefined;
+    const adjustmentRequest = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/inventory/categories') {
+        return new Response(JSON.stringify([{ id: 'category-1', name: 'Technology' }]), { status: 200 });
+      }
+      if (url === '/api/inventory/branches') {
+        return new Response(JSON.stringify([
+          { id: 'branch-1', name: 'Main branch' },
+          { id: 'branch-2', name: 'Kandy branch' },
+          { id: 'branch-3', name: 'Galle branch' },
+        ]), { status: 200 });
+      }
+      if (url === '/api/suppliers') {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url.startsWith('/api/inventory?page=')) {
+        return new Response(JSON.stringify({ items, totalPages: 1 }), { status: 200 });
+      }
+      if (url.startsWith('/api/inventory/') && init?.method === 'PUT') {
+        updateBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return new Response(JSON.stringify(items[0]), { status: 200 });
+      }
+      if (url.endsWith('/adjust')) adjustmentRequest();
+      return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
+    }));
+
+    renderPage();
+    await screen.findAllByText('Wireless Mouse');
+    expect(screen.getAllByRole('row')).toHaveLength(2);
+    expect(screen.getAllByText('Main branch')).toHaveLength(2);
+    expect(screen.getAllByText('Kandy branch')).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Wireless Mouse across branches' }));
+    fireEvent.change(screen.getByLabelText('On-hand stock for Main branch'), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText('On-hand stock for Kandy branch'), { target: { value: '5' } });
+    fireEvent.click(screen.getByLabelText('Galle branch'));
+    fireEvent.change(screen.getByLabelText('On-hand stock for Galle branch'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
+    const confirmation = await screen.findByRole('alertdialog');
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(updateBody?.branchStocks).toEqual([
+        { branchId: 'branch-1', quantity: 7 },
+        { branchId: 'branch-2', quantity: 5 },
+        { branchId: 'branch-3', quantity: 3 },
+      ]);
+      expect(updateBody?.branchId).toBeNull();
+      expect(adjustmentRequest).not.toHaveBeenCalled();
     });
   });
 });

@@ -422,7 +422,10 @@ public class AppDbContext : DbContext
             entity.Property(supplier => supplier.PaymentTerms).HasMaxLength(160);
             entity.Property(supplier => supplier.Notes).HasMaxLength(1000);
         });
-        modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(order => order.TenantId == CurrentTenantId);
+        modelBuilder.Entity<PurchaseOrder>()
+            .HasQueryFilter(order => order.TenantId == CurrentTenantId)
+            .Property(order => order.UpdatedAt)
+            .IsConcurrencyToken();
         modelBuilder.Entity<PurchaseOrderItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
         modelBuilder.Entity<PurchaseOrderReceipt>().HasQueryFilter(receipt => receipt.TenantId == CurrentTenantId);
         modelBuilder.Entity<PurchaseOrderReceiptItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
@@ -433,7 +436,7 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<InventoryCategory>().HasIndex(c => new { c.TenantId, c.Name }).IsUnique();
         modelBuilder.Entity<InventoryUnit>().HasIndex(u => new { u.TenantId, u.Code }).IsUnique();
-        modelBuilder.Entity<InventoryItem>().HasIndex(item => new { item.TenantId, item.Sku }).IsUnique();
+        modelBuilder.Entity<InventoryItem>().HasIndex(item => new { item.TenantId, item.BranchId, item.Sku }).IsUnique();
         modelBuilder.Entity<Supplier>().HasIndex(supplier => new { supplier.TenantId, supplier.Name }).IsUnique();
         modelBuilder.Entity<PurchaseOrder>().HasIndex(order => new { order.TenantId, order.Number }).IsUnique();
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.TenantId, movement.BranchId });

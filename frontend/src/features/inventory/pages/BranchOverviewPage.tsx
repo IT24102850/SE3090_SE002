@@ -164,6 +164,10 @@ export function BranchOverviewPage() {
     value: branches.reduce((sum, branch) => sum + branch.value, 0),
     healthy: branches.filter((branch) => branch.health === 'Healthy').length,
   }), [branches]);
+  const productCount = useMemo(
+    () => new Set(inventory.map((item) => item.sku.trim().toLowerCase() || item.name.trim().toLowerCase())).size,
+    [inventory],
+  );
 
   const comparisonItems = useMemo(() => {
     const term = itemQuery.trim().toLowerCase();
@@ -179,21 +183,36 @@ export function BranchOverviewPage() {
   const comparisonBranches = ['All branches', ...Array.from(new Set(inventory.map((item) => item.branch ?? 'Unassigned'))).sort((a, b) => a.localeCompare(b))];
   const comparisonSummary = useMemo(() => ({
     units: comparisonItems.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0),
-    atRisk: comparisonItems.filter((item) => item.quantity <= 0 || item.quantity <= item.reorderLevel).length,
+    atRisk: new Set(
+      comparisonItems
+        .filter((item) => item.quantity <= 0 || item.quantity <= item.reorderLevel)
+        .map((item) => item.sku.trim().toLowerCase() || item.name.trim().toLowerCase()),
+    ).size,
     value: comparisonItems.reduce((sum, item) => sum + Number(item.quantity ?? 0) * Number(item.unitCost ?? 0), 0),
   }), [comparisonItems]);
   const categoryGroups = useMemo(() => {
-    const grouped = new Map<string, InventoryItem[]>();
+    const products = new Map<string, InventoryItem[]>();
     comparisonItems.forEach((item) => {
-      const label = categoryPresentation(categoryNameFor(item, categoryNames)).label;
-      grouped.set(label, [...(grouped.get(label) ?? []), item]);
+      const productKey = item.sku.trim().toLowerCase() || item.name.trim().toLowerCase();
+      products.set(productKey, [...(products.get(productKey) ?? []), item]);
     });
-    return [...grouped.entries()]
+    const categories = new Map<string, InventoryItem[][]>();
+    products.forEach((branches) => {
+      const label = categoryPresentation(categoryNameFor(branches[0], categoryNames)).label;
+      const categoryProducts = categories.get(label) ?? [];
+      categoryProducts.push(branches.sort((first, second) =>
+        (first.branch ?? 'Unassigned').localeCompare(second.branch ?? 'Unassigned'),
+      ));
+      categories.set(label, categoryProducts);
+    });
+    return [...categories.entries()]
       .map(([label, items]) => ({
         ...categoryPresentation(label),
         items,
-        value: items.reduce((sum, item) => sum + Number(item.quantity ?? 0) * Number(item.unitCost ?? 0), 0),
-        atRisk: items.filter((item) => item.quantity <= 0 || item.quantity <= item.reorderLevel).length,
+        value: items.flat().reduce((sum, item) => sum + Number(item.quantity ?? 0) * Number(item.unitCost ?? 0), 0),
+        atRisk: items.filter((branches) =>
+          branches.some((item) => item.quantity <= 0 || item.quantity <= item.reorderLevel),
+        ).length,
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [categoryNames, comparisonItems]);
@@ -207,7 +226,7 @@ export function BranchOverviewPage() {
           <p className="branch-overview-eyebrow"><span aria-hidden="true">✣</span> INVENTORY / NETWORK</p>
           <h1>Branch overview</h1>
           <p>Compare stock health, inventory value, and replenishment needs across your locations.</p>
-          <div className="branch-overview-live"><span className={loading ? 'is-loading' : error ? 'is-error' : ''} />{loading ? 'Syncing branch inventory…' : error ? 'Branch inventory sync needs attention' : `${summary.branches} locations · ${inventory.length} items tracked`}{lastUpdated && !loading && <small>Updated {lastUpdated.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</small>}</div>
+          <div className="branch-overview-live"><span className={loading ? 'is-loading' : error ? 'is-error' : ''} />{loading ? 'Syncing branch inventory…' : error ? 'Branch inventory sync needs attention' : `${summary.branches} locations · ${productCount} products tracked`}{lastUpdated && !loading && <small>Updated {lastUpdated.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</small>}</div>
         </div>
         <div className="branch-overview-art" aria-hidden="true"><span className="branch-overview-orbit" /><span className="branch-overview-art-icon">⌖</span><i /><i /><i /></div>
         <button type="button" className="btn branch-overview-refresh" onClick={() => void loadInventory(true)} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh data'}</button>
@@ -215,7 +234,7 @@ export function BranchOverviewPage() {
       {error && <p className="page-notice" role="alert">{error}</p>}
       <section className="branch-overview-metrics" aria-label="Network inventory summary">
         <article className="branch-overview-metric branch-overview-metric-locations"><span className="branch-overview-metric-icon">⌖</span><span className="branch-overview-metric-label">NETWORK</span><strong>{summary.branches}</strong><small>Locations in view</small></article>
-        <article className="branch-overview-metric branch-overview-metric-items"><span className="branch-overview-metric-icon">▦</span><span className="branch-overview-metric-label">STOCK COVERAGE</span><strong>{inventory.length}</strong><small>Items across branches</small></article>
+        <article className="branch-overview-metric branch-overview-metric-items"><span className="branch-overview-metric-icon">▦</span><span className="branch-overview-metric-label">STOCK COVERAGE</span><strong>{productCount}</strong><small>Products across branches</small></article>
         <article className="branch-overview-metric branch-overview-metric-health"><span className="branch-overview-metric-icon">✓</span><span className="branch-overview-metric-label">HEALTHY LOCATIONS</span><strong>{summary.healthy}</strong><small>Meeting reorder levels</small></article>
         <article className="branch-overview-metric branch-overview-metric-value"><span className="branch-overview-metric-icon">LKR</span><span className="branch-overview-metric-label">INVENTORY VALUE</span><strong>{money(summary.value)}</strong><small>{summary.attention} items need review</small></article>
       </section>
@@ -236,7 +255,7 @@ export function BranchOverviewPage() {
       <section className="panel branch-directory-panel">
         <div className="panel-head comparison-heading">
           <div><p className="eyebrow">INVENTORY DIRECTORY</p><h2>Stock, organised by category</h2><p>Search and compare item availability, value, and reorder risk across branches.</p></div>
-          <span className="comparison-count">{comparisonItems.length} of {inventory.length} items · {categoryGroups.length} categories</span>
+          <span className="comparison-count">{categoryGroups.reduce((sum, group) => sum + group.items.length, 0)} of {productCount} products · {comparisonItems.length} branch stocks · {categoryGroups.length} categories</span>
         </div>
         <div className="toolbar toolbar-wrap branch-comparison-toolbar">
           <div className="search-field"><span className="search-icon" aria-hidden="true">⌕</span><input type="search" aria-label="Search branch inventory" placeholder="Search item, SKU, category or branch" value={itemQuery} onChange={(event) => setItemQuery(event.target.value)} /></div>
@@ -248,7 +267,7 @@ export function BranchOverviewPage() {
         </div>
         {categoryWarning && <p className="branch-category-warning" role="status">{categoryWarning} Items without a saved category or matching legacy category text are grouped as “Uncategorised”.</p>}
         <div className="branch-directory-pulse" aria-label="Filtered inventory summary">
-          <div><span className="branch-directory-pulse-icon">▦</span><span><small>ITEMS IN VIEW</small><strong>{comparisonItems.length}</strong></span></div>
+          <div><span className="branch-directory-pulse-icon">▦</span><span><small>PRODUCTS IN VIEW</small><strong>{categoryGroups.reduce((sum, group) => sum + group.items.length, 0)}</strong></span></div>
           <div><span className="branch-directory-pulse-icon branch-directory-pulse-units">↕</span><span><small>UNITS ON HAND</small><strong>{comparisonSummary.units.toLocaleString('en-LK')}</strong></span></div>
           <div className={comparisonSummary.atRisk ? 'has-risk' : ''}><span className="branch-directory-pulse-icon branch-directory-pulse-risk">!</span><span><small>NEEDING ATTENTION</small><strong>{comparisonSummary.atRisk}</strong></span></div>
           <div><span className="branch-directory-pulse-icon branch-directory-pulse-value">LKR</span><span><small>FILTERED STOCK VALUE</small><strong>{money(comparisonSummary.value)}</strong></span></div>
@@ -260,29 +279,44 @@ export function BranchOverviewPage() {
                 <header className="category-stock-head">
                   <div className="category-title">
                     <span className="category-icon" aria-hidden="true">{group.icon}</span>
-                    <div><h3>{group.label}</h3><p>{group.items.length} items · {group.atRisk} need attention</p></div>
+                    <div><h3>{group.label}</h3><p>{group.items.length} products · {group.atRisk} need attention</p></div>
                   </div>
                   <div className="category-stock-total"><small>ON-HAND VALUE</small><strong>{money(group.value)}</strong></div>
                 </header>
                 <div className="comparison-table-wrap">
                   <table className="data-table">
-                    <thead><tr><th>Item</th><th>SKU</th><th>Branch</th><th>On hand</th><th>Reorder</th><th>Unit cost</th><th>Stock value</th><th>Stock health</th></tr></thead>
-                    <tbody>{group.items.map((item) => (
-                      <tr key={item.id}>
-                        <td><strong>{item.name}</strong><small className="branch-item-category">{categoryNameFor(item, categoryNames)}</small></td>
+                    <thead><tr><th>Item</th><th>SKU</th><th>Branch stock</th><th>Total on hand</th><th>Total stock value</th></tr></thead>
+                    <tbody>{group.items.map((productItems) => {
+                      const first = productItems[0];
+                      const totalQuantity = productItems.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+                      const totalValue = productItems.reduce((sum, item) => sum + Number(item.quantity ?? 0) * Number(item.unitCost ?? 0), 0);
+                      return (
+                      <tr key={first.sku.trim().toLowerCase() || first.name.trim().toLowerCase()}>
+                        <td><strong>{first.name}</strong><small className="branch-item-category">{categoryNameFor(first, categoryNames)}</small></td>
                         <td>
                           <span className="branch-item-sku-card">
                             <span className="branch-item-sku-mark" aria-hidden="true">SKU</span>
-                            <code className="branch-item-sku">{item.sku}</code>
+                            <code className="branch-item-sku">{first.sku}</code>
                           </span>
                         </td>
-                        <td>{item.branch ?? 'Unassigned'}</td>
-                        <td>{item.quantity} {item.unit ?? 'units'}</td><td>{item.reorderLevel} {item.unit ?? 'units'}</td>
-                        <td>{item.unitCost != null ? money(Number(item.unitCost)) : '—'}</td>
-                        <td>{item.unitCost != null ? money(Number(item.quantity) * Number(item.unitCost)) : '—'}</td>
-                        <td><span className={`branch-stock-status ${item.quantity <= 0 ? 'is-out' : item.quantity <= item.reorderLevel ? 'is-low' : 'is-ok'}`}>{item.quantity <= 0 ? 'Out of stock' : item.quantity <= item.reorderLevel ? 'Low stock' : 'In stock'}</span></td>
+                        <td className="branch-stock-cell">
+                          <div className="branch-stock-allocations">
+                            {productItems.map((item) => {
+                              const stockHealth = item.quantity <= 0 ? 'Out of stock' : item.quantity <= item.reorderLevel ? 'Low stock' : 'In stock';
+                              return (
+                                <div className="branch-stock-allocation" key={item.id}>
+                                  <span className="branch-stock-allocation-name">{item.branch ?? 'Unassigned'}</span>
+                                  <span className="branch-stock-allocation-quantity">{item.quantity} {item.unit ?? 'units'}</span>
+                                  <span className={`branch-stock-status ${item.quantity <= 0 ? 'is-out' : item.quantity <= item.reorderLevel ? 'is-low' : 'is-ok'}`}>{stockHealth}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </td>
+                        <td>{totalQuantity} {first.unit ?? 'units'}</td>
+                        <td>{productItems.some((item) => item.unitCost != null) ? money(totalValue) : '—'}</td>
                       </tr>
-                    ))}</tbody>
+                    );})}</tbody>
                   </table>
                 </div>
               </section>

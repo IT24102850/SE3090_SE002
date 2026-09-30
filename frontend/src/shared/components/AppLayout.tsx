@@ -94,13 +94,14 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Inventory',
     items: [
       { path: '/inventory', label: 'Inventory Manager', icon: '📦', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/suppliers', label: 'Suppliers', icon: '🏭', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/suppliers', label: 'Suppliers', icon: '🏭', roles: ['Admin', 'Staff'] },
       { path: '/stock-movements', label: 'Physical Counts & Activity', icon: '🔄', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/purchase-orders', label: 'Purchase Orders', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/sales', label: 'Sales', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/stocksense-ai', label: 'StockSense AI', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/branch-overview', label: 'Branch Overview', icon: '🏬', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/inventory-analytics', label: 'Inventory Analytics', icon: '📉', roles: ['Admin', 'Manager'] },
+      { path: '/branch-performance', label: 'Branch Performance', icon: '📊', roles: ['Admin', 'Manager'] },
     ],
   },
   {
@@ -132,6 +133,7 @@ const INVENTORY_NAV_ICONS: Record<string, string> = {
   '/stocksense-ai': 'stocksense',
   '/branch-overview': 'branch',
   '/inventory-analytics': 'chart',
+  '/branch-performance': 'chart',
 };
 
 function NavigationIcon({ item, size = 18 }: { item: NavItem; size?: number }) {
@@ -236,12 +238,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     ? 'PHYSICAL COUNTS & ACTIVITY'
     : location.pathname === '/inventory-analytics'
     ? 'INVENTORY ANALYTICS'
+    : location.pathname === '/branch-performance'
+    ? 'BRANCH PERFORMANCE'
     : location.pathname === '/stocksense-ai'
       ? 'STOCKSENSE AI'
     : location.pathname === '/inventory'
       ? 'STOCK MANAGEMENT'
       : location.pathname.replace('/', '').replace(/-/g, ' ').toUpperCase() || 'OPERATIONS';
-  const pageCategory = location.pathname.startsWith('/inventory') || location.pathname === '/purchase-orders' || location.pathname === '/stock-movements' || location.pathname === '/low-stock-alerts' || location.pathname === '/branch-overview'
+  const pageCategory = location.pathname.startsWith('/inventory') || location.pathname === '/purchase-orders' || location.pathname === '/stock-movements' || location.pathname === '/low-stock-alerts' || location.pathname === '/branch-overview' || location.pathname === '/branch-performance'
     ? 'inventory'
     : location.pathname === '/planner' || location.pathname === '/agent-workflows'
       ? 'automation'

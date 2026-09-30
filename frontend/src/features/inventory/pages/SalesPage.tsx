@@ -62,8 +62,18 @@ type HistoricalSaleReceipt = Pick<RecentSale, 'reference' | 'occurredAt' | 'amou
 type ReceiptView = SaleReceipt | HistoricalSaleReceipt;
 
 type InventoryListResponse = { items?: InventoryItem[]; totalPages?: number };
+type BranchOption = { id: string; name: string };
 
 const API_PAGE_SIZE = 100;
+const BRANCH_LOADING_MIN_DURATION_MS = 5_000;
+
+function isBranchOption(value: unknown): value is BranchOption {
+  return Boolean(
+    value && typeof value === 'object' &&
+    'id' in value && typeof value.id === 'string' &&
+    'name' in value && typeof value.name === 'string',
+  );
+}
 
 function money(value: number | null | undefined) {
   return value == null ? 'Not available' : `LKR ${value.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -128,6 +138,8 @@ export function SalesPage() {
   const { notify } = useToast();
   const { user } = useSelector((state: RootState) => state.auth);
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState(user?.role === 'Admin' ? '' : user?.branchId ?? '');
   const [report, setReport] = useState<SalesReport | null>(null);
   const [selectedId, setSelectedId] = useState('');
   const [search, setSearch] = useState('');
@@ -136,20 +148,25 @@ export function SalesPage() {
   const [activeItemOption, setActiveItemOption] = useState(0);
   const [amount, setAmount] = useState('1');
   const [loading, setLoading] = useState(true);
+  const loadRequestSequence = useRef(0);
+  const pendingBranchChange = useRef(false);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptView | null>(null);
 
+  const branchSelectionLocked = Boolean(user?.branchId && user.role !== 'Admin');
   const selectedItem = items.find((item) => item.id === selectedId) ?? null;
+  const selectedBranchName = branches.find((branch) => branch.id === selectedBranchId)?.name;
   const saleQuantity = Number(amount);
   const itemOptions = useMemo(() => {
     const query = search.trim().toLowerCase();
     return items.filter((item) => {
       if (!item.branchId || item.quantity <= 0) return false;
+      if (selectedBranchId && item.branchId !== selectedBranchId) return false;
       if (!query) return true;
       return `${item.name} ${item.sku} ${item.category ?? ''} ${item.branch ?? ''}`.toLowerCase().includes(query);
     });
-  }, [items, search]);
+  }, [items, search, selectedBranchId]);
   const selectItem = (item: InventoryItem) => {
     setSelectedId(item.id);
     setSearch(`${item.name} · ${item.sku} · ${item.branch ?? 'No branch'}`);
@@ -157,35 +174,75 @@ export function SalesPage() {
   };
 
   const loadData = useCallback(async (showFeedback = false) => {
+    const requestSequence = ++loadRequestSequence.current;
+    const holdForBranchChange = pendingBranchChange.current;
+    pendingBranchChange.current = false;
+    const loadingStartedAt = Date.now();
     setLoading(true);
     try {
+      const branchResponse = await authorizedFetch('/inventory/branches', token);
+      const branchData: unknown = await branchResponse.json();
+      if (requestSequence !== loadRequestSequence.current) return;
+      if (!Array.isArray(branchData) || !branchData.every(isBranchOption)) {
+        throw new Error('Branch response did not contain a valid branch list.');
+      }
+      setBranches(branchData);
+
       const inventory: InventoryItem[] = [];
       let page = 1;
       let totalPages = 1;
       while (page <= totalPages) {
-        const response = await authorizedFetch(`/inventory?page=${page}&pageSize=${API_PAGE_SIZE}`, token);
+        const inventoryParams = new URLSearchParams({ page: String(page), pageSize: String(API_PAGE_SIZE) });
+        if (selectedBranchId) inventoryParams.set('branchId', selectedBranchId);
+        const response = await authorizedFetch(`/inventory?${inventoryParams.toString()}`, token);
         const payload = await response.json() as InventoryListResponse;
         if (!Array.isArray(payload.items)) throw new Error('Inventory response did not contain an item list.');
         inventory.push(...payload.items);
         totalPages = Math.max(1, Number(payload.totalPages ?? 1));
         page++;
+        if (requestSequence !== loadRequestSequence.current) return;
       }
       const range = dateWindow(7);
       const params = new URLSearchParams({ from: range.from, to: range.to, page: '1', pageSize: '10' });
+      if (selectedBranchId) params.set('branchId', selectedBranchId);
       const reportResponse = await authorizedFetch(`/reports/sales-activity?${params}`, token);
       const nextReport = await reportResponse.json() as SalesReport;
+      if (requestSequence !== loadRequestSequence.current) return;
       setItems(inventory);
-      setSelectedId((current) => inventory.some((item) => item.id === current && item.quantity > 0) ? current : '');
+      setSelectedId((current) => inventory.some((item) =>
+        item.id === current && item.quantity > 0 &&
+        (!selectedBranchId || item.branchId === selectedBranchId),
+      ) ? current : '');
       setReport(nextReport);
       if (showFeedback) notify('Sales and inventory refreshed.', 'success');
     } catch (error) {
-      notify(error instanceof Error ? error.message : 'Sales data could not be loaded.', 'error');
+      if (requestSequence === loadRequestSequence.current) {
+        notify(error instanceof Error ? error.message : 'Sales data could not be loaded.', 'error');
+      }
     } finally {
-      setLoading(false);
+      if (requestSequence === loadRequestSequence.current) {
+        if (holdForBranchChange) {
+          const remainingDuration = BRANCH_LOADING_MIN_DURATION_MS - (Date.now() - loadingStartedAt);
+          if (remainingDuration > 0) {
+            await new Promise((resolve) => setTimeout(resolve, remainingDuration));
+          }
+        }
+        if (requestSequence === loadRequestSequence.current) setLoading(false);
+      }
     }
-  }, [notify, token]);
+  }, [notify, selectedBranchId, token]);
 
   useEffect(() => { void loadData(); }, [loadData]);
+
+  function changeBranch(branchId: string) {
+    pendingBranchChange.current = true;
+    setSelectedBranchId(branchId);
+    setSelectedId('');
+    setSearch('');
+    setAmount('1');
+    setItemPickerOpen(false);
+    setActiveItemOption(0);
+  }
 
   const canRecord = Boolean(
     selectedItem &&
@@ -308,10 +365,29 @@ export function SalesPage() {
 
       <section className="panel sales-record-panel">
         <div className="panel-head">
-          <div><span className="sales-section-eyebrow">NEW TRANSACTION</span><h2>Record a sale</h2><p>Choose an in-stock item, review the total, and confirm. Catalog prices stay locked.</p></div>
+          <div><span className="sales-section-eyebrow">NEW TRANSACTION</span><h2>Record a sale</h2><p>Choose an in-stock item from the selected branch, review the total, and confirm. Catalog prices stay locked.</p></div>
           <Badge tone="blue">Live stock</Badge>
         </div>
         <div className="sales-form">
+          {loading && (
+            <div className="sales-branch-loading" role="status" aria-live="polite">
+              <span className="sales-branch-loading-spinner" aria-hidden="true" />
+              <span>Fetching {selectedBranchName ?? 'selected branch'} stock and sales data…</span>
+              <span className="sales-branch-loading-track" aria-hidden="true"><i /></span>
+            </div>
+          )}
+          <label className="form-field sales-branch-picker">
+            Sale branch
+            <select aria-label="Sale branch" value={selectedBranchId} onChange={(event) => changeBranch(event.target.value)} disabled={saving || branchSelectionLocked}>
+              {!branchSelectionLocked && <option value="">All branches</option>}
+              {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+            </select>
+            <small>{loading
+              ? 'Refreshing branch-specific stock and recent sales.'
+              : selectedBranchId
+                ? 'Only stock held at this branch can be selected.'
+                : 'Choose a branch to limit the sale to its stock.'}</small>
+          </label>
           <div
             className="form-field sales-item-picker"
             onBlur={(event) => {
@@ -353,7 +429,7 @@ export function SalesPage() {
                     selectItem(itemOptions[activeItemOption]);
                   }
                 }}
-                placeholder="Search name, SKU, category or branch"
+                placeholder={selectedBranchId ? 'Search this branch by name, SKU or category' : 'Search name, SKU, category or branch'}
                 disabled={loading || saving}
                 autoComplete="off"
               />
@@ -397,7 +473,12 @@ export function SalesPage() {
                   </button>
                 )) : (
                   <p className="sales-item-empty">
-                    {items.some((item) => item.quantity > 0 && item.branchId) ? 'No in-stock item matches this search.' : 'No in-stock items with an assigned branch are available.'}
+                    {items.some((item) =>
+                      item.quantity > 0 && item.branchId &&
+                      (!selectedBranchId || item.branchId === selectedBranchId),
+                    ) ? 'No in-stock item matches this search.' : selectedBranchId
+                      ? 'No in-stock items are available at this branch.'
+                      : 'No in-stock items with an assigned branch are available.'}
                   </p>
                 )}
               </div>
@@ -406,7 +487,7 @@ export function SalesPage() {
           </div>
           <label className="form-field">
             Quantity
-            <input type="number" aria-label="Quantity to sell" min="0.001" step="0.001" max={selectedItem?.quantity} value={amount} onChange={(event) => setAmount(event.target.value)} disabled={!selectedItem || saving} />
+            <input type="number" aria-label="Quantity to sell" min="0" step="1" max={selectedItem?.quantity} value={amount} onChange={(event) => setAmount(event.target.value)} disabled={!selectedItem || saving} />
             {selectedItem && <small>Available: {quantity(selectedItem.quantity)} {selectedItem.unit ?? 'units'}</small>}
           </label>
           <label className="form-field">

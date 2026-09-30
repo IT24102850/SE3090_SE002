@@ -25,6 +25,38 @@ public sealed class InventoryController(
 {
     private const int MaxPageSize = 100;
 
+    [HttpGet("branches")]
+    public async Task<ActionResult<IReadOnlyList<InventoryBranchOptionResponse>>> GetBranches(
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var branchScope = ResolveBranchScope(null);
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService,
+                InventoryAuthorizationPolicies.InventoryRead,
+                tenantId,
+                branchScope))
+        {
+            return Forbid();
+        }
+
+        var query = db.Branches.AsNoTracking().Where(branch => branch.TenantId == tenantId);
+        if (branchScope.HasValue)
+        {
+            query = query.Where(branch => branch.Id == branchScope.Value);
+        }
+
+        var branches = await query
+            .OrderBy(branch => branch.Name)
+            .Select(branch => new InventoryBranchOptionResponse(branch.Id, branch.Name))
+            .ToListAsync(cancellationToken);
+        return Ok(branches);
+    }
+
     [HttpPost("agent/plan")]
     public async Task<IActionResult> PlanInventory(
         [FromBody] InventoryAgentPlanRequest request,
@@ -245,6 +277,7 @@ public sealed class InventoryController(
                 suppliers.TryGetValue(movement.SupplierId.Value, out supplier);
             return new InventoryMovementResponse(
                 movement.Id,
+                movement.BranchId,
                 movement.OccurredAt,
                 item?.Name ?? "Unknown item",
                 item?.Sku ?? "Unknown SKU",
@@ -329,8 +362,8 @@ public sealed class InventoryController(
             return Forbid();
         }
 
-        // A branch move needs access to both the source item and its destination.
-        if (!await this.IsInventoryOperationAuthorizedAsync(
+        if (request.BranchStocks is null &&
+            !await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
                 InventoryAuthorizationPolicies.InventoryWrite,
                 tenantId,
@@ -388,13 +421,6 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
-        if (await db.InventoryItems.IgnoreQueryFilters()
-            .AnyAsync(candidate => candidate.TenantId == tenantId && candidate.Sku == sku && candidate.Id != id,
-                cancellationToken))
-        {
-            return Conflict(new { message = $"An item with SKU '{sku}' already exists." });
-        }
-
         if (request.BranchId.HasValue &&
             !await db.Branches.AnyAsync(branch => branch.Id == request.BranchId.Value, cancellationToken))
         {
@@ -422,6 +448,147 @@ public sealed class InventoryController(
         {
             ModelState.AddModelError("supplierId", "The supplier does not exist for this tenant.");
             return ValidationProblem(ModelState);
+        }
+
+        if (request.BranchStocks is not null)
+        {
+            if (request.BranchId.HasValue)
+            {
+                ModelState.AddModelError("branchStocks", "Specify either branchStocks or branchId, not both.");
+                return ValidationProblem(ModelState);
+            }
+
+            var requestedBranchStocks = request.BranchStocks.ToList();
+            if (requestedBranchStocks.Count == 0)
+            {
+                ModelState.AddModelError("branchStocks", "Select at least one branch to update.");
+                return ValidationProblem(ModelState);
+            }
+            if (requestedBranchStocks.GroupBy(stock => stock.BranchId).Any(group => group.Count() > 1))
+            {
+                ModelState.AddModelError("branchStocks", "A branch can be selected only once.");
+                return ValidationProblem(ModelState);
+            }
+            if (requestedBranchStocks.Any(stock => stock.Quantity < 0))
+            {
+                ModelState.AddModelError("branchStocks", "Branch stock quantity cannot be negative.");
+                return ValidationProblem(ModelState);
+            }
+
+            var selectedBranchIds = requestedBranchStocks.Select(stock => stock.BranchId).ToList();
+            var validBranchIds = await db.Branches
+                .Where(branch => branch.TenantId == tenantId && selectedBranchIds.Contains(branch.Id))
+                .Select(branch => branch.Id)
+                .ToListAsync(cancellationToken);
+            if (validBranchIds.Count != selectedBranchIds.Count)
+            {
+                ModelState.AddModelError("branchStocks", "One or more selected branches do not exist for this tenant.");
+                return ValidationProblem(ModelState);
+            }
+
+            foreach (var branchId in selectedBranchIds)
+            {
+                if (!await this.IsInventoryOperationAuthorizedAsync(
+                        authorizationService,
+                        InventoryAuthorizationPolicies.InventoryWrite,
+                        tenantId,
+                        branchId))
+                {
+                    return Forbid();
+                }
+            }
+
+            var existingBranchItems = await db.InventoryItems
+                .Where(candidate =>
+                    candidate.TenantId == tenantId &&
+                    candidate.Sku == item.Sku &&
+                    candidate.BranchId.HasValue &&
+                    selectedBranchIds.Contains(candidate.BranchId.Value))
+                .ToListAsync(cancellationToken);
+            var existingBranchItemIds = existingBranchItems.Select(candidate => candidate.Id).ToList();
+
+            if (await db.InventoryItems.IgnoreQueryFilters()
+                .AnyAsync(candidate =>
+                        candidate.TenantId == tenantId &&
+                        candidate.BranchId.HasValue &&
+                        selectedBranchIds.Contains(candidate.BranchId.Value) &&
+                        candidate.Sku == sku &&
+                        !existingBranchItemIds.Contains(candidate.Id),
+                    cancellationToken))
+            {
+                return Conflict(new { message = $"An item with SKU '{sku}' already exists in one of the selected branches." });
+            }
+
+            var existingByBranch = existingBranchItems.ToDictionary(candidate => candidate.BranchId!.Value);
+            var now = DateTime.UtcNow;
+            foreach (var branchStock in requestedBranchStocks)
+            {
+                if (!existingByBranch.TryGetValue(branchStock.BranchId, out var branchItem))
+                {
+                    branchItem = new InventoryItem
+                    {
+                        TenantId = tenantId,
+                        BranchId = branchStock.BranchId,
+                        Quantity = branchStock.Quantity,
+                    };
+                    db.InventoryItems.Add(branchItem);
+                }
+                else
+                {
+                    var adjustmentQuantity = branchStock.Quantity - branchItem.Quantity;
+                    if (adjustmentQuantity != 0)
+                    {
+                        db.StockMovements.Add(new StockMovement
+                        {
+                            TenantId = tenantId,
+                            InventoryItemId = branchItem.Id,
+                            BranchId = branchStock.BranchId,
+                            MovementType = "Adjustment",
+                            Quantity = adjustmentQuantity,
+                            Reference = "Inventory manager edit",
+                            Notes = "Branch stock changed while editing the inventory item.",
+                            OccurredAt = now,
+                            PerformedBy = CurrentActorName(),
+                        });
+                    }
+                    branchItem.Quantity = branchStock.Quantity;
+                }
+
+                branchItem.Name = name;
+                branchItem.Sku = sku;
+                branchItem.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+                branchItem.CategoryId = categoryId;
+                branchItem.UnitId = request.UnitId ?? item.UnitId;
+                if (request.SupplierId.HasValue) branchItem.SupplierId = request.SupplierId;
+                else if (request.ClearSupplier) branchItem.SupplierId = null;
+                branchItem.ReorderLevel = request.ReorderLevel;
+                branchItem.UnitCost = request.UnitCost;
+                branchItem.SellingPrice = request.SellingPrice;
+                branchItem.UpdatedAt = now;
+            }
+
+            NotificationHelper.Queue(
+                db,
+                tenantId,
+                null,
+                "InventoryUpdated",
+                "Inventory item updated",
+                $"{name} was updated in {requestedBranchStocks.Count} branch(es).");
+            await db.SaveChangesAsync(cancellationToken);
+            var updatedItem = await LoadItemAsync(item.Id, cancellationToken);
+            return Ok(ToResponse(updatedItem!));
+        }
+
+        var destinationBranchId = request.BranchId ?? item.BranchId;
+        if (await db.InventoryItems.IgnoreQueryFilters()
+            .AnyAsync(candidate =>
+                    candidate.TenantId == tenantId &&
+                    candidate.BranchId == destinationBranchId &&
+                    candidate.Sku == sku &&
+                    candidate.Id != id,
+                cancellationToken))
+        {
+            return Conflict(new { message = $"An item with SKU '{sku}' already exists in this branch." });
         }
 
         item.Name = name;
@@ -1191,21 +1358,6 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
-        if (!await this.IsInventoryOperationAuthorizedAsync(
-                authorizationService,
-                InventoryAuthorizationPolicies.InventoryWrite,
-                tenantId,
-                request.BranchId))
-        {
-            return Forbid();
-        }
-
-        if (await db.InventoryItems.IgnoreQueryFilters()
-                .AnyAsync(item => item.TenantId == tenantId && item.Sku == sku, cancellationToken))
-        {
-            return Conflict(new { message = $"An item with SKU '{sku}' already exists." });
-        }
-
         var categoryId = await ResolveCategoryIdAsync(
             tenantId, request.CategoryId, request.Category, cancellationToken);
         if (ModelState.ErrorCount > 0)
@@ -1228,45 +1380,110 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
-        var branchId = request.BranchId;
-        if (!branchId.HasValue)
+        if (request.BranchStocks is not null && request.BranchId.HasValue)
         {
+            ModelState.AddModelError("branchStocks", "Specify either branchStocks or branchId, not both.");
+            return ValidationProblem(ModelState);
+        }
+
+        List<(Guid? BranchId, decimal Quantity)> branchStocks;
+        if (request.BranchStocks is not null)
+        {
+            var requestedBranchStocks = request.BranchStocks.ToList();
+            if (requestedBranchStocks.Count == 0)
+            {
+                ModelState.AddModelError("branchStocks", "Select at least one branch.");
+                return ValidationProblem(ModelState);
+            }
+            if (requestedBranchStocks.GroupBy(stock => stock.BranchId).Any(group => group.Count() > 1))
+            {
+                ModelState.AddModelError("branchStocks", "A branch can be selected only once.");
+                return ValidationProblem(ModelState);
+            }
+            if (requestedBranchStocks.Any(stock => stock.Quantity < 0))
+            {
+                ModelState.AddModelError("branchStocks", "Initial stock quantity cannot be negative.");
+                return ValidationProblem(ModelState);
+            }
+            branchStocks = requestedBranchStocks
+                .Select(stock => ((Guid?)stock.BranchId, stock.Quantity))
+                .ToList();
+        }
+        else
+        {
+            var branchId = request.BranchId;
             if (Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var userBranchId))
             {
-                branchId = userBranchId;
+                branchId ??= userBranchId;
             }
-            else
+            if (!branchId.HasValue)
             {
                 branchId = await db.Branches
                     .Where(branch => branch.TenantId == tenantId)
                     .Select(branch => (Guid?)branch.Id)
                     .FirstOrDefaultAsync(cancellationToken);
             }
+            branchStocks = [(branchId, request.Quantity)];
         }
-        else if (!await db.Branches.AnyAsync(
-            branch => branch.Id == branchId.Value, cancellationToken))
+
+        var branchIds = branchStocks
+            .Where(stock => stock.BranchId.HasValue)
+            .Select(stock => stock.BranchId!.Value)
+            .ToList();
+        var validBranchIds = branchIds.Count == 0
+            ? new List<Guid>()
+            : await db.Branches
+                .Where(branch => branch.TenantId == tenantId && branchIds.Contains(branch.Id))
+                .Select(branch => branch.Id)
+                .ToListAsync(cancellationToken);
+        if (validBranchIds.Count != branchIds.Distinct().Count())
         {
-            ModelState.AddModelError("branchId", "The branch does not exist for this tenant.");
+            ModelState.AddModelError("branchStocks", "One or more selected branches do not exist for this tenant.");
             return ValidationProblem(ModelState);
         }
 
-        var item = new InventoryItem
+        foreach (var branchId in branchStocks.Select(stock => stock.BranchId).Distinct())
+        {
+            if (!await this.IsInventoryOperationAuthorizedAsync(
+                    authorizationService,
+                    InventoryAuthorizationPolicies.InventoryWrite,
+                    tenantId,
+                    branchId))
+            {
+                return Forbid();
+            }
+        }
+
+        foreach (var stock in branchStocks)
+        {
+            if (await db.InventoryItems.IgnoreQueryFilters()
+                .AnyAsync(item =>
+                        item.TenantId == tenantId &&
+                        item.BranchId == stock.BranchId &&
+                        item.Sku == sku,
+                    cancellationToken))
+            {
+                return Conflict(new { message = $"An item with SKU '{sku}' already exists in one of the selected branches." });
+            }
+        }
+
+        var createdItems = branchStocks.Select(stock => new InventoryItem
         {
             Name = name,
             Sku = sku,
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             CategoryId = categoryId,
             UnitId = request.UnitId,
-            BranchId = branchId,
+            BranchId = stock.BranchId,
             SupplierId = request.SupplierId,
-            Quantity = request.Quantity,
+            Quantity = stock.Quantity,
             ReorderLevel = request.ReorderLevel,
             UnitCost = request.UnitCost,
             SellingPrice = request.SellingPrice,
-        };
+        }).ToList();
 
-        db.InventoryItems.Add(item);
-        NotificationHelper.Queue(db, tenantId, null, "InventoryCreated", "New inventory item", $"{item.Name} was added to inventory.");
+        db.InventoryItems.AddRange(createdItems);
+        NotificationHelper.Queue(db, tenantId, null, "InventoryCreated", "New inventory item", $"{name} was added to {createdItems.Count} branch(es).");
         await db.SaveChangesAsync(cancellationToken);
 
         var created = await db.InventoryItems
@@ -1275,7 +1492,7 @@ public sealed class InventoryController(
             .Include(createdItem => createdItem.Branch)
             .Include(createdItem => createdItem.Supplier)
             .AsNoTracking()
-            .SingleAsync(createdItem => createdItem.Id == item.Id, cancellationToken);
+            .SingleAsync(createdItem => createdItem.Id == createdItems[0].Id, cancellationToken);
 
         return CreatedAtAction(nameof(GetInventory), new { }, ToResponse(created));
     }
@@ -1434,7 +1651,7 @@ public sealed class InventoryController(
     {
         var status = item.Quantity <= 0
             ? "OutOfStock"
-            : item.Quantity < item.ReorderLevel
+            : item.Quantity <= item.ReorderLevel
                 ? "LowStock"
                 : "InStock";
 
@@ -1469,6 +1686,8 @@ public sealed record InventoryListResponse(
     int TotalPages);
 
 public sealed record InventoryCategoryOptionResponse(Guid Id, string Name);
+public sealed record InventoryBranchOptionResponse(Guid Id, string Name);
+public sealed record InventoryBranchStockRequest(Guid BranchId, decimal Quantity);
 
 public sealed record InventoryItemResponse(
     Guid Id,
@@ -1511,6 +1730,7 @@ public sealed record RecordInventorySaleResponse(
 
 public sealed record InventoryMovementResponse(
     Guid Id,
+    Guid? BranchId,
     DateTime OccurredAt,
     string Item,
     string Sku,
@@ -1542,7 +1762,8 @@ public sealed record CreateInventoryRequest(
     decimal? UnitCost = null,
     Guid? SupplierId = null,
     string? Category = null,
-    decimal? SellingPrice = null);
+    decimal? SellingPrice = null,
+    IReadOnlyList<InventoryBranchStockRequest>? BranchStocks = null);
 
 public sealed record UpdateInventoryRequest(
     string? Name,
@@ -1556,7 +1777,8 @@ public sealed record UpdateInventoryRequest(
     Guid? SupplierId = null,
     bool ClearSupplier = false,
     string? Category = null,
-    decimal? SellingPrice = null);
+    decimal? SellingPrice = null,
+    IReadOnlyList<InventoryBranchStockRequest>? BranchStocks = null);
 
 public sealed record AdjustInventoryRequest(
     decimal Quantity,

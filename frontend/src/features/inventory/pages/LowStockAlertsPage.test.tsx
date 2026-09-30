@@ -7,6 +7,7 @@ import { LowStockAlertsPage } from './LowStockAlertsPage';
 
 const scrollIntoView = vi.fn();
 const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+const authorizedBranches = [{ id: 'branch-1', name: 'Main branch' }];
 
 describe('LowStockAlertsPage inventory scope', () => {
   beforeEach(() => {
@@ -17,7 +18,9 @@ describe('LowStockAlertsPage inventory scope', () => {
     });
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
     localStorage.setItem('token', 'test-token');
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input) === '/api/inventory/branches'
+      ? new Response(JSON.stringify(authorizedBranches), { status: 200 })
+      : new Response(JSON.stringify({
       items: [{
         id: 'item-1',
         name: 'Tea Leaves',
@@ -57,16 +60,24 @@ describe('LowStockAlertsPage inventory scope', () => {
       </AppToastProvider>,
     );
 
-    await screen.findByRole('option', { name: 'Main branch' });
+    fireEvent.click(await screen.findByRole('button', { name: /Analyze inventory/i }));
 
     expect(screen.queryByRole('heading', { name: 'Inventory status' })).not.toBeInTheDocument();
     expect(screen.queryByText('Tea Leaves')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Inventory Manager' })).toHaveAttribute('href', '/inventory');
+    expect(screen.queryByRole('link', { name: 'Open Inventory Manager' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Choose AI analysis scope' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Choose AI analysis scope' })).toHaveClass('stocksense-scope-modal');
+    expect(screen.getByRole('radio', { name: /Full business/ })).toBeChecked();
   });
 
   it('explains recommendation confidence and assumptions for review', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    let planRequest: Record<string, unknown> | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/inventory/branches') {
+        return new Response(JSON.stringify(authorizedBranches), { status: 200 });
+      }
       if (String(input) === '/api/inventory/agent/plan') {
+        planRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
         return new Response(JSON.stringify({
           workflow_id: 'workflow-1',
           status: 'NeedsReview',
@@ -125,8 +136,17 @@ describe('LowStockAlertsPage inventory scope', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: /Analyze inventory/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze full business' }));
 
     expect(await screen.findByText('55%')).toBeInTheDocument();
+    expect(planRequest).not.toHaveProperty('branchId');
+    expect(screen.getByText('STOCKSENSE AI REPORT · FULL BUSINESS')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'StockSense AI response' })).toHaveTextContent('Here’s what stands out');
+    expect(screen.getByRole('region', { name: 'StockSense AI response' })).toHaveTextContent('Review stock coverage for Tea Leaves.');
+    expect(document.querySelector('.stocksense-ai-response-visual img')).toHaveAttribute(
+      'src',
+      expect.stringContaining('images.unsplash.com'),
+    );
     expect(screen.getByRole('heading', { name: 'What StockSense found' })).toBeInTheDocument();
     expect(screen.getByText('Estimated reorder cost')).toBeInTheDocument();
     expect(screen.getByText('1 of 1 suggestions have a recorded unit cost')).toBeInTheDocument();
@@ -153,6 +173,9 @@ describe('LowStockAlertsPage inventory scope', () => {
 
   it('does not display a rounded near-zero estimate as zero days', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/inventory/branches') {
+        return new Response(JSON.stringify(authorizedBranches), { status: 200 });
+      }
       if (String(input) === '/api/inventory/agent/plan') {
         return new Response(JSON.stringify({
           workflow_id: 'workflow-2',
@@ -202,11 +225,66 @@ describe('LowStockAlertsPage inventory scope', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: /Analyze inventory/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze full business' }));
 
     expect(await screen.findByText((_, element) =>
       element?.classList.contains('stocksense-recommendation-timing') === true
       && element.textContent?.includes('Already below the reorder point (48 on hand; reorder at 50).') === true,
     )).toBeInTheDocument();
     expect(screen.queryByText(/0 days/)).not.toBeInTheDocument();
+  });
+
+  it('asks for scope and sends the selected branch ID to the AI planner', async () => {
+    let planRequest: Record<string, unknown> | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/inventory/branches') {
+        return new Response(JSON.stringify(authorizedBranches), { status: 200 });
+      }
+      if (String(input) === '/api/inventory/agent/plan') {
+        planRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          workflow_id: 'workflow-branch',
+          status: 'NeedsReview',
+          planner_summary: 'Branch-specific review.',
+          data_sources: [],
+          recommendations: [],
+          insights: [],
+          warnings: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        items: [{
+          id: 'item-1',
+          name: 'Tea Leaves',
+          sku: 'TEA-001',
+          branch: 'Main branch',
+          branchId: 'branch-1',
+          quantity: 12,
+          reorderLevel: 2,
+        }],
+        totalPages: 1,
+        totalCount: 1,
+      }), { status: 200 });
+    }));
+
+    render(
+      <AppToastProvider>
+        <ToastProvider>
+          <MemoryRouter>
+            <LowStockAlertsPage />
+          </MemoryRouter>
+        </ToastProvider>
+      </AppToastProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Analyze inventory/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /Specific branch/ }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Select branch for analysis' }), {
+      target: { value: 'branch-1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze selected branch' }));
+
+    expect(await screen.findByText('STOCKSENSE AI REPORT · MAIN BRANCH')).toBeInTheDocument();
+    expect(planRequest).toMatchObject({ branchId: 'branch-1' });
   });
 });
