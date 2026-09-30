@@ -47,6 +47,7 @@ class _StockCountScreenState extends State<StockCountScreen>
   bool _isOnline = true;
   bool _canApproveCounts = false;
   List<XFile> _selectedPhotos = [];
+  String? _selectedCatalogItemId;
   late final AnimationController _scanLineController;
 
   @override
@@ -307,11 +308,23 @@ class _StockCountScreenState extends State<StockCountScreen>
       }
       final remaining = <_PendingCount>[];
       for (final count in queued) {
-        final matches = _catalog
-            .where((item) => item.sku.toLowerCase() == count.sku.toLowerCase());
+        final matches = _catalog.where((item) {
+          if (count.inventoryItemId != null) {
+            return item.id == count.inventoryItemId;
+          }
+          if (item.sku.toLowerCase() != count.sku.toLowerCase()) return false;
+          return count.branchId == null || item.branchId == count.branchId;
+        }).toList();
         if (matches.isEmpty) {
           remaining.add(count.withError(
             'Item is no longer in catalog. Verify it and take a new count.',
+            requiresReview: true,
+          ));
+          continue;
+        }
+        if (matches.length > 1) {
+          remaining.add(count.withError(
+            'This saved count matches the same SKU in multiple branches. Review it and take a new branch-specific count.',
             requiresReview: true,
           ));
           continue;
@@ -469,6 +482,7 @@ class _StockCountScreenState extends State<StockCountScreen>
     setState(() {
       _scannedCode = code;
       _sku.text = code;
+      _selectedCatalogItemId = null;
     });
     showAppNotification(
       'Barcode scanned. Enter the physical quantity to continue.',
@@ -507,15 +521,23 @@ class _StockCountScreenState extends State<StockCountScreen>
           tone: AppNotificationTone.warning);
       return;
     }
-    final matches =
-        _catalog.where((item) => item.sku.toLowerCase() == code.toLowerCase());
+    final matches = _catalog
+        .where((item) => item.sku.toLowerCase() == code.toLowerCase())
+        .toList();
     if (matches.isEmpty) {
       showAppNotification(
           'SKU "$code" is not in the cached catalog. Pull to refresh while online.',
           tone: AppNotificationTone.error);
       return;
     }
-    final item = matches.first;
+    final item = _selectedCatalogItem;
+    if (item == null) {
+      showAppNotification(
+        'Choose the correct branch for SKU "$code" before saving this count.',
+        tone: AppNotificationTone.warning,
+      );
+      return;
+    }
     final variance = quantity - item.quantity;
     final reason = variance == 0 ? 'NoDiscrepancy' : _reason;
     if (reason == null) {
@@ -550,8 +572,11 @@ class _StockCountScreenState extends State<StockCountScreen>
     try {
       final entry = _PendingCount(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
+        inventoryItemId: item.id,
         sku: item.sku,
         name: item.name,
+        branchId: item.branchId,
+        branch: item.branch,
         quantity: quantity,
         systemQuantityAtCount: item.quantity,
         recordedAt: DateTime.now().toUtc(),
@@ -562,7 +587,14 @@ class _StockCountScreenState extends State<StockCountScreen>
         evidence: await _readSelectedEvidence(),
       );
       final pending = [
-        ..._pending.where((c) => c.sku.toLowerCase() != item.sku.toLowerCase()),
+        ..._pending.where((count) {
+          if (count.inventoryItemId != null) {
+            return count.inventoryItemId != item.id;
+          }
+          if (count.sku.toLowerCase() != item.sku.toLowerCase()) return true;
+          if (count.branchId != null) return count.branchId != item.branchId;
+          return matches.length > 1;
+        }),
         entry,
       ];
       await _store.save(_catalog, pending);
@@ -571,6 +603,7 @@ class _StockCountScreenState extends State<StockCountScreen>
       setState(() {
         _pending = pending;
         _sku.clear();
+        _selectedCatalogItemId = null;
         _quantity.clear();
         _scannedCode = null;
         _reason = null;
@@ -596,10 +629,20 @@ class _StockCountScreenState extends State<StockCountScreen>
     }
   }
 
-  _CatalogItem? get _selectedCatalogItem {
+  List<_CatalogItem> get _matchingCatalogItems {
     final code = _sku.text.trim().toLowerCase();
-    if (code.isEmpty) return null;
-    return _catalog.where((i) => i.sku.toLowerCase() == code).firstOrNull;
+    if (code.isEmpty) return const [];
+    return _catalog.where((item) => item.sku.toLowerCase() == code).toList();
+  }
+
+  _CatalogItem? get _selectedCatalogItem {
+    final matches = _matchingCatalogItems;
+    if (_selectedCatalogItemId != null) {
+      return matches
+          .where((item) => item.id == _selectedCatalogItemId)
+          .firstOrNull;
+    }
+    return matches.length == 1 ? matches.single : null;
   }
 
   bool _isLargeVariance(double variance, double systemQuantity) {
@@ -1011,19 +1054,23 @@ class _StockCountScreenState extends State<StockCountScreen>
                       ),
                     ),
                     const SizedBox(width: 6),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      child: Text(
-                        _isOnline
-                            ? 'ONLINE & SYNC READY'
-                            : 'OFFLINE MODE ACTIVE',
-                        key: ValueKey(_isOnline),
-                        style: AppTextStyles.label.copyWith(
-                          color: _isOnline
-                              ? const Color(0xFF10B981)
-                              : const Color(0xFFFBBF24),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                    Flexible(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        child: Text(
+                          _isOnline
+                              ? 'ONLINE & SYNC READY'
+                              : 'OFFLINE MODE ACTIVE',
+                          key: ValueKey(_isOnline),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.label.copyWith(
+                            color: _isOnline
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFFFBBF24),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
@@ -1193,8 +1240,7 @@ class _StockCountScreenState extends State<StockCountScreen>
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, idx) {
           final item = _catalog[idx];
-          final isSelected =
-              _sku.text.trim().toLowerCase() == item.sku.toLowerCase();
+          final isSelected = _selectedCatalogItem?.id == item.id;
 
           return InkWell(
             borderRadius: BorderRadius.circular(20),
@@ -1203,6 +1249,7 @@ class _StockCountScreenState extends State<StockCountScreen>
               setState(() {
                 _sku.text = item.sku;
                 _scannedCode = item.sku;
+                _selectedCatalogItemId = item.id;
               });
             },
             child: AnimatedContainer(
@@ -1231,7 +1278,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    '${item.name} (${item.sku})',
+                    '${item.name} (${item.sku}) · ${item.branch}',
                     style: AppTextStyles.caption.copyWith(
                       color: isSelected ? Colors.white : AppColors.textPrimary,
                       fontWeight:
@@ -1263,11 +1310,14 @@ class _StockCountScreenState extends State<StockCountScreen>
 
           // SKU input
           TextField(
+            key: const Key('stock-count-sku-field'),
             controller: _sku,
             style: AppTextStyles.body
                 .copyWith(color: Colors.white, fontWeight: FontWeight.w600),
-            onChanged: (val) =>
-                setState(() => _scannedCode = val.isEmpty ? null : val),
+            onChanged: (val) => setState(() {
+              _scannedCode = val.isEmpty ? null : val;
+              _selectedCatalogItemId = null;
+            }),
             decoration: InputDecoration(
               labelText: 'Item SKU / Barcode',
               labelStyle:
@@ -1283,9 +1333,46 @@ class _StockCountScreenState extends State<StockCountScreen>
             ),
           ),
           const SizedBox(height: 14),
+          if (_matchingCatalogItems.length > 1) ...[
+            DropdownButtonFormField<String>(
+              key: const Key('stock-count-branch-selector'),
+              isExpanded: true,
+              initialValue: _matchingCatalogItems
+                      .any((item) => item.id == _selectedCatalogItemId)
+                  ? _selectedCatalogItemId
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Choose branch for this SKU *',
+                filled: true,
+              ),
+              items: _matchingCatalogItems
+                  .map((item) => DropdownMenuItem(
+                        value: item.id,
+                        child: Text(
+                          '${item.branch} · ${_formatAuditQuantity(item.quantity)} ${item.unit}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ))
+                  .toList(),
+              selectedItemBuilder: (context) => _matchingCatalogItems
+                  .map((item) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '${item.branch} · ${_formatAuditQuantity(item.quantity)} ${item.unit}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ))
+                  .toList(),
+              onChanged: (value) =>
+                  setState(() => _selectedCatalogItemId = value),
+            ),
+            const SizedBox(height: 14),
+          ],
 
           // Quantity input
           TextField(
+            key: const Key('stock-count-quantity-field'),
             controller: _quantity,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style:
@@ -1847,17 +1934,23 @@ class _CatalogItem {
     required this.sku,
     required this.name,
     required this.quantity,
+    this.branchId,
+    this.branch = 'Main branch',
     this.unit = 'units',
   });
 
   final String id, sku, name, unit;
   final double quantity;
+  final String? branchId;
+  final String branch;
 
   factory _CatalogItem.fromJson(Map<String, dynamic> json) => _CatalogItem(
         id: '${json['id']}',
         sku: '${json['sku'] ?? ''}',
         name: '${json['name'] ?? ''}',
         quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
+        branchId: json['branchId'] as String?,
+        branch: json['branch'] as String? ?? 'Main branch',
         unit: '${json['unit'] ?? json['unitName'] ?? 'units'}',
       );
 
@@ -1866,6 +1959,8 @@ class _CatalogItem {
         'sku': sku,
         'name': name,
         'quantity': quantity,
+        'branchId': branchId,
+        'branch': branch,
         'unit': unit,
       };
 }
@@ -1873,8 +1968,11 @@ class _CatalogItem {
 class _PendingCount {
   const _PendingCount({
     required this.id,
+    this.inventoryItemId,
     required this.sku,
     required this.name,
+    this.branchId,
+    this.branch,
     required this.quantity,
     required this.systemQuantityAtCount,
     required this.recordedAt,
@@ -1887,6 +1985,7 @@ class _PendingCount {
   });
 
   final String id, sku, name;
+  final String? inventoryItemId, branchId, branch;
   final double quantity;
   final double? systemQuantityAtCount;
   final DateTime recordedAt;
@@ -1904,8 +2003,11 @@ class _PendingCount {
   }) =>
       _PendingCount(
         id: id,
+        inventoryItemId: inventoryItemId,
         sku: sku,
         name: name,
+        branchId: branchId,
+        branch: branch,
         quantity: quantity,
         systemQuantityAtCount: systemQuantityAtCount,
         recordedAt: recordedAt,
@@ -1923,8 +2025,11 @@ class _PendingCount {
     final lastError = json['lastError'] as String?;
     return _PendingCount(
       id: '${json['id']}',
+      inventoryItemId: json['inventoryItemId'] as String?,
       sku: '${json['sku']}',
       name: '${json['name']}',
+      branchId: json['branchId'] as String?,
+      branch: json['branch'] as String?,
       quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
       systemQuantityAtCount: systemQuantity,
       recordedAt: DateTime.parse(json['recordedAt'] as String),
@@ -1947,8 +2052,11 @@ class _PendingCount {
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'inventoryItemId': inventoryItemId,
         'sku': sku,
         'name': name,
+        'branchId': branchId,
+        'branch': branch,
         'quantity': quantity,
         'systemQuantityAtCount': systemQuantityAtCount,
         'recordedAt': recordedAt.toIso8601String(),

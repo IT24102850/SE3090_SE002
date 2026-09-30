@@ -448,7 +448,7 @@ class _InventoryDashboardState extends State<InventoryDashboard>
     try {
       final endpoint = isAdd
           ? '/api/inventory/${item.id}/receive'
-          : '/api/inventory/${item.id}/adjust';
+          : '/api/inventory/${item.id}/issue';
       final body = isAdd
           ? {
               'quantity': qty,
@@ -456,9 +456,9 @@ class _InventoryDashboardState extends State<InventoryDashboard>
               'notes': 'Recorded via SME Mobile Dashboard'
             }
           : {
-              'quantity': -qty,
+              'quantity': qty,
               'reference': 'DASHBOARD-QUICK-ISSUE',
-              'notes': 'Adjusted via SME Mobile Dashboard'
+              'notes': 'Issued via SME Mobile Dashboard'
             };
 
       final res = await widget.client.post(endpoint, body: body);
