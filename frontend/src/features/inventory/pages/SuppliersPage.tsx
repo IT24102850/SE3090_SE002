@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { getStoredToken } from '../authToken';
 import { useToast } from '../ui/ToastContext';
@@ -6,13 +6,48 @@ import { useToast } from '../ui/ToastContext';
 type Supplier = {
   id: string;
   name: string;
+  contactPerson: string | null;
   email: string;
   phone: string;
+  address: string | null;
+  paymentTerms: string | null;
+  notes: string | null;
   leadTimeDays: number | null;
   createdAt: string;
   updatedAt: string;
 };
 type SupplierFilter = 'all' | 'missing-contact' | 'missing-lead-time';
+type SupplierOrder = {
+  id: string;
+  number: string;
+  branch?: string | null;
+  status: string;
+  totalAmount: number;
+  lineItems: number;
+  createdAt: string;
+};
+type SupplierOrderListResponse = {
+  items: SupplierOrder[];
+  totalPages: number;
+  totalCount: number;
+};
+type SupplierOrderHistory = {
+  orders: SupplierOrder[];
+  loading: boolean;
+  error: string;
+};
+
+const supplierCurrency = new Intl.NumberFormat(undefined, {
+  style: 'currency',
+  currency: 'LKR',
+  maximumFractionDigits: 2,
+});
+
+function supplierOrderValue(orders: SupplierOrder[]): number {
+  return orders
+    .filter((order) => order.status.toLowerCase() !== 'cancelled')
+    .reduce((total, order) => total + order.totalAmount, 0);
+}
 
 export function SuppliersPage() {
   const token = getStoredToken();
@@ -25,10 +60,16 @@ export function SuppliersPage() {
   const [loadError, setLoadError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
+  const [contactPerson, setContactPerson] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [paymentTerms, setPaymentTerms] = useState('');
+  const [notes, setNotes] = useState('');
   const [leadTimeDays, setLeadTimeDays] = useState('');
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
+  const [expandedSupplierId, setExpandedSupplierId] = useState<string | null>(null);
+  const [supplierOrderHistories, setSupplierOrderHistories] = useState<Record<string, SupplierOrderHistory>>({});
 
   const loadSuppliers = useCallback(async () => {
     setLoading(true);
@@ -52,12 +93,73 @@ export function SuppliersPage() {
 
   useEffect(() => { void loadSuppliers(); }, [loadSuppliers]);
 
+  async function loadSupplierOrderHistory(supplier: Supplier) {
+    const cached = supplierOrderHistories[supplier.id];
+    if (cached && !cached.error) return;
+
+    setSupplierOrderHistories((current) => ({
+      ...current,
+      [supplier.id]: { orders: cached?.orders ?? [], loading: true, error: '' },
+    }));
+
+    try {
+      const firstPageResponse = await fetch(
+        `/api/purchase-orders?supplierId=${encodeURIComponent(supplier.id)}&page=1&pageSize=100`,
+        { headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' } },
+      );
+      if (!firstPageResponse.ok) {
+        throw new Error(`Order history request failed (${firstPageResponse.status})`);
+      }
+      const firstPage = await firstPageResponse.json() as SupplierOrderListResponse;
+      const remainingPages = await Promise.all(
+        Array.from({ length: Math.max(0, firstPage.totalPages - 1) }, (_, index) =>
+          fetch(
+            `/api/purchase-orders?supplierId=${encodeURIComponent(supplier.id)}&page=${index + 2}&pageSize=100`,
+            { headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' } },
+          ).then(async (response) => {
+            if (!response.ok) throw new Error(`Order history request failed (${response.status})`);
+            return response.json() as Promise<SupplierOrderListResponse>;
+          }),
+        ),
+      );
+      setSupplierOrderHistories((current) => ({
+        ...current,
+        [supplier.id]: {
+          orders: [firstPage, ...remainingPages].flatMap((page) => page.items),
+          loading: false,
+          error: '',
+        },
+      }));
+    } catch (error) {
+      setSupplierOrderHistories((current) => ({
+        ...current,
+        [supplier.id]: {
+          orders: current[supplier.id]?.orders ?? [],
+          loading: false,
+          error: error instanceof Error ? error.message : 'Unable to load supplier order history.',
+        },
+      }));
+    }
+  }
+
+  function toggleSupplierDetails(supplier: Supplier) {
+    if (expandedSupplierId === supplier.id) {
+      setExpandedSupplierId(null);
+      return;
+    }
+    setExpandedSupplierId(supplier.id);
+    void loadSupplierOrderHistory(supplier);
+  }
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return suppliers.filter((supplier) => {
-      const matchesQuery = !needle || [supplier.name, supplier.email, supplier.phone].some((field) => field.toLowerCase().includes(needle));
+      const matchesQuery = !needle || [
+        supplier.name, supplier.contactPerson ?? '', supplier.email, supplier.phone,
+        supplier.address ?? '', supplier.paymentTerms ?? '', supplier.notes ?? '',
+      ].some((field) => field.toLowerCase().includes(needle));
       const matchesFilter = directoryFilter === 'all' ||
-        (directoryFilter === 'missing-contact' && !supplier.email && !supplier.phone) ||
+        (directoryFilter === 'missing-contact' && !supplier.contactPerson && !supplier.email && !supplier.phone) ||
         (directoryFilter === 'missing-lead-time' && !supplier.leadTimeDays);
       return matchesQuery && matchesFilter;
     });
@@ -76,7 +178,16 @@ export function SuppliersPage() {
       const response = await fetch(editingSupplierId ? `/api/suppliers/${editingSupplierId}` : '/api/suppliers', {
         method: editingSupplierId ? 'PUT' : 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), phone: phone.trim(), leadTimeDays: leadDays }),
+        body: JSON.stringify({
+          name: name.trim(),
+          contactPerson: contactPerson.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          address: address.trim(),
+          paymentTerms: paymentTerms.trim(),
+          notes: notes.trim(),
+          leadTimeDays: leadDays,
+        }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
@@ -85,8 +196,12 @@ export function SuppliersPage() {
       const created = await response.json() as Supplier;
       setSuppliers((current) => [...current.filter((supplier) => supplier.id !== created.id), created].sort((a, b) => a.name.localeCompare(b.name)));
       setName('');
+      setContactPerson('');
       setEmail('');
       setPhone('');
+      setAddress('');
+      setPaymentTerms('');
+      setNotes('');
       setLeadTimeDays('');
       setEditingSupplierId(null);
       setShowForm(false);
@@ -101,8 +216,12 @@ export function SuppliersPage() {
   function editSupplier(supplier: Supplier) {
     setEditingSupplierId(supplier.id);
     setName(supplier.name);
+    setContactPerson(supplier.contactPerson ?? '');
     setEmail(supplier.email);
     setPhone(supplier.phone);
+    setAddress(supplier.address ?? '');
+    setPaymentTerms(supplier.paymentTerms ?? '');
+    setNotes(supplier.notes ?? '');
     setLeadTimeDays(supplier.leadTimeDays?.toString() ?? '');
     setShowForm(true);
   }
@@ -110,13 +229,17 @@ export function SuppliersPage() {
   function resetSupplierForm() {
     setEditingSupplierId(null);
     setName('');
+    setContactPerson('');
     setEmail('');
     setPhone('');
+    setAddress('');
+    setPaymentTerms('');
+    setNotes('');
     setLeadTimeDays('');
     setShowForm(false);
   }
 
-  const contactCount = suppliers.filter((supplier) => supplier.email || supplier.phone).length;
+  const contactCount = suppliers.filter((supplier) => supplier.contactPerson || supplier.email || supplier.phone).length;
   const missingContactCount = suppliers.length - contactCount;
   const missingLeadTimeCount = suppliers.filter((supplier) => !supplier.leadTimeDays).length;
 
@@ -162,16 +285,20 @@ export function SuppliersPage() {
           <div className="suppliers-create-heading"><div><span className="suppliers-create-kicker">{editingSupplierId ? 'EDIT PARTNER' : 'NEW PARTNER'}</span><h2>{editingSupplierId ? 'Update supplier' : 'Add a supplier'}</h2><p>Record the supplier's usual delivery lead time from your order history.</p></div><span className="suppliers-create-symbol" aria-hidden="true">＋</span></div>
           <div className="suppliers-form-grid">
             <label>Supplier name <input value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} placeholder="e.g. Central Office Supplies" /></label>
+            <label>Contact person <input value={contactPerson} onChange={(event) => setContactPerson(event.target.value)} maxLength={160} placeholder="Primary contact name" /></label>
             <label>Email address <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={256} placeholder="orders@example.com" /></label>
             <label>Phone number <input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} maxLength={64} placeholder="+94 …" /></label>
             <label>Usual lead time (days) <input type="number" min={1} max={90} step={1} value={leadTimeDays} onChange={(event) => setLeadTimeDays(event.target.value)} placeholder="Leave blank if unknown" /></label>
+            <label>Payment terms <input value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} maxLength={160} placeholder="e.g. Net 30 or payment on delivery" /></label>
+            <label>Business address <textarea value={address} onChange={(event) => setAddress(event.target.value)} maxLength={500} rows={2} placeholder="Supplier's billing or delivery address" /></label>
+            <label>Supplier notes <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={1000} rows={2} placeholder="Useful purchasing or delivery notes" /></label>
           </div>
           <div className="suppliers-form-actions"><button className="btn btn-secondary" type="button" onClick={resetSupplierForm}>Cancel</button><button className="btn btn-primary" type="submit" disabled={saving || !name.trim()}>{saving ? 'Saving…' : editingSupplierId ? 'Save changes' : 'Save supplier'}</button></div>
         </form>
       )}
 
       <section className="panel suppliers-directory-panel">
-        <div className="suppliers-directory-head"><div><span className="suppliers-section-mark" aria-hidden="true">▤</span><div><h2>All suppliers</h2><p>Contact details available to your inventory workspace.</p></div></div><label className="suppliers-search"><span aria-hidden="true">⌕</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name or contact" aria-label="Search suppliers" /></label></div>
+        <div className="suppliers-directory-head"><div><span className="suppliers-section-mark" aria-hidden="true">▤</span><div><h2>All suppliers</h2><p>Contact, delivery, and purchasing details for your inventory workspace.</p></div></div><label className="suppliers-search"><span aria-hidden="true">⌕</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search supplier details" aria-label="Search suppliers" /></label></div>
         <div className="inventory-quick-filters" role="group" aria-label="Filter supplier directory">
           <button type="button" className={`inventory-chip${directoryFilter === 'all' ? ' is-active' : ''}`} aria-pressed={directoryFilter === 'all'} onClick={() => setDirectoryFilter('all')}>All suppliers <strong>({suppliers.length})</strong></button>
           <button type="button" className={`inventory-chip chip-amber${directoryFilter === 'missing-contact' ? ' is-active' : ''}`} aria-pressed={directoryFilter === 'missing-contact'} onClick={() => setDirectoryFilter('missing-contact')}>Missing contact <strong>({missingContactCount})</strong></button>
@@ -180,25 +307,107 @@ export function SuppliersPage() {
         </div>
         <div className="table-wrap">
           <table className="data-table suppliers-table">
-            <thead><tr><th>Supplier</th><th>Email</th><th>Phone</th><th>Lead time</th><th>Added</th><th>Orders</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Supplier</th><th>Email</th><th>Phone</th><th>Lead time</th><th>Payment terms</th><th>Added</th><th>Orders</th><th>Actions</th></tr></thead>
             <tbody>
               {filtered.map((supplier) => (
-                <tr key={supplier.id}>
-                  <td><div className="suppliers-table-name"><span className="suppliers-avatar">{supplier.name.trim().charAt(0).toUpperCase()}</span><div><strong>{supplier.name}</strong><small>Supplier partner</small></div></div></td>
+                <Fragment key={supplier.id}>
+                <tr>
+                  <td>
+                    <div className="suppliers-table-name"><span className="suppliers-avatar">{supplier.name.trim().charAt(0).toUpperCase()}</span><div><strong>{supplier.name}</strong><small>{supplier.contactPerson ? `Contact: ${supplier.contactPerson}` : 'Contact person not set'}</small></div></div>
+                    <button
+                      className="suppliers-expand-button"
+                      type="button"
+                      aria-expanded={expandedSupplierId === supplier.id}
+                      aria-controls={`supplier-details-${supplier.id}`}
+                      onClick={() => void toggleSupplierDetails(supplier)}
+                    >
+                      {expandedSupplierId === supplier.id ? 'Show less' : 'Show more'}
+                    </button>
+                  </td>
                   <td>{supplier.email ? <a href={`mailto:${supplier.email}`}>{supplier.email}</a> : <span className="suppliers-missing">No email saved</span>}</td>
                   <td>{supplier.phone ? <a href={`tel:${supplier.phone}`}>{supplier.phone}</a> : <span className="suppliers-missing">No phone saved</span>}</td>
                   <td>{supplier.leadTimeDays ? `${supplier.leadTimeDays} days` : <span className="suppliers-missing">Not set</span>}</td>
+                  <td>{supplier.paymentTerms || <span className="suppliers-missing">Not set</span>}</td>
                   <td>{supplier.createdAt ? new Date(supplier.createdAt).toLocaleDateString() : '—'}</td>
-                  <td><Link className="suppliers-order-link" to="/purchase-orders">View orders <span aria-hidden="true">↗</span></Link></td>
+                  <td><Link className="suppliers-order-link" to={`/purchase-orders?supplier=${encodeURIComponent(supplier.name)}`}>View orders <span aria-hidden="true">↗</span></Link></td>
                   <td><button type="button" className="btn btn-secondary" onClick={() => editSupplier(supplier)}>Edit</button></td>
                 </tr>
+                {expandedSupplierId === supplier.id && (
+                  <tr key={`${supplier.id}-details`} className="suppliers-expanded-row">
+                    <td id={`supplier-details-${supplier.id}`} colSpan={8}>
+                      <div className="suppliers-expanded-details">
+                        <section className="suppliers-profile-details" aria-label={`${supplier.name} supplier details`}>
+                          <h3>Supplier details</h3>
+                          <dl>
+                            <div><dt>Contact person</dt><dd>{supplier.contactPerson || 'Not provided'}</dd></div>
+                            <div><dt>Email</dt><dd>{supplier.email || 'Not provided'}</dd></div>
+                            <div><dt>Phone</dt><dd>{supplier.phone || 'Not provided'}</dd></div>
+                            <div><dt>Business address</dt><dd>{supplier.address || 'Not provided'}</dd></div>
+                            <div><dt>Payment terms</dt><dd>{supplier.paymentTerms || 'Not provided'}</dd></div>
+                            <div><dt>Usual lead time</dt><dd>{supplier.leadTimeDays ? `${supplier.leadTimeDays} days` : 'Not set'}</dd></div>
+                            <div><dt>Notes</dt><dd>{supplier.notes || 'No notes'}</dd></div>
+                          </dl>
+                        </section>
+                        <section className="suppliers-order-history" aria-label={`${supplier.name} purchase order history`}>
+                          <div className="suppliers-history-heading">
+                            <div><h3>Purchase order history</h3><p>Cancelled orders are excluded; supplier payments are not recorded here.</p></div>
+                            <strong>{supplierOrderHistories[supplier.id]?.loading
+                              ? 'Loading order history…'
+                              : `${supplierOrderHistories[supplier.id]?.orders.length ?? 0} orders · ${supplierCurrency.format(
+                                supplierOrderValue(supplierOrderHistories[supplier.id]?.orders ?? []),
+                              )} non-cancelled PO value`}</strong>
+                          </div>
+                          {supplierOrderHistories[supplier.id]?.loading && <p role="status">Loading purchase orders…</p>}
+                          {supplierOrderHistories[supplier.id]?.error && (
+                            <div className="page-notice" role="alert">
+                              {supplierOrderHistories[supplier.id].error}
+                              <button className="btn btn-secondary" type="button" onClick={() => {
+                                setSupplierOrderHistories((current) => {
+                                  const next = { ...current };
+                                  delete next[supplier.id];
+                                  return next;
+                                });
+                                void loadSupplierOrderHistory(supplier);
+                              }}>Retry</button>
+                            </div>
+                          )}
+                          {!supplierOrderHistories[supplier.id]?.loading &&
+                            !supplierOrderHistories[supplier.id]?.error &&
+                            (supplierOrderHistories[supplier.id]?.orders.length ?? 0) === 0 && (
+                              <p>No purchase orders are recorded for this supplier yet.</p>
+                            )}
+                          {(supplierOrderHistories[supplier.id]?.orders.length ?? 0) > 0 && (
+                            <div className="table-wrap">
+                              <table className="data-table suppliers-history-table">
+                                <thead><tr><th>Order</th><th>Date</th><th>Branch</th><th>Status</th><th>Lines</th><th>Order value</th></tr></thead>
+                                <tbody>
+                                  {supplierOrderHistories[supplier.id].orders.map((order) => (
+                                    <tr key={order.id}>
+                                      <td>{order.number}</td>
+                                      <td>{new Date(order.createdAt).toLocaleDateString()}</td>
+                                      <td>{order.branch || '—'}</td>
+                                      <td>{order.status}</td>
+                                      <td>{order.lineItems}</td>
+                                      <td>{supplierCurrency.format(order.totalAmount)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </section>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
-              {!loading && filtered.length === 0 && <tr><td colSpan={7} className="empty-state">{suppliers.length ? 'No suppliers match your search.' : 'No suppliers yet. Add a supplier to start building your directory.'}</td></tr>}
-              {loading && suppliers.length === 0 && <tr><td colSpan={7} className="empty-state">Loading supplier directory…</td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={8} className="empty-state">{suppliers.length ? 'No suppliers match your search.' : 'No suppliers yet. Add a supplier to start building your directory.'}</td></tr>}
+              {loading && suppliers.length === 0 && <tr><td colSpan={8} className="empty-state">Loading supplier directory…</td></tr>}
             </tbody>
           </table>
         </div>
-        <div className="suppliers-directory-footer"><span>Showing {filtered.length} of {suppliers.length} suppliers</span><span>AI uses the supplier on the item's latest supplier-linked receipt.</span></div>
+        <div className="suppliers-directory-footer"><span>Showing {filtered.length} of {suppliers.length} suppliers</span><span>AI prefers the supplier assigned to an item, then falls back to its latest supplier-linked receipt.</span></div>
       </section>
     </div>
   );

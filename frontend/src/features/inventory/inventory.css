@@ -1123,8 +1123,9 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .suppliers-create-symbol { display: grid; width: 42px; height: 42px; place-items: center; color: var(--color-primary); font-size: 1.3rem; background: var(--color-primary-soft); border-radius: 13px; }
 .inventory-scope .suppliers-form-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: .8rem; }
 .inventory-scope .suppliers-form-grid label { display: grid; gap: .35rem; color: var(--color-text-secondary); font-size: .73rem; font-weight: 700; }
-.inventory-scope .suppliers-form-grid input { min-width: 0; padding: .65rem .75rem; color: var(--color-text); font: inherit; font-size: .82rem; background: var(--color-surface); border: 1px solid var(--color-border-strong); border-radius: .6rem; }
-.inventory-scope .suppliers-form-grid input:focus { border-color: var(--color-primary); outline: 3px solid var(--color-primary-soft); }
+.inventory-scope .suppliers-form-grid :is(input, textarea) { min-width: 0; padding: .65rem .75rem; color: var(--color-text); font: inherit; font-size: .82rem; background: var(--color-surface); border: 1px solid var(--color-border-strong); border-radius: .6rem; }
+.inventory-scope .suppliers-form-grid :is(input, textarea):focus { border-color: var(--color-primary); outline: 3px solid var(--color-primary-soft); }
+.inventory-scope .suppliers-form-grid textarea { resize: vertical; }
 .inventory-scope .suppliers-form-actions { display: flex; justify-content: flex-end; gap: .55rem; margin-top: 1rem; }
 .inventory-scope .suppliers-directory-panel { border-radius: 1.05rem; }
 .inventory-scope .suppliers-directory-head { display: flex; gap: 1rem; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-border); background: linear-gradient(90deg, var(--color-primary-soft), transparent 60%); }
@@ -1135,7 +1136,7 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .suppliers-search { display: flex; width: min(300px, 100%); gap: .4rem; align-items: center; padding: 0 .65rem; color: var(--color-text-muted); background: var(--color-surface); border: 1px solid var(--color-border-strong); border-radius: .6rem; }
 .inventory-scope .suppliers-search input { width: 100%; min-width: 0; padding: .55rem 0; color: var(--color-text); font: inherit; font-size: .78rem; background: transparent; border: 0; outline: 0; }
 .inventory-scope .suppliers-search:focus-within { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-soft); }
-.inventory-scope .suppliers-table { min-width: 720px; }
+.inventory-scope .suppliers-table { min-width: 980px; }
 .inventory-scope .suppliers-table td a:not(.suppliers-order-link) { color: var(--color-text); text-decoration: none; }
 .inventory-scope .suppliers-table td a:not(.suppliers-order-link):hover { color: var(--color-primary); text-decoration: underline; }
 .inventory-scope .suppliers-table-name { display: flex; gap: .65rem; align-items: center; }
@@ -1143,6 +1144,21 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .suppliers-table-name > div { display: grid; gap: .15rem; }
 .inventory-scope .suppliers-table-name strong { font-size: .82rem; }
 .inventory-scope .suppliers-table-name small { color: var(--color-text-muted); font-size: .68rem; }
+.inventory-scope .suppliers-expand-button { margin: .35rem 0 0 3.05rem; padding: 0; color: var(--color-primary); font: inherit; font-size: .7rem; font-weight: 750; background: none; border: 0; cursor: pointer; }
+.inventory-scope .suppliers-expand-button:hover { text-decoration: underline; }
+.inventory-scope .suppliers-expanded-row > td { padding: 0; background: color-mix(in srgb, var(--color-primary-soft) 25%, var(--color-surface)); }
+.inventory-scope .suppliers-expanded-details { display: grid; grid-template-columns: minmax(230px, .85fr) minmax(420px, 1.5fr); gap: 1rem; padding: 1rem; }
+.inventory-scope .suppliers-expanded-details h3 { margin: 0 0 .7rem; font-size: .88rem; }
+.inventory-scope .suppliers-profile-details dl { display: grid; gap: .55rem; margin: 0; }
+.inventory-scope .suppliers-profile-details dl > div { display: grid; grid-template-columns: minmax(105px, .7fr) minmax(0, 1fr); gap: .6rem; font-size: .72rem; }
+.inventory-scope .suppliers-profile-details dt { color: var(--color-text-muted); font-weight: 700; }
+.inventory-scope .suppliers-profile-details dd { margin: 0; overflow-wrap: anywhere; }
+.inventory-scope .suppliers-history-heading { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: flex-start; justify-content: space-between; margin-bottom: .65rem; }
+.inventory-scope .suppliers-history-heading h3 { margin-bottom: .2rem; }
+.inventory-scope .suppliers-history-heading p { margin: 0; color: var(--color-text-muted); font-size: .68rem; }
+.inventory-scope .suppliers-history-heading > strong { color: var(--color-primary); font-size: .75rem; }
+.inventory-scope .suppliers-history-table { min-width: 600px; }
+.inventory-scope .suppliers-history-table th, .inventory-scope .suppliers-history-table td { padding: .55rem .65rem; font-size: .7rem; }
 .inventory-scope .suppliers-missing { color: var(--color-text-muted); font-size: .76rem; }
 .inventory-scope .suppliers-order-link { color: var(--color-primary); font-size: .75rem; font-weight: 750; text-decoration: none; white-space: nowrap; }
 .inventory-scope .suppliers-order-link:hover { text-decoration: underline; }
@@ -1456,6 +1472,7 @@ body:has(.inventory-scope) .app-shell::after,
   .inventory-scope .suppliers-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inventory-scope .suppliers-summary-link { grid-column: 1 / -1; }
   .inventory-scope .suppliers-form-grid { grid-template-columns: 1fr; }
+  .inventory-scope .suppliers-expanded-details { grid-template-columns: 1fr; }
   .inventory-scope .suppliers-directory-head { align-items: stretch; flex-direction: column; }
   .inventory-scope .suppliers-search { width: 100%; }
 }

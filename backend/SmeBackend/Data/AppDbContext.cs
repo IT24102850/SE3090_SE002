@@ -415,6 +415,13 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<InventoryUnit>().HasQueryFilter(u => u.TenantId == CurrentTenantId && u.Tenant.IsActive && u.IsActive);
         modelBuilder.Entity<InventoryItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId && item.IsActive);
         modelBuilder.Entity<Supplier>().HasQueryFilter(supplier => supplier.TenantId == CurrentTenantId && supplier.IsActive);
+        modelBuilder.Entity<Supplier>(entity =>
+        {
+            entity.Property(supplier => supplier.ContactPerson).HasMaxLength(160);
+            entity.Property(supplier => supplier.Address).HasMaxLength(500);
+            entity.Property(supplier => supplier.PaymentTerms).HasMaxLength(160);
+            entity.Property(supplier => supplier.Notes).HasMaxLength(1000);
+        });
         modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(order => order.TenantId == CurrentTenantId);
         modelBuilder.Entity<PurchaseOrderItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
         modelBuilder.Entity<PurchaseOrderReceipt>().HasQueryFilter(receipt => receipt.TenantId == CurrentTenantId);
