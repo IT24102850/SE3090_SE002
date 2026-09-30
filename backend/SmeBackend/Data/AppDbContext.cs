@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using SmeBackend.Models;
 using SmeBackend.Services;
 
@@ -166,7 +166,13 @@ public class AppDbContext : DbContext
         // ==================== BOOKINGS ====================
         modelBuilder.Entity<Booking>(entity =>
         {
-            entity.ToTable("bookings");
+            entity.ToTable("bookings", t =>
+            {
+                // Data-integrity rules the database itself enforces, whatever
+                // code path writes the row (migration AddDataIntegrityChecks).
+                t.HasCheckConstraint("CK_bookings_end_after_start", "\"EndTime\" > \"StartTime\"");
+                t.HasCheckConstraint("CK_bookings_attendee_count_positive", "\"AttendeeCount\" IS NULL OR \"AttendeeCount\" > 0");
+            });
             entity.HasQueryFilter(b => b.DeletedAt == null);
 
             entity.HasIndex(b => new { b.TenantId, b.StartTime });
@@ -739,6 +745,12 @@ public class AppDbContext : DbContext
         // Purchase order items
         modelBuilder.Entity<PurchaseOrderItem>(entity =>
         {
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_purchase_order_items_quantity_positive", "\"Quantity\" > 0");
+                t.HasCheckConstraint("CK_purchase_order_items_received_in_range", "\"ReceivedQuantity\" >= 0");
+                t.HasCheckConstraint("CK_purchase_order_items_unit_price_non_negative", "\"UnitPrice\" >= 0");
+            });
             entity.Property(i => i.Quantity).HasPrecision(18, 3);
             entity.Property(i => i.UnitPrice).HasPrecision(18, 2);
             entity.Property(i => i.ReceivedQuantity).HasPrecision(18, 3);
@@ -751,7 +763,11 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<Invoice>(entity =>
         {
-            entity.ToTable("invoices");
+            entity.ToTable("invoices", t =>
+            {
+                t.HasCheckConstraint("CK_invoices_discount_non_negative", "\"Discount\" >= 0");
+                t.HasCheckConstraint("CK_invoices_tax_non_negative", "\"Tax\" >= 0");
+            });
 
             entity.HasIndex(i => new { i.TenantId, i.InvoiceNumber })
                 .IsUnique();
@@ -811,7 +827,8 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<InvoiceItem>(entity =>
         {
-            entity.ToTable("invoice_items");
+            entity.ToTable("invoice_items", t =>
+                t.HasCheckConstraint("CK_invoice_items_quantity_positive", "\"Quantity\" > 0"));
 
             entity.HasIndex(i => i.InvoiceId);
 

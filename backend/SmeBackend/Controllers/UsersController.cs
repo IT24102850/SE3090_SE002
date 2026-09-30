@@ -159,8 +159,11 @@ public sealed class UsersController(AppDbContext db, IEntitlementService entitle
         return NoContent();
     }
 
+    // JwtService issues the claim as "tenantId"; reading only "tenant_id"
+    // (as this did) turned every Admin request here into a 401. Caught by
+    // Api/AuthAndRoleApiTests.UserManagement_IsAdminOnly.
     private bool TryGetTenantId(out Guid tenantId) =>
-        Guid.TryParse(User.FindFirst("tenant_id")?.Value, out tenantId);
+        Guid.TryParse((User.FindFirst("tenantId") ?? User.FindFirst("tenant_id"))?.Value, out tenantId);
 }
 
 public sealed record UserResponse(Guid Id, string FullName, string Email, string Phone, string Role, Guid? BranchId, bool IsApproved);

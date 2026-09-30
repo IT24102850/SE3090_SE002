@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using Serilog.Events;
 using SmeBackend.Authorization;
 using SmeBackend.Data;
 using SmeBackend.Middleware;
@@ -14,16 +16,28 @@ using SmeBackend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// The Windows Event Log provider can be injected by local tooling. It requires
-// elevated permissions and turns otherwise harmless EF Core warnings into a
-// startup crash for a normal developer account. Development logs belong in the
-// console/debug output instead.
-if (builder.Environment.IsDevelopment())
+// Structured logging through Serilog. It replaces every default provider,
+// which also keeps the Windows Event Log provider (injected by some local
+// tooling, and a startup crash without elevation) out of the pipeline.
+// Levels and extra sinks can be overridden from the "Serilog" config section.
+builder.Host.UseSerilog((context, services, logger) => logger
+    .ReadFrom.Configuration(context.Configuration)
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("Application", "SmeBackend")
+    .WriteTo.Console(outputTemplate:
+        "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext}: {Message:lj} {Properties:j}{NewLine}{Exception}"));
+
+// Global error handling: any unhandled exception becomes an RFC 7807
+// ProblemDetails body with a trace id, never a stack trace or a bare 500.
+builder.Services.AddProblemDetails(options =>
 {
-    builder.Logging.ClearProviders();
-    builder.Logging.AddSimpleConsole();
-    builder.Logging.AddDebug();
-}
+    options.CustomizeProblemDetails = context =>
+        context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+});
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // Railway (and most PaaS hosts) assign the listen port via $PORT at runtime
 // rather than appsettings/launchSettings - bind to it when present so the
@@ -256,12 +270,18 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-// CORS
+// CORS: only the deployed web app (and its Vercel previews) and local dev
+// servers may call the API from a browser. The Flutter Android app is not a
+// browser and is unaffected; the website widget is an iframe served from the
+// web app's own origin. Extra origins: Cors:AllowedOrigins (or
+// Cors__AllowedOrigins__0, ... as environment variables).
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? new[] { "https://se-3090-se-002.vercel.app" };
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.SetIsOriginAllowed(origin => CorsOrigins.IsAllowed(origin, allowedOrigins))
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -270,6 +290,10 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Middleware pipeline
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+app.UseSerilogRequestLogging();
+
 // Railway and other managed hosts terminate TLS at a reverse proxy. Honor its
 // forwarded scheme before applying HTTPS redirection.
 app.UseForwardedHeaders(new ForwardedHeadersOptions
@@ -329,7 +353,12 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
+    // PostgreSQL gets its migrations; the in-memory provider the HTTP
+    // integration tests swap in has no migrations to run.
+    if (db.Database.IsRelational())
+        db.Database.Migrate();
+    else
+        db.Database.EnsureCreated();
 
     // The platform owner exists in every environment - the console is for
     // the deployed site. See Data/PlatformOwnerSeeder.cs for the config keys.
@@ -381,3 +410,6 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+// Exposes the entry point to WebApplicationFactory<Program> in the tests.
+public partial class Program { }

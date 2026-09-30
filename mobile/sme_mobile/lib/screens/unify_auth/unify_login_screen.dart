@@ -9,7 +9,6 @@ import '../../theme/app_colors.dart';
 import '../../widgets/ui/ui.dart';
 import '../../widgets/unify_auth/orbit_hero.dart';
 import '../../widgets/unify_auth/unify_logo_mark.dart';
-import '../../widgets/unify_auth/social_sign_in_row.dart';
 import '../../widgets/unify_auth/unify_wordmark.dart';
 import '../customer/book_business_list_screen.dart';
 import '../register_screen.dart';
@@ -339,16 +338,9 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
             ),
             SizedBox(height: 18 * gap),
 
-            const Center(
-              child: Text(
-                'Or continue with',
-                style: TextStyle(fontSize: 13, color: AppColors.textMuted),
-              ),
-            ),
-            SizedBox(height: 14 * gap),
-
-            SocialSignInRow(onProviderTap: _showComingSoon),
-            SizedBox(height: 20 * gap),
+            // No social sign-in row: Apple/Google/Facebook sign-in is not
+            // implemented, and a button that only says "coming soon" is not
+            // a feature. Email and password is the one way in.
 
             // Both ways in on one row. There are two kinds of sign-up now -
             // a customer account, which belongs to no business, and business

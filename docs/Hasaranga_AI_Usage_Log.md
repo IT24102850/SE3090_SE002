@@ -1,6 +1,26 @@
 # Hasaranga - AI Usage Log
 
 > Entries are reconstructed from Hasaranga-authored Git history. The tool used for this work was Antigravity.
+>
+> **To complete before submission (Hasaranga):** Section 18.3 requires, for
+> every entry, the date, tool **and model**, the task, what the tool produced,
+> **what was changed or rejected**, and **how the result was verified**. The
+> entries below name the commits but not the model, nor what was rejected, nor
+> a verification you ran yourself (a commit existing is not verification).
+> Your earlier work (2026-08-14 to 2026-09-23: the inventory module, the
+> inventory analytics, and the agent contracts in the old root `agents/`
+> folder, since removed as unused) has no entries yet. Add them from your own
+> notes only - a reconstructed or invented entry is treated as fabricated
+> evidence (Section 18.2). Use this shape:
+>
+> ```
+> ## YYYY-MM-DD
+> - **Tool / model:**
+> - **Task / section:**
+> - **What it produced:**
+> - **What I changed or rejected, and why:**
+> - **How I verified it:** (test run, manual check, review...)
+> ```
 
 ## 2026-09-24
 - **Tool:** Antigravity

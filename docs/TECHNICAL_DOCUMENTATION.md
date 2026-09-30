@@ -329,7 +329,20 @@ cd ../mobile/sme_mobile
 flutter test
 ```
 
-The backend tests include unit and PostgreSQL/Testcontainers-backed scenarios. AI tests mock the Gemini boundary and focus on orchestration, tool permissions, deterministic safety, schema validation, and failure handling. Frontend checks include Vitest, TypeScript compilation, navigation parity, subtype registry validation, and Vite production bundling.
+What each suite covers, as required by Section 12 of the specification:
+
+| Layer | Where | What is tested |
+| --- | --- | --- |
+| Backend unit / service | `backend/SmeBackend.Tests/*.cs`, `Billing/`, `PlatformBilling/` | Services and business rules (booking conflicts, availability, pricing, billing, entitlements), validation, controllers over an in-memory database |
+| Backend API integration | `backend/SmeBackend.Tests/Api/` | The real ASP.NET Core pipeline over HTTP via `WebApplicationFactory<Program>`: login, 401 for missing/tampered tokens, role-based 403s (Admin-only user management, Manager-only agent approval), validation 400s, ProblemDetails 404s, CORS allow-list |
+| PostgreSQL integration | `DatabaseIntegrationTests.cs`, `Billing/BillingDatabaseIntegrationTests.cs` | Real PostgreSQL 16 in Docker (Testcontainers): every migration applies, unique and foreign-key constraints, the `CHECK` constraints, transaction rollback, and that every billing query translates to SQL |
+| React | `frontend/src/**/*.test.ts(x)` | Components, form validation (login, invoices, dynamic forms), the protected route, the API client (bearer token, 401 sign-out), error states |
+| Flutter | `mobile/sme_mobile/test/` | Unit (models), widgets, form validation (login), role navigation, API integration through the real Dio client with a fake HTTP adapter, secure storage |
+| Agentic AI | `agentic-ai-service/tests/` | Golden cases, planning and delegation, per-agent tool permissions, schema validation, the deterministic safety gate, approval enforcement, prompt-injection resistance, model fallback and safe failure. The model is mocked, so no test depends on an LLM |
+
+The PostgreSQL tests need Docker. Without it (a laptop without Docker Desktop
+running) they are reported as **Skipped** with that reason, never as passed;
+in GitHub Actions, where Docker is available, they run on every push.
 
 ## 14. Deployment
 
@@ -350,22 +363,24 @@ The React application can be deployed to Vercel or another static hosting provid
 
 - Use production-only secrets and a strong stable JWT key.
 - Run database migrations against the intended database and verify `/health`.
-- Restrict CORS and allowed origins to deployed client domains.
+- CORS is restricted to the deployed web app, its Vercel previews and localhost (`Cors:AllowedOrigins`).
 - Configure the AI service shared token and HTTPS URLs.
 - Verify Swagger, authentication, tenant isolation, booking conflict checks, and an AI workflow with non-production data.
 - Do not publish demo credentials as production credentials.
 
 ## 15. Live URLs and Test Accounts
 
-The repository configuration currently identifies these deployed service URLs:
+- React web app: https://se-3090-se-002.vercel.app
+- API health (includes a PostgreSQL check): https://sme-backend-lxsp.onrender.com/health
+- Swagger UI: https://sme-backend-lxsp.onrender.com/swagger
+- Agentic AI service health: https://sme-agentic-ai.onrender.com/health (every other route requires the internal token and is called only by the API)
+- Platform owner console: https://se-3090-se-002.vercel.app/platform/login
 
-- Backend: `https://sme-backend-lxsp.onrender.com`
-- AI service: `https://sme-agentic-ai.onrender.com`
-- Backend health: `https://sme-backend-lxsp.onrender.com/health`
-- Backend Swagger: `https://sme-backend-lxsp.onrender.com/swagger`
-- Frontend: deployment URL is not recorded in this repository and must be added after the Vercel deployment is confirmed.
+The services run on Render's free tier and sleep when idle; the first request
+can take about 40 seconds.
 
-Development seed accounts, created only for local demonstration, are:
+Demo accounts (tenant "SME Demo Store"), created by `DevelopmentUserSeeder`
+in the shared database:
 
 | Role | Email | Password |
 | --- | --- | --- |
@@ -374,19 +389,23 @@ Development seed accounts, created only for local demonstration, are:
 | Staff | `staff@sme-demo.local` | `Staff@12345` |
 | Customer | `customer@sme-demo.local` | `Customer@12345` |
 
-These credentials are from `DevelopmentUserSeeder` and must not be reused in a public deployment. The platform owner account is configured through `Platform__OwnerEmail` and an initial secret or hash; its password and TOTP secret are intentionally not documented.
+These are demonstration credentials for evaluator access only; no real
+customer data is behind them. The platform owner account is configured
+through `Platform__OwnerEmail` and an initial secret or hash; its password and
+TOTP secret are intentionally not documented.
 
 ## 16. Individual Contributions
 
-The contribution allocation recorded in the project README is:
+| Student | ID | Primary component | Agentic AI contribution |
+| --- | --- | --- | --- |
+| Hasiru Chamika | IT24102850 | Universal Booking & Resource Engine | Planner/Coordinator, Domain Analysis, Action/Tool and Validation/Safety agents of the booking pipeline (Schedule Copilot, find-and-book); Platform Operations Copilot |
+| Oshadi | IT24101203 | Billing, Payments & Dynamic Forms Engine | Billing Copilot: `agents/billing_planner.py` (planning and narration) and the deterministic `BillingAgentService` |
+| Hasaranga Abeyrathna | IT24102315 | Inventory, Analytics & Intelligence Hub | StockSense: `agents/inventory_agents.py` (planning, domain analysis, replenishment, health analysis) and `InventoryAgentService` |
 
-| Contributor | Contribution |
-| --- | --- |
-| Hasiru | Universal booking and resource engine; Planner/Coordinator Agent; core backend and platform integration. |
-| Student 2 | Billing, payments, dynamic forms engine; Domain Analysis Agent. |
-| Student 3 | Inventory, analytics and intelligence hub; Action/Tool Agent; Validation/Safety Agent. |
-
-The placeholders `Student 2` and `Student 3` should be replaced with institutional names before final submission if required by the assessment rubric.
+The file-level ownership is listed in the README's "Team Members" table and
+can be checked with `git log --author=<id> -- <path>`. Each student's
+contribution statement, AI usage log and reflection are in their Individual
+Report section of the consolidated report and in `docs/*_AI_Usage_Log.md`.
 
 ## 17. Challenges and Design Decisions
 
@@ -407,7 +426,8 @@ The placeholders `Student 2` and `Student 3` should be replaced with institution
 - The AI service uses a shared internal token, receives caller-authorized JWTs for API tools, has per-agent tool allow-lists, and cannot access the database directly.
 - Deterministic validation rechecks conflicts and safety constraints before an action is applied.
 - Secrets are externalized to user-secrets or hosting secret stores.
-- Production deployments should enforce HTTPS, restrictive CORS, secure headers, database least privilege, log redaction, secret rotation, backups, and dependency updates.
+- CORS allows only the deployed web app and local development origins; unhandled errors return RFC 7807 ProblemDetails with a trace id and no stack trace; logs are structured (Serilog).
+- Production deployments should enforce HTTPS, secure headers, database least privilege, log redaction, secret rotation, backups, and dependency updates.
 
 This project is not a substitute for a production security assessment. Payment-provider webhooks, external integrations, rate-limit tuning, backup recovery, and privacy/legal requirements should be reviewed before real customer data is used.
 
