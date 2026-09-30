@@ -109,11 +109,6 @@ def _run_stage(trace: WorkflowTrace, client: BookingToolsClient, agent: str, run
     return result
 
 
-@app.get("/health")
-def health() -> dict:
-    return {"status": "ok"}
-
-
 @app.post("/plan", response_model=WorkflowTrace, dependencies=[Depends(_require_internal_token)])
 def plan(request: PlanRequest) -> WorkflowTrace | JSONResponse:
     workflow_id = str(uuid.uuid4())

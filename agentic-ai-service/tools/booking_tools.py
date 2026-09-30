@@ -21,6 +21,23 @@ class ToolError(Exception):
     into the agent loop."""
 
 
+# Least privilege for the find-and-book pipeline, enforced here rather than
+# only documented: a tool call from an agent not listed for that tool is
+# refused with a ToolError and recorded in the trace like any other call.
+# The Planner reads no data at all; only the deterministic Validation/Safety
+# agent may write (create_booking), and only after its own checks pass.
+# "unknown" is the client before the orchestrator hands it to an agent -
+# direct use in tests and scripts - and is not restricted.
+BOOKING_ALLOWED_TOOLS: dict[str, frozenset[str]] = {
+    "PlannerAgent": frozenset(),
+    "DomainAnalysisAgent": frozenset({"search_resources", "get_resource_metadata", "check_staff_schedule"}),
+    "ActionToolAgent": frozenset({
+        "query_resource_availability", "detect_conflicts", "get_resource_metadata", "predict_no_show_probability",
+    }),
+    "ValidationSafetyAgent": frozenset({"detect_conflicts", "predict_no_show_probability", "create_booking"}),
+}
+
+
 def _records_call(tool_name: str):
     """Record every invocation of an allow-listed tool on the client.
 
@@ -35,6 +52,13 @@ def _records_call(tool_name: str):
         @functools.wraps(fn)
         def wrapper(self, *args, **kwargs):
             started = time.monotonic()
+            agent = getattr(self, "current_agent", "unknown")
+            allowed = BOOKING_ALLOWED_TOOLS.get(agent)
+            # Subclasses (ScheduleToolsClient) carry their own per-agent gate.
+            if type(self) is BookingToolsClient and allowed is not None and tool_name not in allowed:
+                error = f"{agent} is not permitted to call {tool_name}."
+                self._record(tool_name, started, ok=False, error=error)
+                raise ToolError(error)
             try:
                 result = fn(self, *args, **kwargs)
             except Exception as e:
