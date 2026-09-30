@@ -151,10 +151,9 @@ describe('SuppliersPage', () => {
     expect(await screen.findByText('12 Main Street')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit supplier details' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('dialog', { name: 'Central Supplies' })).queryByRole('button', { name: /Delete supplier/ })).not.toBeInTheDocument();
-    expect(within(screen.getByRole('dialog', { name: 'Central Supplies' })).getByRole('link', { name: /Open purchase orders/ })).toHaveAttribute(
-      'href',
-      '/purchase-orders?supplier=Central%20Supplies',
-    );
+    const openPurchaseOrders = within(screen.getByRole('dialog', { name: 'Central Supplies' })).getByRole('link', { name: /Open purchase orders/ });
+    expect(openPurchaseOrders).toHaveAttribute('href', '/purchase-orders?supplier=Central%20Supplies');
+    expect(openPurchaseOrders).toHaveClass('suppliers-history-button');
     expect(screen.getByText('Deliver before noon')).toBeInTheDocument();
     expect(await screen.findAllByText('PO-1001')).toHaveLength(1);
     expect(screen.getAllByText('PO-1002')).toHaveLength(1);

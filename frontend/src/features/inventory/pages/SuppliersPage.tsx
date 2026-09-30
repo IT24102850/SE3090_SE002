@@ -549,7 +549,16 @@ export function SuppliersPage() {
                         to={`/purchase-orders?supplier=${encodeURIComponent(supplier.name)}`}
                       >Open purchase orders <span aria-hidden="true">↗</span></Link>
                     </div>
-                    {history?.loading && <p role="status">Loading purchase orders…</p>}
+                    {history?.loading && (
+                      <div className="suppliers-history-loading" role="status" aria-live="polite">
+                        <span className="suppliers-history-spinner" aria-hidden="true" />
+                        <span className="suppliers-history-loading-copy">
+                          <strong>Loading purchase orders</strong>
+                          <small>Gathering the latest supplier order history…</small>
+                        </span>
+                        <span className="suppliers-history-loading-bars" aria-hidden="true"><i /><i /><i /></span>
+                      </div>
+                    )}
                     {history?.error && (
                       <div className="page-notice" role="alert">
                         {history.error}
