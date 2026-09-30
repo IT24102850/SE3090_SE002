@@ -36,7 +36,32 @@ public sealed class SuppliersController(
         var suppliers = await db.Suppliers
             .AsNoTracking()
             .OrderBy(supplier => supplier.Name)
-            .Select(supplier => new SupplierResponse(
+            .ToListAsync(cancellationToken);
+
+        var purchaseOrders = await db.PurchaseOrders
+            .AsNoTracking()
+            .Select(order => new SupplierOrderRow(order.Id, order.SupplierId, order.Status, order.CreatedAt))
+            .ToListAsync(cancellationToken);
+        var orderTotals = await db.PurchaseOrderItems
+            .AsNoTracking()
+            .GroupBy(item => item.PurchaseOrderId)
+            .Select(group => new PurchaseOrderValue(group.Key, group.Sum(item => item.Quantity * item.UnitPrice)))
+            .ToDictionaryAsync(value => value.PurchaseOrderId, value => value.TotalValue, cancellationToken);
+        var orderSummaries = purchaseOrders
+            .GroupBy(order => order.SupplierId)
+            .ToDictionary(
+                group => group.Key,
+                group => new SupplierOrderSummary(
+                    group.Count(),
+                    group.Count(order => !string.Equals(order.Status, "Cancelled", StringComparison.OrdinalIgnoreCase)),
+                    group.Where(order => !string.Equals(order.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                        .Sum(order => orderTotals.GetValueOrDefault(order.Id)),
+                    group.Max(order => order.CreatedAt)));
+
+        var responses = suppliers.Select(supplier =>
+        {
+            var summary = orderSummaries.GetValueOrDefault(supplier.Id) ?? new SupplierOrderSummary(0, 0, 0m, null);
+            return new SupplierResponse(
                 supplier.Id,
                 supplier.Name,
                 supplier.ContactPerson,
@@ -47,10 +72,14 @@ public sealed class SuppliersController(
                 supplier.Notes,
                 supplier.LeadTimeDays,
                 supplier.CreatedAt,
-                supplier.UpdatedAt))
-            .ToListAsync(cancellationToken);
+                supplier.UpdatedAt,
+                summary.OrderCount,
+                summary.ActiveOrderCount,
+                summary.TotalOrderValue,
+                summary.LastOrderAt);
+        }).ToList();
 
-        return Ok(new SuppliersListResponse(suppliers));
+        return Ok(new SuppliersListResponse(responses));
     }
 
     [HttpPost]
@@ -157,6 +186,30 @@ public sealed class SuppliersController(
         return Ok(ToResponse(supplier));
     }
 
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteSupplier(Guid id, CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService, InventoryAuthorizationPolicies.InventoryWrite, tenantId, branchId: null))
+            return Forbid();
+
+        var supplier = await db.Suppliers.SingleOrDefaultAsync(value => value.Id == id, cancellationToken);
+        if (supplier is null) return NotFound();
+
+        if (await db.PurchaseOrders.AnyAsync(order => order.SupplierId == id, cancellationToken))
+        {
+            return Conflict(new
+            {
+                message = "This supplier has purchase order history and cannot be deleted without removing those records.",
+            });
+        }
+
+        db.Suppliers.Remove(supplier);
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
     private bool TryGetTenantId(out Guid tenantId) =>
         Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out tenantId);
 
@@ -179,6 +232,9 @@ public sealed class SuppliersController(
 }
 
 public sealed record SuppliersListResponse(IReadOnlyList<SupplierResponse> Items);
+internal sealed record SupplierOrderRow(Guid Id, Guid SupplierId, string Status, DateTime CreatedAt);
+internal sealed record PurchaseOrderValue(Guid PurchaseOrderId, decimal TotalValue);
+internal sealed record SupplierOrderSummary(int OrderCount, int ActiveOrderCount, decimal TotalOrderValue, DateTime? LastOrderAt);
 
 public sealed record SupplierResponse(
     Guid Id,
@@ -191,7 +247,11 @@ public sealed record SupplierResponse(
     string? Notes,
     int? LeadTimeDays,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    int OrderCount = 0,
+    int ActiveOrderCount = 0,
+    decimal TotalOrderValue = 0,
+    DateTime? LastOrderAt = null);
 
 public sealed record CreateSupplierRequest(
     string? Name,

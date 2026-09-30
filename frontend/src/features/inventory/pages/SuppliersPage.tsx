@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { Link } from 'react-router-dom';
 import { getStoredToken } from '../authToken';
 import { useToast } from '../ui/ToastContext';
+import ConfirmDialog from '../../../shared/components/ConfirmDialog';
 
 type Supplier = {
   id: string;
@@ -15,6 +16,10 @@ type Supplier = {
   leadTimeDays: number | null;
   createdAt: string;
   updatedAt: string;
+  orderCount: number;
+  activeOrderCount: number;
+  totalOrderValue: number;
+  lastOrderAt: string | null;
 };
 type SupplierFilter = 'all' | 'missing-contact' | 'missing-lead-time';
 type SupplierOrder = {
@@ -70,6 +75,8 @@ export function SuppliersPage() {
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
   const [expandedSupplierId, setExpandedSupplierId] = useState<string | null>(null);
   const [supplierOrderHistories, setSupplierOrderHistories] = useState<Record<string, SupplierOrderHistory>>({});
+  const [confirmDeleteSupplierId, setConfirmDeleteSupplierId] = useState<string | null>(null);
+  const [deletingSupplierId, setDeletingSupplierId] = useState<string | null>(null);
 
   const loadSuppliers = useCallback(async () => {
     setLoading(true);
@@ -202,7 +209,19 @@ export function SuppliersPage() {
         throw new Error(body?.message || body?.title || `Supplier could not be saved (${response.status})`);
       }
       const created = await response.json() as Supplier;
-      setSuppliers((current) => [...current.filter((supplier) => supplier.id !== created.id), created].sort((a, b) => a.name.localeCompare(b.name)));
+      setSuppliers((current) => {
+        const previous = current.find((supplier) => supplier.id === created.id);
+        const saved = editingSupplierId && previous
+          ? {
+            ...created,
+            orderCount: previous.orderCount,
+            activeOrderCount: previous.activeOrderCount,
+            totalOrderValue: previous.totalOrderValue,
+            lastOrderAt: previous.lastOrderAt,
+          }
+          : created;
+        return [...current.filter((supplier) => supplier.id !== created.id), saved].sort((a, b) => a.name.localeCompare(b.name));
+      });
       setName('');
       setContactPerson('');
       setEmail('');
@@ -247,10 +266,49 @@ export function SuppliersPage() {
     setShowForm(false);
   }
 
+  async function deleteSupplier(supplier: Supplier) {
+    setDeletingSupplierId(supplier.id);
+    try {
+      const response = await fetch(`/api/suppliers/${supplier.id}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message || body?.title || `Supplier could not be deleted (${response.status})`);
+      }
+
+      setSuppliers((current) => current.filter((item) => item.id !== supplier.id));
+      setSupplierOrderHistories((current) => {
+        const next = { ...current };
+        delete next[supplier.id];
+        return next;
+      });
+      setExpandedSupplierId(null);
+      setConfirmDeleteSupplierId(null);
+      notify(`${supplier.name} was deleted from your suppliers.`, 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Supplier could not be deleted.', 'error');
+    } finally {
+      setDeletingSupplierId(null);
+    }
+  }
+
   const contactCount = suppliers.filter((supplier) => supplier.contactPerson || supplier.email || supplier.phone).length;
   const missingContactCount = suppliers.length - contactCount;
   const missingLeadTimeCount = suppliers.filter((supplier) => !supplier.leadTimeDays).length;
   const selectedSupplier = suppliers.find((supplier) => supplier.id === expandedSupplierId);
+  const selectedHistory = selectedSupplier ? supplierOrderHistories[selectedSupplier.id] : undefined;
+  const selectedHistorySummary = selectedHistory && !selectedHistory.loading && !selectedHistory.error
+    ? {
+      orderCount: selectedHistory.orders.length,
+      activeOrderCount: selectedHistory.orders.filter((order) => order.status.toLowerCase() !== 'cancelled').length,
+      totalOrderValue: supplierOrderValue(selectedHistory.orders),
+      lastOrderAt: selectedHistory.orders
+        .map((order) => order.createdAt)
+        .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] ?? null,
+    }
+    : null;
 
   return (
     <div className="page suppliers-page">
@@ -322,22 +380,29 @@ export function SuppliersPage() {
                 <tr key={supplier.id}>
                   <td>
                     <div className="suppliers-table-name"><span className="suppliers-avatar">{supplier.name.trim().charAt(0).toUpperCase()}</span><div><strong>{supplier.name}</strong><small>{supplier.contactPerson ? `Contact: ${supplier.contactPerson}` : 'Contact person not set'}</small></div></div>
-                    <button
-                      className="suppliers-expand-button"
-                      type="button"
-                      aria-expanded={expandedSupplierId === supplier.id}
-                      aria-controls={`supplier-details-${supplier.id}`}
-                      onClick={() => void toggleSupplierDetails(supplier)}
-                    >
-                      View details
-                    </button>
                   </td>
                   <td>{supplier.email ? <a href={`mailto:${supplier.email}`}>{supplier.email}</a> : <span className="suppliers-missing">No email saved</span>}</td>
                   <td>{supplier.phone ? <a href={`tel:${supplier.phone}`}>{supplier.phone}</a> : <span className="suppliers-missing">No phone saved</span>}</td>
                   <td>{supplier.leadTimeDays ? `${supplier.leadTimeDays} days` : <span className="suppliers-missing">Not set</span>}</td>
                   <td>{supplier.paymentTerms || <span className="suppliers-missing">Not set</span>}</td>
                   <td>{supplier.createdAt ? new Date(supplier.createdAt).toLocaleDateString() : '—'}</td>
-                  <td><Link className="suppliers-order-link" to={`/purchase-orders?supplier=${encodeURIComponent(supplier.name)}`}>View orders <span aria-hidden="true">↗</span></Link></td>
+                  <td>
+                    <div className="supplier-order-summary">
+                      <div className="supplier-order-summary-values">
+                        <strong>{supplier.orderCount} <span>{supplier.orderCount === 1 ? 'order' : 'orders'}</span></strong>
+                        <span>{supplierCurrency.format(supplier.totalOrderValue)} PO value</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="suppliers-history-button"
+                        aria-expanded={expandedSupplierId === supplier.id}
+                        aria-controls={`supplier-details-${supplier.id}`}
+                        onClick={() => void toggleSupplierDetails(supplier)}
+                      >
+                          <span aria-hidden="true">▤</span> Order history &amp; details <span aria-hidden="true">→</span>
+                      </button>
+                    </div>
+                  </td>
                   <td><button type="button" className="btn btn-secondary" onClick={() => editSupplier(supplier)}>Edit</button></td>
                 </tr>
               ))}
@@ -352,6 +417,8 @@ export function SuppliersPage() {
         const supplier = selectedSupplier;
         const history = supplierOrderHistories[supplier.id];
         const orders = history?.orders ?? [];
+        const supplierHasPurchaseOrders = (selectedHistorySummary?.orderCount ?? supplier.orderCount) > 0;
+        const lastOrderAt = selectedHistorySummary?.lastOrderAt ?? supplier.lastOrderAt;
         return (
           <div
             className="modal-overlay suppliers-modal-overlay"
@@ -373,6 +440,28 @@ export function SuppliersPage() {
                 <button className="modal-close" type="button" aria-label="Close supplier details" onClick={() => setExpandedSupplierId(null)}>×</button>
               </header>
               <div className="modal-body suppliers-modal-body">
+                <section className="suppliers-profile-metrics" aria-label={`${supplier.name} order summary`}>
+                  <article className="supplier-metric-card supplier-metric-orders">
+                    <span className="supplier-metric-icon" aria-hidden="true">▤</span>
+                    <span className="supplier-metric-label">All orders</span>
+                    <strong>{history?.loading ? '…' : selectedHistorySummary?.orderCount ?? supplier.orderCount}</strong>
+                    <small>{lastOrderAt
+                      ? `Last order ${new Date(lastOrderAt).toLocaleDateString()}`
+                      : 'No order history yet'}</small>
+                  </article>
+                  <article className="supplier-metric-card supplier-metric-active">
+                    <span className="supplier-metric-icon" aria-hidden="true">↗</span>
+                    <span className="supplier-metric-label">Non-cancelled orders</span>
+                    <strong>{history?.loading ? '…' : selectedHistorySummary?.activeOrderCount ?? supplier.activeOrderCount}</strong>
+                    <small>Included in the PO value total</small>
+                  </article>
+                  <article className="supplier-metric-card supplier-metric-value">
+                    <span className="supplier-metric-icon" aria-hidden="true">LKR</span>
+                    <span className="supplier-metric-label">Total PO value</span>
+                    <strong>{history?.loading ? '…' : supplierCurrency.format(selectedHistorySummary?.totalOrderValue ?? supplier.totalOrderValue)}</strong>
+                    <small>Not a confirmed amount paid</small>
+                  </article>
+                </section>
                 <div className="suppliers-expanded-details">
                   <section className="suppliers-profile-details" aria-label={`${supplier.name} supplier details`}>
                     <h3>Supplier details</h3>
@@ -385,17 +474,23 @@ export function SuppliersPage() {
                       <div><dt>Usual lead time</dt><dd>{supplier.leadTimeDays ? `${supplier.leadTimeDays} days` : 'Not set'}</dd></div>
                       <div><dt>Notes</dt><dd>{supplier.notes || 'No notes'}</dd></div>
                     </dl>
-                    <button type="button" className="btn btn-secondary" onClick={() => {
-                      setExpandedSupplierId(null);
-                      editSupplier(supplier);
-                    }}>Edit supplier details</button>
+                    <div className="suppliers-delete-action">
+                      <button
+                        className="btn btn-danger"
+                        type="button"
+                        disabled={supplierHasPurchaseOrders || deletingSupplierId === supplier.id}
+                        onClick={() => setConfirmDeleteSupplierId(supplier.id)}
+                      >{deletingSupplierId === supplier.id ? 'Deleting…' : 'Delete supplier'}</button>
+                      {supplierHasPurchaseOrders && <p role="note">Suppliers with purchase order history cannot be deleted, so past orders remain intact.</p>}
+                    </div>
                   </section>
                   <section className="suppliers-order-history" aria-label={`${supplier.name} purchase order history`}>
                     <div className="suppliers-history-heading">
-                      <div><h3>Purchase order history</h3><p>Cancelled orders are excluded from the value; payments are not tracked here.</p></div>
-                      <strong>{history?.loading
-                        ? 'Loading order history…'
-                        : `${orders.length} orders · ${supplierCurrency.format(supplierOrderValue(orders))} non-cancelled PO value`}</strong>
+                      <div><h3>Purchase order history</h3><p>Cancelled orders are excluded from value; supplier payments are not tracked.</p></div>
+                      <Link
+                        className="suppliers-history-button"
+                        to={`/purchase-orders?supplier=${encodeURIComponent(supplier.name)}`}
+                      >Open purchase orders <span aria-hidden="true">↗</span></Link>
                     </div>
                     {history?.loading && <p role="status">Loading purchase orders…</p>}
                     {history?.error && (
@@ -415,7 +510,7 @@ export function SuppliersPage() {
                       <p>No purchase orders are recorded for this supplier yet.</p>
                     )}
                     {orders.length > 0 && (
-                      <div className="table-wrap">
+                      <div className="table-wrap suppliers-history-table-wrap">
                         <table className="data-table suppliers-history-table">
                           <thead><tr><th>Order</th><th>Date</th><th>Branch</th><th>Status</th><th>Lines</th><th>Order value</th></tr></thead>
                           <tbody>
@@ -440,6 +535,16 @@ export function SuppliersPage() {
           </div>
         );
       })()}
+      {selectedSupplier && confirmDeleteSupplierId === selectedSupplier.id && (
+        <ConfirmDialog
+          title={`Delete ${selectedSupplier.name}?`}
+          message="This permanently removes the supplier from your directory and clears its supplier references from inventory. This cannot be undone."
+          confirmLabel={deletingSupplierId === selectedSupplier.id ? 'Deleting…' : 'Delete supplier'}
+          tone="danger"
+          onConfirm={() => { void deleteSupplier(selectedSupplier); }}
+          onCancel={() => setConfirmDeleteSupplierId(null)}
+        />
+      )}
     </div>
   );
 }
