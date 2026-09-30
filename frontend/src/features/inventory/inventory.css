@@ -391,9 +391,15 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .movement-table tbody tr { transition: background .16s ease; }
 .inventory-scope .movement-table tbody tr:hover { background: color-mix(in srgb, var(--color-primary-soft) 45%, transparent); }
 .inventory-scope .movement-when { color: var(--color-text-secondary); font-size: .75rem; white-space: nowrap; }
-.inventory-scope .movement-quantity { display: inline-flex; min-width: 3.2rem; justify-content: center; padding: .28rem .45rem; color: var(--color-text-secondary); font-size: .77rem; font-weight: 800; font-variant-numeric: tabular-nums; background: var(--color-surface-muted); border-radius: .48rem; }
-.inventory-scope .movement-quantity.is-in { color: #047857; background: #ecfdf5; }
-.inventory-scope .movement-quantity.is-out { color: #b91c1c; background: #fef2f2; }
+.inventory-scope .movement-quantity { display: inline-flex; min-width: 3.5rem; justify-content: center; padding: .31rem .52rem; color: var(--color-text-secondary); font-size: .77rem; font-weight: 850; font-variant-numeric: tabular-nums; background: var(--color-surface-muted); border: 1px solid color-mix(in srgb, currentColor 10%, transparent); border-radius: .56rem; box-shadow: var(--shadow-sm); }
+.inventory-scope .movement-quantity.is-in { color: var(--color-good); background: var(--color-good-soft); }
+.inventory-scope .movement-quantity.is-out { color: var(--color-critical); background: var(--color-critical-soft); }
+.inventory-scope .movement-quantity.is-count-pending { color: var(--color-warning); background: var(--color-warning-soft); border-color: color-mix(in srgb, var(--color-warning) 30%, var(--color-border)); }
+.inventory-scope .movement-type-cell-physical-count .badge { min-height: 31px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); box-shadow: 0 3px 9px color-mix(in srgb, currentColor 11%, transparent); font-size: .72rem; font-weight: 800; letter-spacing: .015em; }
+.inventory-scope .movement-count-status-applied .badge-green { color: var(--color-good); background: var(--color-good-soft); }
+.inventory-scope .movement-count-status-pendingapproval .badge-amber,
+.inventory-scope .movement-count-status-needsrecount .badge-amber { color: var(--color-warning); background: var(--color-warning-soft); }
+.inventory-scope .movement-count-status-matched .badge-blue { color: var(--color-primary); background: var(--color-primary-soft); }
 .inventory-scope .movement-detail-text { max-width: 280px; margin: 0; overflow: hidden; color: var(--color-text-secondary); font-size: .78rem; text-overflow: ellipsis; }
 .inventory-scope .movement-reference { color: var(--color-text-muted); font-size: .74rem; font-variant-numeric: tabular-nums; }
 .inventory-scope .movement-footer { padding-top: .25rem; }

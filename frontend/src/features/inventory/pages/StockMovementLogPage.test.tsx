@@ -255,5 +255,16 @@ describe('StockMovementLogPage', () => {
     expect(within(table).getByText('Variance +7')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Physical counts 3/ })).toBeInTheDocument();
     expect(within(table).getByText('-2')).toBeInTheDocument();
+
+    const appliedRow = within(table).getByText('Counted applied').closest('tr');
+    const pendingRow = within(table).getByText('Counted pending').closest('tr');
+    const matchedRow = within(table).getByText('Counted matched').closest('tr');
+    expect(appliedRow).not.toBeNull();
+    expect(pendingRow).not.toBeNull();
+    expect(matchedRow).not.toBeNull();
+    expect(within(appliedRow!).getByText('Physical count').parentElement).toHaveClass('badge-green');
+    expect(within(pendingRow!).getByText('Physical count').parentElement).toHaveClass('badge-amber');
+    expect(within(pendingRow!).getByText('Variance +7')).toHaveClass('is-count-pending');
+    expect(within(matchedRow!).getByText('Physical count').parentElement).toHaveClass('badge-blue');
   });
 });

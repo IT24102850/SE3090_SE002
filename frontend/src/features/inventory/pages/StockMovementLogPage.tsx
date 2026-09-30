@@ -74,6 +74,13 @@ function formatCountStatus(status: string) {
   return status;
 }
 
+function countStatusTone(status: string | undefined): BadgeTone {
+  if (status === 'Applied') return 'green';
+  if (status === 'Matched') return 'blue';
+  if (status === 'PendingApproval' || status === 'NeedsRecount') return 'amber';
+  return 'violet';
+}
+
 async function fetchAllPages(
   endpoint: string,
   headers: HeadersInit,
@@ -405,9 +412,9 @@ export function StockMovementLogPage() {
                     <p className="cell-title">{row.item}</p>
                     <p className="cell-sub">{row.sku}</p>
                   </td>
-                  <td className={`movement-type-cell movement-type-cell-${row.movementType.toLowerCase().replace(/\s+/g, '-')}`}><Badge tone={typeTone[row.movementType] ?? 'neutral'}>{row.movementType}</Badge></td>
+                  <td className={`movement-type-cell movement-type-cell-${row.movementType.toLowerCase().replace(/\s+/g, '-')}${row.isPhysicalCount ? ` movement-count-status-${(row.countStatus ?? 'unknown').toLowerCase()}` : ''}`}><Badge tone={row.isPhysicalCount ? countStatusTone(row.countStatus) : typeTone[row.movementType] ?? 'neutral'}>{row.movementType}</Badge></td>
                   <td>
-                    <span className={`movement-quantity${row.quantity > 0 ? ' is-in' : row.quantity < 0 ? ' is-out' : ''}`}>
+                    <span className={`movement-quantity${row.quantity > 0 ? ' is-in' : row.quantity < 0 ? ' is-out' : ''}${row.isPhysicalCount && row.countStatus !== 'Applied' && row.countStatus !== 'Matched' ? ' is-count-pending' : ''}`}>
                       {row.isPhysicalCount &&
                       row.countStatus !== 'Applied' &&
                       row.countStatus !== 'Matched'
