@@ -786,19 +786,12 @@ body:has(.inventory-scope) .app-shell::after,
 @keyframes stocksense-guide-orbit { to { transform: rotate(360deg); } }
 @keyframes stocksense-guide-bars { to { filter: saturate(.62); transform: scaleY(.78); transform-origin: bottom; } }
 @keyframes stocksense-guide-chip { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-.inventory-scope .stocksense-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .9rem; margin: 0; }
-.inventory-scope .stocksense-kpi { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-content: center; gap: .2rem .85rem; min-width: 0; min-height: 116px; padding: 1.1rem 1.15rem; overflow: hidden; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 1.1rem; box-shadow: var(--shadow-sm); transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
-.inventory-scope .stocksense-kpi:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--color-primary) 34%, var(--color-border)); box-shadow: var(--shadow-md); }
-.inventory-scope .stocksense-kpi::after { content: ''; position: absolute; top: -30px; right: -30px; width: 94px; height: 94px; border-radius: 50%; background: var(--color-primary-soft); }
-.inventory-scope .stocksense-kpi .metric-icon-bubble { grid-row: 1 / 3; align-self: center; width: 2.65rem; height: 2.65rem; margin: 0; border-radius: .85rem; }
-.inventory-scope .stocksense-kpi .stat-value { position: relative; z-index: 1; overflow: hidden; font-size: clamp(1.25rem, 2.2vw, 1.75rem); line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
-.inventory-scope .stocksense-kpi .stat-label { position: relative; z-index: 1; color: var(--color-text-muted); font-size: .72rem; font-weight: 700; line-height: 1.35; }
-.inventory-scope .stocksense-kpi-out::after { background: var(--color-critical-soft); }
-.inventory-scope .stocksense-kpi-reorder::after { background: var(--color-warning-soft); }
-.inventory-scope .stocksense-kpi-value::after { background: var(--color-good-soft); }
-.inventory-scope .stocksense-inventory-panel, .inventory-scope .stocksense-ai-panel { border-radius: 1.25rem; box-shadow: var(--shadow-md); }
-.inventory-scope .stocksense-inventory-panel .panel-head { padding: 1.25rem 1.4rem; }
-.inventory-scope .stocksense-inventory-panel .toolbar { padding: 1rem 1.2rem; }
+.inventory-scope .stocksense-scope-panel { border-radius: 1.25rem; box-shadow: var(--shadow-md); }
+.inventory-scope .stocksense-scope-panel .panel-head { padding: 1.1rem 1.4rem .25rem; }
+.inventory-scope .stocksense-scope-panel .panel-head h2 { margin: .2rem 0; font-size: 1.1rem; }
+.inventory-scope .stocksense-scope-panel .toolbar { align-items: center; padding: .85rem 1.2rem 1rem; }
+.inventory-scope .stocksense-scope-label { color: var(--color-text-muted); font-size: .8rem; font-weight: 700; }
+.inventory-scope .stocksense-ai-panel { border-radius: 1.25rem; box-shadow: var(--shadow-md); }
 .inventory-scope .stocksense-ai-panel { margin-top: .2rem; border-color: color-mix(in srgb, var(--color-primary) 24%, var(--color-border)); background: linear-gradient(145deg, var(--color-surface), color-mix(in srgb, var(--color-primary-soft) 38%, var(--color-surface))); }
 .inventory-scope .stocksense-ai-head { align-items: center; padding: 1.25rem 1.4rem; background: linear-gradient(105deg, var(--color-primary-soft), var(--color-accent-soft) 70%, transparent); }
 .inventory-scope .stocksense-ai-title { display: flex; align-items: center; gap: .9rem; min-width: 0; }
@@ -807,6 +800,26 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .stocksense-ai-body { padding: 1.2rem 1.4rem 1.4rem; }
 .inventory-scope .stocksense-ai-body > .cell-sub:first-child { margin-bottom: 1rem; font-size: .82rem; }
 .inventory-scope .stocksense-ai-body .page-notice { margin: .5rem 0; }
+.inventory-scope .stocksense-recommendations { display: grid; gap: .8rem; }
+.inventory-scope .stocksense-recommendation-card { min-width: 0; padding: 1.05rem 1.15rem; border: 1px solid var(--color-border); border-radius: 1rem; background: linear-gradient(145deg, var(--color-surface), color-mix(in srgb, var(--color-primary-soft) 17%, var(--color-surface))); box-shadow: var(--shadow-sm); animation: stocksense-insight-enter .45s ease-out both; }
+.inventory-scope .stocksense-recommendation-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.inventory-scope .stocksense-recommendation-head h4 { margin: .18rem 0; font-size: 1.02rem; }
+.inventory-scope .stocksense-recommendation-confidence { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: .1rem .55rem; min-width: 190px; }
+.inventory-scope .stocksense-recommendation-confidence strong { color: var(--color-primary); font-size: 1.05rem; }
+.inventory-scope .stocksense-recommendation-confidence > span { color: var(--color-text-muted); font-size: .7rem; }
+.inventory-scope .stocksense-confidence-track { grid-column: 1 / -1; height: .36rem; overflow: hidden; border-radius: 999px; background: var(--color-primary-soft); }
+.inventory-scope .stocksense-confidence-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--color-primary), var(--color-good)); transition: width .45s ease; }
+.inventory-scope .stocksense-recommendation-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; margin-top: .9rem; }
+.inventory-scope .stocksense-recommendation-metrics > div { display: grid; gap: .2rem; min-width: 0; padding: .7rem .75rem; border-radius: .7rem; background: color-mix(in srgb, var(--color-surface) 74%, var(--color-primary-soft)); }
+.inventory-scope .stocksense-recommendation-metrics span { color: var(--color-text-muted); font-size: .68rem; }
+.inventory-scope .stocksense-recommendation-metrics strong { overflow-wrap: anywhere; font-size: .86rem; }
+.inventory-scope .stocksense-recommendation-timing { margin: .7rem 0 0; color: var(--color-warning); font-size: .8rem; }
+.inventory-scope .stocksense-recommendation-details { margin-top: .75rem; padding-top: .7rem; border-top: 1px solid var(--color-border); }
+.inventory-scope .stocksense-recommendation-details summary { width: fit-content; color: var(--color-primary); cursor: pointer; font-size: .78rem; font-weight: 750; }
+.inventory-scope .stocksense-recommendation-details p, .inventory-scope .stocksense-recommendation-details li { color: var(--color-text-muted); font-size: .76rem; line-height: 1.55; }
+.inventory-scope .stocksense-recommendation-details ul { display: grid; gap: .3rem; padding-left: 1.15rem; }
+.inventory-scope .stocksense-recommendation-action { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-top: .85rem; }
+.inventory-scope .stocksense-recommendation-action > span { color: var(--color-text-muted); font-size: .72rem; }
 .inventory-scope .stocksense-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin: 1.4rem 0 .8rem; }
 .inventory-scope .stocksense-section-heading h3 { margin: .2rem 0 0; font-size: 1.08rem; }
 .inventory-scope .stocksense-section-heading > span { padding: .35rem .65rem; color: var(--color-primary); font-size: .73rem; font-weight: 750; border-radius: 999px; background: var(--color-primary-soft); }
@@ -1664,11 +1677,14 @@ body:has(.inventory-scope) .app-shell::after,
   .inventory-scope .inventory-analytics-orbit { top: -118px; right: -65px; opacity: .55; transform: scale(.76); transform-origin: top right; }
   .inventory-scope .inventory-analytics-hero { min-height: 0; }
   .inventory-scope .stocksense-cta-hint { grid-column: 1 / -1; justify-self: center; text-align: center; }
+  .inventory-scope .stocksense-recommendation-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 560px) {
   .inventory-scope .stocksense-progress-panel { grid-template-columns: 52px minmax(0, 1fr); gap: .75rem; }
   .inventory-scope .stocksense-progress-heading > span { font-size: .56rem; }
   .inventory-scope .stocksense-hero-actions .stocksense-analyze-button { min-width: 0; }
+  .inventory-scope .stocksense-recommendation-head, .inventory-scope .stocksense-recommendation-action { align-items: flex-start; flex-direction: column; }
+  .inventory-scope .stocksense-recommendation-confidence { width: 100%; min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .inventory-scope .inventory-analytics-orbit, .inventory-scope .inventory-analytics-orbit i, .inventory-scope .inventory-analytics-hero::after { animation: none; }
