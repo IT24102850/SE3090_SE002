@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { Suspense, lazy, useEffect } from 'react';
 import { store } from './store/store';
@@ -422,12 +422,20 @@ function App() {
                 }
               />
               <Route
-                path="/low-stock-alerts"
+                path="/stocksense-ai"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
                     <InventoryShell><LowStockAlertsPage /></InventoryShell>
                   </ProtectedRoute>
                 }
+              />
+              <Route
+                path="/inventory-ai"
+                element={<Navigate to="/stocksense-ai" replace />}
+              />
+              <Route
+                path="/low-stock-alerts"
+                element={<Navigate to="/stocksense-ai" replace />}
               />
               <Route
                 path="/branch-overview"

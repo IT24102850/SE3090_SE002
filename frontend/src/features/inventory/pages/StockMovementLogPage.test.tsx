@@ -108,6 +108,7 @@ describe('StockMovementLogPage', () => {
 
     renderPage();
 
+    expect(screen.getByRole('heading', { name: 'Physical counts & stock activity' })).toBeInTheDocument();
     expect(await screen.findByText('Used ingredient')).toBeInTheDocument();
     expect(screen.getByText('Sold item')).toBeInTheDocument();
     const table = screen.getByRole('table');

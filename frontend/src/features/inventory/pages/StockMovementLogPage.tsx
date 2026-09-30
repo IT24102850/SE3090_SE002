@@ -327,8 +327,8 @@ export function StockMovementLogPage() {
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="movement-hero-copy">
           <p className="movement-eyebrow"><span aria-hidden="true">↗</span> OPERATIONS / STOCK ACTIVITY</p>
-          <h1>Stock activity</h1>
-          <p>Follow physical counts, receipts, issues, and adjustments across your inventory.</p>
+          <h1>Physical counts &amp; stock activity</h1>
+          <p>Review physical counts alongside receipts, sales, issues, and adjustments across your inventory.</p>
           <div className="movement-hero-meta"><span className={`movement-live-dot${loading ? ' is-loading' : ''}`} aria-hidden="true" />{loading ? 'Syncing recent activity…' : `${activities.length} records loaded`}<span className="movement-meta-separator">·</span>Newest first</div>
         </div>
         <div className="movement-hero-art" aria-hidden="true"><span className="movement-art-ring movement-art-ring-one" /><span className="movement-art-ring movement-art-ring-two" /><span className="movement-art-icon"><Icon name="movement" size={42} /></span><span className="movement-art-point movement-art-point-one" /><span className="movement-art-point movement-art-point-two" /></div>

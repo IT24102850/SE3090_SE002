@@ -869,7 +869,7 @@ export function InventoryManagerPage() {
                 <QRCodeSVG value={qrItem.sku} size={240} level="M" title={`QR code for SKU ${qrItem.sku}`} />
               </div>
               <p className="cell-title" style={{ marginTop: 12 }}><code>{qrItem.sku}</code></p>
-              <p className="modal-hint">This QR encodes only the item SKU. Scan it from Stock Movements or Physical Stock Count.</p>
+              <p className="modal-hint">This QR encodes only the item SKU. Scan it from Physical Counts &amp; Activity or the mobile Physical Stock Count screen.</p>
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setQrItem(null)}>Close</button>
                 <button

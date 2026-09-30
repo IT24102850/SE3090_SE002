@@ -95,10 +95,10 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: '/inventory', label: 'Inventory Manager', icon: '📦', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/suppliers', label: 'Suppliers', icon: '🏭', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/stock-movements', label: 'Stock Movements', icon: '🔄', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/stock-movements', label: 'Physical Counts & Activity', icon: '🔄', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/purchase-orders', label: 'Purchase Orders', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/sales', label: 'Sales', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/low-stock-alerts', label: 'StockSense AI', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/stocksense-ai', label: 'StockSense AI', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/branch-overview', label: 'Branch Overview', icon: '🏬', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/inventory-analytics', label: 'Inventory Analytics', icon: '📉', roles: ['Admin', 'Manager'] },
     ],
@@ -129,7 +129,7 @@ const INVENTORY_NAV_ICONS: Record<string, string> = {
   '/suppliers': 'supplier',
   '/stock-movements': 'movement',
   '/purchase-orders': 'po',
-  '/low-stock-alerts': 'stocksense',
+  '/stocksense-ai': 'stocksense',
   '/branch-overview': 'branch',
   '/inventory-analytics': 'chart',
 };
@@ -230,11 +230,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     sections.flatMap((section) => section.items).find((item) => item.path === '/dashboard'),
     sections.find((section) => section.id === 'scheduling')?.items[0],
     sections.find((section) => section.id === 'inventory')?.items[0],
-    sections.find((section) => section.id === 'inventory')?.items.find((item) => item.path === '/low-stock-alerts'),
+    sections.find((section) => section.id === 'inventory')?.items.find((item) => item.path === '/stocksense-ai'),
   ].filter((item): item is NavItem => Boolean(item));
-  const pageName = location.pathname === '/inventory-analytics'
+  const pageName = location.pathname === '/stock-movements'
+    ? 'PHYSICAL COUNTS & ACTIVITY'
+    : location.pathname === '/inventory-analytics'
     ? 'INVENTORY ANALYTICS'
-    : location.pathname === '/low-stock-alerts'
+    : location.pathname === '/stocksense-ai'
       ? 'STOCKSENSE AI'
     : location.pathname === '/inventory'
       ? 'STOCK MANAGEMENT'
@@ -437,7 +439,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 className={({ isActive }) => `mobile-quick-link${isActive ? ' active' : ''}`}
               >
                 <span className={inventoryIconClass(item)} aria-hidden="true"><NavigationIcon item={item} size={20} /></span>
-                <small>{item.label.replace(' Manager', '').replace('StockSense AI', 'StockSense')}</small>
+                <small>{item.label.replace(' Manager', '')}</small>
               </NavLink>
             ))}
             <button type="button" className="mobile-quick-link mobile-quick-more" onClick={() => setMobileNavOpen(true)}>

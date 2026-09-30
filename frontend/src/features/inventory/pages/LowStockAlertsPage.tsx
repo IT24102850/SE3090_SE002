@@ -221,6 +221,50 @@ export function LowStockAlertsPage() {
         <div className="stocksense-hero-orbit" aria-hidden="true"><span /><i /></div>
       </header>
 
+      <section className="stocksense-guide" aria-labelledby="stocksense-guide-title">
+        <div className="stocksense-guide-heading">
+          <div>
+            <p className="eyebrow">A SMARTER WAY TO MANAGE STOCK</p>
+            <h2 id="stocksense-guide-title">Know what needs attention—and what to do next.</h2>
+            <p>StockSense turns your inventory snapshot and recorded activity into practical guidance your team can review.</p>
+          </div>
+          <div className="stocksense-guide-visual" aria-hidden="true">
+            <span className="stocksense-visual-orbit" />
+            <div className="stocksense-visual-health">
+              <span className="stocksense-visual-label"><i /> STOCK HEALTH</span>
+              <strong>In focus</strong>
+              <span className="stocksense-visual-bars"><i /><i /><i /><i /><i /><i /><i /></span>
+            </div>
+            <div className="stocksense-visual-insight"><Icon name="stocksense" size={18} /><span>Insights ready</span><b>✦</b></div>
+          </div>
+          <span className="stocksense-guide-badge"><Icon name="stocksense" size={19} /> Your inventory co-pilot</span>
+        </div>
+        <div className="stocksense-guide-grid">
+          <article className="stocksense-guide-card" style={{ animationDelay: '40ms' }}>
+            <span className="stocksense-guide-icon guide-risk"><Icon name="alert" size={21} /></span>
+            <span className="stocksense-guide-step">01 · SPOT RISKS</span>
+            <h3>Catch stock problems earlier</h3>
+            <p>See out-of-stock and below-reorder items, check stock health by branch, and focus attention where it is needed.</p>
+          </article>
+          <article className="stocksense-guide-card" style={{ animationDelay: '130ms' }}>
+            <span className="stocksense-guide-icon guide-movement"><Icon name="chart" size={21} /></span>
+            <span className="stocksense-guide-step">02 · UNDERSTAND ACTIVITY</span>
+            <h3>Know what is moving</h3>
+            <p>Use recorded sales, issues, consumption and waste to understand outflow. Missing history is called out—not guessed.</p>
+          </article>
+          <article className="stocksense-guide-card" style={{ animationDelay: '220ms' }}>
+            <span className="stocksense-guide-icon guide-plan"><Icon name="predict" size={21} /></span>
+            <span className="stocksense-guide-step">03 · PLAN WITH CONFIDENCE</span>
+            <h3>Review useful next steps</h3>
+            <p>Get reorder suggestions with reasons, estimated cost and confidence, then decide what fits your suppliers and budget.</p>
+          </article>
+        </div>
+        <div className="stocksense-guide-footer">
+          <span><strong>Simple workflow</strong> Refresh stock <i aria-hidden="true">→</i> Analyze inventory <i aria-hidden="true">→</i> Review suggestions</span>
+          <span className="stocksense-readonly-note"><Icon name="info" size={15} /> Read-only: StockSense never changes stock or creates orders.</span>
+        </div>
+      </section>
+
       {inventoryError && <p className="page-notice stocksense-sync-notice" role="alert">{inventoryError} The timestamp above shows the last successful snapshot.</p>}
 
       {planning && <section className="stocksense-progress-panel" role="status" aria-live="polite">
