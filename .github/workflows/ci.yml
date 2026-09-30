@@ -55,7 +55,7 @@ jobs:
           if-no-files-found: ignore
 
   frontend:
-    name: Frontend (React 19 + Vitest)
+    name: Frontend (React 18 + Vitest)
     runs-on: ubuntu-latest
     defaults:
       run:

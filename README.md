@@ -1,13 +1,28 @@
 # SE3090_SE002 - Universal SME Management Platform
 
 ## Team Members
-- Hasiru - Universal Booking & Resource Engine + Planner/Coordinator Agent
-- Student 2 - Billing, Payments & Dynamic Forms Engine + Domain Analysis Agent
-- Student 3 - Inventory, Analytics & Intelligence Hub + Action/Tool Agent + Validation/Safety Agent
+
+A three-member group, so three primary business components - one per
+student, as Section 3 of the specification requires.
+<!-- TODO before submitting: Section 3 requires the lecturer-in-charge's
+written approval for a group size other than four. Reference it here
+(who approved it, and when) and include it in the consolidated report. -->
+
+The Agentic AI column names the files each student authored; it matches
+`git log --author`.
+
+| Student | ID | Primary component | Agentic AI contribution (own files) |
+|---|---|---|---|
+| Hasiru Chamika | IT24102850 | Universal Booking & Resource Engine (bookings, resources, schedules, availability, check-in) | The four-agent booking pipeline - Planner/Coordinator, Domain Analysis, Action/Tool and Validation/Safety - used by **Schedule Copilot** and customer **find-and-book** (`agentic-ai-service/agents/planner_agent.py`, `domain_analysis_agent.py`, `action_tool_agent.py`, `validation_safety_agent.py`, `schedule_*.py`, `tools/booking_tools.py`, `tools/schedule_tools.py`, `Services/PlannerAgentService.cs`, `Controllers/AgentWorkflowController.cs`); also the Platform Operations Copilot (`agents/platform_*.py`) |
+| Oshadi | IT24101203 | Billing, Payments & Dynamic Forms Engine | **Billing Copilot** - the planning and narration agent at the model edges (`agentic-ai-service/agents/billing_planner.py`, `schemas/billing_contracts.py`) and the deterministic billing analysis agent it drives (`Services/Billing/BillingAgentService.cs`, `Controllers/BillingAgentController.cs`) |
+| Hasaranga Abeyrathna | IT24102315 | Inventory, Analytics & Intelligence Hub | **StockSense** inventory agents - planning, inventory-domain analysis, replenishment recommendation and health analysis with a deterministic safety review (`agentic-ai-service/agents/inventory_agents.py`, `tools/inventory_tools.py`, `Services/InventoryAgentService.cs`) |
+
+The Platform console (SuperAdmin, Unify subscriptions) is additional scope
+beyond the three primary components.
 
 ## Tech Stack
 - **Backend:** ASP.NET Core 8 Web API, Entity Framework Core, PostgreSQL
-- **Frontend:** React 19, Vite, Redux Toolkit, Tailwind CSS
+- **Frontend:** React 18, Vite, Redux Toolkit (+ RTK Query)
 - **Mobile:** Flutter, Dart, Riverpod
 - **Agentic AI:** FastAPI (Python) with a custom four-agent orchestration
   (Planner -> Domain Analysis -> Action/Tool -> Validation/Safety). Gemini is
@@ -18,8 +33,8 @@
   Two assessed workflows run on it: **Schedule Copilot** (staff objective → plan →
   validated proposal → manager approval → apply; React and Flutter) and customer
   **find-and-book** (Flutter request → agents → approval in React → status back to Flutter).
-- **Database:** PostgreSQL (Supabase/Railway)
-- **Deployment:** Railway (API + DB), Vercel (React), Local APK (Flutter)
+- **Database:** PostgreSQL (Supabase)
+- **Deployment:** Render (API + agent service, Docker), Supabase (PostgreSQL), Vercel (React), Android APK (Flutter)
 
 ## Sub-type dashboards
 The tenant admin dashboard adapts to what the business actually does. A
@@ -419,34 +434,48 @@ AI usage declaration. Component-specific details remain in
 [`agentic-ai-service/README.md`](agentic-ai-service/README.md) and
 [`mobile/README.md`](mobile/README.md).
 
-## Railway deployment
+## Deployment (Render + Supabase + Vercel)
 
-The root [`railway.toml`](railway.toml) publishes `backend/SmeBackend` and
-configures Railway's deployment health check. Create a Railway service from
-this repository and set these variables:
+[`render.yaml`](render.yaml) is a Render Blueprint that deploys two Docker
+services from this repository: `sme-backend` (`backend/SmeBackend`) and
+`sme-agentic-ai` (`agentic-ai-service`). PostgreSQL is hosted on Supabase;
+the API applies its EF Core migrations on startup. The React app is deployed
+on Vercel, whose [`frontend/vercel.json`](frontend/vercel.json) rewrites
+`/api/*` to the Render API. Secrets are set in each host's dashboard, never in
+the repository:
 
-- `ASPNETCORE_ENVIRONMENT=Production`
+- `ConnectionStrings__DefaultConnection` — the Supabase PostgreSQL connection
+  string (`Ssl Mode=Require;Trust Server Certificate=true`)
 - `Jwt__Key` — a long, private signing key (at least 32 bytes)
-- `Platform__SecretKey` — a second private key for the platform console's
-  MFA secret (optional; `Jwt__Key` is used when unset — but changing either
-  key later invalidates the enrolled authenticator, so keep them stable)
-- `ConnectionStrings__DefaultConnection` — the PostgreSQL connection string.
-  For a Railway PostgreSQL service, use its `PGHOST`, `PGPORT`, `PGDATABASE`,
-  `PGUSER`, and `PGPASSWORD` reference variables to build an Npgsql connection
-  string, with `Ssl Mode=Require;Trust Server Certificate=true`.
+- `Platform__SecretKey` — key for the platform console's MFA secret
+  (optional; falls back to `Jwt__Key` — keep both stable, changing either
+  invalidates the enrolled authenticator)
+- `AgentService__InternalToken` / `AGENT_SERVICE_INTERNAL_TOKEN` — the shared
+  secret between the API and the agent service (same value on both)
+- `GEMINI_API_KEY` — on the agent service only
+- `Cors__AllowedOrigins__0` — optional extra browser origin (the Vercel
+  domain is allowed by default)
 
-After deployment, substitute the generated Railway domain below:
-
-- Health/readiness: `https://<railway-domain>/health` (200 only when PostgreSQL is reachable)
-- Liveness: `https://<railway-domain>/health/live`
-- Swagger UI: `https://<railway-domain>/swagger`
-- OpenAPI JSON: `https://<railway-domain>/swagger/v1/swagger.json`
+The free Render tier sleeps idle services: the first request after a quiet
+spell takes about 40 seconds. Open both `/health` URLs a few minutes before a
+demonstration.
 
 ## Live URLs
-- API: [pending — add the generated Railway domain after the first deployment]
-- React: [pending]
-- Swagger: `https://<railway-domain>/swagger`
-- Demo Video: [pending]
+
+| What | URL |
+|---|---|
+| React web app | https://se-3090-se-002.vercel.app |
+| API health (checks PostgreSQL) | https://sme-backend-lxsp.onrender.com/health |
+| API liveness | https://sme-backend-lxsp.onrender.com/health/live |
+| Swagger UI | https://sme-backend-lxsp.onrender.com/swagger |
+| OpenAPI JSON | https://sme-backend-lxsp.onrender.com/swagger/v1/swagger.json |
+| Agentic AI service health (internal service, token-protected apart from `/health`) | https://sme-agentic-ai.onrender.com/health |
+| Platform owner console | https://se-3090-se-002.vercel.app/platform/login |
+| Android APK | GitHub Actions → "Build Android APK" workflow artifact, and attached to the submission |
+| Demonstration video | _add the public link before submitting_ |
+
+Test accounts for evaluators are listed in
+[`docs/TECHNICAL_DOCUMENTATION.md` §15](docs/TECHNICAL_DOCUMENTATION.md#15-live-urls-and-test-accounts).
 
 ## License
 MIT

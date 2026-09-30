@@ -154,8 +154,9 @@ data (Bookings, Invoices, Inventory).
    complicating backup/restore.
 3. **Redis** — fast, but not durable enough by default for an audit trail that must survive 
    restarts and be reviewable weeks later during evaluation.
-4. **Dedicated PostgreSQL `AgentWorkflows` table (chosen)** — a shared, structured table with 
-   EF Core migrations, foreign keys to Users (ApprovedBy) and business entities, queried directly 
+4. **Dedicated PostgreSQL `agent_workflows` table (chosen)** — a shared, structured table with 
+   EF Core migrations, scoped to the tenant (`TenantId` + the global tenant query filter) and 
+   indexed on `(TenantId, Status)` and `CreatedAt` for the monitor's filters, queried directly 
    by all three team members' controllers.
 
 **Decision:**
@@ -171,6 +172,18 @@ queryable via standard EF Core LINQ from the Agent Workflow Monitor endpoints.
 - Trade-off: JSON columns (PlanJson, ToolResultsJson) trade some query-ability for flexibility, 
   since plan/tool-result shapes vary by agent — mitigated by keeping JSON schema-validated at 
   the application layer before persistence.
+- **`text`, not `jsonb`, for the JSON columns (deliberate).** Every filter the monitor applies 
+  (status, approval status, tenant, date) is a real relational column; nothing queries *inside* 
+  a plan or trace, so `jsonb`'s GIN indexes and operators would buy nothing. The trace is an 
+  audit record: `text` keeps it byte-for-byte as validated and written (`jsonb` re-orders keys 
+  and drops duplicates and whitespace), and it is validated by Pydantic in the agent service 
+  and by the C# DTOs before it is stored, which is where `jsonb` would otherwise have caught 
+  malformed JSON. If the monitor ever needs to filter on a field inside the trace, the 
+  migration is a single `ALTER COLUMN ... TYPE jsonb USING "PlanJson"::jsonb`.
+- **`ApprovedBy` is a plain `uuid`, not a foreign key.** An audit record must outlive the 
+  account that approved it: a foreign key would force either `ON DELETE CASCADE` (deleting 
+  history) or blocking user deletion. The approver's identity comes from the JWT at the 
+  approve/reject endpoint, never from the request body.
 
 ---
 
