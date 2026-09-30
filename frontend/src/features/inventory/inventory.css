@@ -2740,9 +2740,9 @@ body:has(.inventory-scope) .app-content::after {
 @keyframes branch-stock-status-glow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent); } 50% { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent), 0 0 12px color-mix(in srgb, currentColor 16%, transparent); } }
 @keyframes branch-stock-status-dot { 0%, 100% { transform: scale(.9); } 50% { transform: scale(1.12); } }
 @keyframes branch-stock-status-shine { 0%, 18% { transform: skewX(-20deg) translateX(-180%); } 62%, 100% { transform: skewX(-20deg) translateX(520%); } }
-.inventory-scope .branch-stock-status.is-ok { color: #08764f; background: rgba(23,174,131,.1); border-color: rgba(23,174,131,.2); }
-.inventory-scope .branch-stock-status.is-low { color: #986000; background: rgba(226,161,38,.12); border-color: rgba(226,161,38,.24); }
-.inventory-scope .branch-stock-status.is-out { color: #b52e42; background: rgba(228,78,99,.1); border-color: rgba(228,78,99,.22); }
+.inventory-scope .branch-stock-status.is-ok { color: var(--color-good); background: color-mix(in srgb, var(--color-good) 18%, var(--color-surface)); border-color: color-mix(in srgb, var(--color-good) 42%, var(--color-border)); }
+.inventory-scope .branch-stock-status.is-low { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 18%, var(--color-surface)); border-color: color-mix(in srgb, var(--color-warning) 42%, var(--color-border)); }
+.inventory-scope .branch-stock-status.is-out { color: var(--color-critical); background: color-mix(in srgb, var(--color-critical) 18%, var(--color-surface)); border-color: color-mix(in srgb, var(--color-critical) 42%, var(--color-border)); }
 @media (prefers-reduced-motion: reduce) {
   .inventory-scope .branch-stock-status,
   .inventory-scope .branch-stock-status::before,
