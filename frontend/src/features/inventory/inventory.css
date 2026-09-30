@@ -1162,13 +1162,16 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .suppliers-table-name > div { display: grid; gap: .15rem; }
 .inventory-scope .suppliers-table-name strong { font-size: .82rem; }
 .inventory-scope .suppliers-table-name small { color: var(--color-text-muted); font-size: .68rem; }
-.inventory-scope .supplier-order-summary { display: grid; justify-items: start; gap: .42rem; min-width: 170px; }
+.inventory-scope .supplier-order-summary { --supplier-order-accent: #0a9f92; position: relative; display: grid; justify-items: start; gap: .4rem; min-width: 190px; padding: .65rem .7rem; background: linear-gradient(135deg, color-mix(in srgb, var(--supplier-order-accent) 12%, var(--color-surface)), color-mix(in srgb, #3478e5 7%, var(--color-surface))); border: 1px solid color-mix(in srgb, var(--supplier-order-accent) 30%, var(--color-border)); border-left: 3px solid var(--supplier-order-accent); border-radius: .75rem; box-shadow: var(--shadow-sm); transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.inventory-scope .suppliers-table tbody tr:hover .supplier-order-summary { transform: translateY(-1px); border-color: color-mix(in srgb, var(--supplier-order-accent) 48%, var(--color-border)); box-shadow: 0 7px 16px color-mix(in srgb, var(--supplier-order-accent) 11%, transparent); }
+.inventory-scope .supplier-order-summary-kicker { color: var(--supplier-order-accent); font-size: .55rem; font-weight: 900; letter-spacing: .13em; }
 .inventory-scope .supplier-order-summary-values { display: grid; gap: .12rem; }
-.inventory-scope .supplier-order-summary-values > strong { color: var(--color-text); font-size: .92rem; font-weight: 850; }
-.inventory-scope .supplier-order-summary-values > strong span { color: var(--color-text-muted); font-size: .68rem; font-weight: 650; }
-.inventory-scope .supplier-order-summary-values > span { color: var(--color-text-secondary); font-size: .7rem; font-weight: 700; }
-.inventory-scope .suppliers-history-button { display: inline-flex; min-height: 32px; align-items: center; gap: .4rem; padding: .4rem .62rem; color: #075c59; font: inherit; font-size: .68rem; font-weight: 800; text-decoration: none; white-space: nowrap; background: linear-gradient(120deg, #d9faf2, #e6f5ff); border: 1px solid #bce9df; border-radius: .6rem; box-shadow: 0 3px 9px rgba(9, 112, 100, .08); cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
-.inventory-scope .suppliers-history-button:hover { transform: translateY(-1px); border-color: #70cfc0; box-shadow: 0 6px 15px rgba(9, 112, 100, .15); }
+.inventory-scope .supplier-order-summary-values > strong { color: var(--color-text); font-size: 1rem; font-weight: 900; line-height: 1.15; }
+.inventory-scope .supplier-order-summary-values > strong span { color: var(--color-text-secondary); font-size: .7rem; font-weight: 700; }
+.inventory-scope .supplier-order-summary-values > span { color: var(--color-text-secondary); font-size: .68rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.inventory-scope .supplier-order-summary .suppliers-history-button { display: inline-flex; min-height: 34px; align-items: center; gap: .4rem; padding: .42rem .65rem; color: var(--color-good); font: inherit; font-size: .68rem; font-weight: 850; text-decoration: none; white-space: nowrap; background: linear-gradient(120deg, color-mix(in srgb, var(--color-good) 18%, var(--color-surface)), color-mix(in srgb, var(--color-primary) 13%, var(--color-surface))); border: 1px solid color-mix(in srgb, var(--color-good) 38%, var(--color-border)); border-radius: .6rem; box-shadow: 0 3px 9px color-mix(in srgb, var(--color-good) 10%, transparent); cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.inventory-scope .supplier-order-summary .suppliers-history-button:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--color-good) 62%, var(--color-border)); box-shadow: 0 6px 15px color-mix(in srgb, var(--color-good) 17%, transparent); }
+.inventory-scope .suppliers-order-history-icon { display: grid; width: 21px; height: 21px; flex: none; place-items: center; color: var(--color-good); background: linear-gradient(135deg, color-mix(in srgb, var(--color-good) 22%, var(--color-surface)), color-mix(in srgb, var(--color-primary) 18%, var(--color-surface))); border: 1px solid color-mix(in srgb, var(--color-good) 38%, var(--color-border)); border-radius: 6px; font-size: .69rem; line-height: 1; }
 .inventory-scope .suppliers-history-button:focus-visible { outline: 3px solid var(--color-primary-soft); outline-offset: 2px; }
 .inventory-scope .suppliers-row-actions { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
 .inventory-scope .suppliers-row-actions .btn { min-height: 34px; padding-inline: .65rem; font-size: .7rem; }
@@ -2670,6 +2673,29 @@ body:has(.inventory-scope) .app-content::after {
   border-bottom: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-primary-soft) 28%, var(--color-surface));
 }
+.inventory-scope .branch-directory-panel {
+  border-color: color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  box-shadow: var(--shadow-md);
+}
+.inventory-scope .branch-directory-panel > .comparison-heading {
+  background:
+    radial-gradient(ellipse at 100% 0, color-mix(in srgb, var(--color-primary) 11%, transparent), transparent 48%),
+    linear-gradient(100deg, color-mix(in srgb, var(--color-primary-soft) 76%, var(--color-surface)), var(--color-surface) 78%);
+}
+.inventory-scope .branch-directory-panel .comparison-heading h2 {
+  color: var(--color-text);
+  font-size: 1.12rem;
+  letter-spacing: -.035em;
+}
+.inventory-scope .branch-directory-panel .comparison-count {
+  padding: .42rem .68rem;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 11%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 26%, var(--color-border));
+  border-radius: 999px;
+  font-size: .7rem;
+  font-weight: 800;
+}
 .inventory-scope .branch-directory-pulse {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2678,14 +2704,27 @@ body:has(.inventory-scope) .app-content::after {
   border-bottom: 1px solid var(--color-border);
 }
 .inventory-scope .branch-directory-pulse > div {
+  --directory-accent: #5269d9;
   display: flex;
   min-width: 0;
   gap: .65rem;
   align-items: center;
   padding: .7rem .8rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: linear-gradient(140deg, color-mix(in srgb, var(--directory-accent) 7%, var(--color-surface)), var(--color-surface) 72%);
+  border: 1px solid color-mix(in srgb, var(--directory-accent) 24%, var(--color-border));
+  border-top: 2px solid var(--directory-accent);
   border-radius: .8rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  animation: inventory-card-arrive .5s cubic-bezier(.2,.8,.2,1) backwards;
+}
+.inventory-scope .branch-directory-pulse > div:nth-child(2) { --directory-accent: #0b9eae; animation-delay: .07s; }
+.inventory-scope .branch-directory-pulse > div:nth-child(3) { --directory-accent: #d98a12; animation-delay: .14s; }
+.inventory-scope .branch-directory-pulse > div:nth-child(4) { --directory-accent: #15966f; animation-delay: .21s; }
+.inventory-scope .branch-directory-pulse > div:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--directory-accent) 42%, var(--color-border));
+  box-shadow: 0 9px 20px color-mix(in srgb, var(--directory-accent) 12%, transparent);
 }
 .inventory-scope .branch-directory-pulse-icon {
   display: grid;
@@ -2693,8 +2732,9 @@ body:has(.inventory-scope) .app-content::after {
   height: 2rem;
   flex: none;
   place-items: center;
-  color: #5269d9;
-  background: color-mix(in srgb, #5269d9 12%, var(--color-surface));
+  color: var(--directory-accent);
+  background: color-mix(in srgb, var(--directory-accent) 14%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--directory-accent) 24%, var(--color-border));
   border-radius: .65rem;
   font-size: .85rem;
   font-weight: 850;
@@ -2719,11 +2759,23 @@ body:has(.inventory-scope) .app-content::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.inventory-scope .branch-directory-pulse-units { color: #0b8e9e; background: color-mix(in srgb, #0b8e9e 12%, var(--color-surface)); }
-.inventory-scope .branch-directory-pulse-risk { color: #c17a08; background: color-mix(in srgb, #e2a126 14%, var(--color-surface)); }
-.inventory-scope .branch-directory-pulse-value { color: #118b62; background: color-mix(in srgb, #17ae83 13%, var(--color-surface)); font-size: .52rem; }
-.inventory-scope .branch-directory-pulse > .has-risk { border-color: color-mix(in srgb, #e2a126 42%, var(--color-border)); }
-.inventory-scope .branch-directory-pulse > .has-risk .branch-directory-pulse-risk { color: #bd6c00; background: color-mix(in srgb, #e2a126 21%, var(--color-surface)); }
+.inventory-scope .branch-directory-pulse-units { color: var(--directory-accent); background: color-mix(in srgb, var(--directory-accent) 14%, var(--color-surface)); }
+.inventory-scope .branch-directory-pulse-risk { color: var(--directory-accent); background: color-mix(in srgb, var(--directory-accent) 14%, var(--color-surface)); }
+.inventory-scope .branch-directory-pulse-value { color: var(--directory-accent); background: color-mix(in srgb, var(--directory-accent) 14%, var(--color-surface)); font-size: .52rem; }
+.inventory-scope .branch-directory-pulse > .has-risk { border-color: color-mix(in srgb, var(--color-warning) 52%, var(--color-border)); }
+.inventory-scope .branch-directory-pulse > .has-risk .branch-directory-pulse-risk { color: var(--color-warning); background: var(--color-warning-soft); }
+.inventory-scope .branch-directory-panel .branch-comparison-toolbar .search-field input,
+.inventory-scope .branch-directory-panel .branch-comparison-toolbar .filter-select {
+  min-height: 44px;
+  border-color: color-mix(in srgb, var(--color-primary) 20%, var(--color-border-strong));
+  border-radius: .7rem;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.inventory-scope .branch-directory-panel .branch-comparison-toolbar .search-field input:focus,
+.inventory-scope .branch-directory-panel .branch-comparison-toolbar .filter-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
 .inventory-scope .branch-overview-page .category-stock-head { padding: .9rem 1rem; }
 .inventory-scope .branch-overview-page .category-stock-total { display: grid; gap: .15rem; justify-items: end; }
 .inventory-scope .branch-overview-page .category-stock-total > strong { color: var(--category-accent); font-size: .95rem; font-variant-numeric: tabular-nums; }
@@ -2763,6 +2815,10 @@ body:has(.inventory-scope) .app-content::after {
   .inventory-scope .branch-directory-pulse > div { gap: .45rem; padding: .6rem; }
   .inventory-scope .branch-directory-pulse-icon { width: 1.75rem; height: 1.75rem; }
   .inventory-scope .branch-directory-pulse strong { font-size: .8rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inventory-scope .branch-directory-pulse > div { animation: none; transition: none; }
+  .inventory-scope .branch-directory-pulse > div:hover { transform: none; }
 }
 
 .inventory-scope .inventory-analytics-overview,
@@ -2951,6 +3007,14 @@ body:has(.inventory-scope) .app-content::after {
 .inventory-scope .inventory-sales-activity-footer .pagination-ellipsis { padding: .4rem .2rem; color: var(--color-text-muted); }
 .inventory-scope .inventory-sales-page-error { display: flex; flex: 1 1 100%; align-items: center; justify-content: flex-end; gap: .6rem; color: var(--color-critical); font-size: .78rem; }
 .inventory-scope .inventory-sale-receipt-action { white-space: nowrap; }
+.inventory-scope .inventory-sales-reference { display: inline-flex; min-width: 150px; gap: .5rem; align-items: center; }
+.inventory-scope .inventory-sales-reference-mark { display: grid; width: 30px; height: 30px; flex: none; place-items: center; color: var(--color-primary); background: var(--color-primary-soft); border: 1px solid color-mix(in srgb, var(--color-primary) 20%, var(--color-border)); border-radius: 10px; font-size: .85rem; font-weight: 850; }
+.inventory-scope .inventory-sales-reference-copy { display: grid; min-width: 0; gap: .16rem; }
+.inventory-scope .inventory-sales-reference-copy small { color: var(--color-text-muted); font-size: .56rem; font-weight: 850; letter-spacing: .1em; }
+.inventory-scope .inventory-sales-reference-copy strong { overflow-wrap: anywhere; color: var(--color-text); font-family: var(--font-mono, monospace); font-size: .68rem; font-weight: 750; }
+.inventory-scope .branch-item-sku-card { display: inline-flex; min-width: 130px; gap: .5rem; align-items: center; }
+.inventory-scope .branch-item-sku-mark { display: grid; width: 30px; height: 30px; flex: none; place-items: center; color: var(--color-primary); background: var(--color-primary-soft); border: 1px solid color-mix(in srgb, var(--color-primary) 20%, var(--color-border)); border-radius: 10px; font-size: .5rem; font-weight: 900; letter-spacing: .02em; }
+.inventory-scope .branch-item-sku-card .branch-item-sku { padding: 0; color: var(--color-text); background: transparent; font-family: var(--font-mono, monospace); font-size: .68rem; font-weight: 750; }
 .inventory-scope .inventory-sale-receipt-overlay { z-index: 2200; }
 .inventory-scope .inventory-sale-receipt-paper {
   width: min(100%, 620px);
@@ -3051,4 +3115,140 @@ body:has(.inventory-scope) .app-content::after {
   .inventory-scope .inventory-movers-table-wrap .data-table tbody tr,
   .inventory-scope .inventory-sales-activity-table-wrap .data-table tbody tr { transition: none; }
   .inventory-scope .inventory-analytics-panel:hover { transform: none; }
+}
+
+/* KPI cards share the clear hierarchy and accent treatment used on Sales. */
+.inventory-scope .inventory-analytics-metric {
+  display: flex;
+  min-width: 0;
+  min-height: 142px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: .7rem;
+  padding: 1rem 1.05rem .82rem;
+  background:
+    radial-gradient(circle at 105% 115%, color-mix(in srgb, var(--metric-accent) 14%, transparent) 0 24%, transparent 24.5%),
+    linear-gradient(145deg, var(--color-surface), color-mix(in srgb, var(--metric-accent) 7%, var(--color-surface)));
+  animation: inventory-card-arrive .58s cubic-bezier(.2,.8,.2,1) backwards;
+}
+.inventory-scope .inventory-analytics-metric:nth-child(2) { animation-delay: .07s; }
+.inventory-scope .inventory-analytics-metric:nth-child(3) { animation-delay: .14s; }
+.inventory-scope .inventory-analytics-metric:nth-child(4) { animation-delay: .21s; }
+.inventory-scope .inventory-analytics-metric:nth-child(5) { animation-delay: .28s; }
+.inventory-scope .inventory-analytics-metric-main { display: flex; min-width: 0; gap: .7rem; align-items: center; }
+.inventory-scope .inventory-analytics-metric-copy { display: grid; min-width: 0; gap: .2rem; }
+.inventory-scope .inventory-analytics-metric-icon {
+  display: grid;
+  width: 43px;
+  height: 43px;
+  flex: none;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--metric-accent) 22%, var(--color-border));
+  border-radius: 14px;
+  transition: transform .22s ease, box-shadow .22s ease;
+}
+.inventory-scope .inventory-analytics-metric:hover .inventory-analytics-metric-icon {
+  transform: rotate(-5deg) scale(1.06);
+  box-shadow: 0 6px 15px color-mix(in srgb, var(--metric-accent) 18%, transparent);
+}
+.inventory-scope .inventory-analytics-metric-label {
+  overflow: hidden;
+  color: var(--metric-accent);
+  font-size: .58rem;
+  font-weight: 850;
+  letter-spacing: .1em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.inventory-scope .inventory-analytics-metric strong {
+  overflow: hidden;
+  margin: 0;
+  color: var(--color-text);
+  font-size: clamp(.95rem, 1.25vw, 1.22rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 850;
+  line-height: 1.2;
+  letter-spacing: -.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inventory-scope .inventory-analytics-metric-detail {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 25px;
+  gap: .45rem;
+  align-items: center;
+  padding-top: .5rem;
+  border-top: 1px solid color-mix(in srgb, var(--metric-accent) 17%, var(--color-border));
+}
+.inventory-scope .inventory-analytics-metric-detail > span {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--metric-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--metric-accent) 12%, transparent);
+}
+.inventory-scope .inventory-analytics-metric-detail small {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: .65rem;
+  line-height: 1.35;
+}
+.inventory-scope .inventory-analytics-sales-summary .inventory-analytics-metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 1200px) {
+  .inventory-scope .inventory-analytics-sales-summary .inventory-analytics-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 1100px) {
+  .inventory-scope .inventory-analytics-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-scope .inventory-analytics-sales-summary .inventory-analytics-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .inventory-scope .inventory-analytics-metric { min-height: 124px; padding: .8rem; }
+  .inventory-scope .inventory-analytics-metric-icon { width: 36px; height: 36px; border-radius: 12px; }
+  .inventory-scope .inventory-analytics-metric strong { font-size: 1.05rem; }
+  .inventory-scope .inventory-analytics-metric-label,
+  .inventory-scope .inventory-analytics-metric-detail small { font-size: .59rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inventory-scope .inventory-analytics-metric { animation: none; transition: none; }
+  .inventory-scope .inventory-analytics-metric:hover { transform: none; }
+  .inventory-scope .inventory-analytics-metric-icon { transition: none; }
+  .inventory-scope .inventory-analytics-metric:hover .inventory-analytics-metric-icon { transform: none; }
+}
+
+/* Keep inventory icon tiles visibly accent-colored instead of near-white. */
+.inventory-scope :is(
+  .inventory-manager-metric-icon,
+  .sales-stat-icon,
+  .movement-stat-icon,
+  .purchase-order-metric-icon,
+  .inventory-analytics-metric-icon,
+  .branch-overview-metric-icon,
+  .branch-directory-pulse-icon,
+  .supplier-metric-icon,
+  .inventory-analytics-panel-icon,
+  .purchase-orders-panel-icon,
+  .category-icon,
+  .branch-card-icon
+) {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, currentColor 30%, var(--color-surface)),
+    color-mix(in srgb, currentColor 20%, var(--color-surface))
+  );
+  border: 1px solid color-mix(in srgb, currentColor 42%, var(--color-border));
+  box-shadow: inset 0 1px color-mix(in srgb, currentColor 10%, transparent);
+}
+.inventory-scope :is(.branch-item-sku-mark, .inventory-sales-reference-mark, .suppliers-order-history-icon) {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, currentColor 28%, var(--color-surface)),
+    color-mix(in srgb, currentColor 18%, var(--color-surface))
+  );
+  border-color: color-mix(in srgb, currentColor 42%, var(--color-border));
+  box-shadow: inset 0 1px color-mix(in srgb, currentColor 10%, transparent);
 }

@@ -93,8 +93,14 @@ describe('inventory sales activity', () => {
     expect(await screen.findByText('What’s happening in sales')).toBeInTheDocument();
     expect(screen.getByText('SALE-20260929-001')).toBeInTheDocument();
     expect(screen.getByText('Coffee Beans')).toBeInTheDocument();
+    expect(screen.getByText('SALE-20260929-001').closest('.inventory-sales-reference')).toBeInTheDocument();
+    expect(screen.getByText('SALE REF')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getAllByText('Gross profit')).toHaveLength(2);
+    const revenueMetric = screen.getByText('Sales revenue').closest('article');
+    expect(revenueMetric).toHaveClass('inventory-analytics-metric');
+    expect(revenueMetric?.querySelector('.inventory-analytics-metric-main')).not.toBeNull();
+    expect(revenueMetric?.querySelector('.inventory-analytics-metric-detail')).toHaveTextContent('Revenue from recorded sales');
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/^\/api\/reports\/sales-activity\?/),
       expect.anything(),

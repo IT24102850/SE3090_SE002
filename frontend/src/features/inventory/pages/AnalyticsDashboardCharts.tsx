@@ -249,10 +249,17 @@ function Metric({ label, value, detail, tone, icon }: {
 }) {
   return (
     <article className={`inventory-analytics-metric metric-${tone}`}>
-      <span className="inventory-analytics-metric-icon"><Icon name={icon} size={19} /></span>
-      <span className="inventory-analytics-metric-label">{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
+      <div className="inventory-analytics-metric-main">
+        <span className="inventory-analytics-metric-icon" aria-hidden="true"><Icon name={icon} size={19} /></span>
+        <span className="inventory-analytics-metric-copy">
+          <span className="inventory-analytics-metric-label">{label}</span>
+          <strong>{value}</strong>
+        </span>
+      </div>
+      <div className="inventory-analytics-metric-detail">
+        <span aria-hidden="true" />
+        <small>{detail}</small>
+      </div>
     </article>
   );
 }
@@ -781,7 +788,15 @@ export function AnalyticsDashboardPage() {
                           <strong>{sale.items.length ? sale.items.join(', ') : 'Recorded sale'}</strong>
                         </td>
                         <td>{sale.quantity > 0 ? compact(sale.quantity) : '—'}</td>
-                        <td><span className="cell-sub">{sale.reference}</span></td>
+                        <td>
+                          <span className="inventory-sales-reference">
+                            <span className="inventory-sales-reference-mark" aria-hidden="true">#</span>
+                            <span className="inventory-sales-reference-copy">
+                              <small>SALE REF</small>
+                              <strong>{sale.reference}</strong>
+                            </span>
+                          </span>
+                        </td>
                         <td className="inventory-sales-profit">
                           {sale.grossProfit == null ? 'Cost data missing' : lkr(sale.grossProfit)}
                         </td>

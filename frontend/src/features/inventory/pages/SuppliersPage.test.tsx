@@ -134,9 +134,11 @@ describe('SuppliersPage', () => {
     expect(screen.getByText('Suppliers with lead times')).toBeInTheDocument();
     expect(screen.getByText('Ready')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('ORDERS')).toBeInTheDocument();
     expect(screen.getByText(/12,500\.00 PO value/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'View details' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Order history & details/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Order history & details/ }).querySelector('.suppliers-order-history-icon')).not.toBeNull();
     const supplierRow = screen.getByText('Central Supplies').closest('tr');
     expect(supplierRow).not.toBeNull();
     expect(within(supplierRow!).getByRole('button', { name: 'Delete' })).toBeDisabled();

@@ -233,7 +233,7 @@ export function BranchOverviewPage() {
         ))}
         {!branches.length && !error && !loading && <p className="cell-sub">No branches are recorded yet.</p>}
       </section>
-      <section className="panel">
+      <section className="panel branch-directory-panel">
         <div className="panel-head comparison-heading">
           <div><p className="eyebrow">INVENTORY DIRECTORY</p><h2>Stock, organised by category</h2><p>Search and compare item availability, value, and reorder risk across branches.</p></div>
           <span className="comparison-count">{comparisonItems.length} of {inventory.length} items · {categoryGroups.length} categories</span>
@@ -269,7 +269,14 @@ export function BranchOverviewPage() {
                     <thead><tr><th>Item</th><th>SKU</th><th>Branch</th><th>On hand</th><th>Reorder</th><th>Unit cost</th><th>Stock value</th><th>Stock health</th></tr></thead>
                     <tbody>{group.items.map((item) => (
                       <tr key={item.id}>
-                        <td><strong>{item.name}</strong><small className="branch-item-category">{categoryNameFor(item, categoryNames)}</small></td><td><code className="branch-item-sku">{item.sku}</code></td><td>{item.branch ?? 'Unassigned'}</td>
+                        <td><strong>{item.name}</strong><small className="branch-item-category">{categoryNameFor(item, categoryNames)}</small></td>
+                        <td>
+                          <span className="branch-item-sku-card">
+                            <span className="branch-item-sku-mark" aria-hidden="true">SKU</span>
+                            <code className="branch-item-sku">{item.sku}</code>
+                          </span>
+                        </td>
+                        <td>{item.branch ?? 'Unassigned'}</td>
                         <td>{item.quantity} {item.unit ?? 'units'}</td><td>{item.reorderLevel} {item.unit ?? 'units'}</td>
                         <td>{item.unitCost != null ? money(Number(item.unitCost)) : '—'}</td>
                         <td>{item.unitCost != null ? money(Number(item.quantity) * Number(item.unitCost)) : '—'}</td>

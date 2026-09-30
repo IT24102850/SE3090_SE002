@@ -443,6 +443,7 @@ export function SuppliersPage() {
                   <td>{supplier.createdAt ? new Date(supplier.createdAt).toLocaleDateString() : '—'}</td>
                   <td>
                     <div className="supplier-order-summary">
+                      <span className="supplier-order-summary-kicker">ORDERS</span>
                       <div className="supplier-order-summary-values">
                         <strong>{supplier.orderCount} <span>{supplier.orderCount === 1 ? 'order' : 'orders'}</span></strong>
                         <span>{formatSupplierCurrency(supplier.totalOrderValue)} PO value</span>
@@ -454,7 +455,7 @@ export function SuppliersPage() {
                         aria-controls={`supplier-details-${supplier.id}`}
                         onClick={() => void toggleSupplierDetails(supplier)}
                       >
-                          <span aria-hidden="true">▤</span> Order history &amp; details <span aria-hidden="true">→</span>
+                          <span className="suppliers-order-history-icon" aria-hidden="true">▤</span> Order history &amp; details <span aria-hidden="true">→</span>
                       </button>
                     </div>
                   </td>
