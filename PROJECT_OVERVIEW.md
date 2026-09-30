@@ -165,8 +165,8 @@ Tracked against three requirement sets:
 
 | Controller | Responsibility |
 |---|---|
-| `Services/AuthController` | Login, register (global customer account), `/auth/join/{tenantId}`, `/auth/me` |
-| `Services/TenantController` | Tenant onboarding (`/tenant/onboard`), business settings, staff list |
+| `Controllers/AuthController` | Login, register (global customer account), `/auth/join/{tenantId}`, `/auth/me` |
+| `Controllers/TenantController` | Tenant onboarding (`/tenant/onboard`), business settings, staff list |
 | `TenantPublicController` | Public tenant directory for the mobile "Find a Business" list |
 | `BranchesController` | Branch CRUD |
 | `ResourcesController` | Resource CRUD, weekly schedule, schedule exceptions |
