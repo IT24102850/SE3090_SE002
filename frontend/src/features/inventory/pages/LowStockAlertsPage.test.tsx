@@ -72,6 +72,7 @@ describe('LowStockAlertsPage inventory scope', () => {
           status: 'NeedsReview',
           planner_summary: 'Review stock coverage for Tea Leaves.',
           data_sources: ['Authorized inventory snapshot', 'Recent stock movements'],
+          created_at: '2026-09-30T06:00:00Z',
           recommendations: [{
             inventory_item_id: 'item-1',
             item_name: 'Tea Leaves',
@@ -88,7 +89,12 @@ describe('LowStockAlertsPage inventory scope', () => {
             reason: 'Stock is below the reorder level.',
             validation_notes: ['Uses recent recorded outflow.', 'Review supplier availability before ordering.'],
           }],
-          insights: [],
+          insights: [{
+            category: 'coverage',
+            title: 'Short stock cover',
+            detail: 'Tea Leaves are projected to reach the reorder point soon.',
+            affected_items: ['Tea Leaves'],
+          }],
           warnings: [],
         }), { status: 200 });
       }
@@ -121,6 +127,12 @@ describe('LowStockAlertsPage inventory scope', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Analyze inventory/i }));
 
     expect(await screen.findByText('55%')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'What StockSense found' })).toBeInTheDocument();
+    expect(screen.getByText('Estimated reorder cost')).toBeInTheDocument();
+    expect(screen.getByText('1 of 1 suggestions have a recorded unit cost')).toBeInTheDocument();
+    expect(screen.getByText('Usage-backed suggestions')).toBeInTheDocument();
+    expect(screen.getByText('Authorized inventory snapshot')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Short stock cover' })).toBeInTheDocument();
     expect(screen.getByText('Some movement evidence')).toBeInTheDocument();
     expect(screen.getByText('Stock is below the reorder level.')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Why this was suggested and what to verify'));

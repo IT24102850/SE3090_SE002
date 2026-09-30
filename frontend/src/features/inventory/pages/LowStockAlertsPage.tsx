@@ -26,7 +26,7 @@ type InventoryRecommendation = {
   confidence: number; reason: string; validation_notes: string[];
 };
 type InventoryInsight = { category: string; title: string; detail: string; affected_items: string[] };
-type InventoryPlan = { workflow_id: string; status: string; planner_summary: string; data_sources: string[]; recommendations: InventoryRecommendation[]; insights: InventoryInsight[]; warnings: string[] };
+type InventoryPlan = { workflow_id: string; status: string; planner_summary: string; data_sources: string[]; recommendations: InventoryRecommendation[]; insights: InventoryInsight[]; warnings: string[]; created_at?: string };
 
 function insightIcon(category: string) {
   switch (category) {
@@ -160,6 +160,14 @@ export function LowStockAlertsPage() {
   }, [plan, planError]);
 
   const branchOptions = ['All branches', ...Array.from(new Set(inventory.map((item) => item.branch)))];
+  const recommendations = plan?.recommendations ?? [];
+  const pricedRecommendations = recommendations.filter((item) => item.estimated_total_cost != null);
+  const estimatedReorderCost = pricedRecommendations.reduce((sum, item) => sum + (item.estimated_total_cost ?? 0), 0);
+  const usageBackedRecommendations = recommendations.filter((item) => item.avg_daily_outflow != null).length;
+  const reportTime = plan?.created_at ? new Date(plan.created_at) : null;
+  const formattedReportTime = reportTime && !Number.isNaN(reportTime.getTime())
+    ? reportTime.toLocaleString('en-LK', { dateStyle: 'medium', timeStyle: 'short' })
+    : null;
 
   return (
     <div className="page stocksense-page">
@@ -272,6 +280,44 @@ export function LowStockAlertsPage() {
         </div>
         <div className="stocksense-ai-body">
           <p className="cell-sub">Read-only analysis using {plan.data_sources.join(' and ').toLowerCase()}. It has not changed stock or created purchase orders.</p>
+          <section className="stocksense-report-snapshot" aria-label="AI report summary">
+            <div className="stocksense-report-snapshot-heading">
+              <div><p className="eyebrow">THE SIGNAL, AT A GLANCE</p><h3>What StockSense found</h3></div>
+              {formattedReportTime && <span>Report started {formattedReportTime}</span>}
+            </div>
+            <div className="stocksense-report-metrics">
+              <article className="stocksense-report-metric" style={{ animationDelay: '40ms' }}>
+                <span className="stocksense-report-metric-icon"><Icon name="chart" size={18} /></span>
+                <span className="stocksense-report-metric-label">Data signals</span>
+                <strong>{plan.insights.length}</strong>
+                <small>Insight{plan.insights.length === 1 ? '' : 's'} from available stock and movement data</small>
+              </article>
+              <article className="stocksense-report-metric" style={{ animationDelay: '110ms' }}>
+                <span className="stocksense-report-metric-icon"><Icon name="alert" size={18} /></span>
+                <span className="stocksense-report-metric-label">Needs your review</span>
+                <strong>{recommendations.length}</strong>
+                <small>Replenishment suggestion{recommendations.length === 1 ? '' : 's'}; nothing is ordered automatically</small>
+              </article>
+              <article className="stocksense-report-metric" style={{ animationDelay: '180ms' }}>
+                <span className="stocksense-report-metric-icon"><Icon name="workflow" size={18} /></span>
+                <span className="stocksense-report-metric-label">Estimated reorder cost</span>
+                <strong className="stocksense-report-cost">{pricedRecommendations.length
+                  ? estimatedReorderCost.toLocaleString('en-LK', { style: 'currency', currency: 'LKR' })
+                  : 'Not available'}</strong>
+                <small>{pricedRecommendations.length} of {recommendations.length} suggestions have a recorded unit cost</small>
+              </article>
+              <article className="stocksense-report-metric" style={{ animationDelay: '250ms' }}>
+                <span className="stocksense-report-metric-icon"><Icon name="predict" size={18} /></span>
+                <span className="stocksense-report-metric-label">Usage-backed suggestions</span>
+                <strong>{usageBackedRecommendations} / {recommendations.length}</strong>
+                <small>Suggestions with a rate from recorded outflow history</small>
+              </article>
+            </div>
+            <div className="stocksense-report-sources">
+              <span>Evidence used</span>
+              {plan.data_sources.map((source) => <span className="stocksense-source-chip" key={source}><Icon name="info" size={14} />{source}</span>)}
+            </div>
+          </section>
           {plan.warnings.map((warning, index) => {
             const isDeterministic = warning.toLowerCase().includes('deterministic') || warning.toLowerCase().includes('gemini is unavailable');
             return (
@@ -290,21 +336,21 @@ export function LowStockAlertsPage() {
               </div>
             );
           })}
-          {plan.insights?.length > 0 && <><div className="stocksense-section-heading"><div><p className="eyebrow">SIGNALS FROM YOUR DATA</p><h3>Inventory health insights</h3></div><span>{plan.insights.length} insights</span></div><div className="stocksense-insights-grid" aria-label="Inventory health insights">{plan.insights.map((insight, index) => <article className={`stocksense-insight-card stocksense-insight-${insight.category}`} key={`${insight.category}-${index}`} style={{ animationDelay: `${Math.min(index * 75, 450)}ms` }}>
+          {plan.insights?.length > 0 && <><div className="stocksense-section-heading"><div><p className="eyebrow">SIGNALS FROM YOUR DATA</p><h3>Inventory health insights</h3></div><span>{plan.insights.length} insights</span></div><div className="stocksense-insights-grid" aria-label="Inventory health insights">{plan.insights.map((insight, index) => <article className={`stocksense-insight-card stocksense-insight-${insight.category}`} key={`${insight.category}-${index}`} style={{ animationDelay: `${Math.min(index * 90, 540)}ms` }}>
             <div className="stocksense-insight-top"><span className="stocksense-insight-icon"><Icon name={insightIcon(insight.category)} size={19} /></span><p className="stocksense-insight-category">{insight.category.replace('_', ' ')}</p></div><h3>{insight.title}</h3><p className="cell-sub">{insight.detail}</p>
-            {insight.affected_items?.length > 0 && <div className="stocksense-item-chips">{insight.affected_items.map((itemName) => <span key={itemName}>{itemName}</span>)}</div>}
+            {insight.affected_items?.length > 0 && <div className="stocksense-item-chips" aria-label="Items referenced by this insight">{insight.affected_items.map((itemName, itemIndex) => <span key={itemName} style={{ animationDelay: `${Math.min(itemIndex * 55, 330)}ms` }}>{itemName}</span>)}</div>}
           </article>)}</div></>}
-          {plan.recommendations.length > 0 && <>
+          {recommendations.length > 0 && <>
             <div className="stocksense-section-heading">
-              <div><p className="eyebrow">HUMAN REVIEW REQUIRED</p><h3>Replenishment recommendations</h3></div>
-              <span>{plan.recommendations.length} to review</span>
+              <div><p className="eyebrow">HUMAN REVIEW REQUIRED</p><h3>Replenishment recommendations</h3><p className="cell-sub">Compare each suggested quantity with the evidence and supplier notes before opening an order.</p></div>
+              <span>{recommendations.length} to review</span>
             </div>
             <div className="stocksense-recommendations" aria-label="Replenishment recommendations">
-              {plan.recommendations.map((item) => {
+              {recommendations.map((item, index) => {
                 const confidence = Math.max(0, Math.min(100, Math.round(item.confidence * 100)));
                 const confidenceLabel = confidence >= 70 ? 'Strong movement evidence' : confidence >= 50 ? 'Some movement evidence' : 'Limited movement evidence';
                 return (
-                  <article className="stocksense-recommendation-card" key={item.inventory_item_id}>
+                  <article className="stocksense-recommendation-card" key={item.inventory_item_id} style={{ animationDelay: `${Math.min(index * 100, 600)}ms` }}>
                     <div className="stocksense-recommendation-head">
                       <div>
                         <p className="eyebrow">REPLENISHMENT REVIEW</p>
