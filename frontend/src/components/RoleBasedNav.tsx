@@ -35,7 +35,7 @@ const RoleBasedNav = () => {
         </span>
         
         <button 
-          onClick={() => dispatch(signOut())}
+          onClick={() => signOut(dispatch)}
           style={{
             background: '#dc2626',
             color: 'white',

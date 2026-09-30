@@ -128,8 +128,8 @@ const authSlice = createSlice({
 export const { logout, clearError, initializeAuth, updateCurrentUser } = authSlice.actions;
 
 /** Signs out on the server too: the refresh token is revoked before it is dropped locally. */
-export const signOut = () => (dispatch: (action: ReturnType<typeof logout>) => unknown) => {
+export function signOut(dispatch: (action: ReturnType<typeof logout>) => unknown): void {
   revokeRefreshToken();
   dispatch(logout());
-};
+}
 export default authSlice.reducer;

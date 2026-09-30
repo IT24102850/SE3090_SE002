@@ -278,7 +278,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         // Ignore storage restrictions while logging out.
       }
     }
-    dispatch(signOut());
+    signOut(dispatch);
     // Both caches are keyed to the tenant that just logged out. RTK Query
     // keeps its store across a logout, and the sub-type is memoised in a
     // module variable, so without these two the next tenant to sign in on

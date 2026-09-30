@@ -6,7 +6,7 @@ export function ForbiddenPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const signInAgain = () => {
-    dispatch(signOut());
+    signOut(dispatch);
     navigate('/login', { replace: true });
   };
 
