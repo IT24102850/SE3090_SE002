@@ -5,6 +5,7 @@ import { RootState } from '../../../store/store';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
 import { getStoredToken } from '../authToken';
 import { Badge } from '../ui/Badge';
+import { Icon } from '../ui/Icon';
 import { useToast } from '../ui/ToastContext';
 
 type InventoryItem = {
@@ -267,10 +268,38 @@ export function SalesPage() {
       </header>
 
       <section className="stat-strip sales-stat-strip" aria-label="Sales summary for the last seven days">
-        <article className="panel sales-stat sales-stat-revenue"><span>7-day revenue</span><strong>{money(report?.totalRevenue)}</strong><small>Sales total for the last seven days</small></article>
-        <article className="panel sales-stat sales-stat-profit"><span>Gross profit</span><strong>{money(report?.grossProfit)}</strong><small>Revenue after recorded item costs</small></article>
-        <article className="panel sales-stat sales-stat-count"><span>Sales recorded</span><strong>{report?.salesCount ?? '—'}</strong><small>Transactions in this period</small></article>
-        <article className="panel sales-stat sales-stat-average"><span>Average sale</span><strong>{money(report?.averageSale)}</strong><small>Average transaction value</small></article>
+        <article className="panel sales-stat sales-stat-revenue" aria-label="7-day revenue">
+          <div className="sales-stat-main">
+            <span className="sales-stat-icon" aria-hidden="true"><Icon name="chart" size={20} /></span>
+            <div><span className="sales-stat-kicker">SALES PERFORMANCE</span><strong>{money(report?.totalRevenue)}</strong></div>
+            <span className="sales-stat-period">7 DAYS</span>
+          </div>
+          <div className="sales-stat-detail"><span className="sales-stat-detail-dot" />Sales total for the last seven days</div>
+        </article>
+        <article className="panel sales-stat sales-stat-profit" aria-label="Gross profit">
+          <div className="sales-stat-main">
+            <span className="sales-stat-icon" aria-hidden="true"><Icon name="workflow" size={20} /></span>
+            <div><span className="sales-stat-kicker">PROFITABILITY</span><strong>{money(report?.grossProfit)}</strong></div>
+            <span className="sales-stat-period">7 DAYS</span>
+          </div>
+          <div className="sales-stat-detail"><span className="sales-stat-detail-dot" />Revenue after recorded item costs</div>
+        </article>
+        <article className="panel sales-stat sales-stat-count" aria-label="Sales recorded">
+          <div className="sales-stat-main">
+            <span className="sales-stat-icon" aria-hidden="true"><Icon name="inventory" size={20} /></span>
+            <div><span className="sales-stat-kicker">TRANSACTIONS</span><strong>{report?.salesCount ?? '—'}</strong></div>
+            <span className="sales-stat-period">7 DAYS</span>
+          </div>
+          <div className="sales-stat-detail"><span className="sales-stat-detail-dot" />Completed sales in this period</div>
+        </article>
+        <article className="panel sales-stat sales-stat-average" aria-label="Average sale">
+          <div className="sales-stat-main">
+            <span className="sales-stat-icon" aria-hidden="true"><Icon name="predict" size={20} /></span>
+            <div><span className="sales-stat-kicker">TYPICAL CHECK</span><strong>{money(report?.averageSale)}</strong></div>
+            <span className="sales-stat-period">AVERAGE</span>
+          </div>
+          <div className="sales-stat-detail"><span className="sales-stat-detail-dot" />Average value per transaction</div>
+        </article>
       </section>
 
       {user?.role !== 'Admin' && user?.role !== 'Manager' && (
@@ -404,29 +433,73 @@ export function SalesPage() {
         </div>
       </section>
 
-      <section className="panel sales-history-panel">
-        <div className="panel-head"><div><span className="sales-section-eyebrow">TRANSACTION HISTORY</span><h2>Recent sales &amp; receipts</h2><p>Open a sale receipt to print it or save it as a PDF.</p></div><Badge tone="blue">Last 7 days</Badge></div>
-        {loading && !report ? <p className="empty-state">Loading sales…</p> : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead><tr><th>Reference</th><th>Items</th><th>Quantity</th><th>Time</th><th>Sale total</th><th>Gross profit</th><th>Receipt</th></tr></thead>
+      <section className="panel sales-history-panel" aria-labelledby="sales-history-title">
+        <div className="panel-head sales-history-head">
+          <div className="sales-history-heading">
+            <span className="sales-history-icon" aria-hidden="true"><Icon name="chart" size={19} /></span>
+            <div>
+              <span className="sales-section-eyebrow">TRANSACTION HISTORY</span>
+              <h2 id="sales-history-title">Recent sales &amp; receipts</h2>
+              <p>Review completed sales, compare totals, and open printable receipts.</p>
+            </div>
+          </div>
+          <div className="sales-history-meta">
+            <Badge tone="blue">Last 7 days</Badge>
+            {report && <span className="sales-history-count">{report.recentSales.length} {report.recentSales.length === 1 ? 'sale' : 'sales'}</span>}
+          </div>
+        </div>
+        {loading && !report ? (
+          <div className="sales-history-state" role="status">
+            <span className="sales-history-state-icon" aria-hidden="true"><Icon name="chart" size={20} /></span>
+            <strong>Loading transactions</strong>
+            <span>Fetching your latest sales and receipt details…</span>
+          </div>
+        ) : (
+          <div className="table-wrap sales-history-table-wrap">
+            <table className="data-table sales-history-table">
+              <thead><tr><th>Sale reference</th><th>Items sold</th><th>Quantity</th><th>Date &amp; time</th><th>Sale total</th><th>Gross profit</th><th>Receipt</th></tr></thead>
               <tbody>
                 {(report?.recentSales ?? []).map((sale) => (
                   <tr key={sale.id}>
-                    <td><strong>{sale.reference}</strong></td>
-                    <td>{sale.items.join(', ') || 'Inventory sale'}</td>
-                    <td>{quantity(sale.quantity)}</td>
-                    <td>{new Date(sale.occurredAt).toLocaleString('en-LK', { dateStyle: 'medium', timeStyle: 'short' })}</td>
-                    <td className="amount">{money(sale.amount)}</td>
-                    <td>{money(sale.grossProfit)}</td>
-                    <td><button type="button" className="link-button" onClick={() => setReceipt(sale)}>View receipt</button></td>
+                    <td>
+                      <div className="sales-history-reference">
+                        <span className="sales-history-reference-mark" aria-hidden="true"><Icon name="po" size={15} /></span>
+                        <div><strong>{sale.reference}</strong><small>Completed sale</small></div>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="sales-history-items">
+                        <strong>{sale.items[0] || 'Inventory sale'}</strong>
+                        {sale.items.length > 1 && <small>+{sale.items.length - 1} more {sale.items.length === 2 ? 'item' : 'items'}</small>}
+                      </div>
+                    </td>
+                    <td><span className="sales-history-quantity">{quantity(sale.quantity)} <small>units</small></span></td>
+                    <td>
+                      <div className="sales-history-time">
+                        <strong>{new Date(sale.occurredAt).toLocaleDateString('en-LK', { dateStyle: 'medium' })}</strong>
+                        <small>{new Date(sale.occurredAt).toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</small>
+                      </div>
+                    </td>
+                    <td><strong className="sales-history-total">{money(sale.amount)}</strong></td>
+                    <td><span className={`sales-history-profit${sale.grossProfit == null ? ' is-unavailable' : ''}`}>{money(sale.grossProfit)}</span></td>
+                    <td><button type="button" className="sales-receipt-button" onClick={() => setReceipt(sale)}><Icon name="po" size={15} /> View receipt</button></td>
                   </tr>
                 ))}
-                {!report?.recentSales.length && <tr><td colSpan={7} className="empty-state">No sales recorded in the last seven days.</td></tr>}
+                {!report?.recentSales.length && <tr><td colSpan={7}>
+                  <div className="sales-history-state sales-history-empty">
+                    <span className="sales-history-state-icon" aria-hidden="true"><Icon name="chart" size={20} /></span>
+                    <strong>No sales in this period</strong>
+                    <span>Completed transactions from the last seven days will appear here.</span>
+                  </div>
+                </td></tr>}
               </tbody>
             </table>
           </div>
         )}
+        <footer className="sales-history-footer">
+          <span><i aria-hidden="true" /> Sales are recorded against current catalog prices and branch stock.</span>
+          <span>Showing the last 7 days</span>
+        </footer>
       </section>
 
       {confirming && selectedItem && (

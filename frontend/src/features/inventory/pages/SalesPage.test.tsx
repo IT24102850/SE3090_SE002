@@ -99,6 +99,10 @@ describe('SalesPage', () => {
     }));
 
     renderPage();
+    expect(await screen.findByRole('article', { name: '7-day revenue' })).toHaveTextContent('LKR 0.00');
+    expect(screen.getByRole('article', { name: 'Gross profit' })).toHaveTextContent('LKR 0.00');
+    expect(screen.getByRole('article', { name: 'Sales recorded' })).toHaveTextContent('0');
+    expect(screen.getByRole('article', { name: 'Average sale' })).toHaveTextContent('LKR 0.00');
     const itemSearch = await screen.findByRole('combobox', { name: 'Search in-stock item' });
     fireEvent.change(itemSearch, { target: { value: 'tea-001' } });
     fireEvent.click(await screen.findByRole('option', { name: /Tea Leaves/ }));
@@ -192,7 +196,16 @@ describe('SalesPage', () => {
     }));
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'View receipt' }));
+    const receiptButton = await screen.findByRole('button', { name: 'View receipt' });
+    expect(screen.getByRole('heading', { name: 'Recent sales & receipts' })).toBeInTheDocument();
+    expect(screen.getByText('1 sale')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Sale reference' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Date & time' })).toBeInTheDocument();
+    const saleRow = screen.getByText('SALE-001').closest('tr');
+    expect(saleRow).not.toBeNull();
+    expect(within(saleRow!).getByText('Paper')).toBeInTheDocument();
+    expect(receiptButton).toHaveClass('sales-receipt-button');
+    fireEvent.click(receiptButton);
 
     const receipt = screen.getByRole('dialog');
     expect(within(receipt).getByText('UNIFY · SALES RECEIPT')).toBeInTheDocument();
