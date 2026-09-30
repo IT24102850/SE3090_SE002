@@ -42,7 +42,7 @@ def plan_inventory(objective: str) -> InventoryPlan:
             response_schema=InventoryPlanSummary,
             model=os.getenv(
                 "GEMINI_MODEL_INVENTORY",
-                os.getenv("GEMINI_MODEL_PLANNER", os.getenv("GEMINI_MODEL_DEFAULT", "gemini-3.5-flash-lite")),
+                os.getenv("GEMINI_MODEL_PLANNER", os.getenv("GEMINI_MODEL_DEFAULT", "gemini-2.5-flash")),
             ),
         )
         summary = generated.summary
@@ -112,6 +112,81 @@ def _recent_outflow(movements: list[dict[str, Any]]) -> dict[str, tuple[float, i
     return outflow
 
 
+def _demand_trends(movements: list[dict[str, Any]]) -> list[tuple[str, float]]:
+    """Compare seven recent days with the preceding 23 days; require evidence in both windows."""
+    now = datetime.now(timezone.utc)
+    windows: dict[str, list[float]] = {}
+    for movement in movements:
+        kind = str(movement.get("movementType", "")).strip().lower()
+        if kind not in {"issue", "issued", "sale", "sold", "consume", "consumed", "usage", "outflow", "adjustment"}:
+            continue
+        quantity = float(movement.get("quantity") or 0)
+        if kind == "adjustment" and quantity >= 0:
+            continue
+        try:
+            occurred = datetime.fromisoformat(str(movement.get("occurredAt", "")).replace("Z", "+00:00"))
+            if occurred.tzinfo is None:
+                occurred = occurred.replace(tzinfo=timezone.utc)
+            age = (now - occurred).total_seconds() / 86400
+        except (TypeError, ValueError):
+            continue
+        sku = str(movement.get("sku", ""))
+        if not sku or quantity == 0 or age < 0 or age > 30:
+            continue
+        totals = windows.setdefault(sku, [0.0, 0.0])
+        totals[0 if age <= 7 else 1] += abs(quantity)
+    trends = []
+    for sku, (recent, previous) in windows.items():
+        if recent <= 0 or previous <= 0:
+            continue
+        change = (recent / 7 - previous / 23) / (previous / 23)
+        if abs(change) >= 0.30:
+            trends.append((sku, change))
+    return sorted(trends, key=lambda row: abs(row[1]), reverse=True)
+
+
+def _latest_supplier_lead_times(
+    movements: list[dict[str, Any]], items: list[dict[str, Any]] | None = None,
+) -> dict[str, tuple[int, str | None, str]]:
+    """Prefer the explicitly assigned supplier; otherwise use the latest linked receipt."""
+    latest: dict[str, tuple[datetime, int, str | None]] = {}
+    receipt_types = {"receive", "received", "purchasereceived"}
+    for movement in movements:
+        if str(movement.get("movementType", "")).strip().lower() not in receipt_types:
+            continue
+        if not movement.get("supplierId"):
+            continue
+        try:
+            days = int(movement.get("supplierLeadTimeDays"))
+            occurred = datetime.fromisoformat(str(movement.get("occurredAt", "")).replace("Z", "+00:00"))
+            if occurred.tzinfo is None:
+                occurred = occurred.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            continue
+        if days < 1 or days > 90:
+            continue
+        sku = str(movement.get("sku", ""))
+        if not sku:
+            continue
+        current = latest.get(sku)
+        if current is None or occurred > current[0]:
+            name = str(movement.get("supplierName", "")).strip() or None
+            latest[sku] = (occurred, days, name)
+    result = {sku: (days, name, "latest supplier-linked receipt") for sku, (_, days, name) in latest.items()}
+    for item in items or []:
+        sku = str(item.get("sku", ""))
+        if not sku or not item.get("supplierId"):
+            continue
+        try:
+            days = int(item.get("supplierLeadTimeDays"))
+        except (TypeError, ValueError):
+            continue
+        if 1 <= days <= 90:
+            name = str(item.get("supplierName", "")).strip() or None
+            result[sku] = (days, name, "assigned inventory supplier")
+    return result
+
+
 def analyze_inventory_health(
     *, snapshot: DomainSnapshot, plan: InventoryPlan, recommendations: list[InventoryRecommendation]
 ) -> list[InventoryHealthInsight]:
@@ -173,6 +248,73 @@ def analyze_inventory_health(
             affected_items=[name for _, name, _ in shortest],
         ))
 
+    # Long stock cover can tie up cash. Treat this as a review signal only,
+    # since demand is based on a bounded recent movement sample.
+    try:
+        slow_cover_days = min(365, max(1, int(os.getenv("INVENTORY_SLOW_MOVING_COVER_DAYS", "60"))))
+    except ValueError:
+        slow_cover_days = 60
+    slow_movers = []
+    for sku, (quantity, oldest_age, event_count) in outflow.items():
+        item = item_by_sku.get(sku)
+        if not item or event_count < 2:
+            continue
+        daily = quantity / min(30, max(7, oldest_age))
+        on_hand = float(item.get("quantity") or 0)
+        if daily > 0 and on_hand > 0 and on_hand / daily >= slow_cover_days:
+            slow_movers.append((on_hand / daily, item, sku))
+    slow_movers.sort(key=lambda row: row[0], reverse=True)
+    if slow_movers:
+        names = [str(item.get("name", sku)) for _, item, sku in slow_movers[:8]]
+        value = sum(float(item.get("quantity") or 0) * float(item.get("unitCost") or 0)
+                    for _, item, _ in slow_movers if item.get("unitCost") is not None)
+        detail = (
+            f"{len(slow_movers)} items have estimated stock cover of at least {slow_cover_days} days based on recent recorded outflow. "
+            "Check upcoming demand, expiry and branch transfers before reordering or reducing stock."
+        )
+        priced = sum(1 for _, item, _ in slow_movers if item.get("unitCost") is not None)
+        if priced:
+            detail += f" Their priced on-hand value is about {value:,.2f} across {priced} items."
+        insights.append(InventoryHealthInsight(
+            category="excess", title="Potential slow-moving stock", detail=detail, affected_items=names,
+        ))
+
+    # Flag time-sensitive replenishment candidates where recorded demand exists.
+    supplier_lead_times = _latest_supplier_lead_times(movements, items)
+    at_risk = []
+    for recommendation in recommendations:
+        if recommendation.days_until_reorder is None or recommendation.avg_daily_outflow is None:
+            continue
+        lead = supplier_lead_times.get(recommendation.sku, (plan.lead_time_days, None, ""))[0]
+        if recommendation.days_until_reorder <= lead:
+            at_risk.append((recommendation.days_until_reorder, recommendation.item_name, lead))
+    if at_risk:
+        at_risk.sort()
+        insights.append(InventoryHealthInsight(
+            category="risk", title="Reorder review may be time-sensitive",
+            detail=("These items are projected to reach their reorder level within their supplier lead time: "
+                    + "; ".join(f"{name} in about {days:.1f} days (lead time {lead} days)" for days, name, lead in at_risk[:8])
+                    + ". Review supplier availability and budget promptly."),
+            affected_items=[name for _, name, _ in at_risk[:8]],
+        ))
+
+    trends = _demand_trends(movements)
+    if trends:
+        descriptions = []
+        for sku, change in trends[:8]:
+            item = item_by_sku.get(sku)
+            if item:
+                direction = "increased" if change > 0 else "decreased"
+                descriptions.append(f"{item.get('name', sku)}: recorded daily outflow {direction} about {abs(change) * 100:.0f}%")
+        if descriptions:
+            insights.append(InventoryHealthInsight(
+                category="trend",
+                title="Recent demand trend",
+                detail=("Compared the last 7 days with the preceding 23 days. " + "; ".join(descriptions)
+                        + ". This is a short-term signal from recorded movements, not a seasonal forecast."),
+                affected_items=[item_by_sku[sku].get("name", sku) for sku, change in trends[:8] if sku in item_by_sku],
+            ))
+
     waste_by_sku: dict[str, float] = {}
     for movement in movements:
         if str(movement.get("movementType", "")).strip().lower() not in {"waste", "wastage", "writeoff", "write-off"}:
@@ -210,19 +352,24 @@ def recommend_replenishment(
         sku: quantity / min(30, max(7, oldest_age))
         for sku, (quantity, oldest_age, _) in outflow.items()
     }
+    supplier_lead_times = _latest_supplier_lead_times(snapshot.movements, snapshot.items)
 
     recommendations: list[InventoryRecommendation] = []
     for item in snapshot.items:
         on_hand = float(item.get("quantity") or 0)
         reorder = float(item.get("reorderLevel") or 0)
         sku = str(item.get("sku", ""))
+        supplier_lead_time = supplier_lead_times.get(sku)
+        lead_time_days = supplier_lead_time[0] if supplier_lead_time else plan.lead_time_days
+        supplier_name = supplier_lead_time[1] if supplier_lead_time else None
+        supplier_lead_time_source = supplier_lead_time[2] if supplier_lead_time else None
         daily = daily_outflow.get(sku)
         needs_reorder = on_hand <= reorder
         days_until_reorder = max(0, (on_hand - reorder) / daily) if daily and daily > 0 else None
-        if not needs_reorder and (days_until_reorder is None or days_until_reorder > plan.lead_time_days):
+        if not needs_reorder and (days_until_reorder is None or days_until_reorder > lead_time_days):
             continue
 
-        target = max(reorder, daily * (plan.lead_time_days + plan.safety_days) if daily else reorder)
+        target = max(reorder, daily * (lead_time_days + plan.safety_days) if daily else reorder)
         quantity = max(0, math.ceil(target - on_hand))
         if quantity <= 0:
             continue
@@ -236,13 +383,17 @@ def recommend_replenishment(
             notes.append("Outflow rate uses recent issue/sale/consumption and negative manual-adjustment movements; waste and positive corrections were excluded.")
             _, _, event_count = outflow[sku]
             confidence = 0.75 if event_count >= 5 and len(snapshot.movements) < 100 else 0.55 if event_count >= 2 else 0.4
+        if supplier_lead_time:
+            notes.append(f"Uses the configured {lead_time_days}-day lead time for {supplier_name or 'the supplier'} from the {supplier_lead_time_source}.")
+        else:
+            notes.append(f"No supplier-linked receipt with lead-time data was found; uses the configured {plan.lead_time_days}-day default.")
         if not item.get("branchId"):
             notes.append("Item has no assigned branch; choose a branch before creating a purchase order.")
             confidence = min(confidence, 0.4)
         reason = (
             f"On hand is {on_hand:g} against reorder level {reorder:g}. "
             + (f"Recent recorded outflow averages {daily:.2f} per day; stock is projected to reach the reorder level in {days_until_reorder:.1f} days. " if daily else "No reliable daily usage rate is recorded. ")
-            + f"Suggested quantity {quantity:g} covers the reorder target and {plan.lead_time_days}-day lead time plus {plan.safety_days} safety days."
+            + f"Suggested quantity {quantity:g} covers the reorder target and {lead_time_days}-day lead time plus {plan.safety_days} safety days."
         )
         recommendations.append(InventoryRecommendation(
             inventory_item_id=str(item.get("id", "")),

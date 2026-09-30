@@ -14,6 +14,22 @@ namespace SmeBackend;
 [Authorize]
 public sealed class EquipmentMaintenanceController(AppDbContext db) : ControllerBase
 {
+    /// <summary>Lists active equipment that can receive a maintenance log.</summary>
+    [HttpGet("equipment")]
+    public async Task<ActionResult<IReadOnlyList<MaintenanceEquipmentOption>>> GetEquipment(
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+
+        var equipment = await db.EquipmentItems
+            .AsNoTracking()
+            .Where(item => item.TenantId == tenantId && item.IsActive)
+            .OrderBy(item => item.Name)
+            .Select(item => new MaintenanceEquipmentOption(item.Id, item.Name, item.Category))
+            .ToListAsync(cancellationToken);
+        return Ok(equipment);
+    }
+
     /// <summary>Lists maintenance records belonging to the current tenant.</summary>
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<EquipmentMaintenanceResponse>>> GetAll(
@@ -282,3 +298,6 @@ public sealed record EquipmentMaintenanceResponse(
     IReadOnlyList<string> PhotoUrls,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
+
+/// <summary>Equipment option shown when creating a maintenance log.</summary>
+public sealed record MaintenanceEquipmentOption(Guid Id, string Name, string Category);

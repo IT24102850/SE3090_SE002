@@ -412,7 +412,7 @@ def workflows_approve(workflow_id: int, body: dict[str, Any]):
                 backend_url = os.environ.get("BACKEND_URL", "http://localhost:5107")
                 api_token = os.environ.get("BACKEND_API_KEY")
                 po_number = f"AI-PO-{workflow_id}-{int(datetime.utcnow().timestamp())}"
-                create_payload = {"BranchId": branch_id, "SupplierId": supplier_id, "Number": po_number, "Status": "Placed"}
+                create_payload = {"BranchId": branch_id, "SupplierId": supplier_id, "Number": po_number, "Status": "InReview"}
 
                 # Attempt to include line items based on tool result / payload
                 try:
@@ -454,7 +454,7 @@ def workflows_approve(workflow_id: int, body: dict[str, Any]):
                 if resp.ok:
                     backend_result = resp.json()
                     # append backend result to audit
-                    audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": "system", "actionType": "place_po", "outcome": "success", "details": {"backend": backend_result}})
+                    audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": "system", "actionType": "submit_po_for_mobile_approval", "outcome": "success", "details": {"backend": backend_result}})
                     # update AgentWorkflows row tool_result to include backend response
                     try:
                         tr["backend_response"] = backend_result
@@ -464,9 +464,9 @@ def workflows_approve(workflow_id: int, body: dict[str, Any]):
                     conn.commit()
                 else:
                     err_text = resp.text
-                    audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": "system", "actionType": "place_po", "outcome": "error", "details": {"status_code": resp.status_code, "body": err_text}})
+                    audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": "system", "actionType": "submit_po_for_mobile_approval", "outcome": "error", "details": {"status_code": resp.status_code, "body": err_text}})
             else:
-                audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": "system", "actionType": "place_po", "outcome": "skipped", "details": {"reason": "missing branch or supplier id"}})
+                audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": "system", "actionType": "submit_po_for_mobile_approval", "outcome": "skipped", "details": {"reason": "missing branch or supplier id"}})
     except Exception as e:
         audit.append({"timestamp": datetime.utcnow().isoformat() + "Z", "actorRole": "system", "actionType": "place_po", "outcome": "exception", "details": {"error": str(e)}})
 

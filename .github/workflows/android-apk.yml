@@ -1,0 +1,51 @@
+name: Build Android APK
+
+on:
+  push:
+    paths:
+      - "mobile/sme_mobile/**"
+      - ".github/workflows/android-apk.yml"
+  pull_request:
+    paths:
+      - "mobile/sme_mobile/**"
+      - ".github/workflows/android-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          cache-dependency-path: mobile/sme_mobile/pubspec.lock
+
+      - name: Install Flutter dependencies
+        working-directory: mobile/sme_mobile
+        run: flutter pub get
+
+      - name: Build release APK
+        working-directory: mobile/sme_mobile
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sme-mobile-android-apk
+          path: mobile/sme_mobile/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14

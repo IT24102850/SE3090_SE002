@@ -17,10 +17,12 @@ class CustomerRegisterScreen extends ConsumerStatefulWidget {
   const CustomerRegisterScreen({super.key, this.tenant});
 
   @override
-  ConsumerState<CustomerRegisterScreen> createState() => _CustomerRegisterScreenState();
+  ConsumerState<CustomerRegisterScreen> createState() =>
+      _CustomerRegisterScreenState();
 }
 
-class _CustomerRegisterScreenState extends ConsumerState<CustomerRegisterScreen> {
+class _CustomerRegisterScreenState
+    extends ConsumerState<CustomerRegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -45,7 +47,9 @@ class _CustomerRegisterScreenState extends ConsumerState<CustomerRegisterScreen>
           fullName: _fullNameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
-          phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
+          phone: _phoneController.text.trim().isEmpty
+              ? null
+              : _phoneController.text.trim(),
         );
 
     if (success && mounted) {
@@ -80,7 +84,8 @@ class _CustomerRegisterScreenState extends ConsumerState<CustomerRegisterScreen>
                       if (auth.error != null) ...[
                         InlineErrorBanner(
                           message: auth.error!,
-                          onDismiss: () => ref.read(authProvider.notifier).clearError(),
+                          onDismiss: () =>
+                              ref.read(authProvider.notifier).clearError(),
                         ),
                         const SizedBox(height: 18),
                       ],
@@ -89,7 +94,8 @@ class _CustomerRegisterScreenState extends ConsumerState<CustomerRegisterScreen>
                         icon: Icons.person_outline,
                         controller: _fullNameController,
                         textInputAction: TextInputAction.next,
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
                       ),
                       const SizedBox(height: 18),
                       NeonInputField(
@@ -100,7 +106,9 @@ class _CustomerRegisterScreenState extends ConsumerState<CustomerRegisterScreen>
                         textInputAction: TextInputAction.next,
                         validator: (v) {
                           if (v == null || v.trim().isEmpty) return 'Required';
-                          if (!v.contains('@') || !v.contains('.')) return 'Enter a valid email';
+                          if (!v.contains('@') || !v.contains('.')) {
+                            return 'Enter a valid email';
+                          }
                           return null;
                         },
                       ),
@@ -133,11 +141,13 @@ class _CustomerRegisterScreenState extends ConsumerState<CustomerRegisterScreen>
                       ),
                       const SizedBox(height: 8),
                       TextButton(
-                        onPressed:
-                            auth.isLoading ? null : () => Navigator.of(context).pop(false),
+                        onPressed: auth.isLoading
+                            ? null
+                            : () => Navigator.of(context).pop(false),
                         child: Text(
                           'Already have an account? Sign in',
-                          style: AppTextStyles.body.copyWith(color: AppColors.cyan),
+                          style: AppTextStyles.body
+                              .copyWith(color: AppColors.cyan),
                         ),
                       ),
                     ],
@@ -169,14 +179,20 @@ class _SignUpHero extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadii.card),
             border: Border.all(color: AppColors.glassBorder),
             boxShadow: const [
-              BoxShadow(color: AppColors.dangerGlow, blurRadius: 32, spreadRadius: -10),
+              BoxShadow(
+                  color: AppColors.dangerGlow,
+                  blurRadius: 32,
+                  spreadRadius: -10),
             ],
           ),
-          child: const Icon(Icons.person_add_alt_1_rounded, size: 36, color: AppColors.magenta),
+          child: const Icon(Icons.person_add_alt_1_rounded,
+              size: 36, color: AppColors.magenta),
         ),
         const SizedBox(height: 18),
         Text(
-          businessName == null ? 'Create your Unify account' : 'Sign up with $businessName',
+          businessName == null
+              ? 'Create your Unify account'
+              : 'Sign up with $businessName',
           textAlign: TextAlign.center,
           style: AppTextStyles.headlineSmall.copyWith(fontSize: 21),
         ),

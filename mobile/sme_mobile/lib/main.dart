@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'inventory/app_notifications.dart';
+import 'models/notification_model.dart';
 import 'providers/auth_provider.dart';
-import 'screens/unify_auth/unify_login_screen.dart';
+import 'providers/notification_providers.dart';
+import 'screens/unify_auth/welcome_flow_screen.dart';
 import 'screens/role_home.dart';
 import 'screens/profile_setup_screen.dart';
 import 'services/push_notification_service.dart';
@@ -43,7 +46,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     if (!auth.isInitialized) {
       home = const _SplashScreen();
     } else if (!auth.isAuthenticated) {
-      home = const UnifyLoginScreen();
+      home = const WelcomeFlowScreen();
     } else if (!auth.isProfileComplete) {
       home = const ProfileSetupScreen();
     } else {
@@ -64,6 +67,63 @@ class _MyAppState extends ConsumerState<MyApp> {
       scrollBehavior: const AppScrollBehavior(),
       home: home,
     );
+  }
+}
+
+class _NotificationLiveListener extends ConsumerStatefulWidget {
+  const _NotificationLiveListener({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_NotificationLiveListener> createState() =>
+      _NotificationLiveListenerState();
+}
+
+class _NotificationLiveListenerState
+    extends ConsumerState<_NotificationLiveListener> {
+  Set<String>? _knownNotificationIds;
+
+  @override
+  Widget build(BuildContext context) {
+    final authenticated = ref.watch(authProvider).isAuthenticated;
+    if (!authenticated) {
+      _knownNotificationIds = null;
+      return widget.child;
+    }
+
+    ref.listen<AsyncValue<List<AppNotification>>>(
+      notificationsProvider,
+      (previous, next) {
+        final items = next.asData?.value;
+        if (items == null || !ref.read(authProvider).isAuthenticated) return;
+
+        final previousIds = _knownNotificationIds;
+        _knownNotificationIds =
+            items.map((notification) => notification.id).toSet();
+        if (previousIds == null) return;
+
+        final arriving = items
+            .where((notification) =>
+                !notification.isRead &&
+                !previousIds.contains(notification.id))
+            .toList();
+        if (arriving.isEmpty) return;
+
+        final title = arriving.first.title.trim();
+        showAppNotification(
+          arriving.length == 1
+              ? 'New update: ${title.isEmpty ? 'You have a new notification.' : title}'
+              : '${arriving.length} new updates. Open Notifications to review them.',
+          tone: AppNotificationTone.info,
+          title: arriving.length == 1 ? 'New notification' : 'Notifications',
+          duration: const Duration(seconds: 6),
+        );
+      },
+    );
+    ref.watch(notificationsProvider);
+
+    return widget.child;
   }
 }
 

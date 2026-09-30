@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SmeBackend.Authorization;
 using SmeBackend.Data;
 using SmeBackend.Models;
 using SmeBackend.Shared;
@@ -21,12 +22,27 @@ public class EquipmentController : ControllerBase
     public EquipmentController(AppDbContext db) => _db = db;
 
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] Guid tenantId)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] Guid tenantId,
+        CancellationToken cancellationToken)
     {
-        var items = await _db.EquipmentItems.AsNoTracking()
-            .Where(i => i.TenantId == tenantId && i.IsActive)
+        if (!Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out var callerTenantId))
+            return Unauthorized();
+        if (callerTenantId != tenantId)
+            return Forbid();
+
+        var itemsQuery = _db.EquipmentItems.AsNoTracking()
+            .Where(item => item.TenantId == callerTenantId && item.IsActive);
+        if (User.IsInRole(Roles.Manager))
+        {
+            if (!Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var branchId))
+                return Forbid();
+            itemsQuery = itemsQuery.Where(item => item.BranchId == branchId);
+        }
+
+        var items = await itemsQuery
             .OrderBy(i => i.Name)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
         return Ok(items);
     }
 
@@ -34,11 +50,28 @@ public class EquipmentController : ControllerBase
     [Authorize(Roles = $"{Roles.Admin},{Roles.Manager}")]
     public async Task<IActionResult> Create([FromBody] CreateEquipmentItemDto dto)
     {
+        if (!Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out var tenantId))
+            return Unauthorized();
+        if (string.IsNullOrWhiteSpace(dto.Name) || dto.Name.Trim().Length > 200)
+            return BadRequest(new { message = "Equipment name is required and must be 200 characters or fewer." });
+        if (dto.BranchId == Guid.Empty ||
+            !await _db.Branches.AnyAsync(branch =>
+                branch.Id == dto.BranchId &&
+                branch.TenantId == tenantId &&
+                branch.IsActive))
+            return BadRequest(new { message = "Select an active branch belonging to your business." });
+        if (User.IsInRole(Roles.Manager) &&
+            (!Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var managerBranchId) ||
+             managerBranchId != dto.BranchId))
+            return Forbid();
+        if (dto.CurrentStock < 0 || dto.ReorderLevel < 0 || dto.CostPrice < 0 || dto.SellingPrice < 0)
+            return BadRequest(new { message = "Stock levels and prices cannot be negative." });
+
         var item = new EquipmentItem
         {
-            TenantId = dto.TenantId,
+            TenantId = tenantId,
             BranchId = dto.BranchId,
-            Name = dto.Name,
+            Name = dto.Name.Trim(),
             Category = dto.Category ?? string.Empty,
             SKU = dto.SKU ?? string.Empty,
             Unit = dto.Unit ?? string.Empty,
@@ -53,7 +86,7 @@ public class EquipmentController : ControllerBase
         };
         _db.EquipmentItems.Add(item);
         await _db.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetAll), new { tenantId = dto.TenantId }, item);
+        return CreatedAtAction(nameof(GetAll), new { tenantId }, item);
     }
 
     /// <summary>Updates an equipment item's stock or its safety-gear expiry date.</summary>

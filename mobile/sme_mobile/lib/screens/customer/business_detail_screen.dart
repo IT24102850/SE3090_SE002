@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/public_tenant_model.dart';
 import '../../models/resource_model.dart';
+import '../../models/tenant_profile_model.dart';
 import '../../models/tourism_subtype.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/booking_providers.dart';
+import '../../providers/public_tenant_provider.dart';
 import '../../providers/tenant_profile_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_text_styles.dart';
@@ -82,6 +84,24 @@ class _BusinessDetailScreenState extends ConsumerState<BusinessDetailScreen> {
         ),
       );
     }
+    final user = ref.watch(authProvider).user;
+    final visual = BusinessTypeVisual.of(tenant.businessType);
+    final profileAsync = ref.watch(tenantProfileProvider(tenant.id));
+
+    // Branch and resource management APIs require authentication. Guests see
+    // the actual public profile and catalog instead of a misleading error.
+    if (user == null) {
+      return _PublicBusinessPreview(
+        tenant: tenant,
+        visual: visual,
+        profile: profileAsync,
+        catalog: ref.watch(publicBusinessCatalogProvider(tenant.id)),
+        onRetryProfile: () => ref.invalidate(tenantProfileProvider(tenant.id)),
+        onRetryCatalog: () =>
+            ref.invalidate(publicBusinessCatalogProvider(tenant.id)),
+      );
+    }
+
     final branchesAsync = ref.watch(branchesProvider(tenant.id));
 
     // Tourism tenants with a resolved sub-type get the themed dashboard
@@ -103,9 +123,6 @@ class _BusinessDetailScreenState extends ConsumerState<BusinessDetailScreen> {
         },
       );
     }
-
-    final visual = BusinessTypeVisual.of(tenant.businessType);
-    final profileAsync = ref.watch(tenantProfileProvider(tenant.id));
 
     return AppBackgroundScaffold(
       appBar: GlassAppBar(title: tenant.businessName),
@@ -202,6 +219,175 @@ class _BusinessDetailScreenState extends ConsumerState<BusinessDetailScreen> {
       ),
     );
   }
+}
+
+class _PublicBusinessPreview extends StatelessWidget {
+  const _PublicBusinessPreview({
+    required this.tenant,
+    required this.visual,
+    required this.profile,
+    required this.catalog,
+    required this.onRetryProfile,
+    required this.onRetryCatalog,
+  });
+
+  final PublicTenant tenant;
+  final BusinessTypeVisual visual;
+  final AsyncValue<TenantProfile> profile;
+  final AsyncValue<PublicBusinessCatalog> catalog;
+  final VoidCallback onRetryProfile;
+  final VoidCallback onRetryCatalog;
+
+  @override
+  Widget build(BuildContext context) => AppBackgroundScaffold(
+        appBar: GlassAppBar(title: tenant.businessName),
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: BusinessProfileHeader(
+                businessName: tenant.businessName,
+                address: profile.valueOrNull?.address,
+                profile: profile.valueOrNull,
+                hasError: profile.hasError,
+                onRetry: onRetryProfile,
+                themeColor: visual.color,
+                themeIcon: visual.icon,
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: catalog.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(36),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (error, stack) => Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: EmptyState(
+                    icon: Icons.wifi_off_rounded,
+                    title: 'Services are temporarily unavailable',
+                    message: 'The public business profile is still available.',
+                    actionLabel: 'Retry',
+                    onAction: onRetryCatalog,
+                  ),
+                ),
+                data: (data) => _PublicCatalogContent(
+                  catalog: data,
+                  accent: visual.color,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _PublicCatalogContent extends StatelessWidget {
+  const _PublicCatalogContent({required this.catalog, required this.accent});
+
+  final PublicBusinessCatalog catalog;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasOfferings =
+        catalog.resources.isNotEmpty || catalog.departures.isNotEmpty;
+    final offerings = <Widget>[
+      ...catalog.resources.map((resource) => _PublicOfferingTile(
+            icon: Icons.storefront_outlined,
+            title: resource.name,
+            subtitle: [
+              if (resource.category.isNotEmpty) resource.category,
+              if (resource.description?.trim().isNotEmpty == true)
+                resource.description!.trim(),
+            ].join(' • '),
+            accent: accent,
+          )),
+      ...catalog.departures.map((departure) => _PublicOfferingTile(
+            icon: Icons.event_available_outlined,
+            title: departure.name,
+            subtitle: [
+              if (departure.bookingTypeName?.isNotEmpty == true)
+                departure.bookingTypeName!,
+              if (departure.startTime != null)
+                MaterialLocalizations.of(context).formatMediumDate(
+                  departure.startTime!.toLocal(),
+                ),
+              if (departure.seatsRemaining != null)
+                '${departure.seatsRemaining} places left',
+            ].join(' • '),
+            accent: accent,
+          )),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(
+            hasOfferings ? 'Available services' : 'Explore this business',
+            padding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 8),
+          if (hasOfferings)
+            ...offerings
+          else if (catalog.bookingTypes.isNotEmpty)
+            ...catalog.bookingTypes.map((type) => _PublicOfferingTile(
+                  icon: Icons.event_note_rounded,
+                  title: type.name,
+                  subtitle: type.description ?? '',
+                  accent: accent,
+                ))
+          else
+            Text(
+              'This business has not published its services yet. Check back soon for updates.',
+              style: AppTextStyles.bodyMuted,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PublicOfferingTile extends StatelessWidget {
+  const _PublicOfferingTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.accent,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: GlassCard(
+          padding: const EdgeInsets.all(14),
+          borderRadius: AppRadii.row,
+          child: Row(
+            children: [
+              Icon(icon, color: accent, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AppTextStyles.subtitle),
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(subtitle, style: AppTextStyles.caption),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 }
 
 class _ResourceList extends ConsumerStatefulWidget {

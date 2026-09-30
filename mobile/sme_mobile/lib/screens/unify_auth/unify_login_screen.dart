@@ -29,7 +29,13 @@ import '../customer/customer_register_screen.dart';
 /// swaps the app's home for the dashboard (or profile setup) as soon as the
 /// token lands.
 class UnifyLoginScreen extends ConsumerStatefulWidget {
-  const UnifyLoginScreen({super.key});
+  const UnifyLoginScreen({super.key, this.onBackToWelcome});
+
+  /// Set when the welcome flow composes this screen inline rather than pushing
+  /// it: there is no route to pop, so the way back is a callback that slides
+  /// the welcome pages back in. Left null when the screen is the app's home,
+  /// and then no back affordance is drawn at all.
+  final VoidCallback? onBackToWelcome;
 
   @override
   ConsumerState<UnifyLoginScreen> createState() => _UnifyLoginScreenState();
@@ -138,6 +144,20 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
             fit: StackFit.expand,
             children: [
               const Positioned.fill(child: AppBackground(showParticles: true)),
+              // Positioned rather than a column child: this screen fits its
+              // content to the viewport with no height to spare, so the back
+              // affordance floats over the backdrop instead of taking a row.
+              if (widget.onBackToWelcome != null)
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 4,
+                  left: 4,
+                  child: IconButton(
+                    onPressed: widget.onBackToWelcome,
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                    color: AppColors.textSecondary,
+                    tooltip: 'Back',
+                  ),
+                ),
               SafeArea(
                 child: LayoutBuilder(
                   builder: (context, constraints) {

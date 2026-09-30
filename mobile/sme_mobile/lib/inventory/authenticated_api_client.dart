@@ -67,13 +67,28 @@ class AuthenticatedApiClient {
     }
   }
 
+  /// Normalises an arbitrary path so Dio can append it correctly to `baseUrl`.
+  ///
+  /// Rules:
+  ///  - `/api/purchase-orders` → `/purchase-orders`  (strip redundant /api prefix)
+  ///  - `api/purchase-orders`  → `/purchase-orders`
+  ///  - `/purchase-orders`     → `/purchase-orders`  (already clean)
+  ///  - `purchase-orders`      → `/purchase-orders`  (add leading slash)
+  ///
+  /// The result always starts with `/`.  Dio with a baseUrl of
+  /// `https://host/api` (no trailing slash) will then resolve to
+  /// `https://host/api/purchase-orders` as expected.
   String _normalize(String path) {
-    final normalized = path.startsWith('/') ? path : '/$path';
-    return normalized.startsWith('/api/')
-        ? normalized.substring(4)
-        : normalized == '/api'
-            ? '/'
-            : normalized;
+    var p = path.trim();
+    // Strip a redundant /api prefix that duplicates what is already in baseUrl.
+    if (p.startsWith('/api/')) {
+      p = p.substring(4); // keeps the leading /
+    } else if (p.startsWith('api/')) {
+      p = '/${p.substring(4)}';
+    } else if (!p.startsWith('/')) {
+      p = '/$p';
+    }
+    return p;
   }
 
   String _body(Object? data) => data is String ? data : jsonEncode(data ?? {});
