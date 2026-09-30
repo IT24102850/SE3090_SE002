@@ -4,9 +4,22 @@
 
 A three-member group, so three primary business components - one per
 student, as Section 3 of the specification requires.
-<!-- TODO before submitting: Section 3 requires the lecturer-in-charge's
-written approval for a group size other than four. Reference it here
-(who approved it, and when) and include it in the consolidated report. -->
+
+> **⚠ GROUP-SIZE APPROVAL — NOT YET RECORDED. Fill in before submitting.**
+>
+> Section 3 requires the lecturer-in-charge's **written** approval for a group
+> size other than four. Replace this whole block with the real details and put
+> a copy of the approval in the consolidated report:
+>
+> - Approved by: `<lecturer-in-charge's name>`
+> - Date of approval: `<date>`
+> - Evidence: `<email / Course Web message / other, and where it is in the report>`
+>
+> This block is deliberately visible rather than a hidden comment: an
+> unfilled placeholder that ships is an obvious gap an evaluator can ask
+> about, whereas an invented name and date would be fabricated evidence
+> under Section 18.2. If the approval does not exist yet, request it — do not
+> write something here to make the warning go away.
 
 The Agentic AI column names the files each student authored; it matches
 `git log --author`.
@@ -433,6 +446,10 @@ API, testing, deployment, accounts, contribution record, security notes, and
 AI usage declaration. Component-specific details remain in
 [`agentic-ai-service/README.md`](agentic-ai-service/README.md) and
 [`mobile/README.md`](mobile/README.md).
+
+- Load testing and results: [`docs/PERFORMANCE_REPORT.md`](docs/PERFORMANCE_REPORT.md)
+- Where the delivered system differs from the original task-assignment plan,
+  and why: [`docs/CHANGES_FROM_PLAN.md`](docs/CHANGES_FROM_PLAN.md)
 
 ## Deployment (Render + Supabase + Vercel)
 
