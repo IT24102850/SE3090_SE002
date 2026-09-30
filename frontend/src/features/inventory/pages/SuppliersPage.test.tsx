@@ -132,6 +132,9 @@ describe('SuppliersPage', () => {
     expect(screen.getByText(/12,500\.00 PO value/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'View details' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Order history & details/ })).toBeInTheDocument();
+    const supplierRow = screen.getByText('Central Supplies').closest('tr');
+    expect(supplierRow).not.toBeNull();
+    expect(within(supplierRow!).getByRole('button', { name: 'Delete' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /Order history/ }));
 
     expect(screen.getByRole('dialog', { name: 'Central Supplies' })).toBeInTheDocument();
@@ -140,13 +143,12 @@ describe('SuppliersPage', () => {
     expect(screen.getByText('Total PO value')).toBeInTheDocument();
     expect(await screen.findByText('12 Main Street')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit supplier details' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('dialog', { name: 'Central Supplies' })).queryByRole('button', { name: /Delete supplier/ })).not.toBeInTheDocument();
     expect(within(screen.getByRole('dialog', { name: 'Central Supplies' })).getByRole('link', { name: /Open purchase orders/ })).toHaveAttribute(
       'href',
       '/purchase-orders?supplier=Central%20Supplies',
     );
     expect(screen.getByText('Deliver before noon')).toBeInTheDocument();
-    expect(within(screen.getByRole('dialog', { name: 'Central Supplies' })).getByRole('button', { name: 'Delete supplier' })).toBeDisabled();
-    expect(screen.getByText(/Suppliers with purchase order history cannot be deleted/)).toBeInTheDocument();
     expect(await screen.findAllByText('PO-1001')).toHaveLength(1);
     expect(screen.getAllByText('PO-1002')).toHaveLength(1);
     expect(within(screen.getByRole('dialog', { name: 'Central Supplies' })).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
@@ -160,6 +162,59 @@ describe('SuppliersPage', () => {
     expect(screen.queryByText('No order history yet')).not.toBeInTheDocument();
     expect(screen.getByText('Total PO value').parentElement).toHaveTextContent('12,500.00');
     expect(screen.getByText('Cancelled orders are excluded from value; supplier payments are not tracked.')).toBeInTheDocument();
+  });
+
+  it('sends edited supplier fields to the update endpoint and refreshes the directory values', async () => {
+    let supplier = {
+      id: 'supplier-edit',
+      name: 'Edit Supplies',
+      contactPerson: 'Jamie Lee',
+      email: 'old@example.test',
+      phone: '+94110000000',
+      address: 'Old address',
+      paymentTerms: 'Net 30',
+      notes: 'Old notes',
+      leadTimeDays: 5,
+      createdAt: '2026-09-30T00:00:00Z',
+      updatedAt: '2026-09-30T00:00:00Z',
+      orderCount: 0,
+      activeOrderCount: 0,
+      totalOrderValue: 0,
+      lastOrderAt: null,
+    };
+    let updateBody: Record<string, unknown> | undefined;
+
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/suppliers' && init?.method !== 'PUT') {
+        return new Response(JSON.stringify({ items: [supplier] }), { status: 200 });
+      }
+      if (url === `/api/suppliers/${supplier.id}` && init?.method === 'PUT') {
+        updateBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+        supplier = { ...supplier, ...updateBody } as typeof supplier;
+        return new Response(JSON.stringify(supplier), { status: 200 });
+      }
+      return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
+    }));
+
+    renderPage();
+    await screen.findByText('Net 30');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Payment terms'), { target: { value: 'Net 14' } });
+    fireEvent.change(screen.getByLabelText('Business address'), { target: { value: '42 New Street' } });
+    fireEvent.change(screen.getByLabelText('Supplier notes'), { target: { value: 'Updated delivery notes' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(updateBody).toMatchObject({
+      paymentTerms: 'Net 14',
+      address: '42 New Street',
+      notes: 'Updated delivery notes',
+    }));
+    expect(await screen.findByText('Net 14')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByLabelText('Payment terms')).toHaveValue('Net 14');
+    expect(screen.getByLabelText('Business address')).toHaveValue('42 New Street');
+    expect(screen.getByLabelText('Supplier notes')).toHaveValue('Updated delivery notes');
   });
 
   it('deletes a supplier with no purchase order history after confirmation', async () => {
@@ -196,8 +251,9 @@ describe('SuppliersPage', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Order history & details/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete supplier' }));
+    const supplierRow = (await screen.findByText('Solo Supplies')).closest('tr');
+    expect(supplierRow).not.toBeNull();
+    fireEvent.click(within(supplierRow!).getByRole('button', { name: 'Delete' }));
 
     const confirmation = screen.getByRole('alertdialog', { name: 'Delete Solo Supplies?' });
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Delete supplier' }));

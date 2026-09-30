@@ -298,6 +298,7 @@ export function SuppliersPage() {
   const missingContactCount = suppliers.length - contactCount;
   const missingLeadTimeCount = suppliers.filter((supplier) => !supplier.leadTimeDays).length;
   const selectedSupplier = suppliers.find((supplier) => supplier.id === expandedSupplierId);
+  const supplierPendingDeletion = suppliers.find((supplier) => supplier.id === confirmDeleteSupplierId);
   const selectedHistory = selectedSupplier ? supplierOrderHistories[selectedSupplier.id] : undefined;
   const selectedHistorySummary = selectedHistory && !selectedHistory.loading && !selectedHistory.error
     ? {
@@ -403,7 +404,18 @@ export function SuppliersPage() {
                       </button>
                     </div>
                   </td>
-                  <td><button type="button" className="btn btn-secondary" onClick={() => editSupplier(supplier)}>Edit</button></td>
+                  <td>
+                    <div className="suppliers-row-actions">
+                      <button type="button" className="btn btn-secondary" onClick={() => editSupplier(supplier)}>Edit</button>
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        disabled={supplier.orderCount > 0 || deletingSupplierId === supplier.id}
+                        title={supplier.orderCount > 0 ? 'Suppliers with purchase order history cannot be deleted.' : undefined}
+                        onClick={() => setConfirmDeleteSupplierId(supplier.id)}
+                      >{deletingSupplierId === supplier.id ? 'Deleting…' : 'Delete'}</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {!loading && filtered.length === 0 && <tr><td colSpan={8} className="empty-state">{suppliers.length ? 'No suppliers match your search.' : 'No suppliers yet. Add a supplier to start building your directory.'}</td></tr>}
@@ -417,7 +429,6 @@ export function SuppliersPage() {
         const supplier = selectedSupplier;
         const history = supplierOrderHistories[supplier.id];
         const orders = history?.orders ?? [];
-        const supplierHasPurchaseOrders = (selectedHistorySummary?.orderCount ?? supplier.orderCount) > 0;
         const lastOrderAt = selectedHistorySummary?.lastOrderAt ?? supplier.lastOrderAt;
         return (
           <div
@@ -474,15 +485,6 @@ export function SuppliersPage() {
                       <div><dt>Usual lead time</dt><dd>{supplier.leadTimeDays ? `${supplier.leadTimeDays} days` : 'Not set'}</dd></div>
                       <div><dt>Notes</dt><dd>{supplier.notes || 'No notes'}</dd></div>
                     </dl>
-                    <div className="suppliers-delete-action">
-                      <button
-                        className="btn btn-danger"
-                        type="button"
-                        disabled={supplierHasPurchaseOrders || deletingSupplierId === supplier.id}
-                        onClick={() => setConfirmDeleteSupplierId(supplier.id)}
-                      >{deletingSupplierId === supplier.id ? 'Deleting…' : 'Delete supplier'}</button>
-                      {supplierHasPurchaseOrders && <p role="note">Suppliers with purchase order history cannot be deleted, so past orders remain intact.</p>}
-                    </div>
                   </section>
                   <section className="suppliers-order-history" aria-label={`${supplier.name} purchase order history`}>
                     <div className="suppliers-history-heading">
@@ -535,13 +537,13 @@ export function SuppliersPage() {
           </div>
         );
       })()}
-      {selectedSupplier && confirmDeleteSupplierId === selectedSupplier.id && (
+      {supplierPendingDeletion && (
         <ConfirmDialog
-          title={`Delete ${selectedSupplier.name}?`}
+          title={`Delete ${supplierPendingDeletion.name}?`}
           message="This permanently removes the supplier from your directory and clears its supplier references from inventory. This cannot be undone."
-          confirmLabel={deletingSupplierId === selectedSupplier.id ? 'Deleting…' : 'Delete supplier'}
+          confirmLabel={deletingSupplierId === supplierPendingDeletion.id ? 'Deleting…' : 'Delete supplier'}
           tone="danger"
-          onConfirm={() => { void deleteSupplier(selectedSupplier); }}
+          onConfirm={() => { void deleteSupplier(supplierPendingDeletion); }}
           onCancel={() => setConfirmDeleteSupplierId(null)}
         />
       )}

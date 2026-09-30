@@ -1152,6 +1152,8 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .suppliers-history-button { display: inline-flex; min-height: 32px; align-items: center; gap: .4rem; padding: .4rem .62rem; color: #075c59; font: inherit; font-size: .68rem; font-weight: 800; text-decoration: none; white-space: nowrap; background: linear-gradient(120deg, #d9faf2, #e6f5ff); border: 1px solid #bce9df; border-radius: .6rem; box-shadow: 0 3px 9px rgba(9, 112, 100, .08); cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
 .inventory-scope .suppliers-history-button:hover { transform: translateY(-1px); border-color: #70cfc0; box-shadow: 0 6px 15px rgba(9, 112, 100, .15); }
 .inventory-scope .suppliers-history-button:focus-visible { outline: 3px solid var(--color-primary-soft); outline-offset: 2px; }
+.inventory-scope .suppliers-row-actions { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.inventory-scope .suppliers-row-actions .btn { min-height: 34px; padding-inline: .65rem; font-size: .7rem; }
 .inventory-scope .suppliers-modal { display: flex; width: min(98vw, 1840px); height: min(96dvh, 1200px); max-height: calc(100dvh - 1rem); flex-direction: column; overflow: hidden; }
 .inventory-scope .suppliers-modal-body { min-height: 0; flex: 1; max-height: none; }
 .inventory-scope .suppliers-profile-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin: 0 0 1rem; }
@@ -1170,8 +1172,6 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .suppliers-profile-details dl > div { display: grid; gap: .22rem; min-width: 0; font-size: .78rem; }
 .inventory-scope .suppliers-profile-details dt { color: var(--color-text-muted); font-weight: 700; }
 .inventory-scope .suppliers-profile-details dd { margin: 0; overflow-wrap: anywhere; }
-.inventory-scope .suppliers-delete-action { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; margin-top: 1rem; }
-.inventory-scope .suppliers-delete-action p { margin: 0; color: var(--color-text-muted); font-size: .72rem; }
 .inventory-scope .confirm-backdrop { z-index: 2100; }
 .inventory-scope .suppliers-history-heading { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: flex-start; justify-content: space-between; margin-bottom: .65rem; }
 .inventory-scope .suppliers-history-heading h3 { margin-bottom: .2rem; }

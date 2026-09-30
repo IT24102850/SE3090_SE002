@@ -56,6 +56,43 @@ public sealed class SuppliersControllerTests
         Assert.Single(await db.PurchaseOrders.ToListAsync());
     }
 
+    [Fact]
+    public async Task UpdateSupplier_PersistsPaymentTermsAndOtherEditableFields()
+    {
+        var tenantId = Guid.NewGuid();
+        await using var db = TestHelpers.NewInMemoryDb(tenantId);
+        var supplier = new Supplier
+        {
+            TenantId = tenantId,
+            Name = "Original Supplies",
+            PaymentTerms = "Net 30",
+            Address = "Old address",
+            Notes = "Old notes",
+        };
+        db.Suppliers.Add(supplier);
+        await db.SaveChangesAsync();
+
+        var request = new UpdateSupplierRequest(
+            "Updated Supplies",
+            "orders@example.test",
+            "+94112223333",
+            7,
+            "Alex Silva",
+            "42 New Street",
+            "Net 14",
+            "Updated delivery notes");
+        var controller = CreateController(db, tenantId);
+
+        var result = await controller.UpdateSupplier(supplier.Id, request, CancellationToken.None);
+
+        var response = Assert.IsType<OkObjectResult>(result.Result);
+        var updated = Assert.IsType<SupplierResponse>(response.Value);
+        Assert.Equal("Net 14", updated.PaymentTerms);
+        Assert.Equal("42 New Street", updated.Address);
+        Assert.Equal("Updated delivery notes", updated.Notes);
+        Assert.Equal("Net 14", (await db.Suppliers.SingleAsync(value => value.Id == supplier.Id)).PaymentTerms);
+    }
+
     private static SuppliersController CreateController(SmeBackend.Data.AppDbContext db, Guid tenantId)
     {
         var authorizationService = new Mock<IAuthorizationService>();
