@@ -1,6 +1,7 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+﻿import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
 import { API_BASE_URL, LOCAL_API_BASE_URL } from './apiBaseUrl';
+import { expireSession, refreshSession } from './sessionRefresh';
 import type {
   AgentWorkflow,
   AvailabilityDay,
@@ -68,8 +69,9 @@ const localBackendQuery = fetchBaseQuery({
   },
 });
 
-// Access tokens live 2 hours (JwtService.GenerateAccessToken) and there is no
-// refresh endpoint to renew them, so a session simply dies mid-use. Without
+// Access tokens live 2 hours (JwtService.GenerateAccessToken). On the first
+// 401 the refresh token is traded for a new pair (api/sessionRefresh.ts) and
+// the query is replayed; only when that fails is the session over. Without
 // this wrapper RTK Query swallowed the resulting 401s: every page kept
 // rendering the logged-in shell off the stale `user` object in localStorage
 // while each table showed its "nothing found" empty state, which reads as
@@ -89,9 +91,10 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
   // fires several queries at once) only redirect once, and so a genuine 401
   // while already logged out can't loop us back into /login.
   if (result.error?.status === 401 && localStorage.getItem('token')) {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
+    if (await refreshSession()) {
+      result = await rawBaseQuery(args, api, extraOptions);
+    }
+    if (result.error?.status === 401) expireSession();
   }
   return result;
 };

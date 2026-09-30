@@ -2,7 +2,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { useEffect, useState, type ReactNode } from 'react';
 import { RootState } from '../../store/store';
-import { logout } from '../../store/authSlice';
+import { signOut } from '../../store/authSlice';
 import NotificationBell from './NotificationBell';
 import { bookingApi, useGetTenantProfileQuery, useGetTenantQuery } from '../../api/bookingApi';
 import { resetSubtypeCache } from '../../features/dashboard/subtype';
@@ -278,7 +278,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         // Ignore storage restrictions while logging out.
       }
     }
-    dispatch(logout());
+    dispatch(signOut());
     // Both caches are keyed to the tenant that just logged out. RTK Query
     // keeps its store across a logout, and the sub-type is memoised in a
     // module variable, so without these two the next tenant to sign in on
