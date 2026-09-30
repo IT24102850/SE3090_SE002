@@ -82,6 +82,10 @@ public class AppDbContext : DbContext
     public DbSet<PlatformCreditEntry> PlatformCreditEntries { get; set; } = null!;
     public DbSet<PlatformUsageCounter> PlatformUsageCounters { get; set; } = null!;
     public DbSet<PlatformPromotion> PlatformPromotions { get; set; } = null!;
+    // The platform owner's own agent runs. Not tenant-scoped: the copilot
+    // reads across every business and proposes actions against them, so
+    // filing a run under one tenant would be wrong in both directions.
+    public DbSet<PlatformAgentWorkflow> PlatformAgentWorkflows { get; set; } = null!;
     public DbSet<PlatformPromotionRedemption> PlatformPromotionRedemptions { get; set; } = null!;
 
      // Billing engine
@@ -693,6 +697,33 @@ public class AppDbContext : DbContext
             entity.Property(p => p.Period).HasMaxLength(20);
             entity.Property(p => p.AmountOff).HasPrecision(18, 2);
             entity.Property(p => p.AmountCurrency).HasMaxLength(3);
+        });
+
+        modelBuilder.Entity<PlatformAgentWorkflow>(entity =>
+        {
+            entity.ToTable("platform_agent_workflows");
+            entity.HasIndex(w => w.CreatedAt);
+            entity.HasIndex(w => w.Status);
+            entity.HasIndex(w => w.TraceId);
+            entity.Property(w => w.TraceId).HasMaxLength(64);
+            entity.Property(w => w.Objective).HasMaxLength(1000).IsRequired();
+            entity.Property(w => w.Status).HasMaxLength(24).IsRequired();
+            entity.Property(w => w.ApprovalStatus).HasMaxLength(24).IsRequired();
+            entity.Property(w => w.DecidedByEmail).HasMaxLength(256);
+            entity.Property(w => w.DecisionReason).HasMaxLength(500);
+            entity.Property(w => w.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(w => w.EstimatedCost).HasPrecision(18, 2);
+            // jsonb rather than text: these are queried in the console and
+            // read by hand during an incident, and Postgres should be able
+            // to reach into them without a client-side parse.
+            entity.Property(w => w.PlanJson).HasColumnType("jsonb");
+            entity.Property(w => w.AnalysisJson).HasColumnType("jsonb");
+            entity.Property(w => w.ProposalsJson).HasColumnType("jsonb");
+            entity.Property(w => w.ValidationJson).HasColumnType("jsonb");
+            entity.Property(w => w.ObservabilityJson).HasColumnType("jsonb");
+            entity.Property(w => w.ApprovedInterventionsJson).HasColumnType("jsonb");
+            entity.Property(w => w.OutcomeJson).HasColumnType("jsonb");
+            entity.Property(w => w.ErrorLog).HasMaxLength(4000);
         });
 
         modelBuilder.Entity<PlatformPromotionRedemption>(entity =>

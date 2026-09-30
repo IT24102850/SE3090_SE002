@@ -221,6 +221,11 @@ builder.Services.AddScoped<SmeBackend.Services.PlatformBilling.IPlatformSubscrip
 builder.Services.AddScoped<SmeBackend.Services.PlatformBilling.IPlatformCheckoutService,
     SmeBackend.Services.PlatformBilling.PlatformCheckoutService>();
 builder.Services.AddHostedService<SmeBackend.Services.PlatformBilling.PlatformRenewalService>();
+// The platform owner's Agentic AI console. An HttpClient-backed service
+// because it calls the internal agent service, exactly as the other
+// agent flows do - React and Flutter never reach that service directly.
+builder.Services.AddHttpClient<SmeBackend.Services.PlatformBilling.IPlatformCopilotService,
+    SmeBackend.Services.PlatformBilling.PlatformCopilotService>();
 
 // The public website booking widget is anonymous, so it gets a per-IP
 // budget that no signed-in endpoint needs: enough for a family working

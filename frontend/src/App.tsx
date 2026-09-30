@@ -81,6 +81,7 @@ const PlatformUsersPage = lazy(() => import('./features/platform/PlatformUsersPa
 const PlatformAuditPage = lazy(() => import('./features/platform/PlatformAuditPage'));
 const PlatformSecurityPage = lazy(() => import('./features/platform/PlatformSecurityPage'));
 const PlatformRevenuePage = lazy(() => import('./features/platform/PlatformRevenuePage'));
+const PlatformCopilotPage = lazy(() => import('./features/platform/PlatformCopilotPage'));
 
 /* Deliberately near-empty. This shows for the length of one chunk fetch on a
  * local network, and a spinner that appears and vanishes inside 100ms reads
@@ -502,6 +503,7 @@ function App() {
               <Route path="/platform/audit" element={<PlatformAuditPage />} />
               <Route path="/platform/security" element={<PlatformSecurityPage />} />
               <Route path="/platform/revenue" element={<PlatformRevenuePage />} />
+              <Route path="/platform/copilot" element={<PlatformCopilotPage />} />
 
               <Route path="/" element={<LandingPage />} />
               <Route path="*" element={<div style={{ padding: '2rem' }}><h1>404 - Page Not Found</h1></div>} />

@@ -154,10 +154,86 @@ export interface RevenueInvoiceRow {
   tenantId: string; tenantName: string; provider: string | null;
 }
 
+
+/* ── Platform Operations Copilot ───────────────────────────────────── */
+
+export interface CopilotPlanStep {
+  order: number;
+  action: string;
+  assigned_agent: string;
+  description: string;
+}
+
+export interface CopilotTenantRisk {
+  tenant_id: string;
+  tenant_name: string;
+  plan_code: string;
+  status: string;
+  risk_score: number;
+  risk_factors: string[];
+  monthly_value: number;
+  open_invoices: number;
+}
+
+export interface CopilotIntervention {
+  tenant_id: string;
+  tenant_name: string;
+  kind: string;
+  extend_days: number | null;
+  comp_plan_code: string | null;
+  comp_months: number | null;
+  rationale: string;
+  estimated_cost: number;
+  protected_value: number;
+  confidence: number;
+}
+
+export interface CopilotVerdict {
+  tenant_id: string;
+  kind: string;
+  accepted: boolean;
+  reason: string | null;
+  adjusted_from: string | null;
+}
+
+export interface CopilotRunSummary {
+  id: string;
+  traceId: string;
+  objective: string;
+  status: string;
+  approvalStatus: string;
+  modelDriven: boolean;
+  estimatedCost: number;
+  currency: string;
+  createdAt: string;
+  completedAt: string | null;
+  decidedByEmail: string | null;
+}
+
+export interface CopilotRun extends CopilotRunSummary {
+  decidedAt: string | null;
+  decisionReason: string | null;
+  errorLog: string | null;
+  plan: { plan: CopilotPlanStep[]; assigned_agents: string[]; interpreted_goal: string; confidence_score: number } | null;
+  analysis: { at_risk: CopilotTenantRisk[]; criteria_used: string[]; platform_summary: string } | null;
+  proposals: { interventions: CopilotIntervention[]; reasoning: string } | null;
+  validation: {
+    is_allowed: boolean;
+    requires_human_approval: boolean;
+    accepted: CopilotIntervention[];
+    verdicts: CopilotVerdict[];
+    rejection_reason: string | null;
+    validation_notes: string[];
+    total_estimated_cost: number;
+  } | null;
+  observability: { tool_calls: string | null; llm_calls: string | null; agent_steps: string | null } | null;
+  outcome: { tenantId: string; tenantName: string; kind: string; applied: boolean; detail: string }[] | null;
+}
+
 export const platformApi = createApi({
   reducerPath: 'platformApi',
   baseQuery,
-  tagTypes: ['Overview', 'Tenants', 'Tenant', 'Users', 'Audit', 'Sessions', 'Me', 'Revenue'],
+  tagTypes: ['Overview', 'Tenants', 'Tenant', 'Users', 'Audit', 'Sessions', 'Me', 'Revenue', 'Copilot'],
   endpoints: (builder) => ({
     // auth
     login: builder.mutation<PlatformLoginResult, { email: string; password: string; code?: string }>({
@@ -232,6 +308,37 @@ export const platformApi = createApi({
 
     // revenue
     revenue: builder.query<RevenueOverview, void>({ query: () => 'platform/revenue', providesTags: ['Revenue'] }),
+
+    // copilot
+    copilotRuns: builder.query<CopilotRunSummary[], void>({
+      query: () => 'platform/copilot',
+      providesTags: ['Copilot'],
+    }),
+    copilotRun: builder.query<CopilotRun, string>({
+      query: (id) => `platform/copilot/${id}`,
+      providesTags: ['Copilot'],
+    }),
+    startCopilot: builder.mutation<CopilotRun, { objective: string; maxInterventions: number; maxCompMonths: number; currency: string }>({
+      query: (body) => ({ url: 'platform/copilot', method: 'POST', body }),
+      invalidatesTags: ['Copilot', 'Audit'],
+    }),
+    approveCopilot: builder.mutation<CopilotRun, { id: string; tenantIds: string[]; reason?: string; otp?: string }>({
+      query: ({ id, otp, ...body }) => ({
+        url: `platform/copilot/${id}/approve`,
+        method: 'POST',
+        body,
+        headers: withOtp(otp),
+      }),
+      invalidatesTags: ['Copilot', 'Revenue', 'Audit', 'Tenants'],
+    }),
+    rejectCopilot: builder.mutation<CopilotRun, { id: string; reason?: string }>({
+      query: ({ id, ...body }) => ({ url: `platform/copilot/${id}/reject`, method: 'POST', body }),
+      invalidatesTags: ['Copilot', 'Audit'],
+    }),
+    reviseCopilot: builder.mutation<CopilotRun, { id: string; reason?: string }>({
+      query: ({ id, ...body }) => ({ url: `platform/copilot/${id}/revise`, method: 'POST', body }),
+      invalidatesTags: ['Copilot', 'Audit'],
+    }),
     revenueSubscriptions: builder.query<Paged<RevenueSubscriptionRow>, { plan?: string; status?: string; page?: number; pageSize?: number }>({
       query: (params) => ({ url: 'platform/revenue/subscriptions', params }),
       providesTags: ['Revenue'],
@@ -283,6 +390,12 @@ export const {
   useRevenueInvoicesQuery,
   useCompSubscriptionMutation,
   useExtendSubscriptionMutation,
+  useCopilotRunsQuery,
+  useCopilotRunQuery,
+  useStartCopilotMutation,
+  useApproveCopilotMutation,
+  useRejectCopilotMutation,
+  useReviseCopilotMutation,
 } = platformApi;
 
 /** Pulls the server's message out of an RTK Query error, with a fallback. */

@@ -37,6 +37,8 @@ from tools.booking_tools import BookingToolsClient, ToolError  # noqa: E402
 from tools.inventory_tools import InventoryToolsClient  # noqa: E402
 from tools.schedule_tools import ScheduleToolsClient  # noqa: E402
 from agents import billing_planner, schedule_copilot  # noqa: E402
+from agents import platform_copilot  # noqa: E402
+from schemas.platform_contracts import PlatformPlanRequest, PlatformTrace  # noqa: E402
 from schemas.billing_contracts import (  # noqa: E402
     BillingNarrateRequest, BillingNarrateTrace, BillingPlanRequest, BillingPlanTrace,
 )
@@ -400,3 +402,17 @@ def reject(workflow_id: str, body: ApproveRejectRequest | None = None) -> Workfl
     trace.status = "Rejected"
     trace.error = (body.reason if body else None) or "Rejected."
     return trace
+
+
+# ── Platform Operations Copilot ─────────────────────────────────────────
+# The platform owner's own agent, and the only flow here that reasons across
+# every tenant rather than inside one. Its tools are read-only and scoped to
+# the owner's MFA-minted session, and it has no route to apply anything: a
+# successful run ends AwaitingApproval, and carrying an intervention out
+# needs a fresh authenticator code that never reaches this service.
+@app.post("/platform/plan", response_model=PlatformTrace, dependencies=[Depends(_require_internal_token)])
+def plan_platform_operations(request: PlatformPlanRequest) -> PlatformTrace:
+    return platform_copilot.run(
+        request,
+        backend_base_url=os.getenv("BACKEND_API_BASE_URL", "http://localhost:5298/api"),
+    )

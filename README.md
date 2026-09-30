@@ -337,6 +337,36 @@ The owner is seeded on startup in every environment, once. After that the
 password lives only as a hash in the database and is rotated from
 Security → Change password.
 
+## Platform Operations Copilot (the owner's Agentic AI)
+
+The fourth agentic workflow, and the only one that reasons **across** tenants
+rather than inside one. The platform owner gives it an objective — "reduce
+churn risk this month" — and four agents plan, read the platform's own
+commercial records, propose one intervention per at-risk business, and check
+every proposal against policy. Full detail in
+[`docs/platform-operations-copilot.md`](docs/platform-operations-copilot.md).
+
+The property it is built on: **the agent cannot carry out a high-impact
+action.** Extending a term or comping a plan goes through an endpoint that
+demands a fresh authenticator code, and the agent service has no database
+credentials, no write tool and no way to produce one. So no sequence of model
+outputs — however well injected — moves money here. A person with the
+authenticator does, or it does not happen.
+
+| Agent | Responsibility | Tools | Model |
+|---|---|---|---|
+| Planner | Objective → plan, states its reading of the goal | none | yes |
+| Analysis | Who is at risk, on what evidence | 3 read-only | yes |
+| Action | One intervention each, with cost | 1 read-only | yes |
+| Safety | Policy, caps, blast radius | none | **no** |
+
+- Tools are read-only *by construction* — there is no write method to call
+- Ceilings enforced three times: agent gate, API boundary, execution
+- The apply request carries *which* businesses, never *what to do* to them
+- No suspend or delete exists; every reachable write is additive for the tenant
+- 33 tests (19 Python, 14 C#), none of which involve a language model
+- Screen: `/platform/copilot`
+
 ## Unify subscriptions (what a tenant pays us)
 
 A tenant admin has to hold a Unify subscription to get the platform. The price
