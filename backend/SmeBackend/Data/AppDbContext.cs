@@ -25,6 +25,7 @@ public class AppDbContext : DbContext
     public DbSet<BookingReminder> BookingReminders { get; set; } = null!;
     public DbSet<RecurringPattern> RecurringPatterns { get; set; } = null!;
     public DbSet<AgentWorkflow> AgentWorkflows { get; set; } = null!;
+    public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
     public DbSet<Resource> Resources { get; set; } = null!;
     public DbSet<BookingType> BookingTypes { get; set; } = null!;
     public DbSet<Booking> Bookings { get; set; } = null!;
@@ -342,6 +343,19 @@ public class AppDbContext : DbContext
         });
 
         // ==================== AGENT WORKFLOWS ====================
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("refresh_tokens");
+            entity.HasIndex(t => t.TokenHash).IsUnique();
+            entity.HasIndex(t => new { t.UserId, t.RevokedAt });
+            entity.Property(t => t.TokenHash).HasMaxLength(64).IsRequired();
+            entity.Property(t => t.ReplacedByTokenHash).HasMaxLength(64);
+            entity.HasOne(t => t.User)
+                  .WithMany()
+                  .HasForeignKey(t => t.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<AgentWorkflow>(entity =>
         {
             entity.ToTable("agent_workflows");

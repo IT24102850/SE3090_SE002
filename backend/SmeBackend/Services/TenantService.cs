@@ -97,7 +97,7 @@ public class TenantService : ITenantService
             
             // 6. Generate JWT token
             var token = _jwtService.GenerateAccessToken(admin);
-            var refreshToken = _jwtService.GenerateRefreshToken();
+            var refreshToken = await RefreshTokenStore.IssueAsync(_context, admin.Id);
             
             return new AuthResponseDto
             {

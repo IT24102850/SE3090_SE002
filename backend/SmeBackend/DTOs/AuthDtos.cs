@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using SmeBackend.Models;
 
 namespace SmeBackend.DTOs;
@@ -61,6 +61,12 @@ public class LoginDto
 
     [Required]
     public string Password { get; set; } = string.Empty;
+}
+
+public class RefreshRequestDto
+{
+    [Required, MaxLength(200)]
+    public string RefreshToken { get; set; } = string.Empty;
 }
 
 public class AuthResponseDto
