@@ -76,6 +76,97 @@ public class InventoryControllerTests
     }
 
     [Fact]
+    public async Task GetPhysicalCounts_ReturnsPagedCountsWithinRequestedBranch()
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var otherBranchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var countedAt = DateTime.UtcNow;
+        var matchingCount = new PhysicalStockCount
+        {
+            TenantId = tenantId,
+            InventoryItemId = Guid.NewGuid(),
+            BranchId = branchId,
+            ItemName = "Counted item",
+            Sku = "COUNT-001",
+            SystemQuantityAtCount = 10m,
+            CountedQuantity = 8m,
+            Variance = -2m,
+            Reason = "LostOrMissing",
+            CountedAt = countedAt,
+            CountedBy = "Mobile Counter",
+            Reference = "MOBILE-AUDIT-001",
+            Status = "Applied",
+        };
+        db.PhysicalStockCounts.AddRange(
+            matchingCount,
+            new PhysicalStockCount
+            {
+                TenantId = tenantId,
+                InventoryItemId = Guid.NewGuid(),
+                BranchId = branchId,
+                ItemName = "Newer count",
+                Sku = "COUNT-002",
+                SystemQuantityAtCount = 4m,
+                CountedQuantity = 4m,
+                Variance = 0m,
+                Reason = "NoDiscrepancy",
+                CountedAt = countedAt.AddMinutes(1),
+                CountedBy = "Mobile Counter",
+                Reference = "MOBILE-AUDIT-002",
+                Status = "Matched",
+            },
+            new PhysicalStockCount
+            {
+                TenantId = tenantId,
+                InventoryItemId = Guid.NewGuid(),
+                BranchId = otherBranchId,
+                ItemName = "Other branch count",
+                Sku = "COUNT-003",
+                SystemQuantityAtCount = 1m,
+                CountedQuantity = 2m,
+                Variance = 1m,
+                Reason = "LostOrMissing",
+                CountedAt = countedAt.AddMinutes(2),
+                CountedBy = "Other Counter",
+                Reference = "MOBILE-AUDIT-003",
+                Status = "PendingApproval",
+            });
+        await db.SaveChangesAsync();
+
+        var controller = new PhysicalStockCountsController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<ICloudinaryImageService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.GetPhysicalCounts(
+            branchId,
+            page: 2,
+            pageSize: 1,
+            cancellationToken: CancellationToken.None);
+
+        var response = Assert.IsType<OkObjectResult>(result.Result).Value
+            as PhysicalStockCountListResponse;
+        Assert.NotNull(response);
+        Assert.Equal(2, response.TotalCount);
+        Assert.Equal(2, response.TotalPages);
+        Assert.Equal(2, response.Page);
+        var item = Assert.Single(response.Items);
+        Assert.Equal(matchingCount.Id, item.Id);
+        Assert.Equal("Applied", item.Status);
+        Assert.Equal(-2m, item.Variance);
+    }
+
+    [Fact]
     public async Task GetCategories_WhenLegacyTenantHasNoCatalog_SeedsBusinessCategories()
     {
         var tenantId = Guid.NewGuid();

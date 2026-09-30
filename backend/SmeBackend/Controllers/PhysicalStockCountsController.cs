@@ -22,6 +22,62 @@ public sealed class PhysicalStockCountsController(
     private const long MaxPhotoBytes = 5 * 1024 * 1024;
     private const int MaxPhotosPerCount = 3;
 
+    [HttpGet("physical-counts")]
+    public async Task<ActionResult<PhysicalStockCountListResponse>> GetPhysicalCounts(
+        [FromQuery] Guid? branchId = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 100,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+        if (!User.IsInRole(UserRole.Admin.ToString()) &&
+            !Guid.TryParse(
+                User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value,
+                out _))
+        {
+            return Forbid();
+        }
+
+        branchId = ResolveBranchScope(branchId);
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService,
+                InventoryAuthorizationPolicies.InventoryRead,
+                tenantId,
+                branchId))
+        {
+            return Forbid();
+        }
+
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query = db.PhysicalStockCounts.AsNoTracking()
+            .OrderByDescending(count => count.CountedAt)
+            .ThenByDescending(count => count.Id)
+            .AsQueryable();
+        if (branchId.HasValue)
+        {
+            query = query.Where(count => count.BranchId == branchId.Value);
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+        page = totalPages == 0 ? 1 : Math.Min(page, totalPages);
+        var counts = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return Ok(new PhysicalStockCountListResponse(
+            counts.Select(InventoryController.ToPhysicalCountResponse).ToList(),
+            page,
+            pageSize,
+            totalCount,
+            totalPages));
+    }
+
     [HttpGet("physical-count-approvals")]
     public async Task<ActionResult<PhysicalCountApprovalListResponse>> GetPendingApprovals(
         CancellationToken cancellationToken)
@@ -337,9 +393,9 @@ public sealed class PhysicalStockCountsController(
         User.IsInRole(UserRole.Admin.ToString()) ||
         User.IsInRole(UserRole.Manager.ToString());
 
-    private Guid? ResolveBranchScope() =>
+    private Guid? ResolveBranchScope(Guid? requestedBranchId = null) =>
         User.IsInRole(UserRole.Admin.ToString())
-            ? null
+            ? requestedBranchId
             : Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var branchId)
                 ? branchId
                 : null;
@@ -370,6 +426,13 @@ public sealed class PhysicalStockCountsController(
         "image/webp",
     };
 }
+
+public sealed record PhysicalStockCountListResponse(
+    IReadOnlyList<PhysicalStockCountResponse> Items,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int TotalPages);
 
 public sealed record PhysicalCountApprovalListResponse(
     IReadOnlyList<PhysicalStockCountResponse> Items,
