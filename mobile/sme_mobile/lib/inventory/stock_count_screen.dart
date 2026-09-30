@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +15,7 @@ import '../widgets/ui/ui.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
 import 'inventory_panel.dart';
+import 'inventory_loading_state.dart';
 
 /// Offline-first physical stock audit screen.
 class StockCountScreen extends StatefulWidget {
@@ -25,7 +27,7 @@ class StockCountScreen extends StatefulWidget {
 }
 
 class _StockCountScreenState extends State<StockCountScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _scanner = MobileScannerController();
   final _sku = TextEditingController();
   final _quantity = TextEditingController();
@@ -35,6 +37,7 @@ class _StockCountScreenState extends State<StockCountScreen>
   final _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _connectionChanges;
   List<_CatalogItem> _catalog = [];
+  Map<String, _BranchLocation> _branchLocations = {};
   List<_PendingCount> _pending = [];
   List<Map<String, dynamic>> _approvalQueue = [];
   bool _loading = true,
@@ -46,9 +49,99 @@ class _StockCountScreenState extends State<StockCountScreen>
   String? _reason;
   bool _isOnline = true;
   bool _canApproveCounts = false;
+  bool _scanSucceeded = false;
   List<XFile> _selectedPhotos = [];
   String? _selectedCatalogItemId;
+  double? _latitude;
+  double? _longitude;
+  String? _locationBranchId;
+  bool _capturingLocation = false;
+  static const _branchVerificationRadiusMeters = 150.0;
+
+  ({double distanceMeters})? get _locationVerification {
+    final item = _selectedCatalogItem;
+    final branchId = item?.branchId;
+    if (branchId == null ||
+        branchId != _locationBranchId ||
+        _latitude == null ||
+        _longitude == null) {
+      return null;
+    }
+    final branch = _branchLocations[branchId];
+    if (branch?.latitude == null || branch?.longitude == null) return null;
+    return (
+      distanceMeters: Geolocator.distanceBetween(
+        _latitude!,
+        _longitude!,
+        branch!.latitude!,
+        branch.longitude!,
+      ),
+    );
+  }
+
   late final AnimationController _scanLineController;
+  late final AnimationController _scanSuccessController;
+
+  Future<void> _captureLocation() async {
+    if (_capturingLocation) return;
+    setState(() => _capturingLocation = true);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        throw StateError(
+            'Turn on device location to attach an audit location.');
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied) {
+        throw StateError(
+            'Location permission was denied. You can continue without it.');
+      }
+      if (permission == LocationPermission.deniedForever) {
+        throw StateError(
+            'Location permission is disabled for Unify. Enable it in device settings or continue without location.');
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _latitude = position.latitude;
+        _longitude = position.longitude;
+        _locationBranchId = _selectedCatalogItem?.branchId;
+      });
+      final verification = _locationVerification;
+      showAppNotification(
+        verification == null
+            ? 'GPS coordinates attached. This branch has no configured location, so proximity cannot be verified.'
+            : verification.distanceMeters <= _branchVerificationRadiusMeters
+                ? 'Branch verified · ${verification.distanceMeters.round()} m from ${_selectedCatalogItem?.branch ?? 'the branch'}.'
+                : 'You are ${verification.distanceMeters.round()} m from the configured branch. Move within ${_branchVerificationRadiusMeters.round()} m or remove GPS to record an unverified manual count.',
+        tone: verification == null
+            ? AppNotificationTone.warning
+            : verification.distanceMeters <= _branchVerificationRadiusMeters
+                ? AppNotificationTone.success
+                : AppNotificationTone.error,
+      );
+    } on StateError catch (error) {
+      if (mounted) {
+        showAppNotification(error.message, tone: AppNotificationTone.warning);
+      }
+    } catch (error) {
+      if (mounted) {
+        showAppNotification(
+          'Could not capture the device location: $error',
+          tone: AppNotificationTone.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _capturingLocation = false);
+    }
+  }
 
   @override
   void initState() {
@@ -57,6 +150,12 @@ class _StockCountScreenState extends State<StockCountScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2200),
     )..repeat(reverse: true);
+    _scanSuccessController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+      lowerBound: 0.94,
+      upperBound: 1,
+    );
     try {
       _connectionChanges =
           _connectivity.onConnectivityChanged.listen((results) {
@@ -92,6 +191,7 @@ class _StockCountScreenState extends State<StockCountScreen>
     _connectionChanges?.cancel();
     _scanner.dispose();
     _scanLineController.dispose();
+    _scanSuccessController.dispose();
     _sku.dispose();
     _quantity.dispose();
     _reasonNotes.dispose();
@@ -106,6 +206,8 @@ class _StockCountScreenState extends State<StockCountScreen>
       _pending = saved.pending;
       _loading = false;
     });
+    final savedBranches = await _store.loadBranchLocations();
+    if (mounted) setState(() => _branchLocations = savedBranches);
     await _refreshCatalog();
     await _sync(silent: true);
     await _loadApprovalQueue();
@@ -128,9 +230,28 @@ class _StockCountScreenState extends State<StockCountScreen>
       }
       await _store.save(catalog, _pending);
       if (mounted) setState(() => _catalog = catalog);
+      await _refreshBranchLocations();
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<void> _refreshBranchLocations() async {
+    try {
+      final response = await widget.client.get('/api/inventory/branches');
+      if (response.statusCode != 200) return;
+      final payload = jsonDecode(response.body);
+      if (payload is! List) return;
+      final locations = <String, _BranchLocation>{};
+      for (final row in payload.whereType<Map<String, dynamic>>()) {
+        final location = _BranchLocation.fromJson(row);
+        locations[location.id] = location;
+      }
+      await _store.saveBranchLocations(locations);
+      if (mounted) setState(() => _branchLocations = locations);
+    } catch (_) {
+      // Keep the last known branch locations for offline verification.
     }
   }
 
@@ -249,8 +370,12 @@ class _StockCountScreenState extends State<StockCountScreen>
         body: {'decision': decision, 'notes': notes},
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (!mounted) return;
         showAppNotification(
-          _error(response.body) ?? 'The stock count could not be reviewed.',
+          response.statusCode == 403
+              ? 'You cannot review this count. It must be reviewed by a different Admin or Manager with access to this branch.'
+              : _error(response.body) ??
+                  'The stock count could not be reviewed (server ${response.statusCode}).',
           tone: AppNotificationTone.error,
         );
         await _loadApprovalQueue();
@@ -346,6 +471,8 @@ class _StockCountScreenState extends State<StockCountScreen>
             'reference': 'MOBILE-AUDIT-${count.id}',
             'reason': count.reason,
             'reasonNotes': count.reasonNotes,
+            'latitude': count.latitude,
+            'longitude': count.longitude,
           });
           if (response.statusCode < 200 || response.statusCode >= 300) {
             final conflict = _decodeJsonMap(response.body);
@@ -481,11 +608,13 @@ class _StockCountScreenState extends State<StockCountScreen>
     HapticFeedback.mediumImpact();
     setState(() {
       _scannedCode = code;
+      _scanSucceeded = true;
       _sku.text = code;
       _selectedCatalogItemId = null;
     });
+    _scanSuccessController.repeat(reverse: true);
     showAppNotification(
-      'Barcode scanned. Enter the physical quantity to continue.',
+      'Code captured. Check the matching item and enter its physical quantity.',
       tone: AppNotificationTone.success,
     );
     _scanner.stop();
@@ -493,7 +622,12 @@ class _StockCountScreenState extends State<StockCountScreen>
 
   Future<void> _scanAgain() async {
     try {
-      setState(() => _scannedCode = null);
+      setState(() {
+        _scannedCode = null;
+        _scanSucceeded = false;
+      });
+      _scanSuccessController.stop();
+      _scanSuccessController.value = 0;
       await _scanner.start();
       if (mounted) {
         showAppNotification(
@@ -557,6 +691,40 @@ class _StockCountScreenState extends State<StockCountScreen>
       return;
     }
 
+    final branchLocation =
+        item.branchId == null ? null : _branchLocations[item.branchId!];
+    final verification = _locationVerification;
+    if (branchLocation?.isConfigured == true &&
+        verification != null &&
+        verification.distanceMeters > _branchVerificationRadiusMeters) {
+      showAppNotification(
+        'Branch verification failed. You are ${verification.distanceMeters.round()} m away; move within ${_branchVerificationRadiusMeters.round()} m or remove GPS to record this as an unverified manual count.',
+        tone: AppNotificationTone.error,
+      );
+      return;
+    }
+    if (branchLocation?.isConfigured == true &&
+        _latitude != null &&
+        verification == null) {
+      showAppNotification(
+        'GPS belongs to another item or branch. Remove it and capture location again.',
+        tone: AppNotificationTone.error,
+      );
+      return;
+    }
+    if (branchLocation?.isConfigured == true && _latitude == null) {
+      final proceedUnverified = await showAppConfirmation(
+        context: context,
+        title: 'Continue without GPS verification?',
+        message:
+            'This branch has a configured location, but this count has no GPS proof. Continue as an explicitly unverified manual count?',
+        confirmLabel: 'Continue unverified',
+        icon: Icons.location_searching_rounded,
+        accent: AppColors.warning,
+      );
+      if (!proceedUnverified || !mounted) return;
+    }
+
     final confirmed = await showAppConfirmation(
       context: context,
       title: 'Save physical count?',
@@ -584,6 +752,8 @@ class _StockCountScreenState extends State<StockCountScreen>
         reasonNotes: variance == 0 || _reasonNotes.text.trim().isEmpty
             ? null
             : _reasonNotes.text.trim(),
+        latitude: _latitude,
+        longitude: _longitude,
         evidence: await _readSelectedEvidence(),
       );
       final pending = [
@@ -609,6 +779,9 @@ class _StockCountScreenState extends State<StockCountScreen>
         _reason = null;
         _reasonNotes.clear();
         _selectedPhotos = [];
+        _latitude = null;
+        _longitude = null;
+        _locationBranchId = null;
       });
       showAppNotification(
           _isLargeVariance(variance, item.quantity)
@@ -836,9 +1009,10 @@ class _StockCountScreenState extends State<StockCountScreen>
             ),
           ),
           child: _loading
-              ? const AppLoader(
+              ? const InventoryLoadingState(
                   key: ValueKey('stock-count-loading'),
-                  message: 'Initializing local inventory cache...',
+                  message: 'Preparing stock count',
+                  detail: 'Loading your inventory for an offline audit',
                 )
               : RefreshIndicator(
                   key: const ValueKey('stock-count-content'),
@@ -1048,7 +1222,9 @@ class _StockCountScreenState extends State<StockCountScreen>
                       height: 7,
                       decoration: BoxDecoration(
                         color: _isOnline
-                            ? const Color(0xFF10B981)
+                            ? _syncing
+                                ? AppColors.cyan
+                                : const Color(0xFF10B981)
                             : const Color(0xFFF59E0B),
                         shape: BoxShape.circle,
                       ),
@@ -1059,14 +1235,18 @@ class _StockCountScreenState extends State<StockCountScreen>
                         duration: const Duration(milliseconds: 250),
                         child: Text(
                           _isOnline
-                              ? 'ONLINE & SYNC READY'
+                              ? _syncing
+                                  ? 'SYNCING SAVED COUNTS'
+                                  : 'ONLINE & SYNC READY'
                               : 'OFFLINE MODE ACTIVE',
                           key: ValueKey(_isOnline),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.label.copyWith(
                             color: _isOnline
-                                ? const Color(0xFF10B981)
+                                ? _syncing
+                                    ? AppColors.cyan
+                                    : const Color(0xFF10B981)
                                 : const Color(0xFFFBBF24),
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
@@ -1080,7 +1260,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                 Text(
                   _pending.isEmpty
                       ? 'All counts uploaded to server.'
-                      : '${_pending.length} counts queued; review any marked RECOUNT REQUIRED.',
+                      : '${_pending.length} counts queued · auto-sync while this screen is open; review any marked RECOUNT REQUIRED.',
                   style: AppTextStyles.caption
                       .copyWith(color: AppColors.textSecondary),
                 ),
@@ -1141,21 +1321,40 @@ class _StockCountScreenState extends State<StockCountScreen>
             ),
             IgnorePointer(
               child: Center(
-                child: Container(
+                child: AnimatedContainer(
+                  key: const Key('stock-count-scan-frame'),
+                  duration: const Duration(milliseconds: 260),
                   width: 180,
                   height: 140,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                        color: AppColors.cyan.withValues(alpha: 0.6),
-                        width: 1.5),
+                      color: !_scanSucceeded
+                          ? AppColors.cyan.withValues(alpha: 0.6)
+                          : AppColors.success,
+                      width: _scanSucceeded ? 2.5 : 1.5,
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.cyan.withValues(alpha: 0.2),
-                        blurRadius: 16,
+                        color: (!_scanSucceeded
+                                ? AppColors.cyan
+                                : AppColors.success)
+                            .withValues(alpha: _scanSucceeded ? 0.5 : 0.2),
+                        blurRadius: _scanSucceeded ? 28 : 16,
+                        spreadRadius: _scanSucceeded ? 2 : 0,
                       ),
                     ],
                   ),
+                  child: !_scanSucceeded
+                      ? null
+                      : const Center(
+                          child: Icon(
+                            Icons.check_circle_rounded,
+                            key: Key('stock-count-scan-success-icon'),
+                            color: AppColors.success,
+                            size: 52,
+                          ),
+                        ),
                 ),
               ),
             ),
@@ -1211,18 +1410,118 @@ class _StockCountScreenState extends State<StockCountScreen>
               curve: Curves.easeOutCubic,
               left: 14,
               right: 14,
-              bottom: _scannedCode == null ? -54 : 14,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 220),
-                opacity: _scannedCode == null ? 0 : 1,
-                child: GhostButton(
-                  label: _scannedCode == null
-                      ? 'Scan a barcode'
-                      : 'Scanned: $_scannedCode (Tap to rescan)',
-                  icon: Icons.refresh_rounded,
-                  height: 38,
-                  onPressed: _scannedCode == null ? null : _scanAgain,
+              bottom: _scanSucceeded ? 12 : -58,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                switchInCurve: Curves.easeOutBack,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, .35),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
                 ),
+                child: !_scanSucceeded
+                    ? const SizedBox(
+                        key: ValueKey('scan-ready'),
+                        height: 36,
+                        child: Center(
+                          child: Text(
+                            'Align a QR code or barcode inside the frame',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              shadows: [
+                                Shadow(color: Colors.black54, blurRadius: 8),
+                              ],
+                            ),
+                          ),
+                        ),
+                      )
+                    : AnimatedBuilder(
+                        key: ValueKey('scan-success-$_scannedCode'),
+                        animation: _scanSuccessController,
+                        builder: (context, child) => Transform.scale(
+                          scale: _scanSuccessController.value,
+                          child: child,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xF011292C),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: AppColors.success.withValues(alpha: 0.85),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color:
+                                    AppColors.success.withValues(alpha: 0.28),
+                                blurRadius: 18,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.check_circle_rounded,
+                                key:
+                                    Key('stock-count-scan-success-banner-icon'),
+                                color: AppColors.success,
+                                size: 25,
+                              ),
+                              const SizedBox(width: 9),
+                              Expanded(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'CODE CAPTURED',
+                                      style: TextStyle(
+                                        color: AppColors.success,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                    Text(
+                                      _scannedCode!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              TextButton.icon(
+                                key: const Key('stock-count-scan-again'),
+                                onPressed: _scanAgain,
+                                icon: const Icon(
+                                  Icons.qr_code_scanner_rounded,
+                                  size: 17,
+                                ),
+                                label: const Text('Scan again'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
               ),
             ),
           ],
@@ -1249,6 +1548,7 @@ class _StockCountScreenState extends State<StockCountScreen>
               setState(() {
                 _sku.text = item.sku;
                 _scannedCode = item.sku;
+                _scanSucceeded = false;
                 _selectedCatalogItemId = item.id;
               });
             },
@@ -1316,6 +1616,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                 .copyWith(color: Colors.white, fontWeight: FontWeight.w600),
             onChanged: (val) => setState(() {
               _scannedCode = val.isEmpty ? null : val;
+              _scanSucceeded = false;
               _selectedCatalogItemId = null;
             }),
             decoration: InputDecoration(
@@ -1599,6 +1900,89 @@ class _StockCountScreenState extends State<StockCountScreen>
             ),
           ),
 
+          if (matchedItem != null) ...[
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              key: const Key('stock-count-capture-location'),
+              onPressed: _capturingLocation ? null : _captureLocation,
+              icon: _capturingLocation
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.cyan,
+                      ),
+                    )
+                  : Icon(
+                      _latitude == null
+                          ? Icons.my_location_rounded
+                          : Icons.location_on_rounded,
+                    ),
+              label: Text(
+                _capturingLocation
+                    ? 'Getting location…'
+                    : _latitude == null
+                        ? matchedItem.branchId != null &&
+                                _branchLocations[matchedItem.branchId!]
+                                        ?.isConfigured ==
+                                    true
+                            ? 'Verify branch location with GPS'
+                            : 'Add GPS location to this count (optional)'
+                        : 'Location attached · ${_latitude!.toStringAsFixed(5)}, ${_longitude!.toStringAsFixed(5)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.cyan,
+                alignment: Alignment.centerLeft,
+              ),
+            ),
+            Container(
+              key: const Key('stock-count-location-explanation'),
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.glassFill,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.glassBorder),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.location_on_outlined,
+                    color: AppColors.cyan,
+                    size: 17,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _locationExplanation(matchedItem),
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_latitude != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  key: const Key('stock-count-clear-location'),
+                  onPressed: () => setState(() {
+                    _latitude = null;
+                    _longitude = null;
+                    _locationBranchId = null;
+                  }),
+                  child: const Text('Remove location'),
+                ),
+              ),
+          ],
+
           const SizedBox(height: 20),
           NeonButton(
             label: _savingCount ? 'Saving...' : 'Record Physical Count',
@@ -1611,8 +1995,28 @@ class _StockCountScreenState extends State<StockCountScreen>
     );
   }
 
+  String _locationExplanation(_CatalogItem item) {
+    final branch =
+        item.branchId == null ? null : _branchLocations[item.branchId!];
+    if (branch?.isConfigured != true) {
+      return 'Branch GPS is not configured, so proximity verification is unavailable. GPS tagging remains optional and never tracks you continuously.';
+    }
+    if (_latitude == null) {
+      return 'Capture GPS to verify within ${_branchVerificationRadiusMeters.round()} m of ${item.branch}. You can still submit without GPS, but must confirm it as unverified.';
+    }
+    final verification = _locationVerification;
+    if (verification == null) {
+      return 'GPS coordinates are attached, but branch proximity could not be verified. This branch location may have changed; refresh the catalog.';
+    }
+    if (verification.distanceMeters <= _branchVerificationRadiusMeters) {
+      return 'Branch verified · ${verification.distanceMeters.round()} m from ${item.branch}. Coordinates are attached to the audit; no continuous tracking.';
+    }
+    return 'Outside the ${_branchVerificationRadiusMeters.round()} m verification area · ${verification.distanceMeters.round()} m from ${item.branch}. Remove GPS to continue as an unverified manual count.';
+  }
+
   Widget _buildApprovalCard(Map<String, dynamic> count) {
     final variance = (count['variance'] as num?)?.toDouble() ?? 0;
+    final canReview = _canApproveCounts && count['canReview'] == true;
     final photos =
         (count['photoUrls'] as List?)?.whereType<String>().toList() ??
             const <String>[];
@@ -1643,6 +2047,12 @@ class _StockCountScreenState extends State<StockCountScreen>
               'Counted by ${count['countedBy'] ?? 'Unknown'} · ${count['countedAt'] ?? ''}',
               style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
             ),
+            if (count['latitude'] is num && count['longitude'] is num)
+              Text(
+                'Location · ${(count['latitude'] as num).toStringAsFixed(5)}, ${(count['longitude'] as num).toStringAsFixed(5)}',
+                style:
+                    AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+              ),
             if (photos.isNotEmpty) ...[
               const SizedBox(height: 8),
               SizedBox(
@@ -1668,11 +2078,12 @@ class _StockCountScreenState extends State<StockCountScreen>
               ),
             ],
             const SizedBox(height: 8),
-            if (_canApproveCounts)
+            if (canReview)
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
+                      key: Key('stock-count-approval-reject-${count['id']}'),
                       onPressed: () => _reviewCount(count, 'Reject'),
                       child: const Text('Reject'),
                     ),
@@ -1680,6 +2091,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                   const SizedBox(width: 8),
                   Expanded(
                     child: FilledButton.icon(
+                      key: Key('stock-count-approval-approve-${count['id']}'),
                       onPressed: () => _reviewCount(count, 'Approve'),
                       icon: const Icon(Icons.check_rounded),
                       label: const Text('Approve'),
@@ -1689,7 +2101,9 @@ class _StockCountScreenState extends State<StockCountScreen>
               )
             else
               Text(
-                'Waiting for an Admin or Manager to review this adjustment.',
+                _canApproveCounts
+                    ? 'This count must be reviewed by a different Admin or Manager with access to this branch.'
+                    : 'Waiting for an Admin or Manager to review this adjustment.',
                 style: AppTextStyles.caption.copyWith(color: AppColors.warning),
               ),
           ],
@@ -1759,6 +2173,12 @@ class _StockCountScreenState extends State<StockCountScreen>
                   if (entry.evidence.isNotEmpty)
                     Text(
                       '${entry.evidence.length} evidence photo(s) queued',
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.textSecondary),
+                    ),
+                  if (entry.latitude != null && entry.longitude != null)
+                    Text(
+                      'Location · ${entry.latitude!.toStringAsFixed(5)}, ${entry.longitude!.toStringAsFixed(5)}',
                       style: AppTextStyles.caption
                           .copyWith(color: AppColors.textSecondary),
                     ),
@@ -1888,6 +2308,7 @@ String _formatAuditQuantity(double value) {
 class _CountStore {
   static const _catalogKey = 'stock_count_catalog_v2';
   static const _pendingKey = 'stock_count_pending_v2';
+  static const _branchesKey = 'stock_count_branch_locations_v1';
 
   Future<({List<_CatalogItem> catalog, List<_PendingCount> pending})>
       load() async {
@@ -1926,6 +2347,65 @@ class _CountStore {
           _pendingKey, jsonEncode(pending.map((p) => p.toJson()).toList()));
     } catch (_) {}
   }
+
+  Future<Map<String, _BranchLocation>> loadBranchLocations() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_branchesKey);
+      if (raw == null) return {};
+      final rows = jsonDecode(raw);
+      if (rows is! List) return {};
+      final locations = <String, _BranchLocation>{};
+      for (final row in rows.whereType<Map<String, dynamic>>()) {
+        final branch = _BranchLocation.fromJson(row);
+        locations[branch.id] = branch;
+      }
+      return locations;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> saveBranchLocations(
+    Map<String, _BranchLocation> locations,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _branchesKey,
+        jsonEncode(locations.values.map((branch) => branch.toJson()).toList()),
+      );
+    } catch (_) {}
+  }
+}
+
+class _BranchLocation {
+  const _BranchLocation({
+    required this.id,
+    required this.name,
+    this.latitude,
+    this.longitude,
+  });
+
+  final String id, name;
+  final double? latitude, longitude;
+
+  bool get isConfigured => latitude != null && longitude != null;
+
+  factory _BranchLocation.fromJson(Map<String, dynamic> json) =>
+      _BranchLocation(
+        id: '${json['id']}',
+        name: '${json['name'] ?? 'Branch'}',
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'latitude': latitude,
+        'longitude': longitude,
+      };
 }
 
 class _CatalogItem {
@@ -1978,6 +2458,8 @@ class _PendingCount {
     required this.recordedAt,
     required this.reason,
     required this.evidence,
+    this.latitude,
+    this.longitude,
     this.lastError,
     this.requiresReview = false,
     this.reasonNotes,
@@ -1991,6 +2473,7 @@ class _PendingCount {
   final DateTime recordedAt;
   final String reason;
   final String? reasonNotes;
+  final double? latitude, longitude;
   final List<_PendingEvidence> evidence;
   final String? lastError;
   final bool requiresReview;
@@ -2013,6 +2496,8 @@ class _PendingCount {
         recordedAt: recordedAt,
         reason: reason,
         reasonNotes: reasonNotes,
+        latitude: latitude,
+        longitude: longitude,
         evidence: evidence,
         lastError: error,
         requiresReview: requiresReview,
@@ -2035,6 +2520,8 @@ class _PendingCount {
       recordedAt: DateTime.parse(json['recordedAt'] as String),
       reason: json['reason'] as String? ?? 'Other',
       reasonNotes: json['reasonNotes'] as String?,
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
       evidence: ((json['evidence'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(_PendingEvidence.fromJson)
@@ -2062,6 +2549,8 @@ class _PendingCount {
         'recordedAt': recordedAt.toIso8601String(),
         'reason': reason,
         'reasonNotes': reasonNotes,
+        'latitude': latitude,
+        'longitude': longitude,
         'evidence': evidence.map((photo) => photo.toJson()).toList(),
         'lastError': lastError,
         'requiresReview': requiresReview,

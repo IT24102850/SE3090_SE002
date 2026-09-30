@@ -12,6 +12,7 @@ import '../widgets/ui/ui.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
 import 'inventory_panel.dart';
+import 'inventory_loading_state.dart';
 
 class EquipmentMaintenanceScreen extends StatefulWidget {
   const EquipmentMaintenanceScreen({super.key, required this.client});
@@ -966,7 +967,10 @@ class _EquipmentMaintenanceScreenState
       ),
       child: SafeArea(
         child: _loading
-            ? const AppLoader(message: 'Loading asset maintenance logs...')
+            ? const InventoryLoadingState(
+                message: 'Loading maintenance',
+                detail: 'Preparing your equipment records',
+              )
             : RefreshIndicator(
                 color: AppColors.cyan,
                 backgroundColor: AppColors.overlaySurface,

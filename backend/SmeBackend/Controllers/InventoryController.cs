@@ -52,7 +52,11 @@ public sealed class InventoryController(
 
         var branches = await query
             .OrderBy(branch => branch.Name)
-            .Select(branch => new InventoryBranchOptionResponse(branch.Id, branch.Name))
+            .Select(branch => new InventoryBranchOptionResponse(
+                branch.Id,
+                branch.Name,
+                branch.Latitude,
+                branch.Longitude))
             .ToListAsync(cancellationToken);
         return Ok(branches);
     }
@@ -914,6 +918,15 @@ public sealed class InventoryController(
             ModelState.AddModelError("reason", "Choose a reason for a discrepancy. Add notes when the reason is Other.");
             return ValidationProblem(ModelState);
         }
+        if (request.Latitude.HasValue != request.Longitude.HasValue ||
+            request.Latitude is < -90m or > 90m ||
+            request.Longitude is < -180m or > 180m)
+        {
+            ModelState.AddModelError(
+                "location",
+                "Provide both valid latitude and longitude coordinates, or leave both empty.");
+            return ValidationProblem(ModelState);
+        }
         var requestedVariance = request.CountedQuantity - request.SystemQuantityAtCount;
         if (!PhysicalStockCountReasons.All.Contains(request.Reason, StringComparer.Ordinal) ||
             (requestedVariance == 0 && request.Reason != "NoDiscrepancy") ||
@@ -940,6 +953,27 @@ public sealed class InventoryController(
         if (existingCount is not null)
         {
             return Ok(ToPhysicalCountResponse(existingCount));
+        }
+
+        const double branchVerificationRadiusMeters = 150;
+        var branchLatitude = item.Branch?.Latitude;
+        var branchLongitude = item.Branch?.Longitude;
+        if (request.Latitude.HasValue &&
+            branchLatitude.HasValue &&
+            branchLongitude.HasValue)
+        {
+            var distanceMeters = DistanceBetweenMeters(
+                (double)request.Latitude.Value,
+                (double)request.Longitude!.Value,
+                (double)branchLatitude.Value,
+                (double)branchLongitude.Value);
+            if (distanceMeters > branchVerificationRadiusMeters)
+            {
+                return Conflict(new
+                {
+                    message = $"GPS is {Math.Round(distanceMeters)} m from {item.Branch!.Name}; counts with GPS must be within {branchVerificationRadiusMeters:0} m. Remove GPS to record an unverified manual count."
+                });
+            }
         }
 
         var countedAtUtc = request.CountedAt.UtcDateTime;
@@ -977,6 +1011,8 @@ public sealed class InventoryController(
             CountedByUserId = countedByUserId,
             CountedBy = CurrentActorName(),
             Reference = request.Reference,
+            Latitude = request.Latitude,
+            Longitude = request.Longitude,
             Status = adjustment == 0 ? "Matched" : "Applied",
         };
         var requiresApproval = IsLargePhysicalCountVariance(
@@ -1519,6 +1555,25 @@ public sealed class InventoryController(
                    : absoluteVariance / systemQuantity > 0.10m);
     }
 
+    private static double DistanceBetweenMeters(
+        double latitudeOne,
+        double longitudeOne,
+        double latitudeTwo,
+        double longitudeTwo)
+    {
+        const double earthRadiusMeters = 6_371_000;
+        static double ToRadians(double degrees) => degrees * Math.PI / 180;
+
+        var latitudeDelta = ToRadians(latitudeTwo - latitudeOne);
+        var longitudeDelta = ToRadians(longitudeTwo - longitudeOne);
+        var haversine = Math.Pow(Math.Sin(latitudeDelta / 2), 2) +
+                        Math.Cos(ToRadians(latitudeOne)) *
+                        Math.Cos(ToRadians(latitudeTwo)) *
+                        Math.Pow(Math.Sin(longitudeDelta / 2), 2);
+        return earthRadiusMeters * 2 *
+               Math.Atan2(Math.Sqrt(haversine), Math.Sqrt(1 - haversine));
+    }
+
     private static string BuildPhysicalCountNotes(PhysicalStockCount count)
     {
         var reason = count.ReasonNotes is null
@@ -1546,7 +1601,9 @@ public sealed class InventoryController(
             DeserializePhotoUrls(count.PhotoUrlsJson),
             count.ReviewedBy,
             count.ReviewedAt,
-            count.ReviewNotes);
+            count.ReviewNotes,
+            count.Latitude,
+            count.Longitude);
 
     private async Task<IReadOnlyList<PhysicalCountChangedMovement>> GetMovementsAfterCountAsync(
         Guid inventoryItemId,
@@ -1686,7 +1743,11 @@ public sealed record InventoryListResponse(
     int TotalPages);
 
 public sealed record InventoryCategoryOptionResponse(Guid Id, string Name);
-public sealed record InventoryBranchOptionResponse(Guid Id, string Name);
+public sealed record InventoryBranchOptionResponse(
+    Guid Id,
+    string Name,
+    decimal? Latitude,
+    decimal? Longitude);
 public sealed record InventoryBranchStockRequest(Guid BranchId, decimal Quantity);
 
 public sealed record InventoryItemResponse(
@@ -1791,7 +1852,9 @@ public sealed record RecordPhysicalCountRequest(
     DateTimeOffset CountedAt,
     string Reference,
     string Reason,
-    string? ReasonNotes = null);
+    string? ReasonNotes = null,
+    decimal? Latitude = null,
+    decimal? Longitude = null);
 
 public sealed record PhysicalStockCountResponse(
     Guid Id,
@@ -1811,7 +1874,10 @@ public sealed record PhysicalStockCountResponse(
     IReadOnlyList<string> PhotoUrls,
     string? ReviewedBy,
     DateTime? ReviewedAt,
-    string? ReviewNotes);
+    string? ReviewNotes,
+    decimal? Latitude = null,
+    decimal? Longitude = null,
+    bool CanReview = true);
 
 public sealed record PhysicalCountChangedMovement(
     string MovementType,

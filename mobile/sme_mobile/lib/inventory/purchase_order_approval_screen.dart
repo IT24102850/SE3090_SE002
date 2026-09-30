@@ -11,6 +11,7 @@ import '../widgets/ui/ui.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
 import 'inventory_panel.dart';
+import 'inventory_loading_state.dart';
 import 'notification_ws.dart';
 
 /// Normalized purchase order statuses matching backend workflow.
@@ -599,7 +600,10 @@ class _PurchaseOrderApprovalScreenState
           backgroundColor: AppColors.overlaySurface,
           onRefresh: () => _load(showSuccess: true),
           child: _loading
-              ? const AppLoader(message: 'Loading purchase order ledger...')
+              ? const InventoryLoadingState(
+                  message: 'Loading purchase orders',
+                  detail: 'Preparing your order queue',
+                )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
                   children: [
@@ -1299,19 +1303,16 @@ class _PurchaseOrderApprovalScreenState
                 ),
               ),
               child: Center(
-                child: isPast
-                    ? const Icon(Icons.check_rounded,
-                        size: 11, color: Color(0xFF10B981))
-                    : isCurrent
-                        ? Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: dotColor,
-                            ),
-                          )
-                        : null,
+                child: isPast || isCurrent
+                    ? Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: dotColor,
+                        ),
+                      )
+                    : null,
               ),
             ),
           );
@@ -1744,7 +1745,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
   final _branchController = TextEditingController();
 
   final _itemNameController = TextEditingController();
-  final _quantityController = TextEditingController(text: '1');
+  final _quantityControllers = <String, TextEditingController>{};
   final _unitPriceController = TextEditingController();
 
   bool _loading = false;
@@ -1752,26 +1753,27 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _suppliers = [];
   List<Map<String, dynamic>> _inventoryItems = [];
-  String? _selectedBranchId;
+  List<String> _selectedBranchIds = [];
   String? _selectedSupplierId;
   String? _selectedItemId;
   String? _optionsError;
 
   List<Map<String, dynamic>> get _supplierItems {
     final supplierId = _selectedSupplierId;
-    final branchId = _selectedBranchId;
-    if (supplierId == null || branchId == null) return const [];
+    if (supplierId == null) return const [];
     return _inventoryItems
-        .where((item) =>
-            '${item['supplierId'] ?? ''}' == supplierId &&
-            '${item['branchId'] ?? ''}' == branchId)
+        .where((item) => '${item['supplierId'] ?? ''}' == supplierId)
         .toList();
   }
 
   double get _lineTotal {
-    final quantity = double.tryParse(_quantityController.text.trim()) ?? 0;
     final unitPrice = double.tryParse(_unitPriceController.text.trim()) ?? 0;
-    return quantity * unitPrice;
+    return _selectedBranchIds.fold<double>(0, (total, branchId) {
+      final quantity =
+          double.tryParse(_quantityControllers[branchId]?.text.trim() ?? '') ??
+              0;
+      return total + quantity * unitPrice;
+    });
   }
 
   @override
@@ -1805,8 +1807,16 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
           _branches = branches;
           _suppliers = suppliers;
           _inventoryItems = items;
-          _selectedBranchId =
-              branches.isNotEmpty ? '${branches.first['id']}' : null;
+          _selectedBranchIds =
+              branches.isNotEmpty ? ['${branches.first['id']}'] : [];
+          for (final branch in branches) {
+            final branchId = '${branch['id']}';
+            _quantityControllers[branchId] = TextEditingController(
+              text: branches.isNotEmpty && branchId == '${branches.first['id']}'
+                  ? '1'
+                  : '0',
+            );
+          }
           _selectedSupplierId =
               suppliers.isNotEmpty ? '${suppliers.first['id']}' : null;
           _optionsError = null;
@@ -1841,6 +1851,25 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
     _unitPriceController.text = unitCost == null ? '' : _money(unitCost);
   }
 
+  void _toggleBranch(String branchId, bool selected) {
+    setState(() {
+      if (selected) {
+        if (!_selectedBranchIds.contains(branchId)) {
+          _selectedBranchIds = [..._selectedBranchIds, branchId];
+          final quantity = _quantityControllers[branchId];
+          if (quantity == null ||
+              quantity.text.trim().isEmpty ||
+              quantity.text == '0') {
+            _quantityControllers[branchId] = TextEditingController(text: '1');
+          }
+        }
+      } else {
+        _selectedBranchIds =
+            _selectedBranchIds.where((id) => id != branchId).toList();
+      }
+    });
+  }
+
   String _money(double value) => value.toStringAsFixed(2);
 
   String _formatTotal(double value) => 'LKR ${_money(value)}';
@@ -1858,7 +1887,9 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
     _supplierController.dispose();
     _branchController.dispose();
     _itemNameController.dispose();
-    _quantityController.dispose();
+    for (final controller in _quantityControllers.values) {
+      controller.dispose();
+    }
     _unitPriceController.dispose();
     super.dispose();
   }
@@ -1867,6 +1898,13 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
     if (_selectedSupplierId == null) {
       showAppNotification(
         'Choose a supplier before creating a purchase order.',
+        tone: AppNotificationTone.error,
+      );
+      return;
+    }
+    if (_selectedBranchIds.isEmpty) {
+      showAppNotification(
+        'Select at least one delivery branch.',
         tone: AppNotificationTone.error,
       );
       return;
@@ -1882,30 +1920,52 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
     setState(() => _loading = true);
 
     try {
-      final qty = double.tryParse(_quantityController.text) ?? 1;
       final price = double.tryParse(_unitPriceController.text) ?? 0;
+      final number = _numberController.text.trim();
+      final branchOrders = _selectedBranchIds
+          .map((branchId) => {
+                'branchId': branchId,
+                'items': [
+                  {
+                    'inventoryItemId': _selectedItemId,
+                    'description': _itemNameController.text.trim(),
+                    'quantity':
+                        double.tryParse(_quantityControllers[branchId]!.text) ??
+                            0,
+                    'unitPrice': price,
+                  }
+                ],
+              })
+          .toList();
+      final isMultiBranch = branchOrders.length > 1;
+      final generatedNumbers = List.generate(
+        branchOrders.length,
+        (index) => '$number-${(index + 1).toString().padLeft(2, '0')}',
+      );
+      final body = isMultiBranch
+          ? {
+              'number': number,
+              'supplierId': _selectedSupplierId,
+              'branchOrders': branchOrders,
+            }
+          : {
+              'number': number,
+              'branchId': _selectedBranchIds.single,
+              'supplierId': _selectedSupplierId,
+              'items': branchOrders.single['items'],
+            };
 
-      final body = {
-        'number': _numberController.text.trim(),
-        'branchId': _selectedBranchId,
-        'supplierId': _selectedSupplierId,
-        'items': [
-          {
-            'inventoryItemId': _selectedItemId,
-            'description': _itemNameController.text.trim(),
-            'quantity': qty,
-            'unitPrice': price,
-          }
-        ],
-      };
-
-      final response =
-          await widget.client.post('/api/purchase-orders', body: body);
+      final response = await widget.client.post(
+        isMultiBranch ? '/api/purchase-orders/batch' : '/api/purchase-orders',
+        body: body,
+      );
       if (response.statusCode >= 200 && response.statusCode < 300) {
         if (!mounted) return;
         Navigator.pop(context);
         showAppNotification(
-          'Purchase order ${_numberController.text} created successfully.',
+          isMultiBranch
+              ? 'Purchase orders ${generatedNumbers.join(', ')} created successfully.'
+              : 'Purchase order $number created successfully.',
           tone: AppNotificationTone.success,
         );
         widget.onCreated();
@@ -1916,7 +1976,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
     } catch (e) {
       if (mounted) {
         showAppNotification(
-          'Could not create purchase order. Verify branch and supplier are selected.',
+          'Could not create purchase order: ${e.toString().replaceFirst('Bad state: ', '')}',
           tone: AppNotificationTone.error,
         );
       }
@@ -2006,29 +2066,56 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
               ],
               const SizedBox(height: 12),
 
-              // Branch Dropdown or Text
+              // Each selected branch receives its own order.
               if (_branches.isNotEmpty) ...[
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedBranchId,
-                  dropdownColor: const Color(0xFF17263C),
-                  decoration: _inputDec('DELIVERY BRANCH'),
-                  items: _branches
-                      .map((b) => DropdownMenuItem(
-                            value: '${b['id']}',
-                            child: Text(
-                              '${b['name']}',
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 13),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (val) => setState(() {
-                    _selectedBranchId = val;
-                    final items = _supplierItems;
-                    _selectSupplierItem(items.isEmpty ? null : items.first);
-                  }),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'DELIVERY BRANCHES',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.7,
+                    ),
+                  ),
                 ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Choose each destination. A separate purchase order will be created for every selected branch.',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ..._branches.map((branch) {
+                  final branchId = '${branch['id']}';
+                  return Material(
+                    color: Colors.transparent,
+                    child: CheckboxListTile(
+                      key: Key('po-branch-checkbox-$branchId'),
+                      value: _selectedBranchIds.contains(branchId),
+                      onChanged: _loading || _loadingOptions
+                          ? null
+                          : (selected) =>
+                              _toggleBranch(branchId, selected ?? false),
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      activeColor: AppColors.cyan,
+                      title: Text(
+                        '${branch['name']}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
               ] else ...[
                 TextFormField(
                   controller: _branchController,
@@ -2084,7 +2171,8 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
                       .map((item) => DropdownMenuItem<String>(
                             value: '${item['id']}',
                             child: Text(
-                              '${item['name']} · ${item['sku']}',
+                              '${item['name']} · ${item['sku']}'
+                              '${(item['branchName'] as String?)?.trim().isNotEmpty == true ? ' · ${item['branchName']}' : ''}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -2104,37 +2192,45 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
                 ),
               const SizedBox(height: 10),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      key: const Key('po-quantity-field'),
-                      controller: _quantityController,
-                      keyboardType: TextInputType.number,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                      decoration: _inputDec('QTY'),
-                      validator: (val) => (double.tryParse(val ?? '') ?? 0) <= 0
-                          ? 'Must be > 0'
-                          : null,
-                      onChanged: (_) => setState(() {}),
-                    ),
+              ..._selectedBranchIds.map((branchId) {
+                final branch = _branches.firstWhere(
+                  (entry) => '${entry['id']}' == branchId,
+                  orElse: () => {'name': 'Branch'},
+                );
+                final branchName = '${branch['name']}';
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: TextFormField(
+                    key: Key('po-quantity-field-$branchId'),
+                    controller: _quantityControllers[branchId],
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    decoration: _inputDec('QTY · ${branchName.toUpperCase()}'),
+                    validator: (value) {
+                      final quantity = double.tryParse(value ?? '');
+                      if (quantity == null || quantity <= 0) {
+                        return 'Enter a quantity greater than 0';
+                      }
+                      if (quantity != quantity.truncateToDouble()) {
+                        return 'Use a whole number';
+                      }
+                      return null;
+                    },
+                    onChanged: (_) => setState(() {}),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextFormField(
-                      key: const Key('po-unit-price-field'),
-                      controller: _unitPriceController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      readOnly: true,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                      decoration: _inputDec('UNIT PRICE (LKR)'),
-                      validator: (val) => (double.tryParse(val ?? '') ?? -1) < 0
-                          ? 'Invalid'
-                          : null,
-                    ),
-                  ),
-                ],
+                );
+              }),
+              TextFormField(
+                key: const Key('po-unit-price-field'),
+                controller: _unitPriceController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                readOnly: true,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: _inputDec('UNIT PRICE (LKR)'),
+                validator: (value) =>
+                    (double.tryParse(value ?? '') ?? -1) < 0 ? 'Invalid' : null,
               ),
               const SizedBox(height: 12),
               Container(
@@ -2227,7 +2323,6 @@ class _ReceivePurchaseOrderSheetState
   final _accepted = <String, TextEditingController>{};
   final _damaged = <String, TextEditingController>{};
   final _notes = <String, TextEditingController>{};
-  final _closedAsShort = <String>{};
   final _linkedInventoryItemIds = <String, String>{};
   final _photos = <XFile>[];
 
@@ -2276,8 +2371,7 @@ class _ReceivePurchaseOrderSheetState
         return;
       }
 
-      final closeShort = _closedAsShort.contains(item.id);
-      if (delivered == 0 && !closeShort) continue;
+      if (delivered == 0) continue;
       final inventoryItemId =
           item.inventoryItemId ?? _linkedInventoryItemIds[item.id];
       if (accepted > 0 && inventoryItemId == null) {
@@ -2291,7 +2385,7 @@ class _ReceivePurchaseOrderSheetState
         'purchaseOrderItemId': item.id,
         'acceptedQuantity': accepted,
         'damagedQuantity': damaged,
-        'closeRemainingAsShort': closeShort,
+        'closeRemainingAsShort': false,
         'notes': _notes[item.id]!.text.trim(),
         if (item.inventoryItemId == null && inventoryItemId != null)
           'inventoryItemId': inventoryItemId,
@@ -2300,7 +2394,7 @@ class _ReceivePurchaseOrderSheetState
 
     if (receiptItems.isEmpty) {
       showAppNotification(
-        'Enter a delivered quantity or mark an item’s remaining balance as short.',
+        'Enter an accepted or damaged quantity for at least one item.',
         tone: AppNotificationTone.warning,
       );
       return;
@@ -2383,10 +2477,14 @@ class _ReceivePurchaseOrderSheetState
             ],
           ),
           const Text(
-            'Record what arrived for each item. Only accepted units are added to stock.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            'Enter the quantities delivered in this shipment. Accepted units go into stock; damaged and missing units are tracked separately.',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              height: 1.45,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Flexible(
             child: ListView.separated(
               shrinkWrap: true,
@@ -2463,66 +2561,95 @@ class _ReceivePurchaseOrderSheetState
                           ),
                         const SizedBox(height: 8),
                       ],
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 8,
+                      Row(
                         children: [
-                          SizedBox(
-                            width: 125,
+                          Expanded(
                             child: _receiptQuantityField(
-                              label: 'ACCEPTED (GOOD)',
+                              keyValue: 'receipt-accepted-${item.id}',
+                              label: 'Accepted / good',
                               controller: _accepted[item.id]!,
                               onChanged: (_) => setState(() {}),
                             ),
                           ),
-                          SizedBox(
-                            width: 125,
+                          const SizedBox(width: 10),
+                          Expanded(
                             child: _receiptQuantityField(
-                              label: 'DAMAGED',
+                              keyValue: 'receipt-damaged-${item.id}',
+                              label: 'Damaged',
                               controller: _damaged[item.id]!,
                               onChanged: (_) => setState(() {}),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Accepted to stock: $accepted · Remaining: $remainingAfterDelivery',
-                        style: const TextStyle(
-                          color: AppColors.cyan,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.cyan.withValues(alpha: 0.07),
+                          border: Border.all(
+                            color: AppColors.cyan.withValues(alpha: 0.18),
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _receiptQuantitySummary(
+                                'Added to stock',
+                                accepted,
+                                AppColors.cyan,
+                              ),
+                            ),
+                            Container(
+                              width: 1,
+                              height: 30,
+                              color: AppColors.glassBorder,
+                            ),
+                            Expanded(
+                              child: _receiptQuantitySummary(
+                                'Still expected',
+                                remainingAfterDelivery,
+                                AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        value: _closedAsShort.contains(item.id),
-                        onChanged: (value) => setState(() {
-                          if (value == true) {
-                            _closedAsShort.add(item.id);
-                          } else {
-                            _closedAsShort.remove(item.id);
-                          }
-                        }),
-                        title: Text(
-                          'No more delivery expected; close remaining $remainingAfterDelivery as short',
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
+                      const SizedBox(height: 8),
+                      if (remainingAfterDelivery > 0)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Text(
+                            '${_formatReceiptQuantity(remainingAfterDelivery)} units stay open for a later delivery.',
+                            style: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 11,
+                              height: 1.35,
+                            ),
                           ),
                         ),
-                      ),
+                      const SizedBox(height: 10),
                       TextField(
+                        key: Key('receipt-notes-${item.id}'),
                         controller: _notes[item.id],
                         maxLength: 1000,
                         style:
                             const TextStyle(color: Colors.white, fontSize: 13),
                         decoration: InputDecoration(
-                          labelText: 'Condition / supplier notes',
+                          labelText: 'Condition or supplier notes (optional)',
+                          helperText:
+                              'For example: packaging damage or delivery reference.',
+                          helperMaxLines: 2,
                           labelStyle:
                               const TextStyle(color: AppColors.textMuted),
+                          helperStyle: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 10,
+                          ),
                           isDense: true,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -2536,28 +2663,82 @@ class _ReceivePurchaseOrderSheetState
             ),
           ),
           const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: _pickPhotos,
-              icon: const Icon(Icons.add_a_photo_outlined),
-              label: Text(
-                _photos.isEmpty
-                    ? 'Add optional receipt photos'
-                    : 'Add receipt photos (${_photos.length}/5)',
-              ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.glassFill,
+              border: Border.all(color: AppColors.glassBorder),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.photo_camera_back_outlined,
+                      color: AppColors.cyan,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Receipt evidence',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Optional photos of the delivery or damaged items.',
+                            style: TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '${_photos.length}/5',
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  key: const Key('receipt-add-photos'),
+                  onPressed: _pickPhotos,
+                  icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+                  label:
+                      Text(_photos.isEmpty ? 'Add photos' : 'Add more photos'),
+                ),
+                if (_photos.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: _photos
+                        .map((photo) => InputChip(
+                              label: Text(photo.name),
+                              onDeleted: () =>
+                                  setState(() => _photos.remove(photo)),
+                            ))
+                        .toList(),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (_photos.isNotEmpty)
-            Wrap(
-              spacing: 6,
-              children: _photos
-                  .map((photo) => InputChip(
-                        label: Text(photo.name),
-                        onDeleted: () => setState(() => _photos.remove(photo)),
-                      ))
-                  .toList(),
-            ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -2591,32 +2772,113 @@ class _ReceivePurchaseOrderSheetState
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              'Ordered ${item.quantity} · Accepted ${item.receivedQuantity} · Damaged ${item.damagedQuantity} · Short ${item.shortageQuantity} · Remaining ${item.remainingQuantity}',
-              style: const TextStyle(
-                color: AppColors.textMuted,
+            const Text(
+              'Order progress',
+              style: TextStyle(
+                color: AppColors.textSecondary,
                 fontSize: 11,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 7),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _receiptStat('Ordered', item.quantity),
+                _receiptStat('Accepted', item.receivedQuantity),
+                _receiptStat('Damaged', item.damagedQuantity),
+                _receiptStat('Short', item.shortageQuantity),
+                _receiptStat('Remaining', item.remainingQuantity,
+                    emphasize: true),
+              ],
+            ),
+            const SizedBox(height: 12),
             child,
           ],
         ),
       );
 
+  Widget _receiptStat(String label, double value, {bool emphasize = false}) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: emphasize
+              ? AppColors.cyan.withValues(alpha: 0.1)
+              : Colors.white.withValues(alpha: 0.045),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: emphasize
+                ? AppColors.cyan.withValues(alpha: 0.24)
+                : AppColors.glassBorder,
+          ),
+        ),
+        child: Text.rich(
+          TextSpan(
+            style: TextStyle(
+              color: emphasize ? AppColors.cyan : AppColors.textSecondary,
+              fontSize: 10,
+            ),
+            children: [
+              TextSpan(text: '$label  '),
+              TextSpan(
+                text: _formatReceiptQuantity(value),
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  Widget _receiptQuantitySummary(String label, double value, Color color) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              _formatReceiptQuantity(value),
+              style: TextStyle(
+                color: color,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  String _formatReceiptQuantity(double value) =>
+      value == value.truncateToDouble()
+          ? value.toStringAsFixed(0)
+          : value.toStringAsFixed(2);
+
   Widget _receiptQuantityField({
+    required String keyValue,
     required String label,
     required TextEditingController controller,
     required ValueChanged<String> onChanged,
   }) =>
       TextField(
+        key: Key(keyValue),
         controller: controller,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         style: const TextStyle(color: Colors.white, fontSize: 13),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+          labelStyle: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         ),
         onChanged: onChanged,

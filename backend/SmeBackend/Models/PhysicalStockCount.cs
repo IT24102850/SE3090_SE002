@@ -19,6 +19,8 @@ public class PhysicalStockCount : BaseEntity, ITenantScoped
     public string Status { get; set; } = string.Empty;
     public string? PhotoUrlsJson { get; set; }
     public string? PhotoUploadKeysJson { get; set; }
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
     public Guid? ReviewedByUserId { get; set; }
     public string? ReviewedBy { get; set; }
     public DateTime? ReviewedAt { get; set; }

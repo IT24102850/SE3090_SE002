@@ -443,7 +443,7 @@ export function AgentWorkflowMonitorPage() {
                   {selected.actionType === 'generate_purchase_order' && (
                     <div className="workflow-detail-callout workflow-detail-neutral">
                       <strong>Purchase-order approval has two steps</strong>
-                      <span>Approving this agent workflow submits the order for review. Final authorization and placement are available only in the mobile Purchase Approvals screen.</span>
+                      <span>Approving this agent workflow submits the order for review. Final authorization and placement are available only in the mobile Purchase Orders screen.</span>
                     </div>
                   )}
 

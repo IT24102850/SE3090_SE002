@@ -409,7 +409,12 @@ public class AppDbContext : DbContext
         // ==================== INVENTORY MODULE ====================
         // Tenant isolation filters apply to both booking and inventory data.
         modelBuilder.Entity<Tenant>().HasQueryFilter(t => t.IsActive);
-        modelBuilder.Entity<Branch>().HasQueryFilter(b => b.TenantId == CurrentTenantId && b.IsActive);
+        modelBuilder.Entity<Branch>(entity =>
+        {
+            entity.HasQueryFilter(b => b.TenantId == CurrentTenantId && b.IsActive);
+            entity.Property(b => b.Latitude).HasPrecision(10, 7);
+            entity.Property(b => b.Longitude).HasPrecision(10, 7);
+        });
         modelBuilder.Entity<User>().HasQueryFilter(u => u.TenantId == CurrentTenantId && u.Tenant.IsActive);
         modelBuilder.Entity<InventoryCategory>().HasQueryFilter(c => c.TenantId == CurrentTenantId && c.Tenant.IsActive && c.IsActive);
         modelBuilder.Entity<InventoryUnit>().HasQueryFilter(u => u.TenantId == CurrentTenantId && u.Tenant.IsActive && u.IsActive);
@@ -619,6 +624,8 @@ public class AppDbContext : DbContext
             entity.Property(count => count.Status).HasMaxLength(30).IsRequired();
             entity.Property(count => count.PhotoUrlsJson).HasColumnType("jsonb");
             entity.Property(count => count.PhotoUploadKeysJson).HasColumnType("jsonb");
+            entity.Property(count => count.Latitude).HasPrecision(9, 6);
+            entity.Property(count => count.Longitude).HasPrecision(9, 6);
             entity.Property(count => count.ReviewedBy).HasMaxLength(150);
             entity.Property(count => count.ReviewNotes).HasMaxLength(1000);
         });

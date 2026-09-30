@@ -113,7 +113,13 @@ public sealed class PhysicalStockCountsController(
             .Take(100)
             .ToListAsync(cancellationToken);
         return Ok(new PhysicalCountApprovalListResponse(
-            counts.Select(InventoryController.ToPhysicalCountResponse).ToList(),
+            counts.Select(count =>
+                InventoryController.ToPhysicalCountResponse(count) with
+                {
+                    CanReview = CanApprove() &&
+                        count.CountedByUserId.HasValue &&
+                        count.CountedByUserId != CurrentUserId(),
+                }).ToList(),
             CanApprove()));
     }
 

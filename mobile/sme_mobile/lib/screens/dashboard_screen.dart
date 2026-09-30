@@ -35,7 +35,6 @@ import '../inventory/stock_count_screen.dart';
 import '../inventory/stock_activity_history_screen.dart';
 import '../inventory/purchase_order_approval_screen.dart';
 import '../inventory/equipment_maintenance_screen.dart';
-import '../inventory/analytics_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -441,6 +440,7 @@ class _DashboardDrawer extends ConsumerWidget {
                       Navigator.of(context).push(slideFadeRoute(
                         InventoryDashboard(
                           client: AuthenticatedApiClient(),
+                          role: user.role,
                           canApprove:
                               user.role == 'Admin' || user.role == 'Manager',
                           canReceive: user.role == 'Admin' ||
@@ -465,8 +465,8 @@ class _DashboardDrawer extends ConsumerWidget {
                   ),
                 if (user.role == 'Admin' || user.role == 'Manager')
                   _DrawerItem(
-                    icon: Icons.fact_check_outlined,
-                    label: 'Purchase approvals',
+                    icon: Icons.receipt_long_outlined,
+                    label: 'Purchase orders',
                     accent: AppColors.success,
                     onTap: () {
                       Navigator.pop(context);
@@ -476,18 +476,6 @@ class _DashboardDrawer extends ConsumerWidget {
                           canApprove: true,
                           canReceive: true,
                         ),
-                      ));
-                    },
-                  ),
-                if (user.role == 'Admin' || user.role == 'Manager')
-                  _DrawerItem(
-                    icon: Icons.insights_outlined,
-                    label: 'Inventory analytics',
-                    accent: AppColors.violet,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(slideFadeRoute(
-                        InsightsScreen(client: AuthenticatedApiClient()),
                       ));
                     },
                   ),
@@ -803,12 +791,10 @@ const _quickActionImages = <String, String>{
       'https://images.unsplash.com/photo-1494412651409-8963ce7935a7?auto=format&fit=crop&w=400&q=60',
   'Physical stock count':
       'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=400&q=60',
-  'Purchase approvals':
+  'Purchase orders':
       'https://images.unsplash.com/photo-1554224154-26032ffc0d07?auto=format&fit=crop&w=400&q=60',
   'Equipment maintenance':
       'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=60',
-  'Inventory analytics':
-      'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=400&q=60',
 };
 
 List<_QuickActionGroup> _quickActionsFor(
@@ -938,6 +924,7 @@ List<_QuickActionGroup> _quickActionsFor(
         onTap: () => Navigator.of(context).push(slideFadeRoute(
           InventoryDashboard(
             client: client,
+            role: role,
             canApprove: role == 'Admin' || role == 'Manager',
             canReceive: role == 'Admin' || role == 'Manager' || role == 'Staff',
           ),
@@ -980,10 +967,10 @@ List<_QuickActionGroup> _quickActionsFor(
     addAction(
         'Inventory',
         _QuickActionCard(
-          label: 'Purchase approvals',
-          icon: Icons.approval_outlined,
+          label: 'Purchase orders',
+          icon: Icons.receipt_long_outlined,
           color: color,
-          imageUrl: _quickActionImages['Purchase approvals'],
+          imageUrl: _quickActionImages['Purchase orders'],
           onTap: () => Navigator.of(context).push(slideFadeRoute(
             PurchaseOrderApprovalScreen(client: client, canApprove: true),
           )),
@@ -1000,19 +987,6 @@ List<_QuickActionGroup> _quickActionsFor(
           slideFadeRoute(EquipmentMaintenanceScreen(client: client)),
         ),
       ));
-  if (role == 'Admin' || role == 'Manager') {
-    addAction(
-        'Insights',
-        _QuickActionCard(
-          label: 'Inventory analytics',
-          icon: Icons.insights_outlined,
-          color: color,
-          imageUrl: _quickActionImages['Inventory analytics'],
-          onTap: () => Navigator.of(context).push(
-            slideFadeRoute(InsightsScreen(client: client)),
-          ),
-        ));
-  }
   return _buildActionGroupSections(
     groupedActions,
     compact: compact,

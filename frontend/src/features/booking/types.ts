@@ -321,6 +321,8 @@ export interface Branch {
   name: string;
   address?: string | null;
   phone?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface Resource {

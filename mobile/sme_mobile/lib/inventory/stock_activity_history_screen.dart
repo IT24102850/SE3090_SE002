@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../widgets/route_transitions.dart';
 import '../widgets/ui/ui.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
+import 'inventory_loading_state.dart';
+import 'stock_operations_screen.dart';
 
 enum _MovementFilter { all, stockIn, stockOut }
 
@@ -209,11 +212,9 @@ class _StockActivityHistoryScreenState
               ),
               const SizedBox(height: 14),
               if (_loading && _movements.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 48),
-                  child: Center(
-                    child: CircularProgressIndicator(color: AppColors.cyan),
-                  ),
+                const InventoryLoadingState(
+                  message: 'Loading stock activity',
+                  detail: 'Gathering the latest stock movements',
                 )
               else if (_loadError != null && _movements.isEmpty)
                 _buildMessage(
@@ -221,8 +222,7 @@ class _StockActivityHistoryScreenState
                   title: 'Activity could not be loaded',
                   message: _loadError!,
                   action: TextButton.icon(
-                    onPressed: () =>
-                        _loadMovements(showRefreshFeedback: true),
+                    onPressed: () => _loadMovements(showRefreshFeedback: true),
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Try again'),
                   ),
@@ -283,38 +283,66 @@ class _StockActivityHistoryScreenState
   }
 
   Widget _buildIntro() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.glassFill,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.history_rounded, color: AppColors.cyan, size: 26),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Stock changes, recorded automatically',
-                    style: AppTextStyles.body.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    )),
-                const SizedBox(height: 4),
-                Text(
-                  'Review activity from PO receiving, sales, issues, and adjustments. This screen does not change stock.',
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.textSecondary),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.glassFill,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.glassBorder),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.history_rounded,
+                  color: AppColors.cyan, size: 26),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Stock changes, recorded automatically',
+                        style: AppTextStyles.body.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        )),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Review activity from receiving, sales, issues, and adjustments.',
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.textSecondary),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          key: const Key('stock-activity-open-stock-operations'),
+          onPressed: () => Navigator.of(context).push<void>(
+            slideFadeRoute(StockOperationsScreen(client: widget.client)),
+          ),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.success,
+            foregroundColor: const Color(0xFF101521),
+            minimumSize: const Size.fromHeight(50),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
           ),
-        ],
-      ),
+          icon: const Icon(Icons.swap_vert_rounded),
+          label: Text(
+            'Record Stock In / Out',
+            style: AppTextStyles.button.copyWith(
+              color: const Color(0xFF101521),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

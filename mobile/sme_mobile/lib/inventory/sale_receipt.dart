@@ -484,8 +484,7 @@ class _SaleReceiptDialogState extends State<SaleReceiptDialog> {
             Text(
               'Official inventory sale record',
               textAlign: TextAlign.center,
-              style:
-                  AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
             ),
             const SizedBox(height: 8),
             Text(
@@ -584,10 +583,26 @@ class _SaleReceiptDialogState extends State<SaleReceiptDialog> {
       fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
     );
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: Text(label, style: style)),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
+        ),
         const SizedBox(width: 12),
-        Text(value, style: style),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
+        ),
       ],
     );
   }

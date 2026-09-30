@@ -668,7 +668,33 @@ public class InventoryControllerTests
             10m,
             DateTimeOffset.UtcNow.AddMinutes(-1),
             "MOBILE-AUDIT-COUNT-2",
-            "CountingError");
+            "CountingError",
+            Latitude: 6.9271m,
+            Longitude: 79.8612m);
+
+        foreach (var invalidLocation in new (decimal? Latitude, decimal? Longitude)[]
+        {
+            (6.9271m, null),
+            (91m, 79.8612m),
+            (6.9271m, 181m),
+        })
+        {
+            var invalidResult = await controller.RecordPhysicalCount(
+                item.Id,
+                request with
+                {
+                    Latitude = invalidLocation.Latitude,
+                    Longitude = invalidLocation.Longitude,
+                },
+                CancellationToken.None);
+
+            var invalidResponse = Assert.IsType<ObjectResult>(invalidResult.Result);
+            Assert.IsType<ValidationProblemDetails>(invalidResponse.Value);
+        }
+
+        Assert.Equal(10m, (await db.InventoryItems.SingleAsync()).Quantity);
+        Assert.Empty(await db.PhysicalStockCounts.ToListAsync());
+        Assert.Empty(await db.StockMovements.ToListAsync());
 
         var firstResult = await controller.RecordPhysicalCount(
             item.Id,
@@ -682,6 +708,8 @@ public class InventoryControllerTests
             CancellationToken.None);
 
         Assert.Equal(9m, firstResponse.CountedQuantity);
+        Assert.Equal(6.9271m, firstResponse.Latitude);
+        Assert.Equal(79.8612m, firstResponse.Longitude);
         Assert.Equal("Applied", firstResponse.Status);
         Assert.IsType<OkObjectResult>(secondResult.Result);
         var movement = Assert.Single(await db.StockMovements.ToListAsync());
@@ -689,6 +717,70 @@ public class InventoryControllerTests
         Assert.Equal("Adjustment", movement.MovementType);
         Assert.Equal("MOBILE-AUDIT-COUNT-2", movement.Reference);
         Assert.Contains("CountingError", movement.Notes);
+    }
+
+    [Fact]
+    public async Task RecordPhysicalCount_RejectsGpsOutsideConfiguredBranchRadius()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var branch = new Branch
+        {
+            TenantId = tenantId,
+            Name = "North branch",
+            Latitude = 6.9271m,
+            Longitude = 79.8612m,
+        };
+        db.Branches.Add(branch);
+        var item = new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = branch.Id,
+            Name = "Coffee Beans",
+            Sku = "SKU-COUNT-GPS",
+            Quantity = 10m,
+            IsActive = true,
+        };
+        db.InventoryItems.Add(item);
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, userId: Guid.NewGuid())
+                }
+            }
+        };
+        var request = new RecordPhysicalCountRequest(
+            10m,
+            10m,
+            DateTimeOffset.UtcNow,
+            "MOBILE-AUDIT-GPS-OUTSIDE",
+            "NoDiscrepancy",
+            Latitude: 6.9300m,
+            Longitude: 79.8612m);
+
+        var result = await controller.RecordPhysicalCount(
+            item.Id,
+            request,
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var message = conflict.Value!.GetType().GetProperty("message")?
+            .GetValue(conflict.Value)?
+            .ToString();
+        Assert.Contains("within 150 m", message);
+        Assert.Empty(await db.PhysicalStockCounts.ToListAsync());
+        Assert.Equal(10m, (await db.InventoryItems.SingleAsync()).Quantity);
     }
 
     [Fact]
@@ -1013,7 +1105,11 @@ public class InventoryControllerTests
             {
                 HttpContext = new DefaultHttpContext
                 {
-                    User = CreateUser(tenantId, UserRole.Manager, counterId)
+                    User = CreateUser(
+                        tenantId,
+                        UserRole.Manager,
+                        counterId,
+                        branchId: item.BranchId)
                 }
             }
         };
@@ -1022,6 +1118,11 @@ public class InventoryControllerTests
             new ReviewPhysicalStockCountRequest("Approve"),
             CancellationToken.None);
         Assert.IsType<ForbidResult>(selfApproval.Result);
+        var selfQueueResult = await sameUserApprover.GetPendingApprovals(
+            CancellationToken.None);
+        var selfQueue = Assert.IsType<PhysicalCountApprovalListResponse>(
+            Assert.IsType<OkObjectResult>(selfQueueResult.Result).Value);
+        Assert.False(Assert.Single(selfQueue.Items).CanReview);
 
         var approver = new PhysicalStockCountsController(
             db,
@@ -1032,10 +1133,20 @@ public class InventoryControllerTests
             {
                 HttpContext = new DefaultHttpContext
                 {
-                    User = CreateUser(tenantId, UserRole.Manager, managerId)
+                    User = CreateUser(
+                        tenantId,
+                        UserRole.Manager,
+                        managerId,
+                        branchId: item.BranchId)
                 }
             }
         };
+        var approverQueueResult = await approver.GetPendingApprovals(
+            CancellationToken.None);
+        var approverQueue = Assert.IsType<PhysicalCountApprovalListResponse>(
+            Assert.IsType<OkObjectResult>(approverQueueResult.Result).Value);
+        Assert.True(Assert.Single(approverQueue.Items).CanReview);
+
         var approved = await approver.ReviewPhysicalCount(
             pending.Id,
             new ReviewPhysicalStockCountRequest("Approve", "Verified recount"),

@@ -27,20 +27,23 @@ class _SalesScreenState extends State<SalesScreen> {
   final _quantityController = TextEditingController(text: '1');
   final _itemSearchController = TextEditingController();
   List<InventoryItem> _items = const [];
-  List<_RevenueDay> _days = const [];
+  List<_SalesBranch> _branches = const [];
   List<_RecentSale> _recentSales = const [];
   InventoryItem? _selectedItem;
+  String _selectedBranchId = '';
   bool _loading = true;
   bool _saving = false;
   bool _inventoryLoaded = false;
   bool _itemPickerExpanded = false;
-  bool _hasLoadedOnce = false;
-  double _totalRevenue = 0;
-  double? _grossProfit;
-  int _periodDays = 7;
+  String? _loadError;
+  int _loadGeneration = 0;
 
   List<InventoryItem> get _availableItems => _items
-      .where((item) => item.quantity > 0 && item.branchId != null)
+      .where((item) =>
+          item.quantity > 0 &&
+          item.branchId != null &&
+          _selectedBranchId.isNotEmpty &&
+          item.branchId == _selectedBranchId)
       .toList();
 
   List<InventoryItem> get _matchingAvailableItems {
@@ -310,20 +313,62 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Future<void> _load({bool showRefreshFeedback = false}) async {
+    final generation = ++_loadGeneration;
     setState(() {
       _loading = true;
       _inventoryLoaded = false;
-      _days = const [];
-      _totalRevenue = 0;
-      _grossProfit = null;
+      _loadError = null;
     });
     try {
+      final branchesResponse =
+          await widget.client.get('/api/inventory/branches');
+      if (branchesResponse.statusCode != 200) {
+        throw _apiError(branchesResponse.body, branchesResponse.statusCode);
+      }
+      final branchData = jsonDecode(branchesResponse.body);
+      if (branchData is! List) {
+        throw const FormatException('Branch response has no branch list.');
+      }
+      final branches = branchData
+          .whereType<Map<String, dynamic>>()
+          .map(_SalesBranch.fromJson)
+          .toList();
+      if (!mounted || generation != _loadGeneration) return;
+      final selectedBranchId = branches.any(
+        (branch) => branch.id == _selectedBranchId,
+      )
+          ? _selectedBranchId
+          : branches.length == 1
+              ? branches.single.id
+              : '';
+      setState(() {
+        _branches = branches;
+        _selectedBranchId = selectedBranchId;
+      });
+
+      if (selectedBranchId.isEmpty) {
+        if (!mounted || generation != _loadGeneration) return;
+        setState(() {
+          _items = const [];
+          _recentSales = const [];
+          _selectedItem = null;
+          _inventoryLoaded = false;
+          _loading = false;
+        });
+        return;
+      }
+
       final items = <InventoryItem>[];
       var page = 1;
       var totalPages = 1;
       while (page <= totalPages) {
-        final response =
-            await widget.client.get('/api/inventory?page=$page&pageSize=100');
+        final inventoryQuery = <String, String>{
+          'page': '$page',
+          'pageSize': '100',
+          'branchId': selectedBranchId,
+        };
+        final response = await widget.client.get(
+            '/api/inventory?${Uri(queryParameters: inventoryQuery).query}');
         if (response.statusCode != 200) {
           throw _apiError(response.body, response.statusCode);
         }
@@ -333,8 +378,9 @@ class _SalesScreenState extends State<SalesScreen> {
             .whereType<Map<String, dynamic>>()
             .map(InventoryItem.fromJson));
         page++;
+        if (generation != _loadGeneration) return;
       }
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _items = items;
         _inventoryLoaded = true;
@@ -354,27 +400,17 @@ class _SalesScreenState extends State<SalesScreen> {
 
       final now = DateTime.now().toUtc();
       final to = DateTime.utc(now.year, now.month, now.day);
-      final from = to.subtract(Duration(days: _periodDays - 1));
-      final query = '?from=${Uri.encodeQueryComponent(from.toIso8601String())}'
-          '&to=${Uri.encodeQueryComponent(to.toIso8601String())}';
-      final report = await widget.client.get('/api/reports/revenue$query');
-      if (report.statusCode != 200) {
-        throw _apiError(report.body, report.statusCode);
-      }
-      final data = jsonDecode(report.body) as Map<String, dynamic>;
-      final rawBuckets = data['buckets'];
-      if (rawBuckets is! List) {
-        throw const FormatException('Sales report has no daily totals.');
-      }
-      final days = rawBuckets.whereType<Map<String, dynamic>>().map((bucket) {
-        final rawDate = bucket['date'] as String? ?? '';
-        return _RevenueDay(
-          rawDate.length >= 10 ? rawDate.substring(5) : '',
-          (bucket['revenue'] as num?)?.toDouble() ?? 0,
-        );
-      }).toList();
+      final from = to.subtract(const Duration(days: 29));
+      final activityQuery = <String, String>{
+        'branchId': selectedBranchId,
+        'from': from.toIso8601String(),
+        'to': to.toIso8601String(),
+        'page': '1',
+        'pageSize': '10',
+      };
+      final query = Uri(queryParameters: activityQuery).query;
       final activity =
-          await widget.client.get('/api/reports/sales-activity$query');
+          await widget.client.get('/api/reports/sales-activity?$query');
       if (activity.statusCode != 200) {
         throw _apiError(activity.body, activity.statusCode);
       }
@@ -383,32 +419,49 @@ class _SalesScreenState extends State<SalesScreen> {
           .whereType<Map<String, dynamic>>()
           .map(_RecentSale.fromJson)
           .toList();
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _days = days;
         _recentSales = recentSales;
-        _totalRevenue = (data['totalRevenue'] as num?)?.toDouble() ??
-            days.fold<double>(0, (sum, day) => sum + day.amount);
-        _grossProfit = (activityData['grossProfit'] as num?)?.toDouble();
         _loading = false;
-        _hasLoadedOnce = true;
       });
       if (showRefreshFeedback) {
         _showFeedback('Sales and inventory refreshed successfully.',
             _SalesFeedbackTone.success);
       }
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       final message = _messageFromError(error);
-      setState(() => _loading = false);
-      _showFeedback(
-        showRefreshFeedback
-            ? 'Refresh failed: $message'
-            : 'Could not load sales: $message',
-        _SalesFeedbackTone.error,
-      );
+      setState(() {
+        _loading = false;
+        _loadError = message;
+      });
+      if (showRefreshFeedback) {
+        _showFeedback(
+          'Refresh failed: $message',
+          _SalesFeedbackTone.error,
+        );
+      }
     }
   }
+
+  void _changeBranch(String? branchId) {
+    if (branchId == null || branchId == _selectedBranchId) return;
+    setState(() {
+      _selectedBranchId = branchId;
+      _selectedItem = null;
+      _itemSearchController.clear();
+      _quantityController.text = '1';
+      _itemPickerExpanded = false;
+    });
+    _load();
+  }
+
+  String get _selectedBranchName =>
+      _branches
+          .where((branch) => branch.id == _selectedBranchId)
+          .map((branch) => branch.name)
+          .firstOrNull ??
+      'selected branch';
 
   String _apiError(String body, int status) {
     final data = _tryDecodeJson(body);
@@ -808,10 +861,6 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final maxRevenue = _days.fold<double>(
-      0,
-      (max, day) => max > day.amount ? max : day.amount,
-    );
     return AppBackgroundScaffold(
       showParticles: false,
       appBar: GlassAppBar(
@@ -835,6 +884,16 @@ class _SalesScreenState extends State<SalesScreen> {
             32,
           ),
           children: [
+            _sectionHeading(
+              Icons.point_of_sale_rounded,
+              'Branch sales',
+              'Record a sale and review recent receipts for the selected branch.',
+            ),
+            const SizedBox(height: 14),
+            if (_loadError != null) ...[
+              const SizedBox(height: 2),
+              _buildBranchErrorPanel(),
+            ],
             _buildSaleForm(),
             const SizedBox(height: 24),
             _sectionHeading(
@@ -844,19 +903,6 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const SizedBox(height: 10),
             _buildRecentSales(),
-            const SizedBox(height: 24),
-            _sectionHeading(Icons.show_chart_rounded, 'Sales performance',
-                'Sales revenue and gross profit from the last $_periodDays days.'),
-            const SizedBox(height: 10),
-            _buildRevenueChart(maxRevenue),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                _periodButton(7),
-                const SizedBox(width: 8),
-                _periodButton(30),
-              ],
-            ),
           ],
         ),
       ),
@@ -890,12 +936,183 @@ class _SalesScreenState extends State<SalesScreen> {
         ],
       );
 
+  Widget _buildBranchErrorPanel() => InventoryPanel(
+        key: const Key('sales-load-error'),
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.cloud_off_rounded,
+              color: AppColors.danger,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Could not load branch sales data',
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _loadError ?? 'Please try again.',
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textMuted,
+                      fontSize: 10,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    key: const Key('sales-retry-load'),
+                    onPressed: _loading
+                        ? null
+                        : () => _load(showRefreshFeedback: true),
+                    icon: const Icon(Icons.refresh_rounded, size: 15),
+                    label: const Text('Retry'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.cyan,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 30),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildBranchPicker() => DropdownButtonFormField<String>(
+        key: const Key('sales-branch-dropdown'),
+        initialValue: _selectedBranchId,
+        isExpanded: true,
+        decoration: _inputDecoration('Sale branch', Icons.storefront_outlined),
+        dropdownColor: AppColors.bgMid,
+        style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+        items: [
+          if (_branches.length != 1)
+            const DropdownMenuItem(
+              value: '',
+              child: Text('Select a branch'),
+            ),
+          ..._branches.map(
+            (branch) => DropdownMenuItem(
+              value: branch.id,
+              child: Text(branch.name, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+        ],
+        onChanged:
+            _loading || _saving || _branches.length <= 1 ? null : _changeBranch,
+      );
+
+  Widget _buildBranchLoadingPanel({Key? key}) => InventoryPanel(
+        key: key,
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const _BranchFetchAnimation(size: 42),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _branches.isEmpty && _selectedBranchId.isEmpty
+                            ? 'Loading available branches…'
+                            : 'Fetching $_selectedBranchName data…',
+                        key: const Key('branch-fetch-loading-title'),
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Please wait while branch stock and sales are refreshed.',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textMuted,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: const LinearProgressIndicator(
+                minHeight: 4,
+                backgroundColor: AppColors.glassBorder,
+                color: AppColors.cyan,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildSelectBranchPrompt({Key? key}) => InventoryPanel(
+        key: key,
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppColors.cyan.withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.storefront_outlined,
+                color: AppColors.cyan,
+                size: 19,
+              ),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Text(
+                _branches.isEmpty
+                    ? 'No branches are available for sales.'
+                    : 'Select a branch to fetch its stock and sales data.',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
   Widget _buildSaleForm() => InventoryPanel(
         padding: const EdgeInsets.all(15),
         borderColor: AppColors.violet.withValues(alpha: .28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_selectedBranchId.isEmpty && !_loading) ...[
+              _buildSelectBranchPrompt(
+                key: const Key('sales-select-branch-prompt'),
+              ),
+              const SizedBox(height: 12),
+            ],
             KeyedSubtree(
               key: const Key('sales-form-header'),
               child: _sectionHeading(
@@ -946,87 +1163,101 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ],
             const SizedBox(height: 14),
-            _buildItemPicker(),
-            if (_inventoryLoaded && _availableItems.isEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                _items.any((item) => item.quantity > 0)
-                    ? 'Stock exists, but each item must be assigned to a branch before it can be sold.'
-                    : 'No stock is currently available to sell. Receive or adjust inventory, then refresh.',
-                style: AppTextStyles.caption
-                    .copyWith(color: AppColors.warning, fontSize: 10),
-              ),
-            ],
-            if (_selectedItem != null) ...[
-              const SizedBox(height: 7),
-              Text(
-                'Available: ${_quantity(_selectedItem!.quantity)} ${_selectedItem!.unit} · ${_selectedItem!.branch}',
-                style: AppTextStyles.caption
-                    .copyWith(color: AppColors.textSecondary, fontSize: 10),
-              ),
-            ],
+            _buildBranchPicker(),
             const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: TextField(
-                    key: const Key('sale-quantity-field'),
-                    controller: _quantityController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [
-                      TextInputFormatter.withFunction((oldValue, newValue) {
-                        return RegExp(r'^\d*\.?\d{0,3}$')
-                                .hasMatch(newValue.text)
-                            ? newValue
-                            : oldValue;
-                      }),
-                    ],
-                    style: AppTextStyles.body
-                        .copyWith(color: AppColors.textPrimary),
-                    decoration:
-                        _inputDecoration('Quantity', Icons.numbers_rounded),
-                    enabled: !_saving,
-                    onChanged: (_) => setState(() {}),
+            if (_loading)
+              _buildBranchLoadingPanel(
+                key: const Key('branch-fetch-loading-panel'),
+              )
+            else if (_loadError != null && !_inventoryLoaded)
+              const SizedBox.shrink()
+            else if (_selectedBranchId.isEmpty)
+              const SizedBox.shrink()
+            else ...[
+              _buildItemPicker(),
+              if (_inventoryLoaded && _availableItems.isEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _items.any((item) => item.quantity > 0)
+                      ? 'No sellable stock is assigned to this branch.'
+                      : 'No stock is currently available at this branch. Receive or adjust inventory, then refresh.',
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.warning, fontSize: 10),
+                ),
+              ],
+              if (_selectedItem != null) ...[
+                const SizedBox(height: 7),
+                Text(
+                  'Available: ${_quantity(_selectedItem!.quantity)} ${_selectedItem!.unit} · ${_selectedItem!.branch}',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                    fontSize: 10,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(child: _buildUnitPriceDisplay()),
               ],
-            ),
-            if (_selectedItem != null) ...[
-              const SizedBox(height: 10),
-              _buildSalePreview(),
-            ],
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _saving ||
-                        _loading ||
-                        !_inventoryLoaded ||
-                        _availableItems.isEmpty
-                    ? null
-                    : _recordSale,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.violet,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.point_of_sale_rounded, size: 18),
-                label: Text(_saving ? 'Saving sale…' : 'Record sale'),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const Key('sale-quantity-field'),
+                      controller: _quantityController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        TextInputFormatter.withFunction((oldValue, newValue) {
+                          return RegExp(r'^\d*\.?\d{0,3}$')
+                                  .hasMatch(newValue.text)
+                              ? newValue
+                              : oldValue;
+                        }),
+                      ],
+                      style: AppTextStyles.body
+                          .copyWith(color: AppColors.textPrimary),
+                      decoration:
+                          _inputDecoration('Quantity', Icons.numbers_rounded),
+                      enabled: !_saving,
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: _buildUnitPriceDisplay()),
+                ],
               ),
-            ),
+              if (_selectedItem != null) ...[
+                const SizedBox(height: 10),
+                _buildSalePreview(),
+              ],
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _saving ||
+                          _loading ||
+                          !_inventoryLoaded ||
+                          _availableItems.isEmpty
+                      ? null
+                      : _recordSale,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.violet,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.point_of_sale_rounded, size: 18),
+                  label: Text(_saving ? 'Saving sale…' : 'Record sale'),
+                ),
+              ),
+            ],
           ],
         ),
       );
@@ -1191,227 +1422,18 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Widget _buildRevenueChart(double maxRevenue) {
-    if (_loading) {
-      return _buildSalesLoadingPanel();
-    }
-    final chartDays = _days;
-    final labelIndices = _periodDays <= 7
-        ? List<int>.generate(chartDays.length, (index) => index)
-        : <int>[
-            for (var index = 0; index < chartDays.length; index += 5) index,
-            if (chartDays.isNotEmpty && (chartDays.length - 1) % 5 != 0)
-              chartDays.length - 1,
-          ];
-    return InventoryPanel(
-      padding: const EdgeInsets.all(15),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('LKR ${_money(_totalRevenue)}',
-              style: AppTextStyles.headlineSmall.copyWith(
-                fontSize: 25,
-                fontWeight: FontWeight.w800,
-              )),
-          Text('Total revenue · $_periodDays days',
-              style: AppTextStyles.caption.copyWith(
-                color: AppColors.textMuted,
-                fontSize: 10,
-              )),
-          Text(
-            _grossProfit == null
-                ? 'Gross profit unavailable until all sold items have unit costs.'
-                : 'Gross profit · LKR ${_money(_grossProfit!)}',
-            style: AppTextStyles.caption.copyWith(
-              color:
-                  _grossProfit == null ? AppColors.warning : AppColors.success,
-              fontSize: 10,
-            ),
-          ),
-          const SizedBox(height: 11),
-          Row(
-            children: [
-              Expanded(
-                child: _chartStat(
-                  'ACTIVE DAYS',
-                  '${_days.where((day) => day.amount > 0).length}',
-                  Icons.event_available_outlined,
-                ),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: _chartStat(
-                  'BEST DAY',
-                  _days.isEmpty
-                      ? '—'
-                      : 'LKR ${_money(_days.fold<double>(0, (best, day) => best > day.amount ? best : day.amount))}',
-                  Icons.trending_up_rounded,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 15),
-          if (_days.isEmpty || maxRevenue <= 0)
-            SizedBox(
-              height: 95,
-              child: Center(
-                child: Text('No sales recorded in this period yet.',
-                    style: AppTextStyles.caption
-                        .copyWith(color: AppColors.textMuted)),
-              ),
-            )
-          else
-            SizedBox(
-              height: 130,
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Row(
-                      key: const Key('sales-chart-bars'),
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: chartDays.map((day) {
-                        final factor =
-                            (day.amount / maxRevenue).clamp(.04, 1.0);
-                        return Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: _periodDays > 7 ? .75 : 2,
-                            ),
-                            child: Align(
-                              alignment: Alignment.bottomCenter,
-                              child: FractionallySizedBox(
-                                heightFactor: day.amount <= 0 ? .025 : factor,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: AppColors.violet.withValues(
-                                      alpha: day.amount > 0 ? .9 : .14,
-                                    ),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  SizedBox(
-                    key: const Key('sales-chart-date-labels'),
-                    height: 14,
-                    child: Row(
-                      children: labelIndices.map((index) {
-                        return Expanded(
-                          child: Align(
-                            alignment: index == 0
-                                ? Alignment.centerLeft
-                                : index == labelIndices.last
-                                    ? Alignment.centerRight
-                                    : Alignment.center,
-                            child: Text(
-                              chartDays[index].label,
-                              key: Key('sales-chart-date-$index'),
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.caption.copyWith(
-                                color: AppColors.textMuted,
-                                fontSize: 8,
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSalesLoadingPanel() => InventoryPanel(
-        key: const Key('sales-loading-panel'),
-        padding: const EdgeInsets.all(22),
-        child: SizedBox(
-          height: 236,
-          child: Center(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 320),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: ScaleTransition(scale: animation, child: child),
-              ),
-              child: Column(
-                key: ValueKey(
-                    _hasLoadedOnce ? 'updating-sales' : 'loading-sales'),
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 54,
-                    height: 54,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      backgroundColor: AppColors.violet.withValues(alpha: .16),
-                      valueColor:
-                          const AlwaysStoppedAnimation<Color>(AppColors.cyan),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    _hasLoadedOnce ? 'Updating sales…' : 'Loading sales…',
-                    key: const Key('sales-loading-message'),
-                    style: AppTextStyles.subtitle.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Please wait while we refresh your inventory and sales data.',
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textMuted,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-
   Widget _buildRecentSales() {
     if (_loading) {
-      return InventoryPanel(
+      return _buildBranchLoadingPanel(
         key: const Key('recent-sales-loading'),
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.cyan,
-              ),
-            ),
-            const SizedBox(width: 11),
-            Text(
-              'Loading recent sales…',
-              style: AppTextStyles.caption.copyWith(
-                color: AppColors.textSecondary,
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ),
+      );
+    }
+    if (_loadError != null) {
+      return const SizedBox.shrink();
+    }
+    if (_selectedBranchId.isEmpty) {
+      return _buildSelectBranchPrompt(
+        key: const Key('recent-sales-select-branch-prompt'),
       );
     }
     if (_recentSales.isEmpty) {
@@ -1428,7 +1450,7 @@ class _SalesScreenState extends State<SalesScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'No sales recorded in the last $_periodDays days.',
+                'No recent sales were found for this branch.',
                 style: AppTextStyles.caption.copyWith(
                   color: AppColors.textMuted,
                   fontSize: 11,
@@ -1504,16 +1526,6 @@ class _SalesScreenState extends State<SalesScreen> {
                         fontSize: 9,
                       ),
                     ),
-                    if (sale.grossProfit != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        'Gross profit · LKR ${_money(sale.grossProfit!)}',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.success,
-                          fontSize: 9,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -1547,7 +1559,7 @@ class _SalesScreenState extends State<SalesScreen> {
     final receipt = SaleReceipt(
       reference: sale.reference,
       itemName: sale.items.isEmpty ? 'Inventory sale' : sale.items.join(', '),
-      branch: 'Not included in the sales report',
+      branch: 'Branch details unavailable',
       quantity: sale.quantity,
       unit: '',
       total: sale.amount,
@@ -1568,61 +1580,117 @@ class _SalesScreenState extends State<SalesScreen> {
     return '$day/$month/${local.year} $hour:$minute';
   }
 
-  Widget _periodButton(int days) {
-    final selected = _periodDays == days;
-    return OutlinedButton(
-      onPressed: _loading || selected
-          ? null
-          : () {
-              setState(() => _periodDays = days);
-              _load();
-            },
-      style: OutlinedButton.styleFrom(
-        foregroundColor: selected ? AppColors.cyan : AppColors.textSecondary,
-        side: BorderSide(
-            color: selected ? AppColors.cyan : AppColors.glassBorder),
-      ),
-      child: Text('$days days'),
-    );
-  }
+}
 
-  Widget _chartStat(String label, String value, IconData icon) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.violet.withValues(alpha: .07),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.violet.withValues(alpha: .16)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 14, color: AppColors.violet),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label,
-                      style: AppTextStyles.label
-                          .copyWith(color: AppColors.textMuted, fontSize: 7)),
-                  const SizedBox(height: 2),
-                  Text(value,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 9)),
-                ],
-              ),
-            ),
-          ],
-        ),
+class _SalesBranch {
+  const _SalesBranch({required this.id, required this.name});
+
+  final String id;
+  final String name;
+
+  factory _SalesBranch.fromJson(Map<String, dynamic> json) => _SalesBranch(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
       );
 }
 
-class _RevenueDay {
-  const _RevenueDay(this.label, this.amount);
-  final String label;
-  final double amount;
+class _BranchFetchAnimation extends StatefulWidget {
+  const _BranchFetchAnimation({required this.size});
+
+  final double size;
+
+  @override
+  State<_BranchFetchAnimation> createState() => _BranchFetchAnimationState();
+}
+
+class _BranchFetchAnimationState extends State<_BranchFetchAnimation>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final pulse = .88 + (_controller.value * .12);
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                Transform.scale(
+                  scale: pulse,
+                  child: Container(
+                    width: widget.size * .78,
+                    height: widget.size * .78,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.cyan.withValues(
+                        alpha: .08 + (_controller.value * .06),
+                      ),
+                      border: Border.all(
+                        color: AppColors.cyan.withValues(alpha: .24),
+                      ),
+                    ),
+                  ),
+                ),
+                RotationTransition(
+                  turns: Tween<double>(begin: -.012, end: .012).animate(
+                    CurvedAnimation(
+                      parent: _controller,
+                      curve: Curves.easeInOut,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.storefront_rounded,
+                    size: widget.size * .42,
+                    color: AppColors.cyan,
+                  ),
+                ),
+                Positioned(
+                  right: widget.size * .08,
+                  bottom: widget.size * .13,
+                  child: _fetchDot(.0, .55),
+                ),
+                Positioned(
+                  right: widget.size * .22,
+                  bottom: widget.size * .035,
+                  child: _fetchDot(.22, .77),
+                ),
+                Positioned(
+                  right: widget.size * .4,
+                  bottom: widget.size * .025,
+                  child: _fetchDot(.44, .99),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+  Widget _fetchDot(double begin, double end) => Opacity(
+        opacity: CurvedAnimation(
+          parent: _controller,
+          curve: Interval(begin, end, curve: Curves.easeInOut),
+        ).value,
+        child: Container(
+          width: widget.size * .09,
+          height: widget.size * .09,
+          decoration: const BoxDecoration(
+            color: AppColors.violet,
+            shape: BoxShape.circle,
+          ),
+        ),
+      );
 }
 
 class _RecentSale {
@@ -1632,7 +1700,6 @@ class _RecentSale {
     required this.amount,
     required this.quantity,
     required this.items,
-    required this.grossProfit,
   });
 
   final String reference;
@@ -1640,7 +1707,6 @@ class _RecentSale {
   final double amount;
   final double quantity;
   final List<String> items;
-  final double? grossProfit;
 
   factory _RecentSale.fromJson(Map<String, dynamic> json) => _RecentSale(
         reference: json['reference'] as String? ?? 'SALE',
@@ -1652,6 +1718,5 @@ class _RecentSale {
                 ?.whereType<String>()
                 .toList(growable: false) ??
             const [],
-        grossProfit: (json['grossProfit'] as num?)?.toDouble(),
       );
 }

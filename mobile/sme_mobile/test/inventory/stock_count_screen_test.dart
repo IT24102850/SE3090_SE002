@@ -20,7 +20,24 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final adapter = _StockCountApiAdapter();
+    final adapter = _StockCountApiAdapter(
+      canApprove: true,
+      approvalItems: [
+        {
+          'id': 'pending-count-by-current-manager',
+          'itemName': 'Large discrepancy',
+          'sku': 'AUDIT-01',
+          'systemQuantityAtCount': 88,
+          'countedQuantity': 50,
+          'variance': -38,
+          'reason': 'LostOrMissing',
+          'countedBy': 'Current manager',
+          'countedAt': '2026-09-30T05:25:22Z',
+          'status': 'PendingApproval',
+          'canReview': false,
+        },
+      ],
+    );
     final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
       ..httpClientAdapter = adapter;
 
@@ -43,6 +60,23 @@ void main() {
     await tester.enterText(skuField, 'DUP-01');
     await tester.pump();
     expect(adapter.requestedPaths, contains('/inventory'));
+    expect(find.text('Large discrepancy (AUDIT-01)'), findsOneWidget);
+    expect(
+      find.textContaining('must be reviewed by a different Admin or Manager'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key(
+        'stock-count-approval-approve-pending-count-by-current-manager',
+      )),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key(
+        'stock-count-approval-reject-pending-count-by-current-manager',
+      )),
+      findsNothing,
+    );
     expect(
         find.byKey(const Key('stock-count-branch-selector')), findsOneWidget);
     expect(find.byKey(const Key('count-preview-empty')), findsOneWidget);
@@ -53,12 +87,33 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('count-preview-DUP-01')), findsOneWidget);
     expect(find.text('North item'), findsOneWidget);
+    expect(find.byKey(const Key('stock-count-qr-check-in')), findsNothing);
+    expect(find.byKey(const Key('stock-count-qr-check-out')), findsNothing);
+    expect(
+      find.byKey(const Key('stock-count-capture-location')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Add GPS location to this count (optional)'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('stock-count-location-explanation')),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Branch GPS is not configured'),
+      findsOneWidget,
+    );
 
     await tester.enterText(
       find.byKey(const Key('stock-count-quantity-field')),
       '7',
     );
+    tester.binding.focusManager.primaryFocus?.unfocus();
+    await tester.pump();
     await tester.ensureVisible(find.text('Record Physical Count'));
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.tap(find.text('Record Physical Count'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -84,9 +139,16 @@ void main() {
 }
 
 class _StockCountApiAdapter implements HttpClientAdapter {
+  _StockCountApiAdapter({
+    this.canApprove = false,
+    this.approvalItems = const [],
+  });
+
   static const northItemId = 'f62d0c79-62b9-43e1-8bf3-f00c73b23901';
   static const southItemId = 'ca6e6eab-9a1a-4abe-b59e-514dad539a02';
 
+  final bool canApprove;
+  final List<Map<String, dynamic>> approvalItems;
   final requestedPaths = <String>[];
 
   @override
@@ -122,7 +184,10 @@ class _StockCountApiAdapter implements HttpClientAdapter {
       });
     }
     if (options.uri.path == '/inventory/physical-count-approvals') {
-      return _jsonResponse({'items': [], 'canApprove': false});
+      return _jsonResponse({
+        'items': approvalItems,
+        'canApprove': canApprove,
+      });
     }
     if (options.uri.path.endsWith('/physical-count')) {
       return _jsonResponse({'id': 'audit-1', 'status': 'Matched'});

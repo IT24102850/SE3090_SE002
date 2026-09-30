@@ -105,11 +105,11 @@ export const bookingApi = createApi({
       query: (params) => ({ url: '/branches', params }),
       providesTags: [{ type: 'Branch', id: 'LIST' }],
     }),
-    createBranch: builder.mutation<Branch, { tenantId: string; name: string; address?: string; phone?: string }>({
+    createBranch: builder.mutation<Branch, { tenantId: string; name: string; address?: string; phone?: string; latitude?: number | null; longitude?: number | null }>({
       query: (body) => ({ url: '/branches', method: 'POST', body }),
       invalidatesTags: [{ type: 'Branch', id: 'LIST' }],
     }),
-    updateBranch: builder.mutation<Branch, { id: string; body: Partial<Branch> & { isActive?: boolean } }>({
+    updateBranch: builder.mutation<Branch, { id: string; body: Partial<Branch> & { isActive?: boolean; clearCoordinates?: boolean } }>({
       query: ({ id, body }) => ({ url: `/branches/${id}`, method: 'PUT', body }),
       invalidatesTags: [{ type: 'Branch', id: 'LIST' }],
     }),
