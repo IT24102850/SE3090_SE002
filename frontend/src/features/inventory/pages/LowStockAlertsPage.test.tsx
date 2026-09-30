@@ -5,8 +5,17 @@ import { ToastProvider as AppToastProvider } from '../../../shared/components/To
 import { ToastProvider } from '../ui/ToastContext';
 import { LowStockAlertsPage } from './LowStockAlertsPage';
 
+const scrollIntoView = vi.fn();
+const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+
 describe('LowStockAlertsPage inventory scope', () => {
   beforeEach(() => {
+    scrollIntoView.mockClear();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
     localStorage.setItem('token', 'test-token');
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       items: [{
@@ -26,6 +35,14 @@ describe('LowStockAlertsPage inventory scope', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    if (originalScrollIntoView) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
     localStorage.clear();
   });
 
@@ -112,5 +129,9 @@ describe('LowStockAlertsPage inventory scope', () => {
       'href',
       '/purchase-orders?reorderItemId=item-1&branchId=branch-1&quantity=10',
     );
+    expect(scrollIntoView.mock.contexts.map((element) => (element as HTMLElement).id)).toEqual([
+      'stocksense-analysis-progress',
+      'stocksense-analysis-report',
+    ]);
   });
 });

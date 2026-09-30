@@ -791,6 +791,9 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .stocksense-scope-panel .panel-head h2 { margin: .2rem 0; font-size: 1.1rem; }
 .inventory-scope .stocksense-scope-panel .toolbar { align-items: center; padding: .85rem 1.2rem 1rem; }
 .inventory-scope .stocksense-scope-label { color: var(--color-text-muted); font-size: .8rem; font-weight: 700; }
+.inventory-scope .stocksense-progress-panel,
+.inventory-scope .stocksense-ai-panel,
+.inventory-scope #stocksense-analysis-error { scroll-margin-top: 1.25rem; }
 .inventory-scope .stocksense-ai-panel { border-radius: 1.25rem; box-shadow: var(--shadow-md); }
 .inventory-scope .stocksense-ai-panel { margin-top: .2rem; border-color: color-mix(in srgb, var(--color-primary) 24%, var(--color-border)); background: linear-gradient(145deg, var(--color-surface), color-mix(in srgb, var(--color-primary-soft) 38%, var(--color-surface))); }
 .inventory-scope .stocksense-ai-head { align-items: center; padding: 1.25rem 1.4rem; background: linear-gradient(105deg, var(--color-primary-soft), var(--color-accent-soft) 70%, transparent); }

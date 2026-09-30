@@ -4,6 +4,7 @@ import { Badge } from '../ui/Badge';
 import { Icon } from '../ui/Icon';
 import { useToast } from '../ui/ToastContext';
 import { getStoredToken } from '../authToken';
+import { scrollToId } from '../../marketing/scroll/useSmoothScroll';
 
 type InventoryBranch = {
   branch: string;
@@ -146,6 +147,18 @@ export function LowStockAlertsPage() {
     return () => window.clearInterval(timer);
   }, [planning]);
 
+  useEffect(() => {
+    if (planning) scrollToId('stocksense-analysis-progress');
+  }, [planning]);
+
+  useEffect(() => {
+    if (plan) {
+      scrollToId('stocksense-analysis-report');
+    } else if (planError) {
+      scrollToId('stocksense-analysis-error');
+    }
+  }, [plan, planError]);
+
   const branchOptions = ['All branches', ...Array.from(new Set(inventory.map((item) => item.branch)))];
 
   return (
@@ -240,7 +253,7 @@ export function LowStockAlertsPage() {
         </div>
       </section>
 
-      {planning && <section className="stocksense-progress-panel" role="status" aria-live="polite">
+      {planning && <section id="stocksense-analysis-progress" className="stocksense-progress-panel" role="status" aria-live="polite">
         <div className="stocksense-progress-orbit"><div className="stocksense-progress-ring" /><Icon name="stocksense" size={50} /><span className="stocksense-orbit-dot" /></div>
         <div className="stocksense-progress-copy">
           <div className="stocksense-progress-heading"><p className="eyebrow">LIVE INVENTORY ANALYSIS</p><span>STEP {analysisStep + 1} / {analysisStages.length}</span></div>
@@ -252,7 +265,7 @@ export function LowStockAlertsPage() {
         <div className="stocksense-progress-meter" aria-label="Analysis in progress"><span /></div>
       </section>}
 
-      {plan && <section className="panel stocksense-ai-panel">
+      {plan && <section id="stocksense-analysis-report" className="panel stocksense-ai-panel">
         <div className="panel-head stocksense-ai-head">
           <div className="stocksense-ai-title"><div className="stocksense-ai-orb"><span>✦</span></div><div><p className="eyebrow">STOCKSENSE AI REPORT</p><h2>Inventory health analysis</h2><p className="hint">{plan.planner_summary}</p></div></div>
           <Badge tone={plan.status === 'NeedsReview' ? 'amber' : 'blue'}>{plan.status === 'NeedsReview' ? 'Review recommendations' : plan.insights?.length ? 'Review insights' : 'No action found'}</Badge>
@@ -336,7 +349,7 @@ export function LowStockAlertsPage() {
           </>}
         </div>
       </section>}
-      {planError && <p className="page-notice" role="alert" style={{ marginTop: 12 }}>{planError}</p>}
+      {planError && <p id="stocksense-analysis-error" className="page-notice" role="alert" style={{ marginTop: 12 }}>{planError}</p>}
 
 
       <p className="ai-disclaimer">Coverage and movement insights use the returned inventory snapshot and recent movement sample. Recommendations use explicit outflow history when available; where history is missing, reorder quantities fall back to reorder levels. Review supplier, lead time and budget before ordering.</p>
