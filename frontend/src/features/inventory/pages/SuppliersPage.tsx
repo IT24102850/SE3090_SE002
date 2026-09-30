@@ -48,10 +48,18 @@ const supplierCurrency = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 2,
 });
 
+function formatSupplierCurrency(value: unknown): string {
+  const amount = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : 0;
+  return supplierCurrency.format(Number.isFinite(amount) ? amount : 0);
+}
+
 function supplierOrderValue(orders: SupplierOrder[]): number {
   return orders
     .filter((order) => order.status.toLowerCase() !== 'cancelled')
-    .reduce((total, order) => total + order.totalAmount, 0);
+    .reduce((total, order) => {
+      const amount = Number(order.totalAmount);
+      return total + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
 }
 
 export function SuppliersPage() {
@@ -296,7 +304,10 @@ export function SuppliersPage() {
 
   const contactCount = suppliers.filter((supplier) => supplier.contactPerson || supplier.email || supplier.phone).length;
   const missingContactCount = suppliers.length - contactCount;
+  const contactCoveragePercent = suppliers.length === 0 ? 0 : Math.round((contactCount / suppliers.length) * 100);
   const missingLeadTimeCount = suppliers.filter((supplier) => !supplier.leadTimeDays).length;
+  const leadTimeCount = suppliers.length - missingLeadTimeCount;
+  const leadTimeCoveragePercent = suppliers.length === 0 ? 0 : Math.round((leadTimeCount / suppliers.length) * 100);
   const selectedSupplier = suppliers.find((supplier) => supplier.id === expandedSupplierId);
   const supplierPendingDeletion = suppliers.find((supplier) => supplier.id === confirmDeleteSupplierId);
   const selectedHistory = selectedSupplier ? supplierOrderHistories[selectedSupplier.id] : undefined;
@@ -335,16 +346,59 @@ export function SuppliersPage() {
 
       <section className="suppliers-summary" aria-label="Supplier summary">
         <article className="suppliers-summary-card suppliers-summary-directory">
-          <div className="suppliers-summary-main"><span className="suppliers-summary-icon suppliers-icon-teal" aria-hidden="true">♧</span><div className="suppliers-summary-copy"><span className="suppliers-summary-kicker">PARTNER DIRECTORY</span><strong>{suppliers.length}</strong><span className="suppliers-summary-label">Suppliers registered</span></div><span className="suppliers-summary-index" aria-hidden="true">01</span></div>
-          <div className="suppliers-summary-detail">{contactCount} {contactCount === 1 ? 'supplier has' : 'suppliers have'} contact information</div>
+          <div className="suppliers-summary-main">
+            <span className="suppliers-summary-icon suppliers-icon-teal" aria-hidden="true">♧</span>
+            <div className="suppliers-summary-copy">
+              <span className="suppliers-summary-kicker">PARTNER DIRECTORY</span>
+              <strong>{suppliers.length}</strong>
+              <span className="suppliers-summary-label">Suppliers registered</span>
+            </div>
+            <span className="suppliers-summary-index" aria-hidden="true">01</span>
+          </div>
+          <div className="suppliers-summary-detail">
+            <span className="suppliers-summary-detail-mark" aria-hidden="true">✓</span>
+            {contactCount} of {suppliers.length} {suppliers.length === 1 ? 'supplier has' : 'suppliers have'} contact details
+          </div>
         </article>
         <article className="suppliers-summary-card suppliers-summary-contacts">
-          <div className="suppliers-summary-main"><span className="suppliers-summary-icon suppliers-icon-blue" aria-hidden="true">✉</span><div className="suppliers-summary-copy"><span className="suppliers-summary-kicker">CONTACT COVERAGE</span><strong>{contactCount}</strong><span className="suppliers-summary-label">With contact details</span></div><span className="suppliers-summary-index" aria-hidden="true">02</span></div>
-          <div className="suppliers-summary-detail">{suppliers.length - contactCount} {suppliers.length - contactCount === 1 ? 'supplier is' : 'suppliers are'} missing contact information</div>
+          <div className="suppliers-summary-main">
+            <span className="suppliers-summary-icon suppliers-icon-blue" aria-hidden="true">✉</span>
+            <div className="suppliers-summary-copy">
+              <span className="suppliers-summary-kicker">CONTACT COVERAGE</span>
+              <strong>{contactCount}</strong>
+              <span className="suppliers-summary-label">Suppliers with contact details</span>
+            </div>
+            <span className="suppliers-summary-percent">{contactCoveragePercent}%</span>
+          </div>
+          <div className="suppliers-coverage-track" role="progressbar" aria-label="Supplier contact coverage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={contactCoveragePercent}>
+            <span style={{ width: `${contactCoveragePercent}%` }} />
+          </div>
+          <div className="suppliers-summary-detail">
+            <span>{missingContactCount === 0 ? 'All suppliers have contact details' : `${missingContactCount} ${missingContactCount === 1 ? 'supplier is' : 'suppliers are'} missing details`}</span>
+            <span className={`suppliers-coverage-status${missingContactCount === 0 && suppliers.length > 0 ? ' is-complete' : ''}`}>
+              {suppliers.length === 0 ? 'No data yet' : missingContactCount === 0 ? 'Complete' : 'Needs attention'}
+            </span>
+          </div>
         </article>
-        <article className="suppliers-summary-card suppliers-summary-link">
-          <div className="suppliers-summary-main"><span className="suppliers-summary-icon suppliers-icon-violet" aria-hidden="true">▤</span><div className="suppliers-summary-copy"><span className="suppliers-summary-kicker">PURCHASING TOOLS</span><strong>Purchase orders</strong><span className="suppliers-summary-label">Supplier-linked ordering</span></div><span className="suppliers-summary-index" aria-hidden="true">03</span></div>
-          <div className="suppliers-summary-detail"><Link to="/purchase-orders">Open purchase orders <span aria-hidden="true">→</span></Link></div>
+        <article className="suppliers-summary-card suppliers-summary-lead-time">
+          <div className="suppliers-summary-main">
+            <span className="suppliers-summary-icon suppliers-icon-violet" aria-hidden="true">▤</span>
+            <div className="suppliers-summary-copy">
+              <span className="suppliers-summary-kicker">DELIVERY READINESS</span>
+              <strong>{leadTimeCount}</strong>
+              <span className="suppliers-summary-label">Suppliers with lead times</span>
+            </div>
+            <span className="suppliers-summary-percent">{leadTimeCoveragePercent}%</span>
+          </div>
+          <div className="suppliers-coverage-track" role="progressbar" aria-label="Supplier lead time coverage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={leadTimeCoveragePercent}>
+            <span style={{ width: `${leadTimeCoveragePercent}%` }} />
+          </div>
+          <div className="suppliers-summary-detail">
+            <span>{missingLeadTimeCount === 0 ? 'Lead times ready for planning' : `${missingLeadTimeCount} ${missingLeadTimeCount === 1 ? 'supplier needs' : 'suppliers need'} a lead time`}</span>
+            <span className={`suppliers-coverage-status${missingLeadTimeCount === 0 && suppliers.length > 0 ? ' is-complete' : ''}`}>
+              {suppliers.length === 0 ? 'No data yet' : missingLeadTimeCount === 0 ? 'Ready' : 'Add lead times'}
+            </span>
+          </div>
         </article>
       </section>
 
@@ -391,7 +445,7 @@ export function SuppliersPage() {
                     <div className="supplier-order-summary">
                       <div className="supplier-order-summary-values">
                         <strong>{supplier.orderCount} <span>{supplier.orderCount === 1 ? 'order' : 'orders'}</span></strong>
-                        <span>{supplierCurrency.format(supplier.totalOrderValue)} PO value</span>
+                        <span>{formatSupplierCurrency(supplier.totalOrderValue)} PO value</span>
                       </div>
                       <button
                         type="button"
@@ -469,7 +523,7 @@ export function SuppliersPage() {
                   <article className="supplier-metric-card supplier-metric-value">
                     <span className="supplier-metric-icon" aria-hidden="true">LKR</span>
                     <span className="supplier-metric-label">Total PO value</span>
-                    <strong>{history?.loading ? '…' : supplierCurrency.format(selectedHistorySummary?.totalOrderValue ?? supplier.totalOrderValue)}</strong>
+                    <strong>{history?.loading ? '…' : formatSupplierCurrency(selectedHistorySummary?.totalOrderValue ?? supplier.totalOrderValue)}</strong>
                     <small>Not a confirmed amount paid</small>
                   </article>
                 </section>
@@ -523,7 +577,7 @@ export function SuppliersPage() {
                                 <td>{order.branch || '—'}</td>
                                 <td>{order.status}</td>
                                 <td>{order.lineItems}</td>
-                                <td>{supplierCurrency.format(order.totalAmount)}</td>
+                                <td>{formatSupplierCurrency(order.totalAmount)}</td>
                               </tr>
                             ))}
                           </tbody>

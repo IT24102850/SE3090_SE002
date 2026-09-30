@@ -128,6 +128,11 @@ describe('SuppliersPage', () => {
     expect(await screen.findByText('Central Supplies')).toBeInTheDocument();
     expect(screen.getByText('Net 30')).toBeInTheDocument();
     expect(screen.getByText('Contact: Alex Silva')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Supplier contact coverage' })).toHaveAttribute('aria-valuenow', '100');
+    expect(screen.getByText('Complete')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Supplier lead time coverage' })).toHaveAttribute('aria-valuenow', '100');
+    expect(screen.getByText('Suppliers with lead times')).toBeInTheDocument();
+    expect(screen.getByText('Ready')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText(/12,500\.00 PO value/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'View details' })).not.toBeInTheDocument();
@@ -215,6 +220,32 @@ describe('SuppliersPage', () => {
     expect(screen.getByLabelText('Payment terms')).toHaveValue('Net 14');
     expect(screen.getByLabelText('Business address')).toHaveValue('42 New Street');
     expect(screen.getByLabelText('Supplier notes')).toHaveValue('Updated delivery notes');
+  });
+
+  it('shows zero instead of NaN when a supplier PO total is missing or invalid', async () => {
+    const supplier = {
+      id: 'supplier-invalid-total',
+      name: 'Missing Total Supplies',
+      contactPerson: null,
+      email: '',
+      phone: '',
+      address: null,
+      paymentTerms: null,
+      notes: null,
+      leadTimeDays: null,
+      createdAt: '2026-09-30T00:00:00Z',
+      updatedAt: '2026-09-30T00:00:00Z',
+      orderCount: 1,
+      activeOrderCount: 1,
+      totalOrderValue: Number.NaN,
+      lastOrderAt: null,
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items: [supplier] }), { status: 200 })));
+
+    renderPage();
+    const value = await screen.findByText(/PO value/);
+    expect(value).not.toHaveTextContent('NaN');
+    expect(value).toHaveTextContent('0.00 PO value');
   });
 
   it('deletes a supplier with no purchase order history after confirmation', async () => {
