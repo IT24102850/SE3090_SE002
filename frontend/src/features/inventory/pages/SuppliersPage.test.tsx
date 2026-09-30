@@ -128,13 +128,14 @@ describe('SuppliersPage', () => {
       'href',
       '/purchase-orders?supplier=Central%20Supplies',
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View details' }));
 
+    expect(screen.getByRole('dialog', { name: 'Central Supplies' })).toBeInTheDocument();
     expect(await screen.findByText('12 Main Street')).toBeInTheDocument();
     expect(screen.getByText('Deliver before noon')).toBeInTheDocument();
     expect(await screen.findByText('PO-1001')).toBeInTheDocument();
     expect(screen.getByText('PO-1002')).toBeInTheDocument();
     expect(screen.getByText(/2 orders · .*12,500\.00 non-cancelled PO value/)).toBeInTheDocument();
-    expect(screen.getByText('Cancelled orders are excluded; supplier payments are not recorded here.')).toBeInTheDocument();
+    expect(screen.getByText('Cancelled orders are excluded from the value; payments are not tracked here.')).toBeInTheDocument();
   });
 });

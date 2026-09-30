@@ -1146,13 +1146,15 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .suppliers-table-name small { color: var(--color-text-muted); font-size: .68rem; }
 .inventory-scope .suppliers-expand-button { margin: .35rem 0 0 3.05rem; padding: 0; color: var(--color-primary); font: inherit; font-size: .7rem; font-weight: 750; background: none; border: 0; cursor: pointer; }
 .inventory-scope .suppliers-expand-button:hover { text-decoration: underline; }
-.inventory-scope .suppliers-expanded-row > td { padding: 0; background: color-mix(in srgb, var(--color-primary-soft) 25%, var(--color-surface)); }
-.inventory-scope .suppliers-expanded-details { display: grid; grid-template-columns: minmax(230px, .85fr) minmax(420px, 1.5fr); gap: 1rem; padding: 1rem; }
+.inventory-scope .suppliers-modal { width: min(100%, 1080px); }
+.inventory-scope .suppliers-modal-body { max-height: min(76vh, 760px); }
+.inventory-scope .suppliers-expanded-details { display: grid; grid-template-columns: minmax(230px, .75fr) minmax(420px, 1.5fr); gap: 1.2rem; padding: .2rem; }
 .inventory-scope .suppliers-expanded-details h3 { margin: 0 0 .7rem; font-size: .88rem; }
 .inventory-scope .suppliers-profile-details dl { display: grid; gap: .55rem; margin: 0; }
 .inventory-scope .suppliers-profile-details dl > div { display: grid; grid-template-columns: minmax(105px, .7fr) minmax(0, 1fr); gap: .6rem; font-size: .72rem; }
 .inventory-scope .suppliers-profile-details dt { color: var(--color-text-muted); font-weight: 700; }
 .inventory-scope .suppliers-profile-details dd { margin: 0; overflow-wrap: anywhere; }
+.inventory-scope .suppliers-profile-details > .btn { margin-top: 1rem; }
 .inventory-scope .suppliers-history-heading { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: flex-start; justify-content: space-between; margin-bottom: .65rem; }
 .inventory-scope .suppliers-history-heading h3 { margin-bottom: .2rem; }
 .inventory-scope .suppliers-history-heading p { margin: 0; color: var(--color-text-muted); font-size: .68rem; }
@@ -1472,6 +1474,7 @@ body:has(.inventory-scope) .app-shell::after,
   .inventory-scope .suppliers-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inventory-scope .suppliers-summary-link { grid-column: 1 / -1; }
   .inventory-scope .suppliers-form-grid { grid-template-columns: 1fr; }
+  .inventory-scope .suppliers-modal-body { max-height: calc(100dvh - 7rem); }
   .inventory-scope .suppliers-expanded-details { grid-template-columns: 1fr; }
   .inventory-scope .suppliers-directory-head { align-items: stretch; flex-direction: column; }
   .inventory-scope .suppliers-search { width: 100%; }

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { getStoredToken } from '../authToken';
 import { useToast } from '../ui/ToastContext';
@@ -92,6 +92,14 @@ export function SuppliersPage() {
   }, [token]);
 
   useEffect(() => { void loadSuppliers(); }, [loadSuppliers]);
+  useEffect(() => {
+    if (!expandedSupplierId) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpandedSupplierId(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [expandedSupplierId]);
 
   async function loadSupplierOrderHistory(supplier: Supplier) {
     const cached = supplierOrderHistories[supplier.id];
@@ -242,6 +250,7 @@ export function SuppliersPage() {
   const contactCount = suppliers.filter((supplier) => supplier.contactPerson || supplier.email || supplier.phone).length;
   const missingContactCount = suppliers.length - contactCount;
   const missingLeadTimeCount = suppliers.filter((supplier) => !supplier.leadTimeDays).length;
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === expandedSupplierId);
 
   return (
     <div className="page suppliers-page">
@@ -310,8 +319,7 @@ export function SuppliersPage() {
             <thead><tr><th>Supplier</th><th>Email</th><th>Phone</th><th>Lead time</th><th>Payment terms</th><th>Added</th><th>Orders</th><th>Actions</th></tr></thead>
             <tbody>
               {filtered.map((supplier) => (
-                <Fragment key={supplier.id}>
-                <tr>
+                <tr key={supplier.id}>
                   <td>
                     <div className="suppliers-table-name"><span className="suppliers-avatar">{supplier.name.trim().charAt(0).toUpperCase()}</span><div><strong>{supplier.name}</strong><small>{supplier.contactPerson ? `Contact: ${supplier.contactPerson}` : 'Contact person not set'}</small></div></div>
                     <button
@@ -321,7 +329,7 @@ export function SuppliersPage() {
                       aria-controls={`supplier-details-${supplier.id}`}
                       onClick={() => void toggleSupplierDetails(supplier)}
                     >
-                      {expandedSupplierId === supplier.id ? 'Show less' : 'Show more'}
+                      View details
                     </button>
                   </td>
                   <td>{supplier.email ? <a href={`mailto:${supplier.email}`}>{supplier.email}</a> : <span className="suppliers-missing">No email saved</span>}</td>
@@ -332,75 +340,6 @@ export function SuppliersPage() {
                   <td><Link className="suppliers-order-link" to={`/purchase-orders?supplier=${encodeURIComponent(supplier.name)}`}>View orders <span aria-hidden="true">↗</span></Link></td>
                   <td><button type="button" className="btn btn-secondary" onClick={() => editSupplier(supplier)}>Edit</button></td>
                 </tr>
-                {expandedSupplierId === supplier.id && (
-                  <tr key={`${supplier.id}-details`} className="suppliers-expanded-row">
-                    <td id={`supplier-details-${supplier.id}`} colSpan={8}>
-                      <div className="suppliers-expanded-details">
-                        <section className="suppliers-profile-details" aria-label={`${supplier.name} supplier details`}>
-                          <h3>Supplier details</h3>
-                          <dl>
-                            <div><dt>Contact person</dt><dd>{supplier.contactPerson || 'Not provided'}</dd></div>
-                            <div><dt>Email</dt><dd>{supplier.email || 'Not provided'}</dd></div>
-                            <div><dt>Phone</dt><dd>{supplier.phone || 'Not provided'}</dd></div>
-                            <div><dt>Business address</dt><dd>{supplier.address || 'Not provided'}</dd></div>
-                            <div><dt>Payment terms</dt><dd>{supplier.paymentTerms || 'Not provided'}</dd></div>
-                            <div><dt>Usual lead time</dt><dd>{supplier.leadTimeDays ? `${supplier.leadTimeDays} days` : 'Not set'}</dd></div>
-                            <div><dt>Notes</dt><dd>{supplier.notes || 'No notes'}</dd></div>
-                          </dl>
-                        </section>
-                        <section className="suppliers-order-history" aria-label={`${supplier.name} purchase order history`}>
-                          <div className="suppliers-history-heading">
-                            <div><h3>Purchase order history</h3><p>Cancelled orders are excluded; supplier payments are not recorded here.</p></div>
-                            <strong>{supplierOrderHistories[supplier.id]?.loading
-                              ? 'Loading order history…'
-                              : `${supplierOrderHistories[supplier.id]?.orders.length ?? 0} orders · ${supplierCurrency.format(
-                                supplierOrderValue(supplierOrderHistories[supplier.id]?.orders ?? []),
-                              )} non-cancelled PO value`}</strong>
-                          </div>
-                          {supplierOrderHistories[supplier.id]?.loading && <p role="status">Loading purchase orders…</p>}
-                          {supplierOrderHistories[supplier.id]?.error && (
-                            <div className="page-notice" role="alert">
-                              {supplierOrderHistories[supplier.id].error}
-                              <button className="btn btn-secondary" type="button" onClick={() => {
-                                setSupplierOrderHistories((current) => {
-                                  const next = { ...current };
-                                  delete next[supplier.id];
-                                  return next;
-                                });
-                                void loadSupplierOrderHistory(supplier);
-                              }}>Retry</button>
-                            </div>
-                          )}
-                          {!supplierOrderHistories[supplier.id]?.loading &&
-                            !supplierOrderHistories[supplier.id]?.error &&
-                            (supplierOrderHistories[supplier.id]?.orders.length ?? 0) === 0 && (
-                              <p>No purchase orders are recorded for this supplier yet.</p>
-                            )}
-                          {(supplierOrderHistories[supplier.id]?.orders.length ?? 0) > 0 && (
-                            <div className="table-wrap">
-                              <table className="data-table suppliers-history-table">
-                                <thead><tr><th>Order</th><th>Date</th><th>Branch</th><th>Status</th><th>Lines</th><th>Order value</th></tr></thead>
-                                <tbody>
-                                  {supplierOrderHistories[supplier.id].orders.map((order) => (
-                                    <tr key={order.id}>
-                                      <td>{order.number}</td>
-                                      <td>{new Date(order.createdAt).toLocaleDateString()}</td>
-                                      <td>{order.branch || '—'}</td>
-                                      <td>{order.status}</td>
-                                      <td>{order.lineItems}</td>
-                                      <td>{supplierCurrency.format(order.totalAmount)}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </section>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-                </Fragment>
               ))}
               {!loading && filtered.length === 0 && <tr><td colSpan={8} className="empty-state">{suppliers.length ? 'No suppliers match your search.' : 'No suppliers yet. Add a supplier to start building your directory.'}</td></tr>}
               {loading && suppliers.length === 0 && <tr><td colSpan={8} className="empty-state">Loading supplier directory…</td></tr>}
@@ -409,6 +348,98 @@ export function SuppliersPage() {
         </div>
         <div className="suppliers-directory-footer"><span>Showing {filtered.length} of {suppliers.length} suppliers</span><span>AI prefers the supplier assigned to an item, then falls back to its latest supplier-linked receipt.</span></div>
       </section>
+      {selectedSupplier && (() => {
+        const supplier = selectedSupplier;
+        const history = supplierOrderHistories[supplier.id];
+        const orders = history?.orders ?? [];
+        return (
+          <div
+            className="modal-overlay suppliers-modal-overlay"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setExpandedSupplierId(null);
+            }}
+          >
+            <section
+              className="modal suppliers-modal"
+              id={`supplier-details-${supplier.id}`}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="supplier-details-title"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <header className="modal-head">
+                <div><span className="suppliers-create-kicker">SUPPLIER PROFILE</span><h2 id="supplier-details-title">{supplier.name}</h2></div>
+                <button className="modal-close" type="button" aria-label="Close supplier details" onClick={() => setExpandedSupplierId(null)}>×</button>
+              </header>
+              <div className="modal-body suppliers-modal-body">
+                <div className="suppliers-expanded-details">
+                  <section className="suppliers-profile-details" aria-label={`${supplier.name} supplier details`}>
+                    <h3>Supplier details</h3>
+                    <dl>
+                      <div><dt>Contact person</dt><dd>{supplier.contactPerson || 'Not provided'}</dd></div>
+                      <div><dt>Email</dt><dd>{supplier.email || 'Not provided'}</dd></div>
+                      <div><dt>Phone</dt><dd>{supplier.phone || 'Not provided'}</dd></div>
+                      <div><dt>Business address</dt><dd>{supplier.address || 'Not provided'}</dd></div>
+                      <div><dt>Payment terms</dt><dd>{supplier.paymentTerms || 'Not provided'}</dd></div>
+                      <div><dt>Usual lead time</dt><dd>{supplier.leadTimeDays ? `${supplier.leadTimeDays} days` : 'Not set'}</dd></div>
+                      <div><dt>Notes</dt><dd>{supplier.notes || 'No notes'}</dd></div>
+                    </dl>
+                    <button type="button" className="btn btn-secondary" onClick={() => {
+                      setExpandedSupplierId(null);
+                      editSupplier(supplier);
+                    }}>Edit supplier details</button>
+                  </section>
+                  <section className="suppliers-order-history" aria-label={`${supplier.name} purchase order history`}>
+                    <div className="suppliers-history-heading">
+                      <div><h3>Purchase order history</h3><p>Cancelled orders are excluded from the value; payments are not tracked here.</p></div>
+                      <strong>{history?.loading
+                        ? 'Loading order history…'
+                        : `${orders.length} orders · ${supplierCurrency.format(supplierOrderValue(orders))} non-cancelled PO value`}</strong>
+                    </div>
+                    {history?.loading && <p role="status">Loading purchase orders…</p>}
+                    {history?.error && (
+                      <div className="page-notice" role="alert">
+                        {history.error}
+                        <button className="btn btn-secondary" type="button" onClick={() => {
+                          setSupplierOrderHistories((current) => {
+                            const next = { ...current };
+                            delete next[supplier.id];
+                            return next;
+                          });
+                          void loadSupplierOrderHistory(supplier);
+                        }}>Retry</button>
+                      </div>
+                    )}
+                    {!history?.loading && !history?.error && orders.length === 0 && (
+                      <p>No purchase orders are recorded for this supplier yet.</p>
+                    )}
+                    {orders.length > 0 && (
+                      <div className="table-wrap">
+                        <table className="data-table suppliers-history-table">
+                          <thead><tr><th>Order</th><th>Date</th><th>Branch</th><th>Status</th><th>Lines</th><th>Order value</th></tr></thead>
+                          <tbody>
+                            {orders.map((order) => (
+                              <tr key={order.id}>
+                                <td>{order.number}</td>
+                                <td>{new Date(order.createdAt).toLocaleDateString()}</td>
+                                <td>{order.branch || '—'}</td>
+                                <td>{order.status}</td>
+                                <td>{order.lineItems}</td>
+                                <td>{supplierCurrency.format(order.totalAmount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+                </div>
+              </div>
+            </section>
+          </div>
+        );
+      })()}
     </div>
   );
 }
