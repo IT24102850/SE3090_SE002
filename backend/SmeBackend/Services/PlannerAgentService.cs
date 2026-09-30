@@ -70,27 +70,29 @@ public partial class PlannerAgentService : IPlannerAgentService
         if (string.IsNullOrEmpty(token))
             return AgentPlanResult.Failed("AgentService:InternalToken is not configured.");
 
-        using var message = new HttpRequestMessage(HttpMethod.Post, "/plan")
-        {
-            Content = JsonContent.Create(request, options: JsonOptions),
-        };
-        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var (response, sendError) = await SendWithWakeRetryAsync(
+            () =>
+            {
+                var message = new HttpRequestMessage(HttpMethod.Post, "/plan")
+                {
+                    Content = JsonContent.Create(request, options: JsonOptions),
+                };
+                message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                return message;
+            },
+            ct);
 
-        HttpResponseMessage response;
-        try
-        {
-            response = await _http.SendAsync(message, ct);
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
-            return AgentPlanResult.Failed($"Could not reach the AI planning service: {ex.Message}");
-        }
+        if (response == null)
+            return AgentPlanResult.Failed($"Could not reach the AI planning service: {sendError}");
 
         // The Python service returns 422 for a legitimate, structured safe
         // failure (still a full trace with `error` set) — that's a normal
         // outcome to hand back to the caller, not an exception here.
         if (response.StatusCode != HttpStatusCode.OK && response.StatusCode != HttpStatusCode.UnprocessableEntity)
-            return AgentPlanResult.Failed($"AI planning service returned HTTP {(int)response.StatusCode}.");
+            return AgentPlanResult.Failed(DescribeUpstreamFailure(
+                "The AI planning service",
+                response.StatusCode,
+                await response.Content.ReadAsStringAsync(ct)));
 
         WorkflowTraceDto? trace;
         try
@@ -117,23 +119,22 @@ public partial class PlannerAgentService
         if (string.IsNullOrEmpty(token))
             return ScheduleCopilotResult.Failed("AgentService:InternalToken is not configured.");
 
-        using var message = new HttpRequestMessage(HttpMethod.Post, "/schedule/plan")
-        {
-            Content = JsonContent.Create(request, options: JsonOptions),
-        };
-        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var (response, sendError) = await SendWithWakeRetryAsync(
+            () =>
+            {
+                var message = new HttpRequestMessage(HttpMethod.Post, "/schedule/plan")
+                {
+                    Content = JsonContent.Create(request, options: JsonOptions),
+                };
+                message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                return message;
+            },
+            ct);
 
-        HttpResponseMessage response;
-        try
-        {
-            response = await _http.SendAsync(message, ct);
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
+        if (response == null)
             return ScheduleCopilotResult.Failed(
                 $"Could not reach the deployed Schedule Copilot at {_http.BaseAddress}. " +
-                $"Verify the agent service is running and retry. {ex.Message}");
-        }
+                $"Verify the agent service is running and retry. {sendError}");
 
         // Every outcome of a run - ready, awaiting approval, rejected by the
         // safety gate, failed safely - comes back 200 with a full trace. A
@@ -141,7 +142,7 @@ public partial class PlannerAgentService
         var body = await response.Content.ReadAsStringAsync(ct);
         if (response.StatusCode != HttpStatusCode.OK)
             return ScheduleCopilotResult.Failed(
-                $"Schedule Copilot returned HTTP {(int)response.StatusCode}: {Truncate(body, 300)}");
+                DescribeUpstreamFailure("Schedule Copilot", response.StatusCode, body));
 
         try
         {
@@ -155,6 +156,87 @@ public partial class PlannerAgentService
         {
             return ScheduleCopilotResult.Failed($"Schedule Copilot returned an unreadable response: {ex.Message}");
         }
+    }
+
+    // The free hosting tier stops the agent service after ~15 minutes of no
+    // traffic and needs about 25 seconds to boot it again. Requests that land
+    // during that boot are answered by the host's edge rather than by the
+    // service: HTTP 502 with an HTML error page. The call that triggers the
+    // wake is therefore doomed by design, and retrying is the whole fix -
+    // by the second or third attempt the container is serving.
+    //
+    // Measured cold start was 23s, so the delays below cover ~35s of booting
+    // while staying far inside this client's 150s timeout and the mobile
+    // client's 180s budget.
+    private static readonly TimeSpan[] WakeRetryDelays =
+    {
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(10),
+        TimeSpan.FromSeconds(20),
+    };
+
+    // Only the gateway codes are worth retrying: they are the host saying it
+    // has nothing to route to yet. A 401, 422 or 500 came from the service
+    // itself and means something a retry cannot repair.
+    private static bool IsGatewayError(HttpStatusCode code) =>
+        code is HttpStatusCode.BadGateway
+            or HttpStatusCode.ServiceUnavailable
+            or HttpStatusCode.GatewayTimeout;
+
+    /// Sends the request, re-sending it while the upstream is still waking.
+    /// Returns a null response with the transport error when the service could
+    /// not be reached at all, so callers keep their "never throw" contract.
+    /// The request is rebuilt per attempt because an HttpRequestMessage cannot
+    /// be sent twice.
+    private async Task<(HttpResponseMessage? Response, string? Error)> SendWithWakeRetryAsync(
+        Func<HttpRequestMessage> buildRequest,
+        CancellationToken ct)
+    {
+        HttpResponseMessage? response = null;
+        for (var attempt = 0; ; attempt++)
+        {
+            response?.Dispose();
+            using var message = buildRequest();
+            try
+            {
+                response = await _http.SendAsync(message, ct);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                return (null, ex.Message);
+            }
+
+            if (!IsGatewayError(response.StatusCode) || attempt >= WakeRetryDelays.Length)
+                return (response, null);
+
+            try
+            {
+                await Task.Delay(WakeRetryDelays[attempt], ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // The caller gave up mid-wait; hand back what we have rather
+                // than throwing out of a service that promises not to.
+                return (response, null);
+            }
+        }
+    }
+
+    // A gateway error is a page from the host, not a payload from our service,
+    // so its body is HTML. Pasting that into the UI produced the useless
+    // "returned HTTP 502: <!DOCTYPE html>" the staff app was showing; say what
+    // actually happened and what to do about it instead.
+    private static string DescribeUpstreamFailure(string label, HttpStatusCode code, string body)
+    {
+        if (IsGatewayError(code))
+            return $"{label} is still starting up and did not answer in time " +
+                   $"(HTTP {(int)code} from the host after {WakeRetryDelays.Length + 1} attempts). " +
+                   "The free hosting tier stops it when idle and it needs about half a minute " +
+                   "to come back. Please try again.";
+
+        return body.TrimStart().StartsWith('<')
+            ? $"{label} returned HTTP {(int)code} from the host rather than from the service itself."
+            : $"{label} returned HTTP {(int)code}: {Truncate(body, 300)}";
     }
 
     private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max] + "…";
