@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 import '../services/secure_storage_service.dart';
+import '../services/social_auth_service.dart';
 
 // ─────────────────────────────────────────────────────────
 // Auth State
@@ -80,13 +81,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// POST /api/auth/login
+  /// POST /api/auth/mobile/login
   Future<bool> login(String email, String password) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       final response = await ApiService.dio.post(
-        '/auth/login',
+        '/auth/mobile/login',
         data: {'email': email.trim(), 'password': password},
       );
 
@@ -126,6 +127,138 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return false;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Something went wrong. Please try again.');
+      return false;
+    }
+  }
+
+  /// Quick unlock using hardware-secured PIN.
+  /// Validates against the user's stored PIN in [SecureStorageService].
+  Future<bool> unlockWithPin(String pin) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+
+    final storedPin = await SecureStorageService.getPin();
+    if (storedPin != null && storedPin.isNotEmpty && storedPin != pin) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Incorrect security PIN. Please try again.',
+      );
+      return false;
+    }
+
+    if (storedPin == null || storedPin.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'No Quick PIN is set up. Sign in with your work email, then set one in Security.',
+      );
+      return false;
+    }
+
+    // Restore the authenticated session from SecureStorageService
+    final savedToken = await SecureStorageService.getToken();
+    final savedUserJson = await SecureStorageService.getUser();
+    if (savedToken != null && savedToken.isNotEmpty && savedUserJson != null) {
+      try {
+        final user =
+            User.fromJson(jsonDecode(savedUserJson) as Map<String, dynamic>);
+        state = AuthState(
+          user: user,
+          token: savedToken,
+          isLoading: false,
+          isInitialized: true,
+          isProfileComplete: true,
+        );
+        return true;
+      } catch (_) {}
+    }
+
+    state = state.copyWith(
+      isLoading: false,
+      error: 'There is no saved session to unlock. Sign in with your work email; your PIN will be kept for next time.',
+    );
+    return false;
+  }
+
+  /// Quick unlock using device Biometrics (Face ID / Fingerprint).
+  Future<bool> unlockWithBiometrics() async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    final savedToken = await SecureStorageService.getToken();
+    final savedUserJson = await SecureStorageService.getUser();
+    if (savedToken != null && savedToken.isNotEmpty && savedUserJson != null) {
+      try {
+        final user =
+            User.fromJson(jsonDecode(savedUserJson) as Map<String, dynamic>);
+        state = AuthState(
+          user: user,
+          token: savedToken,
+          isLoading: false,
+          isInitialized: true,
+          isProfileComplete: true,
+        );
+        return true;
+      } catch (_) {}
+    }
+
+    state = state.copyWith(
+      isLoading: false,
+      error: 'Please sign in with your work email first to activate biometrics.',
+    );
+    return false;
+  }
+
+  /// POST /api/auth/mobile/external-login. Provider tokens are checked by
+  /// the API before an account is created or a mobile session is issued.
+  Future<bool> socialLogin(
+    String provider,
+    SocialCredential credential, {
+    String? tenantId,
+  }) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final response = await ApiService.dio.post(
+        '/auth/mobile/external-login',
+        data: {
+          'provider': provider,
+          if (credential.idToken != null) 'idToken': credential.idToken,
+          if (credential.accessToken != null)
+            'accessToken': credential.accessToken,
+          if (tenantId != null) 'tenantId': tenantId,
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      final accessToken =
+          data['accessToken'] as String? ?? data['token'] as String?;
+      if (accessToken == null || accessToken.isEmpty) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'The server returned an invalid sign-in response.',
+        );
+        return false;
+      }
+      final userMap = data['user'] as Map<String, dynamic>? ?? data;
+      final user = User.fromJson(userMap);
+      await SecureStorageService.saveToken(accessToken);
+      await SecureStorageService.saveUser(jsonEncode(user.toJson()));
+      final refresh = data['refreshToken'] as String?;
+      if (refresh != null) await SecureStorageService.saveRefreshToken(refresh);
+      state = AuthState(
+        user: user,
+        token: accessToken,
+        isLoading: false,
+        isInitialized: true,
+        isProfileComplete: true,
+      );
+      return true;
+    } on DioException catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _extractError(e) ?? 'Could not sign in with $provider.',
+      );
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Something went wrong. Please try again.',
+      );
       return false;
     }
   }
@@ -339,10 +472,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Clear secure storage + reset state
+  /// Explicit sign out clears the session and this device's Quick PIN.
   Future<void> logout() async {
     await ApiService.revokeRefreshToken();
     await SecureStorageService.clearAll();
+    state = const AuthState(isInitialized: true);
+  }
+
+  /// Return to the lock screen while keeping the saved session for PIN unlock.
+  /// Without a configured PIN, fall back to a full sign out.
+  Future<void> lock() async {
+    if (!await SecureStorageService.hasPin()) {
+      await SecureStorageService.clearAll();
+    }
     state = const AuthState(isInitialized: true);
   }
 

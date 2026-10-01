@@ -13,4 +13,5 @@ public class StockMovement : BaseEntity, ITenantScoped
     public string? Reference { get; set; }
     public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
     public string? Notes { get; set; }
+    public string? PerformedBy { get; set; }
 }

@@ -66,6 +66,20 @@ public class StaffInventoryAccessTests
         Assert.DoesNotContain("*", components);
     }
 
+    [Fact]
+    public void MobileLoginToken_IsMarkedMobileWhileWebTokenIsNot()
+    {
+        var user = NewUser(UserRole.Manager);
+        var jwt = new JwtService(Config);
+
+        var webClaims = new JwtSecurityTokenHandler().ReadJwtToken(jwt.GenerateAccessToken(user)).Claims;
+        var mobileClaims = new JwtSecurityTokenHandler().ReadJwtToken(jwt.GenerateMobileAccessToken(user)).Claims;
+
+        Assert.DoesNotContain(webClaims, claim => claim.Type == InventoryAccessHandler.ClientPlatformClaimType);
+        Assert.Contains(mobileClaims, claim =>
+            claim.Type == InventoryAccessHandler.ClientPlatformClaimType && claim.Value == "mobile");
+    }
+
     [Theory]
     [InlineData(UserRole.Admin)]
     [InlineData(UserRole.Manager)]

@@ -20,7 +20,7 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
  * owner's console, which has its own shell and sign-in (its sub-routes carry
  * a slash and are not matched by the route regex below at all). */
 const NOT_IN_NAV = new Set([
-  '/', '/login', '/register', '/unauthorized', '/profile', '/admin', '/legacy-dashboard', '/platform',
+  '/', '/login', '/register', '/forgot-password', '/reset-password', '/unauthorized', '/profile', '/admin', '/legacy-dashboard', '/platform',
   // The public price list: a marketing page, reached from the landing page
   // and from the paywall, never from the signed-in sidebar.
   '/pricing',

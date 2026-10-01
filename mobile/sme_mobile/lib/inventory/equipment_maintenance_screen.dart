@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../services/secure_storage_service.dart';
 import '../widgets/ui/ui.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
@@ -26,7 +27,13 @@ class _EquipmentMaintenanceScreenState
     extends State<EquipmentMaintenanceScreen> {
   final _picker = ImagePicker();
   List<_MaintenanceTask> _tasks = const [];
+  List<_MaintenanceEquipment> _equipment = const [];
+  List<_MaintenanceBranch> _branches = const [];
   bool _loading = true;
+  String? _loadError;
+  bool _canManageEquipment = false;
+  String? _tenantId;
+  final Set<String> _updatingTaskIds = {};
   String _selectedTab = 'All'; // 'All', 'Pending', 'Completed'
 
   @override
@@ -36,18 +43,70 @@ class _EquipmentMaintenanceScreenState
   }
 
   Future<void> _load({bool showSuccess = false}) async {
+    if (mounted) {
+      setState(() {
+        _loading = _tasks.isEmpty;
+        _loadError = null;
+      });
+    }
     try {
+      final storedUser = await SecureStorageService.getUser();
+      final user = storedUser == null
+          ? null
+          : jsonDecode(storedUser) as Map<String, dynamic>;
+      final tenantId = user?['tenantId']?.toString();
+      if (tenantId == null || tenantId.isEmpty) {
+        throw StateError('The signed-in account has no tenant information.');
+      }
+      final role = user?['role']?.toString();
+      final canManageEquipment = role == 'Admin' || role == 'Manager';
+      final userBranchId = user?['branchId']?.toString();
+
+      final equipmentResponse = await widget.client
+          .get('/api/equipment?tenantId=${Uri.encodeQueryComponent(tenantId)}');
+      if (equipmentResponse.statusCode < 200 ||
+          equipmentResponse.statusCode >= 300) {
+        throw StateError(
+          _apiError(equipmentResponse.body, equipmentResponse.statusCode),
+        );
+      }
+      final equipmentData = jsonDecode(equipmentResponse.body) as List<dynamic>;
+      final equipment = equipmentData
+          .whereType<Map<String, dynamic>>()
+          .map(_MaintenanceEquipment.fromApi)
+          .toList();
+      List<_MaintenanceBranch> branches = const [];
+      if (canManageEquipment) {
+        final branchResponse = await widget.client.get(
+            '/api/branches?tenantId=${Uri.encodeQueryComponent(tenantId)}');
+        if (branchResponse.statusCode < 200 ||
+            branchResponse.statusCode >= 300) {
+          throw StateError(
+            _apiError(branchResponse.body, branchResponse.statusCode),
+          );
+        }
+        branches = (jsonDecode(branchResponse.body) as List<dynamic>)
+            .whereType<Map<String, dynamic>>()
+            .map(_MaintenanceBranch.fromApi)
+            .where((branch) => role != 'Manager' || branch.id == userBranchId)
+            .toList();
+      }
       final response = await widget.client.get('/api/equipment-maintenance');
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError('Maintenance API returned ${response.statusCode}.');
+        throw StateError(_apiError(response.body, response.statusCode));
       }
       final data = jsonDecode(response.body) as List<dynamic>;
       if (!mounted) return;
       setState(() {
+        _equipment = equipment;
+        _branches = branches;
+        _canManageEquipment = canManageEquipment;
+        _tenantId = tenantId;
         _tasks = data
             .whereType<Map<String, dynamic>>()
-            .map(_MaintenanceTask.fromApi)
+            .map((json) => _MaintenanceTask.fromApi(json, equipment))
             .toList();
+        _loadError = null;
         _loading = false;
       });
       if (showSuccess) {
@@ -59,13 +118,16 @@ class _EquipmentMaintenanceScreenState
       }
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _tasks = const [];
-        _loading = false;
-      });
       final detail = error is StateError
           ? error.message
           : 'Check that the backend is running and the signed-in account has access.';
+      setState(() {
+        _tasks = const [];
+        _equipment = const [];
+        _branches = const [];
+        _loadError = detail;
+        _loading = false;
+      });
       showAppNotification(
         'Maintenance records could not be loaded. $detail',
         tone: AppNotificationTone.error,
@@ -74,7 +136,478 @@ class _EquipmentMaintenanceScreenState
     }
   }
 
-  Future<void> _toggleComplete(_MaintenanceTask task) async {
+  String _apiError(String body, int statusCode) {
+    try {
+      final payload = jsonDecode(body);
+      if (payload is Map<String, dynamic>) {
+        final message = payload['message'] ?? payload['title'];
+        if (message is String && message.trim().isNotEmpty) return message;
+        final errors = payload['errors'];
+        if (errors is Map<String, dynamic>) {
+          final details = errors.values
+              .whereType<List>()
+              .expand((messages) => messages)
+              .whereType<String>()
+              .where((message) => message.trim().isNotEmpty)
+              .join(' ');
+          if (details.isNotEmpty) return details;
+        }
+      }
+    } on FormatException {
+      // Fall back to the HTTP status when the response is not JSON.
+    }
+    return 'Maintenance API returned $statusCode.';
+  }
+
+  Future<void> _addEquipment() async {
+    if (!_canManageEquipment) return;
+    final branches = _branches;
+    if (branches.isEmpty) {
+      showAppNotification(
+        'Add an active branch to your business before adding equipment.',
+        tone: AppNotificationTone.warning,
+        title: 'No branch available',
+      );
+      return;
+    }
+
+    final nameController = TextEditingController();
+    final categoryController = TextEditingController();
+    final skuController = TextEditingController();
+    final unitController = TextEditingController(text: 'unit');
+    var selectedBranchId = branches.first.id;
+    var submitting = false;
+    final created = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            20 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: Color(0xFF111A31),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+          ),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Add equipment',
+                    style: AppTextStyles.title
+                        .copyWith(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Save an asset to this business so it can be scheduled for service.',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 18),
+                  _formLabel('EQUIPMENT NAME'),
+                  TextField(
+                    controller: nameController,
+                    textCapitalization: TextCapitalization.words,
+                    maxLength: 200,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _maintenanceInputDecoration(
+                      hint: 'e.g. Generator, Dive tank, Wheelchair',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _formLabel('BRANCH'),
+                  DropdownButtonFormField<String>(
+                    value: selectedBranchId,
+                    dropdownColor: const Color(0xFF17233A),
+                    decoration: _maintenanceInputDecoration(),
+                    items: branches
+                        .map((branch) => DropdownMenuItem(
+                              value: branch.id,
+                              child: Text(
+                                branch.name,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ))
+                        .toList(),
+                    onChanged: submitting
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              setSheetState(() => selectedBranchId = value);
+                            }
+                          },
+                  ),
+                  const SizedBox(height: 14),
+                  _formLabel('CATEGORY (OPTIONAL)'),
+                  TextField(
+                    controller: categoryController,
+                    textCapitalization: TextCapitalization.words,
+                    style: const TextStyle(color: Colors.white),
+                    decoration:
+                        _maintenanceInputDecoration(hint: 'e.g. Machinery'),
+                  ),
+                  const SizedBox(height: 14),
+                  _formLabel('SKU (OPTIONAL)'),
+                  TextField(
+                    controller: skuController,
+                    textCapitalization: TextCapitalization.characters,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _maintenanceInputDecoration(hint: 'Asset code'),
+                  ),
+                  const SizedBox(height: 14),
+                  _formLabel('UNIT'),
+                  TextField(
+                    controller: unitController,
+                    textCapitalization: TextCapitalization.words,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _maintenanceInputDecoration(hint: 'unit'),
+                  ),
+                  const SizedBox(height: 18),
+                  NeonButton(
+                    label: submitting ? 'Saving…' : 'Save equipment',
+                    icon: Icons.save_rounded,
+                    onPressed: submitting
+                        ? null
+                        : () async {
+                            final name = nameController.text.trim();
+                            if (name.isEmpty) {
+                              showAppNotification(
+                                'Enter an equipment name.',
+                                tone: AppNotificationTone.warning,
+                              );
+                              return;
+                            }
+                            final tenantId = _tenantId;
+                            if (tenantId == null || tenantId.isEmpty) {
+                              showAppNotification(
+                                'Your business session has expired. Sign in again and retry.',
+                                tone: AppNotificationTone.error,
+                              );
+                              return;
+                            }
+                            setSheetState(() => submitting = true);
+                            try {
+                              final response = await widget.client
+                                  .post('/api/equipment', body: {
+                                'tenantId': tenantId,
+                                'branchId': selectedBranchId,
+                                'name': name,
+                                'category': categoryController.text.trim(),
+                                'sku': skuController.text.trim(),
+                                'unit': unitController.text.trim().isEmpty
+                                    ? 'unit'
+                                    : unitController.text.trim(),
+                                'currentStock': 0,
+                                'reorderLevel': 0,
+                                'costPrice': 0,
+                                'sellingPrice': 0,
+                              });
+                              if (response.statusCode < 200 ||
+                                  response.statusCode >= 300) {
+                                throw StateError(_apiError(
+                                  response.body,
+                                  response.statusCode,
+                                ));
+                              }
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext, true);
+                              }
+                            } catch (error) {
+                              showAppNotification(
+                                'Could not save equipment. ${error is StateError ? error.message : 'Check your connection and permissions.'}',
+                                tone: AppNotificationTone.error,
+                              );
+                            } finally {
+                              if (sheetContext.mounted) {
+                                setSheetState(() => submitting = false);
+                              }
+                            }
+                          },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    nameController.dispose();
+    categoryController.dispose();
+    skuController.dispose();
+    unitController.dispose();
+    if (created == true && mounted) {
+      await _load();
+      showAppNotification(
+        'Equipment was saved to your business and is ready for maintenance scheduling.',
+        tone: AppNotificationTone.success,
+        title: 'Equipment added',
+      );
+    }
+  }
+
+  Future<void> _scheduleMaintenance() async {
+    if (_equipment.isEmpty) {
+      showAppNotification(
+        'Add active equipment before scheduling maintenance.',
+        tone: AppNotificationTone.warning,
+        title: 'No equipment available',
+      );
+      return;
+    }
+    final notesController = TextEditingController();
+    final costController = TextEditingController(text: '0');
+    var isSubmitting = false;
+    var selectedEquipmentId = _equipment.first.id;
+    final today = DateTime.now();
+    var maintenanceDate = DateTime(today.year, today.month, today.day);
+    var nextDueDate = maintenanceDate.add(const Duration(days: 90));
+    final shouldReload = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          padding: EdgeInsets.fromLTRB(
+              20, 20, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+          decoration: const BoxDecoration(
+            color: Color(0xFF111A31),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+          ),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Schedule equipment service',
+                      style: AppTextStyles.title
+                          .copyWith(fontSize: 20, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 6),
+                  Text(
+                      'Choose equipment, record the service date, and set its next due date.',
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.textSecondary)),
+                  const SizedBox(height: 18),
+                  _formLabel('EQUIPMENT'),
+                  DropdownButtonFormField<String>(
+                    value: selectedEquipmentId,
+                    dropdownColor: const Color(0xFF17233A),
+                    decoration: _maintenanceInputDecoration(),
+                    items: _equipment
+                        .map((item) => DropdownMenuItem(
+                            value: item.id,
+                            child: Text(item.name,
+                                overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setSheetState(() => selectedEquipmentId = value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    Expanded(
+                        child: _dateField('SERVICE DATE', maintenanceDate,
+                            () async {
+                      final picked = await showDatePicker(
+                          context: context,
+                          initialDate: maintenanceDate,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                          builder: _datePickerTheme);
+                      if (picked != null) {
+                        setSheetState(() {
+                          maintenanceDate = picked;
+                          if (_dateOnly(nextDueDate)
+                              .isBefore(_dateOnly(picked))) {
+                            nextDueDate = picked;
+                          }
+                        });
+                      }
+                    })),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: _dateField('NEXT DUE', nextDueDate, () async {
+                      final picked = await showDatePicker(
+                          context: context,
+                          initialDate: nextDueDate,
+                          firstDate: maintenanceDate,
+                          lastDate: DateTime(2100),
+                          builder: _datePickerTheme);
+                      if (picked != null) {
+                        setSheetState(() => nextDueDate = picked);
+                      }
+                    })),
+                  ]),
+                  const SizedBox(height: 14),
+                  _formLabel('SERVICE COST'),
+                  TextField(
+                      controller: costController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _maintenanceInputDecoration(hint: '0.00')),
+                  const SizedBox(height: 14),
+                  _formLabel('NOTES'),
+                  TextField(
+                      controller: notesController,
+                      minLines: 2,
+                      maxLines: 4,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _maintenanceInputDecoration(
+                          hint:
+                              'Work completed, parts replaced, observations…')),
+                  const SizedBox(height: 18),
+                  NeonButton(
+                    label: isSubmitting ? 'Scheduling…' : 'Schedule service',
+                    icon: Icons.event_available_rounded,
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            final cost =
+                                double.tryParse(costController.text.trim());
+                            if (cost == null || !cost.isFinite || cost < 0) {
+                              showAppNotification(
+                                  'Enter a valid service cost (zero is allowed).',
+                                  tone: AppNotificationTone.warning);
+                              return;
+                            }
+                            if (_dateOnly(nextDueDate)
+                                .isBefore(_dateOnly(maintenanceDate))) {
+                              showAppNotification(
+                                  'The next due date must be on or after the service date.',
+                                  tone: AppNotificationTone.warning);
+                              return;
+                            }
+                            setSheetState(() => isSubmitting = true);
+                            try {
+                              final response = await widget.client
+                                  .post('/api/equipment-maintenance', body: {
+                                'equipmentItemId': selectedEquipmentId,
+                                'maintenanceDate':
+                                    _maintenanceDatePayload(maintenanceDate),
+                                'nextDueDate':
+                                    _maintenanceDatePayload(nextDueDate),
+                                'cost': cost,
+                                'status': 'Scheduled',
+                                'notes': notesController.text.trim().isEmpty
+                                    ? null
+                                    : notesController.text.trim(),
+                              });
+                              if (response.statusCode < 200 ||
+                                  response.statusCode >= 300) {
+                                throw StateError(_apiError(
+                                    response.body, response.statusCode));
+                              }
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext, true);
+                              }
+                              showAppNotification(
+                                  'Service was added to the maintenance log.',
+                                  tone: AppNotificationTone.success,
+                                  title: 'Service scheduled');
+                            } catch (error) {
+                              showAppNotification(
+                                  'Could not schedule service. ${error is StateError ? error.message : 'Check your connection and permissions.'}',
+                                  tone: AppNotificationTone.error);
+                            } finally {
+                              if (sheetContext.mounted) {
+                                setSheetState(() => isSubmitting = false);
+                              }
+                            }
+                          },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    notesController.dispose();
+    costController.dispose();
+    if (shouldReload == true && mounted) await _load();
+  }
+
+  Widget _formLabel(String label) => Padding(
+        padding: const EdgeInsets.only(bottom: 7),
+        child: Text(label,
+            style: AppTextStyles.label.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1)),
+      );
+
+  InputDecoration _maintenanceInputDecoration({String? hint}) =>
+      InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: .8)),
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: .06),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(13),
+            borderSide: const BorderSide(color: AppColors.glassBorder)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(13),
+            borderSide: const BorderSide(color: AppColors.cyan)),
+      );
+
+  Widget _dateField(String label, DateTime value, VoidCallback onTap) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _formLabel(label),
+          InkWell(
+            borderRadius: BorderRadius.circular(13),
+            onTap: onTap,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 14),
+              decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .06),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: AppColors.glassBorder)),
+              child: Row(children: [
+                const Icon(Icons.calendar_month_rounded,
+                    size: 17, color: AppColors.cyan),
+                const SizedBox(width: 7),
+                Expanded(
+                    child: Text(_formatDate(value),
+                        style:
+                            AppTextStyles.caption.copyWith(color: Colors.white),
+                        maxLines: 1))
+              ]),
+            ),
+          ),
+        ],
+      );
+
+  Widget _datePickerTheme(BuildContext context, Widget? child) => Theme(
+        data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+                primary: AppColors.cyan, surface: Color(0xFF17233A))),
+        child: child!,
+      );
+
+  DateTime _dateOnly(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
+
+  String _maintenanceDatePayload(DateTime date) =>
+      DateTime(date.year, date.month, date.day, 12).toUtc().toIso8601String();
+
+  Future<bool> _toggleComplete(_MaintenanceTask task) async {
+    if (!_updatingTaskIds.add(task.id)) return false;
+    if (mounted) setState(() {});
     HapticFeedback.mediumImpact();
     final nextStatus = task.completed ? 'Scheduled' : 'Completed';
     try {
@@ -92,31 +625,34 @@ class _EquipmentMaintenanceScreenState
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         showAppNotification(
-          'The maintenance record could not be updated (${response.statusCode}).',
+          'The maintenance record could not be updated. ${_apiError(response.body, response.statusCode)}',
           tone: AppNotificationTone.error,
         );
-        return;
+        return false;
       }
     } catch (_) {
       showAppNotification(
         'The maintenance record could not be updated. Check the connection and try again.',
         tone: AppNotificationTone.error,
       );
-      return;
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() => _updatingTaskIds.remove(task.id));
+      }
     }
-    if (!mounted) return;
+    if (!mounted) return false;
     setState(() {
       task.completed = !task.completed;
       task.status = nextStatus;
     });
-    if (mounted) {
-      showAppNotification(
-        task.completed
-            ? '${task.name} marked complete.'
-            : '${task.name} reopened for inspection.',
-        tone: AppNotificationTone.success,
-      );
-    }
+    showAppNotification(
+      task.completed
+          ? '${task.name} marked complete.'
+          : '${task.name} reopened for inspection.',
+      tone: AppNotificationTone.success,
+    );
+    return true;
   }
 
   Future<bool> _confirmToggleComplete(_MaintenanceTask task) async {
@@ -134,8 +670,7 @@ class _EquipmentMaintenanceScreenState
       accent: completing ? const Color(0xFF34D399) : AppColors.cyan,
     );
     if (confirmed && mounted) {
-      await _toggleComplete(task);
-      return true;
+      return _toggleComplete(task);
     }
     return false;
   }
@@ -377,18 +912,23 @@ class _EquipmentMaintenanceScreenState
                       const SizedBox(height: 14),
 
                       NeonButton(
-                        label: task.completed
-                            ? 'Reopen Inspection Task'
-                            : 'Mark Task Complete',
+                        label: _updatingTaskIds.contains(task.id)
+                            ? 'Saving…'
+                            : task.completed
+                                ? 'Reopen Inspection Task'
+                                : 'Mark Task Complete',
                         icon: task.completed
                             ? Icons.restart_alt_rounded
                             : Icons.check_circle_rounded,
-                        onPressed: () async {
-                          final completed = await _confirmToggleComplete(task);
-                          if (completed && bottomSheetContext.mounted) {
-                            Navigator.pop(bottomSheetContext);
-                          }
-                        },
+                        onPressed: _updatingTaskIds.contains(task.id)
+                            ? null
+                            : () async {
+                                final completed =
+                                    await _confirmToggleComplete(task);
+                                if (completed && bottomSheetContext.mounted) {
+                                  Navigator.pop(bottomSheetContext);
+                                }
+                              },
                       ),
                     ],
                   ),
@@ -415,6 +955,9 @@ class _EquipmentMaintenanceScreenState
   Widget build(BuildContext context) {
     final pendingCount = _tasks.where((t) => !t.completed).length;
     final completedCount = _tasks.where((t) => t.completed).length;
+    final dueCount = _tasks
+        .where((t) => !t.completed && !t.nextDueDate.isAfter(DateTime.now()))
+        .length;
 
     return AppBackgroundScaffold(
       showParticles: false,
@@ -432,21 +975,86 @@ class _EquipmentMaintenanceScreenState
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   children: [
                     // Top Overview Card
-                    _buildOverviewHeader(pendingCount, completedCount),
+                    _buildOverviewHeader(dueCount, completedCount),
                     const SizedBox(height: 18),
+
+                    if (_loadError != null) ...[
+                      _buildLoadError(),
+                      const SizedBox(height: 16),
+                    ],
+
+                    if (_equipment.isEmpty) ...[
+                      if (_canManageEquipment) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: NeonButton(
+                            label: 'Add equipment to your business',
+                            icon: Icons.add_box_rounded,
+                            onPressed: _addEquipment,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (_loadError == null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Text(
+                            _canManageEquipment
+                                ? 'Equipment you add here is saved to the live business database and can then be scheduled for service.'
+                                : 'Ask a Manager or Administrator to add equipment to this business.',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.caption
+                                .copyWith(color: AppColors.textMuted),
+                          ),
+                        ),
+                    ] else ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: NeonButton(
+                          label: 'Schedule maintenance',
+                          icon: Icons.add_rounded,
+                          onPressed: _scheduleMaintenance,
+                        ),
+                      ),
+                      if (_canManageEquipment) ...[
+                        const SizedBox(height: 8),
+                        Center(
+                          child: TextButton.icon(
+                            onPressed: _addEquipment,
+                            icon: const Icon(Icons.add_rounded),
+                            label: const Text('Add equipment'),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                    ],
 
                     // Filter Tab Bar
                     _buildTabSwitcher(pendingCount, completedCount),
                     const SizedBox(height: 16),
 
                     if (_filteredTasks.isEmpty)
-                      EmptyState(
-                        icon: Icons.check_circle_outline_rounded,
-                        title: 'No maintenance tasks',
-                        message: _selectedTab == 'Pending'
-                            ? 'All equipment inspections are up to date!'
-                            : 'No completed tasks in log yet.',
-                      )
+                      _tasks.isEmpty && _selectedTab == 'All'
+                          ? EmptyState(
+                              icon: Icons.handyman_outlined,
+                              title: _equipment.isEmpty
+                                  ? 'No equipment added yet'
+                                  : 'Start your equipment care log',
+                              message: _equipment.isEmpty
+                                  ? _canManageEquipment
+                                      ? 'Add equipment to the live business database using the button above. Then schedule its first service here.'
+                                      : 'Ask a Manager or Administrator to add equipment to this business.'
+                                  : 'No service is logged yet. Schedule a task to track service dates, costs, notes and photo evidence.',
+                            )
+                          : EmptyState(
+                              icon: Icons.check_circle_outline_rounded,
+                              title: _selectedTab == 'Pending'
+                                  ? 'All caught up'
+                                  : 'No completed tasks yet',
+                              message: _selectedTab == 'Pending'
+                                  ? 'There are no pending maintenance tasks.'
+                                  : 'Completed service records will appear here.',
+                            )
                     else
                       ..._filteredTasks.map((task) => _buildTaskCard(task)),
                   ],
@@ -455,6 +1063,35 @@ class _EquipmentMaintenanceScreenState
       ),
     );
   }
+
+  Widget _buildLoadError() => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF43F5E).withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: const Color(0xFFF43F5E).withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off_outlined,
+                color: Color(0xFFFDA4AF), size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Maintenance data is unavailable. $_loadError',
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textPrimary),
+              ),
+            ),
+            TextButton(
+              onPressed: _loading ? null : _load,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
 
   Widget _buildOverviewHeader(int pending, int completed) {
     return Container(
@@ -767,7 +1404,9 @@ class _EquipmentMaintenanceScreenState
                     : const Color(0xFF10B981),
               ),
               tooltip: task.completed ? 'Reopen Task' : 'Mark Complete',
-              onPressed: () => _confirmToggleComplete(task),
+              onPressed: _updatingTaskIds.contains(task.id)
+                  ? null
+                  : () => _confirmToggleComplete(task),
             ),
           ],
         ),
@@ -803,18 +1442,22 @@ class _MaintenanceTask {
   bool completed;
   List<String> photoUrls;
 
-  factory _MaintenanceTask.fromApi(Map<String, dynamic> json) {
+  factory _MaintenanceTask.fromApi(
+      Map<String, dynamic> json, List<_MaintenanceEquipment> equipment) {
     final nextDueDate =
         DateTime.tryParse(json['nextDueDate'] as String? ?? '') ??
             DateTime.now();
     final status = json['status'] as String? ?? 'Scheduled';
     final equipmentId = json['equipmentItemId'] as String? ?? '';
+    final matchingEquipment = equipment.where((item) => item.id == equipmentId);
+    final equipmentItem =
+        matchingEquipment.isEmpty ? null : matchingEquipment.first;
     final photoUrls =
         (json['photoUrls'] as List? ?? const []).whereType<String>().toList();
     return _MaintenanceTask(
       id: json['id'] as String? ?? '',
       equipmentItemId: equipmentId,
-      name:
+      name: equipmentItem?.name ??
           'Equipment ${equipmentId.length > 8 ? equipmentId.substring(0, 8) : equipmentId}',
       detail: json['notes'] as String? ?? 'No maintenance notes recorded.',
       notes: json['notes'] as String?,
@@ -829,6 +1472,35 @@ class _MaintenanceTask {
       photoUrls: photoUrls,
     );
   }
+}
+
+class _MaintenanceEquipment {
+  const _MaintenanceEquipment(
+      {required this.id, required this.name, required this.category});
+
+  final String id;
+  final String name;
+  final String category;
+
+  factory _MaintenanceEquipment.fromApi(Map<String, dynamic> json) =>
+      _MaintenanceEquipment(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? 'Unnamed equipment',
+        category: json['category'] as String? ?? '',
+      );
+}
+
+class _MaintenanceBranch {
+  const _MaintenanceBranch({required this.id, required this.name});
+
+  final String id;
+  final String name;
+
+  factory _MaintenanceBranch.fromApi(Map<String, dynamic> json) =>
+      _MaintenanceBranch(
+        id: json['id']?.toString() ?? '',
+        name: json['name'] as String? ?? 'Unnamed branch',
+      );
 }
 
 String _formatDate(DateTime date) =>

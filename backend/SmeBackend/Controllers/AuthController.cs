@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 using SmeBackend.Data;
 using SmeBackend.DTOs;
 using SmeBackend.Models;
@@ -15,12 +16,16 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IJwtService _jwtService;
     private readonly ICustomerAccountService _customers;
+    private readonly IPasswordResetManager _passwordReset;
+    private readonly IMobileExternalAuthService _externalAuth;
 
-    public AuthController(AppDbContext context, IJwtService jwtService, ICustomerAccountService customers)
+    public AuthController(AppDbContext context, IJwtService jwtService, ICustomerAccountService customers, IPasswordResetManager passwordReset, IMobileExternalAuthService externalAuth)
     {
         _context = context;
         _jwtService = jwtService;
         _customers = customers;
+        _passwordReset = passwordReset;
+        _externalAuth = externalAuth;
     }
 
     // Public customer self-registration. Creates one global customer
@@ -64,6 +69,21 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
     {
+        return await Authenticate(dto, mobileClient: false);
+    }
+
+    [HttpPost("mobile/login")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResponseDto>> MobileLogin([FromBody] LoginDto dto)
+    {
+        if (Request.Headers.ContainsKey("Origin"))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Mobile sign-in is not available from a web browser." });
+
+        return await Authenticate(dto, mobileClient: true);
+    }
+
+    private async Task<ActionResult<AuthResponseDto>> Authenticate(LoginDto dto, bool mobileClient)
+    {
         // Login happens before a tenant is known, so tenant query filters
         // cannot be applied until the user's tenant has been resolved.
         //
@@ -98,7 +118,15 @@ public class AuthController : ControllerBase
         if (!user.Tenant.IsActive)
             return Unauthorized(new { message = "Tenant is inactive" });
 
-        var token = _jwtService.GenerateAccessToken(user);
+        // Merge of two independent changes, both kept:
+        //   the port added a mobile-specific access token (longer lived, so a
+        //   phone is not signed out between sessions),
+        //   main replaced the throwaway refresh token with a persisted one
+        //   (RefreshTokenStore), which is what makes revocation real.
+        // Taking either alone would silently drop the other's behaviour.
+        var token = mobileClient
+            ? _jwtService.GenerateMobileAccessToken(user)
+            : _jwtService.GenerateAccessToken(user);
         var refreshToken = await RefreshTokenStore.IssueAsync(_context, user.Id);
 
         return Ok(new AuthResponseDto
@@ -244,6 +272,168 @@ public class AuthController : ControllerBase
         await RefreshTokenStore.RevokeAllForUserAsync(_context, user.Id);
 
         return Ok(new { message = "Password changed." });
+    }
+
+    /// <summary>
+    /// Requests a password reset email/code.
+    /// </summary>
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
+    {
+        var email = dto.Email.Trim().ToLowerInvariant();
+        var exists = await _context.Users
+            .IgnoreQueryFilters()
+            .AnyAsync(u => u.Email.ToLower() == email && u.IsActive && u.Role != UserRole.SuperAdmin);
+
+        if (exists)
+        {
+            await _passwordReset.GenerateResetCodeAsync(email);
+        }
+
+        return Ok(new
+        {
+            message = "If the address is registered and email delivery is configured, a 6-digit verification code will arrive shortly."
+        });
+    }
+
+    /// <summary>
+    /// Verifies a native provider token and signs in an existing account, or
+    /// creates a customer account on first sign-in.
+    /// </summary>
+    [HttpPost("mobile/external-login")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResponseDto>> MobileExternalLogin(
+        [FromBody] MobileExternalLoginDto dto,
+        CancellationToken cancellationToken)
+    {
+        if (Request.Headers.ContainsKey("Origin"))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Provider sign-in is only available in the mobile app." });
+
+        ExternalIdentity identity;
+        try
+        {
+            identity = await _externalAuth.GetVerifiedIdentityAsync(
+                dto.Provider, dto.IdToken, dto.AccessToken, cancellationToken);
+        }
+        catch (ExternalAuthException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
+        var email = identity.Email.Trim().ToLowerInvariant();
+        if (dto.TenantId is { } requestedTenantId)
+        {
+            var tenant = await _context.Tenants.IgnoreQueryFilters().AsNoTracking()
+                .FirstOrDefaultAsync(item => item.Id == requestedTenantId, cancellationToken);
+            if (tenant == null || !tenant.IsActive || CustomerAccountService.IsReserved(tenant.BusinessType))
+                return BadRequest(new { message = "This business is not available for customer sign-up." });
+        }
+        var matches = await _context.Users
+            .IgnoreQueryFilters()
+            .Include(u => u.Tenant)
+            .Where(u => u.Email.ToLower() == email)
+            .ToListAsync(cancellationToken);
+
+        var accountIds = matches
+            .Select(user => user.LinkedAccountId ?? user.Id)
+            .Distinct()
+            .ToList();
+        if (accountIds.Count > 1)
+        {
+            return Conflict(new { message = "This email belongs to more than one workspace account. Sign in with your password to choose the correct account." });
+        }
+
+        User user;
+        if (accountIds.Count == 0)
+        {
+            var randomPassword = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+            user = await _customers.RegisterAsync(email, randomPassword, identity.DisplayName, string.Empty, dto.TenantId, null);
+            user.ProfilePictureUrl = identity.PictureUrl;
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            var accountId = accountIds[0];
+            user = matches.FirstOrDefault(candidate => candidate.Id == accountId)
+                ?? matches.First(candidate => candidate.LinkedAccountId == accountId);
+
+            if (user.Role == UserRole.SuperAdmin || !user.IsActive || !user.Tenant.IsActive)
+                return Unauthorized(new { message = "This account is unavailable for mobile sign-in." });
+
+            if (dto.TenantId is { } tenantId && user.Role == UserRole.Customer)
+            {
+                var membership = await _customers.JoinAsync(user.Id, tenantId);
+                if (membership == null)
+                    return BadRequest(new { message = "Could not join this business with your customer account." });
+                user = membership;
+            }
+        }
+
+        var token = _jwtService.GenerateMobileAccessToken(user);
+        return Ok(new AuthResponseDto
+        {
+            AccessToken = token,
+            RefreshToken = _jwtService.GenerateRefreshToken(),
+            ExpiresAt = DateTime.UtcNow.AddHours(2),
+            User = MapToUserDto(user)
+        });
+    }
+
+    /// <summary>
+    /// Verifies the 6-digit reset code before showing the new-password form.
+    /// The code remains valid for the final reset request.
+    /// </summary>
+    [HttpPost("verify-reset-code")]
+    [AllowAnonymous]
+    public IActionResult VerifyResetCode([FromBody] VerifyResetCodeDto dto)
+    {
+        var email = dto.Email.Trim().ToLowerInvariant();
+        if (!_passwordReset.VerifyCode(email, dto.Code))
+        {
+            return BadRequest(new { message = "That code is incorrect or expired. Check the email and try again, or request a new code." });
+        }
+
+        return Ok(new { message = "Code verified. You can now choose a new password." });
+    }
+
+    /// <summary>
+    /// Resets the password using the verified email code.
+    /// </summary>
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+    {
+        var email = dto.Email.Trim().ToLowerInvariant();
+        var valid = _passwordReset.VerifyAndConsumeCode(email, dto.Code);
+        if (!valid)
+        {
+            return BadRequest(new { message = "Invalid or expired reset code. Please request a new code." });
+        }
+
+        var users = await _context.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.Email.ToLower() == email && u.IsActive && u.Role != UserRole.SuperAdmin)
+            .ToListAsync();
+
+        if (users.Count == 0)
+        {
+            return BadRequest(new { message = "Account not found." });
+        }
+
+        var newHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+        foreach (var user in users)
+        {
+            user.PasswordHash = newHash;
+            user.UpdatedAt = DateTime.UtcNow;
+            if (user.Role == UserRole.Customer)
+            {
+                await _customers.PropagatePasswordAsync(user.Id, newHash);
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "Password has been successfully reset! You can now sign in with your new credentials." });
     }
 
     private static UserResponseDto MapToUserDto(User user) => new()

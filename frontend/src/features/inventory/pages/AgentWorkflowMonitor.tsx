@@ -352,8 +352,12 @@ export function AgentWorkflowMonitorPage() {
                         <button className="btn" onClick={() => setSelected(it)}>Details</button>
                         {it.status === 'pending' && (
                           <>
-                              <button className="btn btn-primary" onClick={() => { approve(it.id); setNewIds(prev=>{ const copy=new Set(prev); copy.delete(it.id); return copy;}); }}>Approve</button>
-                            <button className="btn btn-secondary" onClick={() => reject(it.id)}>Reject</button>
+                              <button className="btn btn-primary" onClick={() => { approve(it.id); setNewIds(prev=>{ const copy=new Set(prev); copy.delete(it.id); return copy;}); }}>
+                                {it.actionType === 'generate_purchase_order' ? 'Send for mobile review' : 'Approve'}
+                              </button>
+                            <button className="btn btn-secondary" onClick={() => reject(it.id)}>
+                              {it.actionType === 'generate_purchase_order' ? 'Reject proposal' : 'Reject'}
+                            </button>
                           </>
                         )}
                       </div>
@@ -440,11 +444,18 @@ export function AgentWorkflowMonitorPage() {
                     </div>
                   )}
 
+                  {selected.actionType === 'generate_purchase_order' && (
+                    <div className="workflow-detail-callout workflow-detail-neutral">
+                      <strong>Purchase-order approval has two steps</strong>
+                      <span>Approving this agent workflow submits the order for review. Final authorization and placement are available only in the mobile Purchase Approvals screen.</span>
+                    </div>
+                  )}
+
                   <div className="mt-4 modal-actions">
                     {selected.actionType === 'generate_purchase_order' && selected.status !== 'approved' && (
                       <>
-                        <button className="btn btn-primary" onClick={() => { approve(selected.id); setSelected(null); }}>Approve</button>
-                        <button className="btn btn-secondary" onClick={() => { reject(selected.id); setSelected(null); }}>Reject</button>
+                        <button className="btn btn-primary" onClick={() => { approve(selected.id); setSelected(null); }}>Send for mobile review</button>
+                        <button className="btn btn-secondary" onClick={() => { reject(selected.id); setSelected(null); }}>Reject proposal</button>
                       </>
                     )}
                     <button className="btn" onClick={() => setSelected(null)}>Close</button>

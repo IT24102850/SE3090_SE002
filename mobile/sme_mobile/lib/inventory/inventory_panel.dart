@@ -23,9 +23,17 @@ class InventoryPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(borderRadius);
+    final surface = fill ?? const Color(0xF5121B2B);
     return Container(
       decoration: BoxDecoration(
-        color: fill ?? const Color(0xF5121B2B),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.lerp(surface, Colors.white, .025)!,
+            Color.lerp(surface, Colors.black, .08)!,
+          ],
+        ),
         borderRadius: radius,
         border: Border.all(
           color: borderColor ?? const Color(0xFF273449),

@@ -54,6 +54,33 @@ public class ChangePasswordDto
     public string NewPassword { get; set; } = string.Empty;
 }
 
+public class ForgotPasswordDto
+{
+    [Required, EmailAddress]
+    public string Email { get; set; } = string.Empty;
+}
+
+public class ResetPasswordDto
+{
+    [Required, EmailAddress]
+    public string Email { get; set; } = string.Empty;
+
+    [Required]
+    public string Code { get; set; } = string.Empty;
+
+    [Required, MinLength(6)]
+    public string NewPassword { get; set; } = string.Empty;
+}
+
+public class VerifyResetCodeDto
+{
+    [Required, EmailAddress]
+    public string Email { get; set; } = string.Empty;
+
+    [Required, MinLength(6), MaxLength(6)]
+    public string Code { get; set; } = string.Empty;
+}
+
 public class LoginDto
 {
     [Required, EmailAddress]
@@ -67,6 +94,20 @@ public class RefreshRequestDto
 {
     [Required, MaxLength(200)]
     public string RefreshToken { get; set; } = string.Empty;
+}
+
+/// Social sign-in from the phone. The provider's token is verified
+/// server-side; the client never asserts who it is.
+public class MobileExternalLoginDto
+{
+    [Required]
+    public string Provider { get; set; } = string.Empty;
+
+    public string? IdToken { get; set; }
+
+    public string? AccessToken { get; set; }
+
+    public Guid? TenantId { get; set; }
 }
 
 public class AuthResponseDto

@@ -1,34 +1,18 @@
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/ui/ui.dart';
+import '../widgets/unify_auth/unify_logo_mark.dart';
 import 'authenticated_api_client.dart';
 import 'inventory_panel.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA MODELS
 // ─────────────────────────────────────────────────────────────────────────────
-
-class RevenuePoint {
-  const RevenuePoint(this.label, this.date, this.revenue);
-  final String label;
-  final String date;
-  final double revenue;
-}
-
-class UsagePoint {
-  const UsagePoint(this.name, this.sku, this.received, this.issued, this.net);
-  final String name;
-  final String sku;
-  final int received;
-  final int issued;
-  final int net;
-}
 
 class LowStockPoint {
   const LowStockPoint(
@@ -48,6 +32,13 @@ class CategoryBreakdown {
   final Color color;
 }
 
+class _InventorySessionExpiredException implements Exception {
+  const _InventorySessionExpiredException();
+}
+
+String _formatQuantity(double value) =>
+    value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,132 +51,287 @@ class InsightsScreen extends StatefulWidget {
   State<InsightsScreen> createState() => _InsightsScreenState();
 }
 
-class _InsightsScreenState extends State<InsightsScreen> {
+class _InsightsScreenState extends State<InsightsScreen>
+    with SingleTickerProviderStateMixin {
   bool _loading = false;
-  bool _usedFallback = true;
   final _scrollController = ScrollController();
+  late final AnimationController _heroGlowController;
+  bool? _motionDisabled;
   int _selectedTimeframe = 0; // 0: 7 Days, 1: 30 Days
-
-  List<RevenuePoint> _revenue = const [
-    RevenuePoint('Aug 09', '2026-08-09', 98000),
-    RevenuePoint('Aug 10', '2026-08-10', 116000),
-    RevenuePoint('Aug 11', '2026-08-11', 127500),
-    RevenuePoint('Aug 12', '2026-08-12', 143000),
-    RevenuePoint('Aug 13', '2026-08-13', 131000),
-    RevenuePoint('Aug 14', '2026-08-14', 156500),
-    RevenuePoint('Aug 15', '2026-08-15', 120000),
+  static const _categoryColors = [
+    AppColors.violet,
+    AppColors.cyan,
+    AppColors.success,
+    AppColors.warning,
+    AppColors.magenta,
+    AppColors.electricBlue,
   ];
-
-  List<UsagePoint> _usage = const [
-    UsagePoint('Coffee', 'SKU-00132', 120, 92, 28),
-    UsagePoint('Cups', 'SKU-00612', 180, 126, 54),
-    UsagePoint('Milk', 'SKU-00811', 160, 143, 17),
-    UsagePoint('Boxes', 'SKU-00598', 82, 44, 38),
-    UsagePoint('Syrup', 'SKU-00324', 50, 22, 28),
-  ];
-
-  List<LowStockPoint> _lowStock = const [
-    LowStockPoint('Premium Coffee Beans', 'SKU-00132', 6, 40, 'LowStock'),
-    LowStockPoint('Vanilla Syrup 750ml', 'SKU-00324', 0, 25, 'OutOfStock'),
-    LowStockPoint('Packaging Boxes Medium', 'SKU-00598', 11, 60, 'LowStock'),
-    LowStockPoint('Whole Milk 1L Small', 'SKU-00811', 18, 80, 'LowStock'),
-  ];
-
-  final List<CategoryBreakdown> _categories = const [
-    CategoryBreakdown('Raw Materials', 1842200, 0.44, Color(0xFF7A4DFF)),
-    CategoryBreakdown('Dairy & Milks', 1264400, 0.28, Color(0xFF00E5FF)),
-    CategoryBreakdown('Ingredients', 1105800, 0.18, Color(0xFF10B981)),
-    CategoryBreakdown('Packaging', 884600, 0.10, Color(0xFFF59E0B)),
-  ];
+  List<LowStockPoint> _lowStock = const [];
+  List<CategoryBreakdown> _categories = const [];
+  List<String> _reportErrors = const [];
+  bool _hasLiveData = false;
+  bool _hasInventorySnapshot = false;
+  bool _hasMovementReport = false;
+  bool _sessionExpired = false;
+  int _totalSkus = 0;
+  int _lowStockCount = 0;
+  int _outOfStockCount = 0;
+  int _itemsWithoutUnitCost = 0;
+  double _totalStockValue = 0;
+  double _totalStockUnits = 0;
+  double _totalReceived = 0;
+  double _totalIssued = 0;
 
   @override
   void initState() {
     super.initState();
+    _heroGlowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    );
     _fetchAnalytics();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableMotion = MediaQuery.of(context).disableAnimations;
+    if (disableMotion == _motionDisabled) return;
+    _motionDisabled = disableMotion;
+    if (disableMotion) {
+      _heroGlowController
+        ..stop()
+        ..value = .45;
+    } else {
+      _heroGlowController.repeat(reverse: true);
+    }
+  }
+
+  @override
   void dispose() {
+    _heroGlowController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _fetchAnalytics({bool showSuccess = false}) async {
-    if (widget.client == null) return;
+    if (_loading) return;
+    final client = widget.client;
+    if (client == null) {
+      setState(() {
+        _reportErrors = const [
+          'No authenticated inventory connection is available.'
+        ];
+        _hasLiveData = false;
+        _hasInventorySnapshot = false;
+        _hasMovementReport = false;
+        _sessionExpired = false;
+      });
+      return;
+    }
+    final today = DateTime.now().toUtc();
+    final to = DateTime.utc(today.year, today.month, today.day);
+    final from = to.subtract(Duration(
+      days: _selectedTimeframe == 0 ? 6 : 29,
+    ));
+    final rangeQuery =
+        '?from=${Uri.encodeQueryComponent(from.toIso8601String())}'
+        '&to=${Uri.encodeQueryComponent(to.toIso8601String())}';
     setState(() {
-      _revenue = [];
-      _usage = [];
-      _lowStock = [];
-      _usedFallback = false;
+      _loading = true;
+      _lowStock = const [];
+      _categories = const [];
+      _reportErrors = const [];
+      _hasLiveData = false;
+      _hasInventorySnapshot = false;
+      _hasMovementReport = false;
+      _sessionExpired = false;
+      _totalSkus = 0;
+      _outOfStockCount = 0;
+      _lowStockCount = 0;
+      _totalStockValue = 0;
+      _totalStockUnits = 0;
+      _itemsWithoutUnitCost = 0;
+      _totalReceived = 0;
+      _totalIssued = 0;
     });
-    setState(() => _loading = true);
-    var failedReports = 0;
-    try {
-      final revRes = await widget.client!.get('/api/reports/revenue');
-      if (revRes.statusCode == 200) {
-        final data = jsonDecode(revRes.body) as Map<String, dynamic>;
-        final buckets = (data['buckets'] as List?) ?? [];
-        _revenue = buckets
-            .whereType<Map<String, dynamic>>()
-            .map((b) => RevenuePoint(
-                  b['label'] as String? ?? '',
-                  b['date'] as String? ?? '',
-                  (b['revenue'] as num?)?.toDouble() ?? 0,
-                ))
-            .toList();
+    final errors = <String>[];
+
+    if (!_sessionExpired) {
+      try {
+        final data =
+            await _getReport(client, '/api/reports/inventory-usage$rangeQuery');
+        _totalReceived =
+            (data['totalReceivedQuantity'] as num?)?.toDouble() ?? 0;
+        _totalIssued = (data['totalIssuedQuantity'] as num?)?.toDouble() ?? 0;
+        _hasMovementReport = true;
+        _hasLiveData = true;
+      } catch (error) {
+        if (error is _InventorySessionExpiredException) {
+          _sessionExpired = true;
+        } else if (!_sessionExpired) {
+          errors.add('Stock movement: ${_friendlyError(error)}');
+        }
       }
-    } catch (_) {
-      failedReports++;
     }
 
-    try {
-      final usageRes = await widget.client!.get('/api/reports/inventory-usage');
-      if (usageRes.statusCode == 200) {
-        final data = jsonDecode(usageRes.body) as Map<String, dynamic>;
-        final items = (data['items'] as List?) ?? [];
-        _usage = items
-            .whereType<Map<String, dynamic>>()
-            .take(5)
-            .map((u) => UsagePoint(
-                  u['itemName'] as String? ?? 'Item',
-                  u['sku'] as String? ?? '',
-                  (u['receivedQuantity'] as num?)?.toInt() ?? 0,
-                  (u['issuedQuantity'] as num?)?.toInt() ?? 0,
-                  (u['netQuantity'] as num?)?.toInt() ?? 0,
-                ))
-            .toList();
-      }
-    } catch (_) {
-      failedReports++;
-    }
+    if (!_sessionExpired) {
+      try {
+        final inventory = <Map<String, dynamic>>[];
+        final inventoryIds = <String>{};
+        int? expectedInventoryCount;
+        var page = 1;
+        var totalPages = 1;
+        do {
+          final data = await _getReport(
+            client,
+            '/api/inventory?page=$page&pageSize=100',
+          );
+          final items = data['items'];
+          if (items is! List) {
+            throw const FormatException('Inventory response has no item list.');
+          }
+          final pageItems = items.whereType<Map<String, dynamic>>().toList();
+          if (pageItems.length != items.length) {
+            throw const FormatException(
+                'Inventory response contains invalid items.');
+          }
+          final rawTotalCount = data['totalCount'];
+          if (rawTotalCount is! num ||
+              !rawTotalCount.isFinite ||
+              rawTotalCount < 0 ||
+              rawTotalCount != rawTotalCount.toInt()) {
+            throw const FormatException(
+                'Inventory response has no valid total item count.');
+          }
+          final pageTotalCount = rawTotalCount.toInt();
+          if (expectedInventoryCount != null &&
+              expectedInventoryCount != pageTotalCount) {
+            throw const FormatException(
+                'Inventory changed while loading. Refresh to capture a complete snapshot.');
+          }
+          expectedInventoryCount ??= pageTotalCount;
+          for (final item in pageItems) {
+            final id = item['id'];
+            if (id is String && !inventoryIds.add(id)) {
+              throw const FormatException(
+                  'Inventory pages contain duplicate items. Refresh to capture a complete snapshot.');
+            }
+          }
+          inventory.addAll(pageItems);
+          final pageCount = data['totalPages'];
+          if (pageCount is! num ||
+              !pageCount.isFinite ||
+              pageCount < 0 ||
+              pageCount != pageCount.toInt()) {
+            throw const FormatException(
+                'Inventory response has no valid page count.');
+          }
+          totalPages = pageCount.toInt();
+          page++;
+        } while (page <= totalPages);
+        if (inventory.length != expectedInventoryCount) {
+          throw FormatException(
+            'Loaded ${inventory.length} of $expectedInventoryCount inventory items. Refresh to capture the complete snapshot.',
+          );
+        }
 
-    try {
-      final lowStockRes =
-          await widget.client!.get('/api/inventory/low-stock?pageSize=6');
-      if (lowStockRes.statusCode == 200) {
-        final data = jsonDecode(lowStockRes.body) as Map<String, dynamic>;
-        final items = (data['items'] as List?) ?? [];
-        _lowStock = items
-            .whereType<Map<String, dynamic>>()
-            .map((i) => LowStockPoint(
-                  i['name'] as String? ?? 'Item',
-                  i['sku'] as String? ?? '',
-                  (i['quantity'] as num?)?.toDouble() ?? 0,
-                  (i['reorderLevel'] as num?)?.toDouble() ?? 10,
-                  i['status'] as String? ?? 'LowStock',
-                ))
-            .toList();
+        var categoryNames = <String, String>{};
+        try {
+          categoryNames = await _getInventoryCategoryNames(client);
+        } on _InventorySessionExpiredException {
+          rethrow;
+        } catch (error) {
+          errors.add('Category names: ${_friendlyError(error)}');
+        }
+        final categoryValues = <String, double>{};
+        var totalValue = 0.0;
+        var totalUnits = 0.0;
+        var lowStockCount = 0;
+        var outOfStockCount = 0;
+        var itemsWithoutUnitCost = 0;
+        final lowStockItems = <LowStockPoint>[];
+        for (final item in inventory) {
+          final quantity = (item['quantity'] as num?)?.toDouble() ?? 0;
+          final reorderLevel = (item['reorderLevel'] as num?)?.toDouble() ?? 0;
+          final rawUnitCost = item['unitCost'];
+          if (rawUnitCost is! num) itemsWithoutUnitCost++;
+          final unitCost = (rawUnitCost as num?)?.toDouble() ?? 0;
+          final value = quantity * unitCost;
+          final category = _inventoryCategoryName(item, categoryNames);
+          totalValue += value;
+          totalUnits += quantity;
+          categoryValues.update(category, (existing) => existing + value,
+              ifAbsent: () => value);
+          final out = quantity <= 0;
+          final low = out || quantity <= reorderLevel;
+          if (out) outOfStockCount++;
+          if (low) {
+            lowStockCount++;
+            lowStockItems.add(LowStockPoint(
+              item['name'] as String? ?? 'Item',
+              item['sku'] as String? ?? '',
+              quantity,
+              reorderLevel,
+              out ? 'OutOfStock' : 'LowStock',
+            ));
+          }
+        }
+        lowStockItems.sort((a, b) {
+          if (a.quantity <= 0 && b.quantity > 0) return -1;
+          if (b.quantity <= 0 && a.quantity > 0) return 1;
+          final aRatio = a.reorderLevel > 0 ? a.quantity / a.reorderLevel : 1.0;
+          final bRatio = b.reorderLevel > 0 ? b.quantity / b.reorderLevel : 1.0;
+          return aRatio.compareTo(bRatio);
+        });
+        final categories = categoryValues.entries
+            .where((entry) => entry.value > 0)
+            .toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+
+        _totalSkus = inventory.length;
+        _outOfStockCount = outOfStockCount;
+        _lowStockCount = lowStockCount;
+        _totalStockValue = totalValue;
+        _totalStockUnits = totalUnits;
+        _itemsWithoutUnitCost = itemsWithoutUnitCost;
+        _lowStock = lowStockItems.take(6).toList();
+        _categories = totalValue <= 0
+            ? const []
+            : categories.indexed
+                .map((entry) => CategoryBreakdown(
+                      entry.$2.key,
+                      entry.$2.value,
+                      entry.$2.value / totalValue,
+                      _categoryColors[entry.$1 % _categoryColors.length],
+                    ))
+                .toList();
+        _hasInventorySnapshot = true;
+        _hasLiveData = true;
+      } catch (error) {
+        if (error is _InventorySessionExpiredException) {
+          _sessionExpired = true;
+        } else if (!_sessionExpired) {
+          errors.add('Current inventory: ${_friendlyError(error)}');
+        }
       }
-    } catch (_) {
-      failedReports++;
     }
 
     if (mounted) {
-      setState(() => _loading = false);
-      if (failedReports > 0) {
+      setState(() {
+        _loading = false;
+        _reportErrors = _sessionExpired
+            ? const [
+                'Your session expired or is no longer valid. Sign in again to load inventory analytics.'
+              ]
+            : errors;
+      });
+      if (_sessionExpired) {
+        return;
+      } else if (errors.isNotEmpty) {
         AppSnackBar.info(
           context,
-          '$failedReports analytics report${failedReports == 1 ? '' : 's'} could not be loaded.',
+          '${errors.length} inventory section${errors.length == 1 ? '' : 's'} could not be loaded.',
         );
       } else if (showSuccess) {
         AppSnackBar.success(
@@ -196,11 +342,105 @@ class _InsightsScreenState extends State<InsightsScreen> {
     }
   }
 
-  double get _totalRevenue =>
-      _revenue.fold(0, (sum, item) => sum + item.revenue);
-  int get _totalReceived => _usage.fold(0, (sum, item) => sum + item.received);
-  int get _totalIssued => _usage.fold(0, (sum, item) => sum + item.issued);
-  int get _netQuantity => _totalReceived - _totalIssued;
+  Future<Map<String, dynamic>> _getReport(
+    AuthenticatedApiClient client,
+    String path,
+  ) async {
+    final response = await client.get(path);
+    if (response.statusCode == 401) {
+      throw const _InventorySessionExpiredException();
+    }
+    if (response.statusCode != 200) {
+      throw Exception('Request failed (${response.statusCode}).');
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException(
+          'Unexpected response from the inventory API.');
+    }
+    return decoded;
+  }
+
+  Future<Map<String, String>> _getInventoryCategoryNames(
+    AuthenticatedApiClient client,
+  ) async {
+    final response = await client.get('/api/inventory/categories');
+    if (response.statusCode == 401) {
+      throw const _InventorySessionExpiredException();
+    }
+    if (response.statusCode != 200) {
+      throw Exception('Request failed (${response.statusCode}).');
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) {
+      throw const FormatException('Inventory categories response is invalid.');
+    }
+
+    final names = <String, String>{};
+    for (final entry in decoded) {
+      if (entry is! Map<String, dynamic>) continue;
+      final id = entry['id'];
+      final name = entry['name'];
+      if (id is String && name is String && name.trim().isNotEmpty) {
+        names[id.toLowerCase()] = name.trim();
+      }
+    }
+    return names;
+  }
+
+  String _inventoryCategoryName(
+    Map<String, dynamic> item,
+    Map<String, String> categoryNames,
+  ) {
+    final rawCategory = item['category'];
+    if (rawCategory is String && rawCategory.trim().isNotEmpty) {
+      return rawCategory.trim();
+    }
+    if (rawCategory is Map) {
+      final nestedName = rawCategory['name'] ?? rawCategory['Name'];
+      if (nestedName is String && nestedName.trim().isNotEmpty) {
+        return nestedName.trim();
+      }
+    }
+
+    final rawCategoryName = item['categoryName'] ?? item['CategoryName'];
+    if (rawCategoryName is String && rawCategoryName.trim().isNotEmpty) {
+      return rawCategoryName.trim();
+    }
+
+    final rawCategoryId = item['categoryId'] ?? item['CategoryId'];
+    if (rawCategoryId is String && rawCategoryId.trim().isNotEmpty) {
+      return categoryNames[rawCategoryId.toLowerCase()] ?? 'Unmapped category';
+    }
+
+    final rawDescription = item['description'] ?? item['Description'];
+    if (rawDescription is String) {
+      final description = rawDescription.trim().toLowerCase();
+      for (final categoryName in categoryNames.values) {
+        final normalizedName = categoryName.toLowerCase();
+        if (description == normalizedName ||
+            (description.startsWith('$normalizedName (') &&
+                description.endsWith(')'))) {
+          return categoryName;
+        }
+      }
+    }
+    return 'Uncategorised';
+  }
+
+  String _friendlyError(Object error) {
+    final message = error.toString().replaceFirst('Exception: ', '');
+    return message.length > 140 ? '${message.substring(0, 137)}…' : message;
+  }
+
+  String get _selectedPeriodLabel =>
+      _selectedTimeframe == 0 ? '7-day period' : '30-day period';
+
+  Future<void> _selectTimeframe(int index) async {
+    if (index == _selectedTimeframe || _loading) return;
+    setState(() => _selectedTimeframe = index);
+    await _fetchAnalytics();
+  }
 
   // ──────────────────────────────────────────────────────────────
   // BUILD
@@ -235,86 +475,149 @@ class _InsightsScreenState extends State<InsightsScreen> {
             ),
         ],
       ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-            child: _buildHeroBanner(),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () => _fetchAnalytics(showSuccess: true),
+      child: RefreshIndicator(
+        onRefresh: () => _fetchAnalytics(showSuccess: true),
+        color: AppColors.cyan,
+        backgroundColor: AppColors.bgMid,
+        child: ListView(
+          controller: _scrollController,
+          primary: false,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            _buildHeroBanner(),
+            const SizedBox(height: 16),
+            if (_loading)
+              const LinearProgressIndicator(
+                minHeight: 2,
+                backgroundColor: Colors.transparent,
+                valueColor: AlwaysStoppedAnimation(AppColors.cyan),
+              ),
+            if (_loading) const SizedBox(height: 10),
+            _buildTimeframeRow(),
+            const SizedBox(height: 14),
+
+            if (_reportErrors.isNotEmpty) ...[
+              _buildReportErrorPanel(),
+              const SizedBox(height: 16),
+            ],
+
+            // ── Whole inventory snapshot ─────────────────
+            _buildAnalyticsSectionHeading(
+              icon: Icons.inventory_2_rounded,
+              title: 'Whole inventory',
+              subtitle:
+                  'All accessible items · date range only filters activity',
+            ),
+            const SizedBox(height: 11),
+            _buildInventorySnapshot(),
+            const SizedBox(height: 25),
+
+            // ── Revenue Chart ────────────────────────────
+            _buildAnalyticsSectionHeading(
+              icon: Icons.inventory_2_rounded,
+              title: 'Inventory activity',
+              subtitle: 'Stock received and issued in the selected period',
+              color: AppColors.success,
+            ),
+            const SizedBox(height: 11),
+            _buildInventoryActivitySummary(),
+            const SizedBox(height: 25),
+
+            // ── Inventory Movement ───────────────────────
+            // ── Live category valuation ──────────────────
+            _buildAnalyticsSectionHeading(
+              icon: Icons.donut_large_rounded,
+              title: 'Stock value by category',
+              subtitle: 'Current on-hand value · quantity × unit cost',
               color: AppColors.cyan,
-              backgroundColor: AppColors.bgMid,
-              child: ListView(
-                controller: _scrollController,
-                primary: false,
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-                children: [
-                  if (_loading)
-                    const LinearProgressIndicator(
-                      minHeight: 2,
-                      backgroundColor: Colors.transparent,
-                      valueColor: AlwaysStoppedAnimation(AppColors.cyan),
-                    ),
-                  if (_loading) const SizedBox(height: 10),
-                  // ── Timeframe Pills ──────────────────────────
-                  _buildTimeframeRow(),
-                  const SizedBox(height: 14),
+            ),
+            const SizedBox(height: 11),
+            _buildDonutSection(),
+            const SizedBox(height: 25),
 
-                  // ── KPI Cards ───────────────────────────────
-                  const SectionHeader('KEY METRICS'),
-                  const SizedBox(height: 10),
-                  _buildKpiGrid(),
-                  const SizedBox(height: 18),
-
-                  // ── Revenue Chart ────────────────────────────
-                  const SectionHeader('REVENUE TRENDS'),
-                  const SizedBox(height: 10),
-                  _buildRevenueChart(),
-                  const SizedBox(height: 20),
-
-                  // ── Inventory Movement ───────────────────────
-                  const SectionHeader('INVENTORY MOVEMENT'),
-                  const SizedBox(height: 10),
-                  _buildMovementChart(),
-                  const SizedBox(height: 20),
-
-                  // ── Category Donut ───────────────────────────
-                  const SectionHeader('PORTFOLIO BREAKDOWN'),
-                  const SizedBox(height: 10),
-                  _buildDonutSection(),
-                  const SizedBox(height: 20),
-
-                  // ── Low-Stock Fill Rate ──────────────────────
-                  SectionHeader(
-                    'LOW-STOCK PRESSURE',
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.danger.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: AppColors.danger.withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        '${_lowStock.length} Critical',
-                        style: AppTextStyles.caption.copyWith(
-                          color: const Color(0xFFF87171),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
+            // ── Reorder risk ─────────────────────────────
+            _buildAnalyticsSectionHeading(
+              icon: Icons.warning_amber_rounded,
+              title: 'Reorder watch',
+              subtitle: 'Most urgent items from the complete stock list',
+              color: AppColors.warning,
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.danger.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: AppColors.danger.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  '$_lowStockCount items',
+                  style: AppTextStyles.caption.copyWith(
+                    color: const Color(0xFFF87171),
+                    fontWeight: FontWeight.w800,
                   ),
-                  const SizedBox(height: 10),
-                  _buildLowStockList(),
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 11),
+            _buildLowStockList(),
+          ],
+        ),
       ),
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // SECTION HEADINGS
+  // ──────────────────────────────────────────────────────────────
+  Widget _buildAnalyticsSectionHeading({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    Color color = AppColors.cyan,
+    Widget? trailing,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: color.withValues(alpha: .2)),
+          ),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: AppTextStyles.subtitle.copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textMuted,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (trailing != null) ...[
+          const SizedBox(width: 8),
+          trailing,
+        ],
+      ],
     );
   }
 
@@ -322,80 +625,177 @@ class _InsightsScreenState extends State<InsightsScreen> {
   // HERO BANNER
   // ──────────────────────────────────────────────────────────────
   Widget _buildHeroBanner() {
-    final sourceColor = _usedFallback ? AppColors.warning : AppColors.success;
+    final sourceColor = _reportErrors.isNotEmpty
+        ? AppColors.warning
+        : _hasLiveData
+            ? AppColors.success
+            : AppColors.textMuted;
+    final sourceLabel = _loading && !_hasLiveData
+        ? 'SYNCING'
+        : _reportErrors.isNotEmpty
+            ? 'PARTIAL'
+            : _hasLiveData
+                ? 'LIVE DATA'
+                : 'NO DATA';
     return InventoryPanel(
-      fill: const Color(0xFF142235),
-      borderColor: const Color(0xFF2A4058),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.cyan.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(13),
+      padding: EdgeInsets.zero,
+      borderColor: AppColors.cyan.withValues(alpha: .24),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(
+          children: [
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF172B43),
+                      Color(0xFF10243A),
+                      Color(0xFF122D38),
+                    ],
+                  ),
+                ),
+              ),
             ),
-            child: const Icon(Icons.insights_rounded,
-                color: AppColors.cyan, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('INVENTORY REPORTS',
-                    style: AppTextStyles.label.copyWith(
-                      color: AppColors.cyan,
-                      fontSize: 9,
-                      letterSpacing: 1,
-                    )),
-                const SizedBox(height: 3),
-                Text('Analytics',
-                    style: AppTextStyles.title.copyWith(
+            AnimatedBuilder(
+              animation: _heroGlowController,
+              builder: (context, child) {
+                final pulse =
+                    _motionDisabled == true ? .45 : _heroGlowController.value;
+                return Positioned(
+                  right: -48 - (pulse * 12),
+                  top: -72 + (pulse * 10),
+                  child: Container(
+                    width: 190,
+                    height: 190,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.cyan
+                          .withValues(alpha: .035 + (pulse * .035)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.violet
+                              .withValues(alpha: .08 + (pulse * .08)),
+                          blurRadius: 45 + (pulse * 20),
+                          spreadRadius: 10 + (pulse * 8),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.all(17),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const UnifyLogoMark(size: 42, glow: false),
+                      const SizedBox(width: 11),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Unify',
+                              style: AppTextStyles.subtitle.copyWith(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -.2,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Innovate · Adapt · Operate',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textMuted,
+                                fontSize: 9,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: sourceColor.withValues(alpha: .12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: sourceColor.withValues(alpha: .28)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: sourceColor,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                      color: sourceColor.withValues(alpha: .5),
+                                      blurRadius: 5),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              sourceLabel,
+                              style: AppTextStyles.caption.copyWith(
+                                color: sourceColor,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 9,
+                                letterSpacing: .35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 17),
+                  Text(
+                    'Your stock, in focus',
+                    style: AppTextStyles.headlineSmall.copyWith(
+                      fontSize: 25,
                       fontWeight: FontWeight.w800,
-                      fontSize: 20,
-                    )),
-                Text(
-                  'Sales, stock movement and reorder trends',
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.textSecondary, fontSize: 11),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: sourceColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: sourceColor,
-                    shape: BoxShape.circle,
+                      letterSpacing: -.45,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  _usedFallback ? 'Sample' : 'Live',
-                  style: AppTextStyles.caption.copyWith(
-                    color: sourceColor,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 9,
+                  const SizedBox(height: 5),
+                  Text(
+                    'One complete view of stock on hand, value, movement and items needing attention.',
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 15),
+                  const Wrap(
+                    spacing: 7,
+                    runSpacing: 7,
+                    children: [
+                      _AnalyticsTopicPill(
+                          icon: Icons.show_chart_rounded, label: 'REVENUE'),
+                      _AnalyticsTopicPill(
+                          icon: Icons.swap_vert_rounded, label: 'MOVEMENT'),
+                      _AnalyticsTopicPill(
+                          icon: Icons.notifications_active_outlined,
+                          label: 'REORDER'),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -405,24 +805,58 @@ class _InsightsScreenState extends State<InsightsScreen> {
   // ──────────────────────────────────────────────────────────────
   Widget _buildTimeframeRow() {
     return InventoryPanel(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
       child: Row(
         children: [
-          const Icon(Icons.date_range_rounded,
-              color: AppColors.textSecondary, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text('Period',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w700,
-                )),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppColors.cyan.withValues(alpha: .1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.date_range_rounded,
+                color: AppColors.cyan, size: 17),
           ),
-          _buildTimeframePill('7 days', 0),
-          const SizedBox(width: 6),
-          _buildTimeframePill('30 days', 1),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'DATE RANGE',
+                  style: AppTextStyles.label.copyWith(
+                    color: AppColors.textMuted,
+                    fontSize: 8,
+                    letterSpacing: .8,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Analytics period',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D1728),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.glassBorder),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTimeframePill('7 days', 0),
+                _buildTimeframePill('30 days', 1),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -430,23 +864,36 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
   Widget _buildTimeframePill(String label, int index) {
     final selected = _selectedTimeframe == index;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedTimeframe = index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.cyan : const Color(0xFF182538),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? AppColors.cyan : const Color(0xFF29394D),
-          ),
-        ),
-        child: Text(
-          label,
-          style: AppTextStyles.label.copyWith(
-            color: selected ? AppColors.onPrimary : AppColors.textSecondary,
-            fontWeight: FontWeight.w800,
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(9),
+          onTap: _loading ? null : () => _selectTimeframe(index),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.cyan.withValues(alpha: .16)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: selected
+                    ? AppColors.cyan.withValues(alpha: .42)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Text(
+              label,
+              style: AppTextStyles.caption.copyWith(
+                color: selected ? AppColors.cyan : AppColors.textSecondary,
+                fontWeight: FontWeight.w800,
+                fontSize: 10,
+              ),
+            ),
           ),
         ),
       ),
@@ -454,248 +901,407 @@ class _InsightsScreenState extends State<InsightsScreen> {
   }
 
   // ──────────────────────────────────────────────────────────────
-  // KPI GRID
+  // COMPLETE STOCK SNAPSHOT
   // ──────────────────────────────────────────────────────────────
-  Widget _buildKpiGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 900;
-        return GridView.builder(
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: wide ? 4 : 2,
-            mainAxisExtent: wide ? 132 : 146,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
-          itemCount: 4,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemBuilder: (context, index) {
-            final cards = [
-              _KpiMetricCard(
-                title: 'Revenue',
-                value: 'LKR ${_formatCompact(_totalRevenue)}',
-                detail: '+14.2% vs last period',
-                icon: Icons.payments_outlined,
-                color: AppColors.violet,
-                isPositive: true,
+  Widget _buildInventorySnapshot() {
+    final hasSnapshot = _hasInventorySnapshot;
+    final healthyItems = math.max(0, _totalSkus - _lowStockCount);
+    final healthRatio = _totalSkus == 0 ? 0.0 : healthyItems / _totalSkus;
+    return InventoryPanel(
+      padding: EdgeInsets.zero,
+      fill: const Color(0xFF111F34),
+      borderColor: AppColors.cyan.withValues(alpha: .24),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(
+          children: [
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF142941), Color(0xFF101B30)],
+                  ),
+                ),
               ),
-              _KpiMetricCard(
-                title: 'Stock Received',
-                value: '$_totalReceived units',
-                detail: '30-day window',
-                icon: Icons.move_to_inbox_outlined,
-                color: AppColors.cyan,
+            ),
+            Positioned(
+              right: -24,
+              top: -30,
+              child: Container(
+                width: 108,
+                height: 108,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.cyan.withValues(alpha: .04),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.cyan.withValues(alpha: .08),
+                      blurRadius: 35,
+                      spreadRadius: 10,
+                    ),
+                  ],
+                ),
               ),
-              _KpiMetricCard(
-                title: 'Stock Issued',
-                value: '$_totalIssued units',
-                detail: '+$_netQuantity net',
-                icon: Icons.outbox_rounded,
-                color: const Color(0xFF10B981),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'VALUED STOCK ON HAND',
+                          style: AppTextStyles.label.copyWith(
+                            color: AppColors.textSecondary,
+                            fontSize: 9,
+                            letterSpacing: .9,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.account_balance_wallet_outlined,
+                          color: AppColors.cyan.withValues(alpha: .85),
+                          size: 19),
+                    ],
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    hasSnapshot
+                        ? 'LKR ${_formatCompact(_totalStockValue)}'
+                        : _loading
+                            ? 'Syncing…'
+                            : 'Unavailable',
+                    style: AppTextStyles.headlineSmall.copyWith(
+                      fontSize: 27,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -.4,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    hasSnapshot
+                        ? _itemsWithoutUnitCost == 0
+                            ? 'Quantity × unit cost across all inventory items'
+                            : '$_itemsWithoutUnitCost items missing cost are excluded'
+                        : 'Could not load the complete stock snapshot',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textMuted,
+                      fontSize: 10,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Divider(
+                      height: 1,
+                      color: AppColors.glassBorder.withValues(alpha: .8)),
+                  const SizedBox(height: 13),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SnapshotStat(
+                          icon: Icons.qr_code_2_rounded,
+                          label: 'ITEMS',
+                          value: hasSnapshot ? '$_totalSkus' : '—',
+                          color: AppColors.cyan,
+                        ),
+                      ),
+                      Expanded(
+                        child: _SnapshotStat(
+                          icon: Icons.inventory_2_outlined,
+                          label: 'UNITS ON HAND',
+                          value: hasSnapshot
+                              ? _formatQuantity(_totalStockUnits)
+                              : '—',
+                          color: AppColors.success,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SnapshotStat(
+                          icon: Icons.warning_amber_rounded,
+                          label: 'LOW / REORDER',
+                          value: hasSnapshot ? '$_lowStockCount' : '—',
+                          color: AppColors.warning,
+                        ),
+                      ),
+                      Expanded(
+                        child: _SnapshotStat(
+                          icon: Icons.remove_shopping_cart_outlined,
+                          label: 'OUT OF STOCK',
+                          value: hasSnapshot ? '$_outOfStockCount' : '—',
+                          color: AppColors.danger,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 13),
+                  Container(
+                    padding: const EdgeInsets.all(11),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: .06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.success.withValues(alpha: .18),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'HEALTHY STOCK',
+                                    style: AppTextStyles.label.copyWith(
+                                      color: AppColors.success,
+                                      fontSize: 8,
+                                      letterSpacing: .6,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Above reorder level',
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.textMuted,
+                                      fontSize: 9,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              hasSnapshot ? '$healthyItems / $_totalSkus' : '—',
+                              style: AppTextStyles.subtitle.copyWith(
+                                color: AppColors.success,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 9),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(99),
+                          child: LinearProgressIndicator(
+                            value: hasSnapshot ? healthRatio : 0,
+                            minHeight: 6,
+                            backgroundColor:
+                                AppColors.success.withValues(alpha: .12),
+                            valueColor: const AlwaysStoppedAnimation(
+                              AppColors.success,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              _KpiMetricCard(
-                title: 'Low Stock Alert',
-                value: '${_lowStock.length} items',
-                detail: 'Needs attention',
-                icon: Icons.warning_amber_rounded,
-                color: AppColors.danger,
-                isAlert: true,
-              ),
-            ];
-            return cards[index];
-          },
-        );
-      },
+            ),
+          ],
+        ),
+      ),
     );
   }
+
+  Widget _buildReportErrorPanel() => Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: AppColors.warning.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.warning.withValues(alpha: .28)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.info_outline_rounded,
+                color: AppColors.warning, size: 18),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _sessionExpired
+                        ? 'Sign-in required'
+                        : 'Some data could not be loaded',
+                    style: AppTextStyles.subtitle.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  ..._reportErrors.map((error) => Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          error,
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                            fontSize: 10,
+                          ),
+                        ),
+                      )),
+                ],
+              ),
+            ),
+            if (!_sessionExpired)
+              IconButton(
+                onPressed:
+                    _loading ? null : () => _fetchAnalytics(showSuccess: true),
+                tooltip: 'Retry analytics',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.refresh_rounded,
+                    color: AppColors.warning, size: 18),
+              ),
+          ],
+        ),
+      );
 
   // ──────────────────────────────────────────────────────────────
   // REVENUE CHART
   // ──────────────────────────────────────────────────────────────
-  Widget _buildRevenueChart() {
+  Widget _buildInventoryActivitySummary() {
     return InventoryPanel(
       borderColor: const Color(0xFF29394D),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Revenue Trends',
-                      style: AppTextStyles.subtitle
-                          .copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 2),
-                  Text('Daily revenue (LKR) over selected window',
-                      style: AppTextStyles.caption
-                          .copyWith(color: AppColors.textMuted)),
-                ],
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.violet.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color: AppColors.violet.withValues(alpha: 0.35)),
-                ),
-                child: Text(
-                  'Total: LKR ${_formatCompact(_totalRevenue)}',
-                  style: AppTextStyles.caption.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFFA78BFA),
-                  ),
-                ),
-              ),
-            ],
+      padding: const EdgeInsets.all(14),
+      child: Row(children: [
+        Expanded(
+          child: _PeriodMovementMetric(
+            label: 'RECEIVED Â· $_selectedPeriodLabel',
+            value: _hasMovementReport ? _formatQuantity(_totalReceived) : 'â€”',
+            color: AppColors.success,
+            icon: Icons.south_west_rounded,
           ),
-          const SizedBox(height: 18),
-          if (_revenue.isEmpty)
-            _buildEmptyChart(Icons.show_chart_rounded,
-                'No revenue data recorded', 'Data will appear once API syncs')
-          else
-            SizedBox(
-              height: 190,
-              child: _RevenueAreaChart(
-                points: _revenue,
-                isDark: true,
-              ),
-            ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: _PeriodMovementMetric(
+            label: 'ISSUED Â· $_selectedPeriodLabel',
+            value: _hasMovementReport ? _formatQuantity(_totalIssued) : 'â€”',
+            color: AppColors.warning,
+            icon: Icons.north_east_rounded,
+          ),
+        ),
+      ]),
     );
   }
 
-  // ──────────────────────────────────────────────────────────────
-  // MOVEMENT CHART
-  // ──────────────────────────────────────────────────────────────
-  Widget _buildMovementChart() {
-    return InventoryPanel(
-      borderColor: const Color(0xFF29394D),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Inventory Movement',
-                      style: AppTextStyles.subtitle
-                          .copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 2),
-                  Text('Received vs Issued units by top item',
-                      style: AppTextStyles.caption
-                          .copyWith(color: AppColors.textMuted)),
-                ],
-              ),
-              const Row(
-                children: [
-                  _ChartLegendDot(color: Color(0xFF10B981), label: 'Received'),
-                  SizedBox(width: 10),
-                  _ChartLegendDot(color: Color(0xFFF59E0B), label: 'Issued'),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          if (_usage.isEmpty)
-            _buildEmptyChart(Icons.bar_chart_rounded, 'No movement data',
-                'Inventory usage will appear here')
-          else
-            SizedBox(
-              height: 185,
-              child: _InventoryDualBarChart(
-                usage: _usage,
-                isDark: true,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // ──────────────────────────────────────────────────────────────
-  // DONUT SECTION
-  // ──────────────────────────────────────────────────────────────
   Widget _buildDonutSection() {
     return InventoryPanel(
       borderColor: const Color(0xFF29394D),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Stock Valuation & Slices',
+          Text('Category value breakdown',
               style:
                   AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 2),
-          Text('Portfolio distribution across 4 main categories',
-              style:
-                  AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              SizedBox(
-                width: 128,
-                height: 128,
-                child: _DonutChart(
-                  slices: _categories,
-                  isDark: true,
+          Text(
+            _itemsWithoutUnitCost == 0
+                ? 'Current on-hand value by category'
+                : 'Current value by category · items missing cost excluded',
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textMuted,
+              fontSize: 10,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (!_hasInventorySnapshot)
+            _buildEmptyChart(
+              Icons.inventory_2_outlined,
+              'Inventory valuation unavailable',
+              'Refresh to try loading the complete inventory',
+            )
+          else if (_categories.isEmpty)
+            _buildEmptyChart(
+              Icons.donut_large_rounded,
+              'No category value recorded',
+              _itemsWithoutUnitCost == 0
+                  ? 'Current inventory has no positive on-hand value'
+                  : 'Add unit costs to inventory items to see their value share',
+            )
+          else
+            Row(
+              children: [
+                SizedBox(
+                  width: 124,
+                  height: 124,
+                  child: _DonutChart(
+                    slices: _categories,
+                    centerValue: _formatCompact(_totalStockValue),
+                    isDark: true,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: _categories.map((c) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(
-                              color: c.color,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                    color: c.color.withValues(alpha: 0.5),
-                                    blurRadius: 6),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: _categories.map((category) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 9),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: category.color,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 7),
+                                Expanded(
+                                  child: Text(
+                                    category.label,
+                                    style: AppTextStyles.caption.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 10,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Text(
+                                  '${(category.pct * 100).toStringAsFixed(0)}%',
+                                  style: AppTextStyles.caption.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: category.color,
+                                    fontSize: 10,
+                                  ),
+                                ),
                               ],
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              c.label,
-                              style: AppTextStyles.caption
-                                  .copyWith(fontWeight: FontWeight.w600),
-                              overflow: TextOverflow.ellipsis,
+                            const SizedBox(height: 2),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 15),
+                              child: Text(
+                                'LKR ${_formatCompact(category.amount)}',
+                                style: AppTextStyles.caption.copyWith(
+                                  color: AppColors.textMuted,
+                                  fontSize: 9,
+                                ),
+                              ),
                             ),
-                          ),
-                          Text(
-                            '${(c.pct * 100).toInt()}%',
-                            style: AppTextStyles.caption.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: c.color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );
@@ -706,18 +1312,31 @@ class _InsightsScreenState extends State<InsightsScreen> {
   // ──────────────────────────────────────────────────────────────
   Widget _buildLowStockList() {
     if (_lowStock.isEmpty) {
+      final title = !_hasInventorySnapshot
+          ? (_loading ? 'Checking current stock…' : 'Stock levels unavailable')
+          : 'All stock levels healthy';
+      final detail = !_hasInventorySnapshot
+          ? 'Refresh to load stock for your accessible branches.'
+          : 'No items are at or below their reorder level.';
       return InventoryPanel(
         padding: const EdgeInsets.all(28),
         child: Column(
           children: [
-            const Icon(Icons.check_circle_rounded,
-                color: Color(0xFF10B981), size: 40),
+            Icon(
+              _hasInventorySnapshot
+                  ? Icons.check_circle_rounded
+                  : Icons.inventory_2_outlined,
+              color: _hasInventorySnapshot
+                  ? AppColors.success
+                  : AppColors.textMuted,
+              size: 40,
+            ),
             const SizedBox(height: 10),
-            Text('All stock levels healthy!',
+            Text(title,
                 style: AppTextStyles.subtitle
                     .copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            Text('No items are below reorder threshold.',
+            Text(detail,
                 style:
                     AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
           ],
@@ -731,10 +1350,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Items below safety threshold',
+          Text(
+              'Showing ${_lowStock.length} most urgent of $_lowStockCount items',
               style:
                   AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
-          const SizedBox(height: 16),
+          const SizedBox(height: 13),
           for (var i = 0; i < _lowStock.length; i++) ...[
             _buildLowStockRow(_lowStock[i]),
             if (i < _lowStock.length - 1)
@@ -782,8 +1402,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 ),
                 child: Text(
                   isOut
-                      ? '0% • OUT OF STOCK'
-                      : '${(fillPct * 100).toInt()}% • LOW',
+                      ? 'OUT OF STOCK'
+                      : '${(fillPct * 100).toInt()}% TO REORDER',
                   style: AppTextStyles.caption.copyWith(
                     fontWeight: FontWeight.w800,
                     color: accentColor,
@@ -853,10 +1473,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
   }
 
   static String _formatCompact(double number) {
+    if (number >= 1000000000) {
+      return '${(number / 1000000000).toStringAsFixed(1)}B';
+    }
     if (number >= 1000000) {
       return '${(number / 1000000).toStringAsFixed(1)}M';
     } else if (number >= 1000) {
-      return '${(number / 1000).toStringAsFixed(0)}K';
+      return '${(number / 1000).toStringAsFixed(1)}K';
     }
     return number.toStringAsFixed(0);
   }
@@ -865,420 +1488,37 @@ class _InsightsScreenState extends State<InsightsScreen> {
 // ─────────────────────────────────────────────────────────────────────────────
 // CUSTOM PAINTED REVENUE AREA CHART (unchanged logic)
 // ─────────────────────────────────────────────────────────────────────────────
-class _RevenueAreaChart extends StatefulWidget {
-  const _RevenueAreaChart({required this.points, required this.isDark});
-  final List<RevenuePoint> points;
-  final bool isDark;
-
-  @override
-  State<_RevenueAreaChart> createState() => _RevenueAreaChartState();
-}
-
-class _RevenueAreaChartState extends State<_RevenueAreaChart> {
-  int? _hoveredIndex;
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.points.isEmpty) {
-      return const Center(child: Text('No revenue data recorded'));
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final height = constraints.maxHeight;
-
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (details) => _updateTouch(details.localPosition.dx, width),
-          onHorizontalDragUpdate: (details) =>
-              _updateTouch(details.localPosition.dx, width),
-          onHorizontalDragEnd: (_) => setState(() => _hoveredIndex = null),
-          onTapUp: (_) => setState(() => _hoveredIndex = null),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              CustomPaint(
-                size: Size(width, height),
-                painter: _RevenueChartPainter(
-                  points: widget.points,
-                  selectedIndex: _hoveredIndex,
-                  isDark: widget.isDark,
-                ),
-              ),
-              if (_hoveredIndex != null &&
-                  _hoveredIndex! < widget.points.length)
-                Positioned(
-                  top: 0,
-                  left: math.max(
-                      0,
-                      math.min(
-                          width - 120,
-                          _getXForIndex(
-                                  _hoveredIndex!, width, widget.points.length) -
-                              60)),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color:
-                              const Color(0xFF0D0F2B).withValues(alpha: 0.85),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: AppColors.violet.withValues(alpha: 0.6)),
-                          boxShadow: [
-                            BoxShadow(
-                                color: AppColors.violet.withValues(alpha: 0.25),
-                                blurRadius: 12),
-                          ],
-                        ),
-                        child: Text(
-                          '${widget.points[_hoveredIndex!].label}: LKR ${widget.points[_hoveredIndex!].revenue.toInt()}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _updateTouch(double localX, double totalWidth) {
-    const leftPadding = 38.0;
-    const rightPadding = 16.0;
-    final chartWidth = totalWidth - leftPadding - rightPadding;
-    final count = widget.points.length;
-    if (count <= 1) return;
-    final step = chartWidth / (count - 1);
-    final relativeX = localX - leftPadding;
-    final index = (relativeX / step).round().clamp(0, count - 1);
-    if (_hoveredIndex != index) {
-      setState(() => _hoveredIndex = index);
-    }
-  }
-
-  double _getXForIndex(int i, double totalWidth, int count) {
-    const leftPadding = 38.0;
-    const rightPadding = 16.0;
-    final chartWidth = totalWidth - leftPadding - rightPadding;
-    final step = chartWidth / (count - 1);
-    return leftPadding + i * step;
-  }
-}
-
-class _RevenueChartPainter extends CustomPainter {
-  _RevenueChartPainter({
-    required this.points,
-    required this.selectedIndex,
+class _DonutChart extends StatelessWidget {
+  const _DonutChart({
+    required this.slices,
+    required this.centerValue,
     required this.isDark,
   });
-
-  final List<RevenuePoint> points;
-  final int? selectedIndex;
-  final bool isDark;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (points.isEmpty) return;
-
-    const leftPad = 38.0;
-    const rightPad = 16.0;
-    const topPad = 24.0;
-    const bottomPad = 24.0;
-
-    final chartW = size.width - leftPad - rightPad;
-    final chartH = size.height - topPad - bottomPad;
-
-    final maxVal = points.map((p) => p.revenue).reduce(math.max);
-    final ceiling = math.max(maxVal * 1.15, 1000.0);
-
-    final gridLinePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
-      ..strokeWidth = 1.0;
-
-    final labelStyle = TextStyle(
-      color: Colors.white.withValues(alpha: 0.45),
-      fontSize: 9.5,
-      fontWeight: FontWeight.w600,
-    );
-
-    for (int i = 0; i <= 3; i++) {
-      final yRatio = i / 3.0;
-      final y = topPad + chartH * (1.0 - yRatio);
-      final valueAtY = ceiling * yRatio;
-
-      canvas.drawLine(
-          Offset(leftPad, y), Offset(size.width - rightPad, y), gridLinePaint);
-
-      final label = '${(valueAtY / 1000).toStringAsFixed(0)}k';
-      final tp = TextPainter(
-        text: TextSpan(text: label, style: labelStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(leftPad - tp.width - 6, y - tp.height / 2));
-    }
-
-    final stepX = chartW / (points.length - 1);
-    final coords = <Offset>[];
-    for (int i = 0; i < points.length; i++) {
-      final x = leftPad + i * stepX;
-      final ratio = (points[i].revenue / ceiling).clamp(0.0, 1.0);
-      final y = topPad + chartH * (1.0 - ratio);
-      coords.add(Offset(x, y));
-    }
-
-    final path = Path()..moveTo(coords.first.dx, coords.first.dy);
-    for (int i = 0; i < coords.length - 1; i++) {
-      final p0 = coords[i];
-      final p1 = coords[i + 1];
-      final cx1 = p0.dx + (p1.dx - p0.dx) / 2;
-      final cy1 = p0.dy;
-      final cx2 = p0.dx + (p1.dx - p0.dx) / 2;
-      final cy2 = p1.dy;
-      path.cubicTo(cx1, cy1, cx2, cy2, p1.dx, p1.dy);
-    }
-
-    final areaPath = Path.from(path)
-      ..lineTo(coords.last.dx, topPad + chartH)
-      ..lineTo(coords.first.dx, topPad + chartH)
-      ..close();
-
-    // Neon violet gradient fill
-    final fillPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          const Color(0xFF7A4DFF).withValues(alpha: 0.42),
-          const Color(0xFF7A4DFF).withValues(alpha: 0.02),
-        ],
-      ).createShader(Rect.fromLTWH(leftPad, topPad, chartW, chartH))
-      ..style = PaintingStyle.fill;
-    canvas.drawPath(areaPath, fillPaint);
-
-    // Neon violet stroke
-    final linePaint = Paint()
-      ..color = const Color(0xFF9D71FF)
-      ..strokeWidth = 2.8
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawPath(path, linePaint);
-
-    for (int i = 0; i < coords.length; i++) {
-      final pt = coords[i];
-      final isSel = selectedIndex == i;
-
-      if (i % 2 == 0 || i == coords.length - 1) {
-        final tp = TextPainter(
-          text: TextSpan(text: points[i].label, style: labelStyle),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        tp.paint(canvas, Offset(pt.dx - tp.width / 2, size.height - 14));
-      }
-
-      if (isSel) {
-        final guidePaint = Paint()
-          ..color = const Color(0xFF7A4DFF).withValues(alpha: 0.6)
-          ..strokeWidth = 1.2;
-        canvas.drawLine(
-            Offset(pt.dx, topPad), Offset(pt.dx, topPad + chartH), guidePaint);
-        canvas.drawCircle(
-            pt,
-            9.0,
-            Paint()
-              ..color = const Color(0xFF7A4DFF).withValues(alpha: 0.22)
-              ..style = PaintingStyle.fill);
-      }
-
-      canvas.drawCircle(
-          pt,
-          isSel ? 5.5 : 3.8,
-          Paint()
-            ..color = const Color(0xFF9D71FF)
-            ..style = PaintingStyle.fill);
-      canvas.drawCircle(
-          pt,
-          isSel ? 3.0 : 2.0,
-          Paint()
-            ..color = Colors.white
-            ..style = PaintingStyle.fill);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _RevenueChartPainter oldDelegate) =>
-      oldDelegate.selectedIndex != selectedIndex ||
-      oldDelegate.points != points ||
-      oldDelegate.isDark != isDark;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CUSTOM PAINTED INVENTORY MOVEMENT DUAL BAR CHART (unchanged logic)
-// ─────────────────────────────────────────────────────────────────────────────
-class _InventoryDualBarChart extends StatelessWidget {
-  const _InventoryDualBarChart({required this.usage, required this.isDark});
-  final List<UsagePoint> usage;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    if (usage.isEmpty) {
-      return const Center(child: Text('No inventory movement data'));
-    }
-    return CustomPaint(
-      size: Size.infinite,
-      painter: _InventoryDualBarPainter(usage: usage, isDark: isDark),
-    );
-  }
-}
-
-class _InventoryDualBarPainter extends CustomPainter {
-  _InventoryDualBarPainter({required this.usage, required this.isDark});
-  final List<UsagePoint> usage;
-  final bool isDark;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (usage.isEmpty) return;
-
-    const leftPad = 32.0;
-    const rightPad = 12.0;
-    const topPad = 22.0;
-    const bottomPad = 24.0;
-
-    final chartW = size.width - leftPad - rightPad;
-    final chartH = size.height - topPad - bottomPad;
-
-    int maxVal = 1;
-    for (final u in usage) {
-      maxVal = math.max(maxVal, math.max(u.received, u.issued));
-    }
-    final ceiling = (maxVal * 1.18).toDouble();
-
-    final gridLinePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
-      ..strokeWidth = 1.0;
-
-    final labelStyle = TextStyle(
-      color: Colors.white.withValues(alpha: 0.5),
-      fontSize: 9.5,
-      fontWeight: FontWeight.w600,
-    );
-
-    for (int i = 0; i <= 3; i++) {
-      final yRatio = i / 3.0;
-      final y = topPad + chartH * (1.0 - yRatio);
-      canvas.drawLine(
-          Offset(leftPad, y), Offset(size.width - rightPad, y), gridLinePaint);
-      final val = (ceiling * yRatio).toInt();
-      final tp = TextPainter(
-        text: TextSpan(text: '$val', style: labelStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(leftPad - tp.width - 5, y - tp.height / 2));
-    }
-
-    final slotW = chartW / usage.length;
-    final barW = math.min(slotW * 0.32, 14.0);
-    const gap = 3.0;
-
-    // Neon teal for received, amber for issued
-    final recPaint = Paint()..color = const Color(0xFF00E5FF);
-    final issPaint = Paint()..color = const Color(0xFFF59E0B);
-
-    final valueStyle = TextStyle(
-      color: Colors.white.withValues(alpha: 0.75),
-      fontSize: 9.0,
-      fontWeight: FontWeight.w800,
-    );
-
-    for (int i = 0; i < usage.length; i++) {
-      final u = usage[i];
-      final slotCenterX = leftPad + i * slotW + slotW / 2;
-
-      final recRatio = (u.received / ceiling).clamp(0.0, 1.0);
-      final recH = chartH * recRatio;
-      final recLeft = slotCenterX - barW - gap / 2;
-      final recTop = topPad + chartH - recH;
-      final recRect = RRect.fromRectAndCorners(
-        Rect.fromLTWH(recLeft, recTop, barW, recH),
-        topLeft: const Radius.circular(4),
-        topRight: const Radius.circular(4),
-      );
-      canvas.drawRRect(recRect, recPaint);
-
-      final recTp = TextPainter(
-        text: TextSpan(text: '${u.received}', style: valueStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      recTp.paint(
-          canvas, Offset(recLeft + (barW - recTp.width) / 2, recTop - 13));
-
-      final issRatio = (u.issued / ceiling).clamp(0.0, 1.0);
-      final issH = chartH * issRatio;
-      final issLeft = slotCenterX + gap / 2;
-      final issTop = topPad + chartH - issH;
-      final issRect = RRect.fromRectAndCorners(
-        Rect.fromLTWH(issLeft, issTop, barW, issH),
-        topLeft: const Radius.circular(4),
-        topRight: const Radius.circular(4),
-      );
-      canvas.drawRRect(issRect, issPaint);
-
-      final issTp = TextPainter(
-        text: TextSpan(text: '${u.issued}', style: valueStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      issTp.paint(
-          canvas, Offset(issLeft + (barW - issTp.width) / 2, issTop - 13));
-
-      final nameTp = TextPainter(
-        text: TextSpan(text: u.name, style: labelStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      nameTp.paint(
-          canvas, Offset(slotCenterX - nameTp.width / 2, size.height - 16));
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _InventoryDualBarPainter oldDelegate) =>
-      oldDelegate.usage != usage || oldDelegate.isDark != isDark;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CUSTOM PAINTED DONUT CHART (unchanged logic, neon colors)
-// ─────────────────────────────────────────────────────────────────────────────
-class _DonutChart extends StatelessWidget {
-  const _DonutChart({required this.slices, required this.isDark});
   final List<CategoryBreakdown> slices;
+  final String centerValue;
   final bool isDark;
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
       size: const Size(128, 128),
-      painter: _DonutChartPainter(slices: slices, isDark: isDark),
+      painter: _DonutChartPainter(
+        slices: slices,
+        centerValue: centerValue,
+        isDark: isDark,
+      ),
     );
   }
 }
 
 class _DonutChartPainter extends CustomPainter {
-  _DonutChartPainter({required this.slices, required this.isDark});
+  _DonutChartPainter({
+    required this.slices,
+    required this.centerValue,
+    required this.isDark,
+  });
   final List<CategoryBreakdown> slices;
+  final String centerValue;
   final bool isDark;
 
   @override
@@ -1325,24 +1565,24 @@ class _DonutChartPainter extends CustomPainter {
 
     // Center text
     const numStyle = TextStyle(
-      fontSize: 17,
+      fontSize: 13,
       fontWeight: FontWeight.w900,
       color: Colors.white,
     );
     final subStyle = TextStyle(
-      fontSize: 9.5,
+      fontSize: 9,
       fontWeight: FontWeight.w700,
       color: Colors.white.withValues(alpha: 0.5),
     );
 
     final tp1 = TextPainter(
-      text: const TextSpan(text: '318', style: numStyle),
+      text: TextSpan(text: centerValue, style: numStyle),
       textDirection: TextDirection.ltr,
     )..layout();
     tp1.paint(canvas, Offset(center.dx - tp1.width / 2, center.dy - 13));
 
     final tp2 = TextPainter(
-      text: TextSpan(text: 'Total SKUs', style: subStyle),
+      text: TextSpan(text: 'ON HAND', style: subStyle),
       textDirection: TextDirection.ltr,
     )..layout();
     tp2.paint(canvas, Offset(center.dx - tp2.width / 2, center.dy + 4));
@@ -1350,143 +1590,161 @@ class _DonutChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DonutChartPainter oldDelegate) =>
-      oldDelegate.slices != slices || oldDelegate.isDark != isDark;
+      oldDelegate.slices != slices ||
+      oldDelegate.centerValue != centerValue ||
+      oldDelegate.isDark != isDark;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// KPI METRIC CARD — Glassmorphic
-// ─────────────────────────────────────────────────────────────────────────────
-class _KpiMetricCard extends StatelessWidget {
-  const _KpiMetricCard({
-    required this.title,
-    required this.value,
-    required this.detail,
+class _SnapshotStat extends StatelessWidget {
+  const _SnapshotStat({
     required this.icon,
+    required this.label,
+    required this.value,
     required this.color,
-    this.isPositive,
-    this.isAlert,
   });
 
-  final String title, value, detail;
   final IconData icon;
+  final String label;
+  final String value;
   final Color color;
-  final bool? isPositive;
-  final bool? isAlert;
 
   @override
-  Widget build(BuildContext context) {
-    return InventoryPanel(
-      padding: EdgeInsets.zero,
-      borderColor: const Color(0xFF29394D),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadii.card),
-        child: Stack(
-          children: [
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                height: 3,
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.7)),
-              ),
+  Widget build(BuildContext context) => Row(
+        children: [
+          Container(
+            width: 31,
+            height: 31,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(9),
             ),
-            Padding(
-              padding: const EdgeInsets.all(13),
+            child: Icon(icon, color: color, size: 16),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: AppTextStyles.label.copyWith(
+                    color: AppColors.textMuted,
+                    fontSize: 7,
+                    letterSpacing: .45,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.subtitle.copyWith(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+class _PeriodMovementMetric extends StatelessWidget {
+  const _PeriodMovementMetric({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: .2)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 15, color: color),
+            const SizedBox(width: 7),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: AppTextStyles.caption.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textMuted,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(10),
-                          border:
-                              Border.all(color: color.withValues(alpha: 0.35)),
-                        ),
-                        child: Icon(icon, color: color, size: 16),
-                      ),
-                    ],
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.label.copyWith(
+                      color: AppColors.textMuted,
+                      fontSize: 7,
+                      letterSpacing: .1,
+                    ),
                   ),
+                  const SizedBox(height: 3),
                   Text(
                     value,
-                    style: AppTextStyles.body.copyWith(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.textPrimary,
+                    style: AppTextStyles.subtitle.copyWith(
+                      color: color,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    detail,
-                    style: AppTextStyles.caption.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: isAlert == true
-                          ? AppColors.danger
-                          : isPositive == true
-                              ? const Color(0xFF10B981)
-                              : AppColors.textMuted,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
+      );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SMALL TOPIC PILLS
+// ─────────────────────────────────────────────────────────────────────────────
+class _AnalyticsTopicPill extends StatelessWidget {
+  const _AnalyticsTopicPill({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .045),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: AppColors.cyan),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: AppTextStyles.label.copyWith(
+                fontSize: 8,
+                letterSpacing: .45,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CHART LEGEND DOT
 // ─────────────────────────────────────────────────────────────────────────────
-class _ChartLegendDot extends StatelessWidget {
-  const _ChartLegendDot({required this.color, required this.label});
-  final Color color;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 6),
-            ],
-          ),
-        ),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
-        ),
-      ],
-    );
-  }
-}

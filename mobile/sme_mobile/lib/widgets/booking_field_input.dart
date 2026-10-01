@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/subtype_dashboard_config.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -12,12 +13,14 @@ class BookingFieldInput extends StatelessWidget {
   final BookingFormField field;
   final dynamic value;
   final ValueChanged<dynamic> onChanged;
+  final Future<String> Function(XFile file)? onUpload;
 
   const BookingFieldInput({
     super.key,
     required this.field,
     required this.value,
     required this.onChanged,
+    this.onUpload,
   });
 
   @override
@@ -75,22 +78,7 @@ class BookingFieldInput extends StatelessWidget {
         );
 
       case BookingFieldType.fileUpload:
-        // No document-storage backend exists yet - this deliberately stops
-        // short of a real upload pipeline (multipart + cloud storage) and
-        // just records that the customer confirmed they have the document,
-        // to be checked in person/on arrival.
-        return CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          value: (value as bool?) ?? false,
-          onChanged: (v) => onChanged(v ?? false),
-          activeColor: AppColors.cyan,
-          checkColor: AppColors.onPrimary,
-          title: Text(field.label, style: AppTextStyles.subtitle.copyWith(fontSize: 14)),
-          subtitle: Text(
-            'You\'ll be asked to show this on arrival',
-            style: AppTextStyles.caption.copyWith(fontSize: 11.5),
-          ),
-        );
+        return _ImageUploadField(field: field, value: value as String?, onChanged: onChanged, onUpload: onUpload);
 
       case BookingFieldType.textArea:
         return NeonInputField(
@@ -101,4 +89,38 @@ class BookingFieldInput extends StatelessWidget {
         );
     }
   }
+}
+
+class _ImageUploadField extends StatefulWidget {
+  const _ImageUploadField({required this.field, required this.value, required this.onChanged, this.onUpload});
+  final BookingFormField field;
+  final String? value;
+  final ValueChanged<dynamic> onChanged;
+  final Future<String> Function(XFile file)? onUpload;
+  @override
+  State<_ImageUploadField> createState() => _ImageUploadFieldState();
+}
+
+class _ImageUploadFieldState extends State<_ImageUploadField> {
+  bool _uploading = false;
+  String? _error;
+  Future<void> _pick() async {
+    final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (file == null || widget.onUpload == null) return;
+    setState(() { _uploading = true; _error = null; });
+    try { widget.onChanged(await widget.onUpload!(file)); }
+    catch (e) { if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', '')); }
+    finally { if (mounted) setState(() => _uploading = false); }
+  }
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    SectionHeader(widget.field.label),
+    OutlinedButton.icon(
+      onPressed: _uploading ? null : _pick,
+      icon: _uploading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.upload_outlined),
+      label: Text(_uploading ? 'Uploading…' : (widget.value == null ? 'Choose image' : 'Replace image')),
+    ),
+    if (widget.value != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('Image attached', style: AppTextStyles.caption)),
+    if (_error != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_error!, style: AppTextStyles.caption.copyWith(color: Colors.redAccent))),
+  ]);
 }

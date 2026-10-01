@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
+using SmeBackend.Authorization;
 using SmeBackend.Models;
 
 namespace SmeBackend.Services;
@@ -10,6 +11,7 @@ namespace SmeBackend.Services;
 public interface IJwtService
 {
     string GenerateAccessToken(User user);
+    string GenerateMobileAccessToken(User user);
     /// Platform-console token: same signing key, but scoped so it is only
     /// honoured by the PlatformOwner policy and bound to a server-side
     /// session through <paramref name="jti"/>.
@@ -39,6 +41,12 @@ public class JwtService : IJwtService
     };
 
     public string GenerateAccessToken(User user)
+        => GenerateAccessToken(user, isMobileClient: false);
+
+    public string GenerateMobileAccessToken(User user)
+        => GenerateAccessToken(user, isMobileClient: true);
+
+    private string GenerateAccessToken(User user, bool isMobileClient)
     {
         var key = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
@@ -56,6 +64,9 @@ public class JwtService : IJwtService
         
         if (user.BranchId.HasValue)
             claims.Add(new Claim("branchId", user.BranchId.Value.ToString()));
+
+        if (isMobileClient)
+            claims.Add(new Claim(InventoryAccessHandler.ClientPlatformClaimType, "mobile"));
 
         if (user.Role == UserRole.Staff)
         {

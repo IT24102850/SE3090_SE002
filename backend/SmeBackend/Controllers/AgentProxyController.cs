@@ -72,13 +72,22 @@ public sealed class AgentProxyController(
             return Conflict(new { message = $"A purchase order with number '{number}' already exists." });
         }
 
-        var status = string.IsNullOrWhiteSpace(request.Status) ? "Placed" : request.Status.Trim();
+        var requestedStatus = string.IsNullOrWhiteSpace(request.Status) ? "InReview" : request.Status.Trim();
         if (!new[] { "Draft", "InReview", "Placed", "InTransit", "Received", "Cancelled" }
-            .Contains(status, StringComparer.OrdinalIgnoreCase))
+            .Contains(requestedStatus, StringComparer.OrdinalIgnoreCase))
         {
             ModelState.AddModelError("status", "The purchase order status is invalid.");
             return ValidationProblem(ModelState);
         }
+        if (!string.Equals(requestedStatus, "Draft", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(requestedStatus, "InReview", StringComparison.OrdinalIgnoreCase))
+        {
+            ModelState.AddModelError("status", "Agent-created purchase orders must be Draft or InReview; approval is a manager decision in the mobile app.");
+            return ValidationProblem(ModelState);
+        }
+        var status = string.Equals(requestedStatus, "Draft", StringComparison.OrdinalIgnoreCase)
+            ? "Draft"
+            : "InReview";
         status = new[] { "Draft", "InReview", "Placed", "InTransit", "Received", "Cancelled" }
             .First(value => string.Equals(value, status, StringComparison.OrdinalIgnoreCase));
 

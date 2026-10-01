@@ -46,7 +46,12 @@ def test_recommendation_uses_negative_mobile_issue_adjustments_and_excludes_wast
     assert recommendation.avg_daily_outflow == 1
     assert recommendation.recommended_quantity == 9
     assert "negative manual-adjustment" in recommendation.validation_notes[0]
-    assert "no stock or purchase order was changed" in recommendation.validation_notes[1]
+    # By presence, not position: replenishment now also reports where the lead
+    # time came from, and the read-only disclaimer stays last however many
+    # notes precede it.
+    notes = recommendation.validation_notes
+    assert any("no stock or purchase order was changed" in note for note in notes)
+    assert any("lead-time data was found" in note for note in notes)
 
 
 def test_no_usage_history_falls_back_to_reorder_level_with_low_confidence():

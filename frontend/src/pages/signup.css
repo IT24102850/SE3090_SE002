@@ -662,3 +662,175 @@ html[data-unify-theme='dark'] .su-art {
     justify-content: center;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   AUTHENTICATION & RECOVERY ENHANCEMENTS & ANIMATIONS
+   ═══════════════════════════════════════════════════════════════ */
+
+@keyframes lp-card-in {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.su-card,
+.lp-auth-shell {
+  animation: lp-card-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Step transition animation */
+.lp-auth-step-anim {
+  animation: lp-step-fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes lp-step-fade-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Dev verification code preview banner */
+.lp-dev-code-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px dashed rgba(37, 99, 235, 0.35);
+  color: var(--lp-brand, #2563eb);
+  font-size: 0.82rem;
+  font-weight: 600;
+  animation: lp-pulse-subtle 3s ease-in-out infinite alternate;
+}
+html[data-unify-theme='dark'] .lp-dev-code-banner {
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(96, 165, 250, 0.4);
+  color: #93c5fd;
+}
+.lp-dev-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--brand, #2563eb);
+  color: #ffffff;
+}
+.lp-dev-code-banner strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.05rem;
+  letter-spacing: 0.12em;
+  color: var(--lp-text-primary, #0a0f1d);
+}
+html[data-unify-theme='dark'] .lp-dev-code-banner strong {
+  color: #ffffff;
+}
+
+/* 6-digit Code Input */
+.lp-code-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 1.35rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.25em !important;
+  text-align: center;
+}
+
+/* Resend Button */
+.lp-resend-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--lp-brand, #2563eb);
+  cursor: pointer;
+  transition: opacity 0.2s, color 0.2s;
+}
+.lp-resend-btn:hover:not(:disabled) {
+  text-decoration: underline;
+  color: var(--lp-blue-deep, #1d4ed8);
+}
+.lp-resend-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Success Card */
+.lp-success-card {
+  text-align: center;
+  padding: 24px 0 12px;
+}
+.lp-success-icon-wrap {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4);
+  animation: lp-pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.lp-success-icon-wrap svg {
+  width: 32px;
+  height: 32px;
+}
+.lp-success-card h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 0 0 10px;
+}
+.lp-success-card p {
+  color: var(--lp-text-secondary, #4a5872);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  margin: 0 0 24px;
+}
+
+@keyframes lp-pop-in {
+  0% { transform: scale(0.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes lp-pulse-subtle {
+  0% { opacity: 0.85; }
+  100% { opacity: 1; }
+}
+
+/* Micro-interactions on inputs */
+.su-field input,
+.lp-auth-input {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.su-field input:focus,
+.lp-auth-input:focus {
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14) !important;
+}
+
+/* Interactive hover on segmented toggle */
+.su-toggle button {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lp-success-text {
+  color: #07835f;
+}
+
+.lp-error-text {
+  color: #c2413b;
+}

@@ -15,6 +15,133 @@ namespace SmeBackend.Tests;
 public class InventoryControllerTests
 {
     [Fact]
+    public async Task GetCategories_WhenLegacyTenantHasNoCatalog_SeedsBusinessCategories()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        db.Tenants.Add(new Tenant { Id = tenantId, Name = "Clinic", BusinessType = "clinic" });
+        await db.SaveChangesAsync();
+        db.InventoryCategories.RemoveRange(db.InventoryCategories);
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.GetCategories(CancellationToken.None);
+
+        var categories = Assert.IsType<OkObjectResult>(result.Result).Value
+            as IReadOnlyList<InventoryCategoryOptionResponse>;
+        Assert.NotNull(categories);
+        Assert.Contains(categories, category => category.Name == "Medical Supplies");
+        Assert.Contains(categories, category => category.Name == "Pharmaceuticals");
+        Assert.Equal(4, categories.Count);
+    }
+
+    [Fact]
+    public async Task CreateInventory_WhenCategoryNameIsProvidedWithoutId_CreatesAndAssignsCategory()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        db.Tenants.Add(new Tenant { Id = tenantId, Name = "Clinic", BusinessType = "clinic" });
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.CreateInventory(
+            new CreateInventoryRequest(
+                "Portable ECG",
+                "ECG-001",
+                null,
+                null,
+                null,
+                null,
+                Category: "Diagnostic Equipment"),
+            CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result).Value
+            as InventoryItemResponse;
+        Assert.NotNull(created);
+        Assert.Equal("Diagnostic Equipment", created.Category);
+        Assert.NotNull(created.CategoryId);
+        Assert.Contains(db.InventoryCategories, category =>
+            category.Id == created.CategoryId && category.Name == "Diagnostic Equipment");
+    }
+
+    [Fact]
+    public async Task UpdateInventoryItem_WhenCategoryNameIsProvidedWithoutId_AssignsCategory()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        var item = new InventoryItem
+        {
+            TenantId = tenantId,
+            Name = "Portable ECG",
+            Sku = "ECG-002",
+            IsActive = true,
+        };
+        db.InventoryItems.Add(item);
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.UpdateInventoryItem(
+            item.Id,
+            new UpdateInventoryRequest(
+                item.Name,
+                item.Sku,
+                null,
+                null,
+                null,
+                null,
+                Category: "Diagnostic Equipment"),
+            CancellationToken.None);
+
+        var updated = Assert.IsType<OkObjectResult>(result.Result).Value
+            as InventoryItemResponse;
+        Assert.NotNull(updated);
+        Assert.Equal("Diagnostic Equipment", updated.Category);
+        Assert.NotNull(updated.CategoryId);
+    }
+
+    [Fact]
     public async Task GetInventory_WhenTenantIdMissing_ReturnsUnauthorized()
     {
         var db = CreateDbContext();
@@ -317,13 +444,275 @@ public class PurchaseOrdersControllerTests
         Assert.IsType<ObjectResult>(actionResult.Result);
     }
 
-    private static ClaimsPrincipal CreateUser(Guid tenantId)
+    [Fact]
+    public async Task CreatePurchaseOrder_CannotStartAlreadyPlaced()
     {
-        var claims = new[]
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        db.Branches.Add(new Branch { Id = branchId, TenantId = tenantId, Name = "Main Branch" });
+        db.Suppliers.Add(new Supplier { Id = supplierId, TenantId = tenantId, Name = "Acme Supplies" });
+        await db.SaveChangesAsync();
+
+        var authorizationService = new Mock<IAuthorizationService>();
+        authorizationService.Setup(x => x.AuthorizeAsync(
+                It.IsAny<ClaimsPrincipal>(),
+                It.IsAny<object?>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(AuthorizationResult.Success());
+        var controller = new PurchaseOrdersController(db, authorizationService.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser(tenantId) }
+            }
+        };
+
+        var result = await controller.CreatePurchaseOrder(
+            new CreatePurchaseOrderRequest(branchId, supplierId, "PO-BYPASS", "Placed"),
+            CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result.Result);
+        Assert.Empty(await db.PurchaseOrders.ToListAsync());
+    }
+
+    [Fact]
+    public async Task UpdatePurchaseOrderStatus_WebTokenCanApproveInReviewOrder()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = await CreateControllerWithOrder(tenantId, "InReview");
+        await using var disposeDb = db;
+
+        var result = await controller.UpdatePurchaseOrderStatus(
+            Guid.Parse("9f95fa89-1018-49de-a82e-3442303956a1"),
+            new UpdatePurchaseOrderStatusRequest("Placed"),
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("Placed", (await db.PurchaseOrders.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task UpdatePurchaseOrderStatus_MobileTokenCanApproveInReviewOrder()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = await CreateControllerWithOrder(tenantId, "InReview", mobileClient: true);
+        await using var disposeDb = db;
+
+        var result = await controller.UpdatePurchaseOrderStatus(
+            Guid.Parse("9f95fa89-1018-49de-a82e-3442303956a1"),
+            new UpdatePurchaseOrderStatusRequest("Placed"),
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("Placed", (await db.PurchaseOrders.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task UpdatePurchaseOrderStatus_MobileTokenCannotSkipReview()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = await CreateControllerWithOrder(tenantId, "Draft", mobileClient: true);
+        await using var disposeDb = db;
+
+        var result = await controller.UpdatePurchaseOrderStatus(
+            Guid.Parse("9f95fa89-1018-49de-a82e-3442303956a1"),
+            new UpdatePurchaseOrderStatusRequest("Placed"),
+            CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("Draft", (await db.PurchaseOrders.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task UpdatePurchaseOrderStatus_ApprovalIsNotBoundToRequestOrigin()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = await CreateControllerWithOrder(
+            tenantId,
+            "InReview",
+            mobileClient: true,
+            browserOrigin: true);
+        await using var disposeDb = db;
+
+        var result = await controller.UpdatePurchaseOrderStatus(
+            Guid.Parse("9f95fa89-1018-49de-a82e-3442303956a1"),
+            new UpdatePurchaseOrderStatusRequest("Placed"),
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("Placed", (await db.PurchaseOrders.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task ReceivePurchaseOrder_OnlyAddsAcceptedUnitsAndRecordsShortageAndDamage()
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var itemId = Guid.NewGuid();
+        var poItemId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var order = new PurchaseOrder
+        {
+            TenantId = tenantId,
+            BranchId = branchId,
+            SupplierId = Guid.NewGuid(),
+            Number = "PO-RECEIVE-001",
+            Status = "InTransit",
+        };
+        var inventoryItem = new InventoryItem
+        {
+            TenantId = tenantId,
+            BranchId = branchId,
+            Name = "Coke",
+            Sku = "COKE-001",
+            Quantity = 10m,
+            UnitCost = 5m,
+            IsActive = true,
+        };
+        var orderItem = new PurchaseOrderItem
+        {
+            Id = poItemId,
+            TenantId = tenantId,
+            PurchaseOrderId = order.Id,
+            Description = "Coke",
+            Quantity = 10m,
+            UnitPrice = 6m,
+        };
+        inventoryItem.Id = itemId;
+        db.PurchaseOrders.Add(order);
+        db.PurchaseOrderItems.Add(orderItem);
+        db.InventoryItems.Add(inventoryItem);
+        await db.SaveChangesAsync();
+
+        var authorizationService = new Mock<IAuthorizationService>();
+        authorizationService.Setup(x => x.AuthorizeAsync(
+                It.IsAny<ClaimsPrincipal>(),
+                It.IsAny<object?>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(AuthorizationResult.Success());
+        var controller = new PurchaseOrdersController(db, authorizationService.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, mobileClient: false, role: UserRole.Staff, fullName: "Receiving Staff")
+                }
+            }
+        };
+
+        var firstResult = await controller.ReceivePurchaseOrder(
+            order.Id,
+            new ReceivePurchaseOrderRequest(
+            [
+                new ReceivePurchaseOrderItemRequest(poItemId, 8m, 2m, false, "Two bottles damaged", itemId)
+            ]),
+            CancellationToken.None);
+
+        var firstResponse = Assert.IsType<PurchaseOrderResponse>(
+            Assert.IsType<OkObjectResult>(firstResult.Result).Value);
+        Assert.Equal("PartiallyReceived", firstResponse.Status);
+        Assert.Equal(6m, firstResponse.Items!.Single().ReceivedQuantity);
+        Assert.Equal(2m, firstResponse.Items!.Single().DamagedQuantity);
+        Assert.Equal(16m, inventoryItem.Quantity);
+        var acceptedMovement = await db.StockMovements.SingleAsync();
+        Assert.Equal(6m, acceptedMovement.Quantity);
+        Assert.Equal("Receiving Staff", acceptedMovement.PerformedBy);
+        Assert.Contains("Damaged: 2", acceptedMovement.Notes);
+
+        var secondResult = await controller.ReceivePurchaseOrder(
+            order.Id,
+            new ReceivePurchaseOrderRequest(
+            [
+                new ReceivePurchaseOrderItemRequest(poItemId, 1m, 0m, true, "Supplier confirmed one unit short")
+            ]),
+            CancellationToken.None);
+
+        var secondResponse = Assert.IsType<PurchaseOrderResponse>(
+            Assert.IsType<OkObjectResult>(secondResult.Result).Value);
+        Assert.Equal("Received", secondResponse.Status);
+        Assert.Equal(7m, secondResponse.Items!.Single().ReceivedQuantity);
+        Assert.Equal(2m, secondResponse.Items!.Single().DamagedQuantity);
+        Assert.Equal(1m, secondResponse.Items!.Single().ShortageQuantity);
+        Assert.Equal(17m, inventoryItem.Quantity);
+        Assert.Equal(2, secondResponse.Receipts!.Count);
+        Assert.Equal(7m, (await db.StockMovements.SumAsync(movement => movement.Quantity)));
+    }
+
+    [Fact]
+    public async Task UpdatePurchaseOrderStatus_CannotReceiveWithoutItemizedReceipt()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = await CreateControllerWithOrder(tenantId, "InTransit");
+        await using var disposeDb = db;
+
+        var result = await controller.UpdatePurchaseOrderStatus(
+            Guid.Parse("9f95fa89-1018-49de-a82e-3442303956a1"),
+            new UpdatePurchaseOrderStatusRequest("Received"),
+            CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("InTransit", (await db.PurchaseOrders.SingleAsync()).Status);
+        Assert.Empty(db.StockMovements);
+    }
+
+    private static async Task<(AppDbContext Db, PurchaseOrdersController Controller)> CreateControllerWithOrder(
+        Guid tenantId,
+        string status,
+        bool mobileClient = false,
+        bool browserOrigin = false)
+    {
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        var db = CreateDbContext(tenantContext);
+        db.PurchaseOrders.Add(new PurchaseOrder
+        {
+            Id = Guid.Parse("9f95fa89-1018-49de-a82e-3442303956a1"),
+            TenantId = tenantId,
+            BranchId = Guid.NewGuid(),
+            SupplierId = Guid.NewGuid(),
+            Number = "PO-TEST-APPROVAL",
+            Status = status,
+        });
+        await db.SaveChangesAsync();
+
+        var authorizationService = new Mock<IAuthorizationService>();
+        authorizationService.Setup(x => x.AuthorizeAsync(
+                It.IsAny<ClaimsPrincipal>(),
+                It.IsAny<object?>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(AuthorizationResult.Success());
+        var httpContext = new DefaultHttpContext { User = CreateUser(tenantId, mobileClient) };
+        if (browserOrigin)
+            httpContext.Request.Headers["Origin"] = "https://web.example.test";
+        var controller = new PurchaseOrdersController(db, authorizationService.Object)
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext }
+        };
+        return (db, controller);
+    }
+
+    private static ClaimsPrincipal CreateUser(
+        Guid tenantId,
+        bool mobileClient = false,
+        UserRole role = UserRole.Admin,
+        string? fullName = null)
+    {
+        var claims = new List<Claim>
         {
             new Claim(InventoryAccessHandler.TenantIdClaimType, tenantId.ToString()),
-            new Claim(ClaimTypes.Role, UserRole.Admin.ToString()),
+            new Claim(ClaimTypes.Role, role.ToString()),
         };
+        if (fullName is not null)
+            claims.Add(new Claim("fullName", fullName));
+        if (mobileClient)
+            claims.Add(new Claim(InventoryAccessHandler.ClientPlatformClaimType, "mobile"));
         return new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"));
     }
 

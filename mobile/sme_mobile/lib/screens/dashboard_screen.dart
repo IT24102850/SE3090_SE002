@@ -23,6 +23,7 @@ import 'customer/ai_planner_screen.dart';
 import 'customer/book_business_list_screen.dart';
 import 'customer/my_bookings_screen.dart';
 import 'notifications_screen.dart';
+import 'security_pin_screen.dart';
 import 'profile_screen.dart';
 import 'owner/automation/agent_workflows_screen.dart';
 import 'owner/owner_home_screen.dart';
@@ -36,6 +37,7 @@ import 'staff/my_schedule_screen.dart';
 import '../inventory/authenticated_api_client.dart';
 import '../inventory/app_notifications.dart';
 import '../inventory/inventory_dashboard.dart';
+import '../inventory/sales_screen.dart';
 import '../inventory/stock_count_screen.dart';
 import '../inventory/stock_check_screen.dart';
 import '../inventory/purchase_order_approval_screen.dart';
@@ -70,21 +72,20 @@ class DashboardScreen extends ConsumerWidget {
         actions: [
           const _NotificationBellAction(),
           IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
+            icon: const Icon(Icons.lock_outline_rounded),
+            tooltip: 'Lock app',
             onPressed: () async {
               final confirmed = await showAppConfirmation(
                 context: context,
-                title: 'Log out of Unify?',
+                title: 'Lock Unify?',
                 message:
-                    'Are you sure you want to log out? You will need to sign in again to access your account.',
-                confirmLabel: 'Log Out',
-                icon: Icons.logout_rounded,
-                accent: AppColors.danger,
-                isDestructive: true,
+                    'Your saved session will stay on this device. Unlock it with your Quick PIN or sign in with your work email.',
+                confirmLabel: 'Lock App',
+                icon: Icons.lock_rounded,
+                accent: AppColors.cyan,
               );
               if (!confirmed || !context.mounted) return;
-              await ref.read(authProvider.notifier).logout();
+              await ref.read(authProvider.notifier).lock();
               // MyApp automatically routes back to the landing screen.
             },
           ),
@@ -121,22 +122,17 @@ class DashboardScreen extends ConsumerWidget {
                     const _ClinicDeskCard(),
                   ],
                   const SizedBox(height: 24),
-                  const SectionHeader('Quick actions'),
-                  GridView(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: tileSpacing,
-                      crossAxisSpacing: tileSpacing,
-                      mainAxisExtent: compact ? 132 : 140,
-                    ),
-                    children: _quickActionsFor(
-                      context,
-                      user.role,
-                      role.color,
-                      clinic: isClinicDesk,
-                    ),
+                  const SectionHeader(
+                    'Quick actions',
+                    trailing: Text('Grouped by task'),
+                  ),
+                  ..._quickActionsFor(
+                    context,
+                    user.role,
+                    role.color,
+                    compact: compact,
+                    tileSpacing: tileSpacing,
+                    clinic: isClinicDesk,
                   ),
                   const SizedBox(height: 24),
                   const SectionHeader('Account'),
@@ -284,6 +280,7 @@ class _DashboardDrawer extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final photo = user.profilePictureUrl;
     final isCustomer = user.role == 'Customer';
+    final isClinic = !isCustomer && ref.watch(isClinicTenantProvider);
 
     final drawerWidth = (MediaQuery.sizeOf(context).width * 0.86)
         .clamp(280.0, 360.0)
@@ -393,16 +390,7 @@ class _DashboardDrawer extends ConsumerWidget {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                  child: Text(
-                    isCustomer ? 'YOUR SPACE' : 'WORKSPACE',
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textMuted,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                ),
+                _DrawerSectionLabel(label: isCustomer ? 'HOME' : 'WORKSPACE'),
                 _DrawerItem(
                   icon: Icons.dashboard_outlined,
                   label: 'Dashboard',
@@ -426,6 +414,18 @@ class _DashboardDrawer extends ConsumerWidget {
                 // (screens/owner) that carries the same destinations as the
                 // web sidebar.
                 if (user.role == 'Admin' || user.role == 'Manager')
+                  _DrawerItem(
+                    icon: Icons.storefront_outlined,
+                    label: 'Business Profile',
+                    accent: role.color,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                          slideFadeRoute(const BusinessProfileEditorScreen()));
+                    },
+                  ),
+                if ((user.role == 'Admin' || user.role == 'Manager') &&
+                    isClinic)
                   _DrawerItem(
                     icon: Icons.calendar_today_outlined,
                     label: 'Bookings',
@@ -463,6 +463,8 @@ class _DashboardDrawer extends ConsumerWidget {
                     },
                   ),
                 if (user.role != 'Customer')
+                  const _DrawerSectionLabel(label: 'MANAGE INVENTORY'),
+                if (user.role != 'Customer')
                   _DrawerItem(
                     icon: Icons.inventory_2_outlined,
                     label: 'Inventory operations',
@@ -474,7 +476,23 @@ class _DashboardDrawer extends ConsumerWidget {
                           client: AuthenticatedApiClient(),
                           canApprove:
                               user.role == 'Admin' || user.role == 'Manager',
+                          canReceive: user.role == 'Admin' ||
+                              user.role == 'Manager' ||
+                              user.role == 'Staff',
                         ),
+                      ));
+                    },
+                  ),
+                if (user.role != 'Customer')
+                  _DrawerItem(
+                    icon: Icons.build_outlined,
+                    label: 'Equipment maintenance',
+                    accent: AppColors.warning,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute(
+                        EquipmentMaintenanceScreen(
+                            client: AuthenticatedApiClient()),
                       ));
                     },
                   ),
@@ -489,11 +507,25 @@ class _DashboardDrawer extends ConsumerWidget {
                         PurchaseOrderApprovalScreen(
                           client: AuthenticatedApiClient(),
                           canApprove: true,
+                          canReceive: true,
                         ),
                       ));
                     },
                   ),
+                if (user.role == 'Admin' || user.role == 'Manager')
+                  _DrawerItem(
+                    icon: Icons.insights_outlined,
+                    label: 'Inventory analytics',
+                    accent: AppColors.violet,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute(
+                        InsightsScreen(client: AuthenticatedApiClient()),
+                      ));
+                    },
+                  ),
                 if (isCustomer) ...[
+                  const _DrawerSectionLabel(label: 'YOUR ACTIVITY'),
                   _DrawerItem(
                     icon: Icons.search,
                     label: 'Find a Business',
@@ -560,19 +592,49 @@ class _DashboardDrawer extends ConsumerWidget {
                   padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                   child: Divider(color: AppColors.hairline, height: 1),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                  child: Text(
-                    'ACCOUNT',
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textMuted,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
+                const _DrawerSectionLabel(label: 'ACCOUNT'),
+                _DrawerItem(
+                  icon: Icons.person_outline,
+                  label: 'My Profile',
+                  accent: role.color,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context)
+                        .push(slideFadeRoute(const ProfileScreen()));
+                  },
+                ),
+                _DrawerItem(
+                  icon: Icons.lock_outline_rounded,
+                  label: 'Security & PIN',
+                  accent: AppColors.cyan,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context)
+                        .push(slideFadeRoute(const SecurityPinScreen()));
+                  },
+                ),
+                _DrawerItem(
+                  icon: Icons.lock_outline_rounded,
+                  label: 'Lock App',
+                  accent: AppColors.cyan,
+                  onTap: () async {
+                    final confirmed = await showAppConfirmation(
+                      context: context,
+                      title: 'Lock Unify?',
+                      message:
+                          'Your saved session will stay protected on this device. Unlock it with your Quick PIN or work email.',
+                      confirmLabel: 'Lock App',
+                      icon: Icons.lock_rounded,
+                      accent: AppColors.cyan,
+                    );
+                    if (!confirmed || !context.mounted) return;
+                    Navigator.pop(context);
+                    await ref.read(authProvider.notifier).lock();
+                  },
                 ),
                 _DrawerItem(
                   icon: Icons.logout,
-                  label: 'Logout',
+                  label: 'Sign Out',
                   iconColor: AppColors.danger,
                   labelColor: AppColors.danger,
                   accent: AppColors.danger,
@@ -580,10 +642,10 @@ class _DashboardDrawer extends ConsumerWidget {
                   onTap: () async {
                     final confirmed = await showAppConfirmation(
                       context: context,
-                      title: 'Log out of Unify?',
+                      title: 'Sign out of Unify?',
                       message:
-                          'Are you sure you want to log out? You will need to sign in again to access your account.',
-                      confirmLabel: 'Log Out',
+                          'This clears the saved session and Quick PIN from this device. You will need your work email and password to sign in again.',
+                      confirmLabel: 'Sign Out',
                       icon: Icons.logout_rounded,
                       accent: AppColors.danger,
                       isDestructive: true,
@@ -600,6 +662,26 @@ class _DashboardDrawer extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _DrawerSectionLabel extends StatelessWidget {
+  const _DrawerSectionLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(8, 14, 8, 5),
+        child: Text(
+          label,
+          style: AppTextStyles.caption.copyWith(
+            color: AppColors.textMuted,
+            letterSpacing: 1.4,
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
 }
 
 class _DrawerItem extends StatelessWidget {
@@ -749,7 +831,7 @@ const _quickActionImages = <String, String>{
   'Process walk-ins':
       'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=400&q=60',
   'Inventory dashboard':
-      'https://th.bing.com/th/id/OIP.f339Mfff1xtyBJelmSCekQHaEO?w=312&h=180&c=7&r=0&o=7&dpr=1.3&pid=1.7&rm=3',
+      'https://th.bing.com/th/id/OIP.v1H3kKPUl5tEIGHuHqxEBAHaE7?w=261&h=180&c=7&r=0&o=7&dpr=1.3&pid=1.7&rm=3',
   'Stock movements':
       'https://images.unsplash.com/photo-1494412651409-8963ce7935a7?auto=format&fit=crop&w=400&q=60',
   'Physical stock count':
@@ -770,10 +852,23 @@ const _quickActionImages = <String, String>{
 /// dashboard is itself reachable from it ("Business Dashboard"), so a tile
 /// that does nothing is a dead end in the middle of the app. Each one now
 /// opens the workspace screen that does the job it names.
-List<Widget> _quickActionsFor(BuildContext context, String role, Color color,
-    {bool clinic = false}) {
+List<_QuickActionGroup> _quickActionsFor(
+  BuildContext context,
+  String role,
+  Color color, {
+  required bool compact,
+  required double tileSpacing,
+  bool clinic = false,
+}) {
+  final groupedActions = <String, List<Widget>>{};
+
+  void addAction(String group, Widget action) {
+    groupedActions.putIfAbsent(group, () => <Widget>[]).add(action);
+  }
+
   if (role == 'Customer') {
-    return [
+    addAction(
+      'Appointments',
       _QuickActionCard(
         label: 'Book appointments',
         icon: Icons.calendar_month_outlined,
@@ -782,14 +877,9 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color,
         onTap: () => Navigator.of(context)
             .push(slideFadeRoute(const BookBusinessListScreen())),
       ),
-      _QuickActionCard(
-        label: 'View my bills',
-        icon: Icons.receipt_long_outlined,
-        color: color,
-        imageUrl: _quickActionImages['View my bills'],
-        onTap: () =>
-            Navigator.of(context).push(slideFadeRoute(const MyBillsScreen())),
-      ),
+    );
+    addAction(
+      'Appointments',
       _QuickActionCard(
         label: 'Cancel / reschedule',
         icon: Icons.event_busy_outlined,
@@ -798,6 +888,20 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color,
         onTap: () => Navigator.of(context)
             .push(slideFadeRoute(const MyBookingsScreen())),
       ),
+    );
+    addAction(
+      'Payments',
+      _QuickActionCard(
+        label: 'View my bills',
+        icon: Icons.receipt_long_outlined,
+        color: color,
+        imageUrl: _quickActionImages['View my bills'],
+        onTap: () =>
+            Navigator.of(context).push(slideFadeRoute(const MyBillsScreen())),
+      ),
+    );
+    addAction(
+      'Smart assistant',
       _QuickActionCard(
         label: 'Ask AI to book for you',
         icon: Icons.auto_awesome,
@@ -806,7 +910,13 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color,
         onTap: () =>
             Navigator.of(context).push(slideFadeRoute(const AiPlannerScreen())),
       ),
-    ];
+    );
+    return _buildActionGroupSections(
+      groupedActions,
+      compact: compact,
+      tileSpacing: tileSpacing,
+      roleColor: color,
+    );
   }
 
   const icons = {
@@ -854,83 +964,296 @@ List<Widget> _quickActionsFor(BuildContext context, String role, Color color,
     },
   };
 
-  final actions = RoleTheme.of(role)
-      .actions
-      .map((action) => _QuickActionCard(
-            label: action,
-            icon: icons[action] ?? Icons.check_circle_outline,
-            color: color,
-            imageUrl: _quickActionImages[action],
-            onTap: wiredTaps.containsKey(action)
-                ? () => Navigator.of(context)
-                    .push(slideFadeRoute<void>(wiredTaps[action]!()))
-                : null,
-          ))
-      .toList();
+  for (final action in RoleTheme.of(role).actions) {
+    addAction(
+      _actionGroupFor(action),
+      _QuickActionCard(
+        label: action,
+        icon: icons[action] ?? Icons.check_circle_outline,
+        color: color,
+        imageUrl: _quickActionImages[action],
+        onTap: wiredTaps.containsKey(action)
+            ? () => Navigator.of(context)
+                .push(slideFadeRoute<void>(wiredTaps[action]!()))
+            : null,
+      ),
+    );
+  }
 
   final client = AuthenticatedApiClient();
-  actions.addAll([
-    _QuickActionCard(
-      label: 'Inventory dashboard',
-      icon: Icons.inventory_2_outlined,
-      color: color,
-      imageUrl: _quickActionImages['Inventory dashboard'],
-      onTap: () => Navigator.of(context).push(slideFadeRoute(
-        InventoryDashboard(
-          client: client,
-          canApprove: role == 'Admin' || role == 'Manager',
-        ),
-      )),
-    ),
-    _QuickActionCard(
-      label: 'Stock movements',
-      icon: Icons.qr_code_scanner_rounded,
-      color: color,
-      imageUrl: _quickActionImages['Stock movements'],
-      onTap: () => Navigator.of(context).push(
-        slideFadeRoute(StockCheckScreen(client: client)),
-      ),
-    ),
-    _QuickActionCard(
-      label: 'Physical stock count',
-      icon: Icons.fact_check_outlined,
-      color: color,
-      imageUrl: _quickActionImages['Physical stock count'],
-      onTap: () => Navigator.of(context).push(
-        slideFadeRoute(StockCountScreen(client: client)),
-      ),
-    ),
-    if (role == 'Admin' || role == 'Manager')
+
+  addAction(
+      'Inventory',
       _QuickActionCard(
-        label: 'Purchase approvals',
-        icon: Icons.approval_outlined,
+        label: 'Inventory dashboard',
+        icon: Icons.inventory_2_outlined,
         color: color,
-        imageUrl: _quickActionImages['Purchase approvals'],
+        imageUrl: _quickActionImages['Inventory dashboard'],
         onTap: () => Navigator.of(context).push(slideFadeRoute(
-          PurchaseOrderApprovalScreen(client: client, canApprove: true),
+          InventoryDashboard(
+            client: client,
+            canApprove: role == 'Admin' || role == 'Manager',
+            canReceive: role == 'Admin' || role == 'Manager' || role == 'Staff',
+          ),
         )),
-      ),
-    _QuickActionCard(
-      label: 'Equipment maintenance',
-      icon: Icons.build_outlined,
-      color: color,
-      imageUrl: _quickActionImages['Equipment maintenance'],
-      onTap: () => Navigator.of(context).push(
-        slideFadeRoute(EquipmentMaintenanceScreen(client: client)),
-      ),
-    ),
-    if (role == 'Admin' || role == 'Manager')
+      ));
+  addAction(
+      'Inventory',
       _QuickActionCard(
-        label: 'Inventory analytics',
-        icon: Icons.insights_outlined,
-        color: color,
-        imageUrl: _quickActionImages['Inventory analytics'],
+        label: 'Sales',
+        icon: Icons.point_of_sale_rounded,
+        color: AppColors.violet,
+        imageUrl: _quickActionImages['Inventory dashboard'],
         onTap: () => Navigator.of(context).push(
-          slideFadeRoute(InsightsScreen(client: client)),
+          slideFadeRoute(SalesScreen(client: client)),
         ),
-      ),
-  ]);
-  return actions;
+      ));
+  addAction(
+      'Inventory',
+      _QuickActionCard(
+        label: 'Stock movements',
+        icon: Icons.qr_code_scanner_rounded,
+        color: color,
+        imageUrl: _quickActionImages['Stock movements'],
+        onTap: () => Navigator.of(context).push(
+          slideFadeRoute(StockCheckScreen(client: client)),
+        ),
+      ));
+  addAction(
+      'Inventory',
+      _QuickActionCard(
+        label: 'Physical stock count',
+        icon: Icons.fact_check_outlined,
+        color: color,
+        imageUrl: _quickActionImages['Physical stock count'],
+        onTap: () => Navigator.of(context).push(
+          slideFadeRoute(StockCountScreen(client: client)),
+        ),
+      ));
+  if (role == 'Admin' || role == 'Manager') {
+    addAction(
+        'Inventory',
+        _QuickActionCard(
+          label: 'Purchase approvals',
+          icon: Icons.approval_outlined,
+          color: color,
+          imageUrl: _quickActionImages['Purchase approvals'],
+          onTap: () => Navigator.of(context).push(slideFadeRoute(
+            PurchaseOrderApprovalScreen(client: client, canApprove: true),
+          )),
+        ));
+  }
+  addAction(
+      'Inventory',
+      _QuickActionCard(
+        label: 'Equipment maintenance',
+        icon: Icons.build_outlined,
+        color: color,
+        imageUrl: _quickActionImages['Equipment maintenance'],
+        onTap: () => Navigator.of(context).push(
+          slideFadeRoute(EquipmentMaintenanceScreen(client: client)),
+        ),
+      ));
+  if (role == 'Admin' || role == 'Manager') {
+    addAction(
+        'Insights',
+        _QuickActionCard(
+          label: 'Inventory analytics',
+          icon: Icons.insights_outlined,
+          color: color,
+          imageUrl: _quickActionImages['Inventory analytics'],
+          onTap: () => Navigator.of(context).push(
+            slideFadeRoute(InsightsScreen(client: client)),
+          ),
+        ));
+  }
+  return _buildActionGroupSections(
+    groupedActions,
+    compact: compact,
+    tileSpacing: tileSpacing,
+    roleColor: color,
+  );
+}
+
+String _actionGroupFor(String action) {
+  if (action == 'View system analytics' || action == 'View branch reports') {
+    return 'Insights';
+  }
+  if (action.contains('booking')) return 'Appointments';
+  if (action == 'Mark attendance' || action == 'Process walk-ins') {
+    return 'Daily operations';
+  }
+  return 'Business';
+}
+
+List<_QuickActionGroup> _buildActionGroupSections(
+  Map<String, List<Widget>> actions, {
+  required bool compact,
+  required double tileSpacing,
+  required Color roleColor,
+}) {
+  const order = [
+    'Appointments',
+    'Daily operations',
+    'Business',
+    'Inventory',
+    'Insights',
+    'Payments',
+    'Smart assistant',
+  ];
+  final keys = [
+    ...order.where(actions.containsKey),
+    ...actions.keys.where((key) => !order.contains(key)),
+  ];
+
+  return keys.map((key) {
+    final details = switch (key) {
+      'Appointments' => (
+          Icons.calendar_month_outlined,
+          'Plan and manage appointments',
+          AppColors.cyan
+        ),
+      'Daily operations' => (
+          Icons.task_alt_rounded,
+          'Tools for today’s work',
+          AppColors.success
+        ),
+      'Business' => (
+          Icons.business_center_outlined,
+          'Manage your business and team',
+          roleColor
+        ),
+      'Inventory' => (
+          Icons.inventory_2_outlined,
+          'Stock, purchasing and equipment',
+          AppColors.electricBlue
+        ),
+      'Insights' => (
+          Icons.insights_outlined,
+          'Reports and performance',
+          AppColors.violet
+        ),
+      'Payments' => (
+          Icons.receipt_long_outlined,
+          'Your billing and payments',
+          AppColors.warning
+        ),
+      'Smart assistant' => (
+          Icons.auto_awesome_rounded,
+          'A little help, powered by AI',
+          AppColors.magenta
+        ),
+      _ => (Icons.apps_rounded, 'More tools', roleColor),
+    };
+
+    return _QuickActionGroup(
+      title: key,
+      subtitle: details.$2,
+      icon: details.$1,
+      color: details.$3,
+      actions: actions[key]!,
+      compact: compact,
+      tileSpacing: tileSpacing,
+    );
+  }).toList();
+}
+
+class _QuickActionGroup extends StatelessWidget {
+  const _QuickActionGroup({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.actions,
+    required this.compact,
+    required this.tileSpacing,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final List<Widget> actions;
+  final bool compact;
+  final double tileSpacing;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 0, 2, 11),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(11),
+                      border: Border.all(color: color.withValues(alpha: .24)),
+                    ),
+                    child: Icon(icon, color: color, size: 17),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: AppTextStyles.subtitle.copyWith(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textMuted,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: .045),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.glassBorder),
+                    ),
+                    child: Text(
+                      '${actions.length}',
+                      style: AppTextStyles.caption.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            GridView(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: tileSpacing,
+                crossAxisSpacing: tileSpacing,
+                mainAxisExtent: compact ? 126 : 136,
+              ),
+              children: actions,
+            ),
+          ],
+        ),
+      );
 }
 
 /// A quick-action tile: photo, scrim, icon well and label, inside a card the
@@ -1724,23 +2047,32 @@ class _NotificationBellAction extends ConsumerWidget {
           Positioned(
             top: 8,
             right: 8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-              decoration: const BoxDecoration(
-                color: AppColors.magenta,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(color: AppColors.dangerGlow, blurRadius: 8)
-                ],
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              switchInCurve: Curves.easeOutBack,
+              transitionBuilder: (child, animation) => ScaleTransition(
+                scale: animation,
+                child: child,
               ),
-              alignment: Alignment.center,
-              child: Text(
-                unread > 9 ? '9+' : '$unread',
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.textPrimary,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
+              child: Container(
+                key: ValueKey(unread),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                decoration: const BoxDecoration(
+                  color: AppColors.magenta,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(color: AppColors.dangerGlow, blurRadius: 8)
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  unread > 9 ? '9+' : '$unread',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textPrimary,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
