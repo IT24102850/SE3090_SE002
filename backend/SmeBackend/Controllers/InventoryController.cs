@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +7,7 @@ using SmeBackend.Data;
 using SmeBackend.Models;
 using SmeBackend.Shared;
 using SmeBackend.Services;
+using SmeBackend.Services.Inventory;
 
 namespace SmeBackend.Controllers;
 
@@ -43,10 +44,18 @@ public sealed class InventoryController(
 
         var response = await inventoryAgentService.PlanAsync(new InventoryAgentRequest(
             request.Objective.Trim(), tenantId, branchId, jwtService.GenerateAccessToken(user)), cancellationToken);
+
+        // Every run - successful or not - is kept as an auditable workflow
+        // record, and its id goes back to the client so a reorder raised from
+        // these recommendations can point at the analysis behind it.
+        var workflow = StockSenseAnalysisRecord.From(tenantId, userId, request.Objective.Trim(), response.StatusCode, response.Body);
+        db.AgentWorkflows.Add(workflow);
+        await db.SaveChangesAsync(cancellationToken);
+
         return new ContentResult
         {
             StatusCode = response.StatusCode,
-            Content = response.Body,
+            Content = StockSenseAnalysisRecord.WithWorkflowId(response.Body, workflow.Id),
             ContentType = response.ContentType,
         };
     }
@@ -423,8 +432,10 @@ public sealed class InventoryController(
             return Conflict(new { message = $"Adjustment would take '{item.Name}' below zero ({item.Quantity} on hand)." });
         }
 
+        var quantityBefore = item.Quantity;
         item.Quantity += request.Quantity;
         item.UpdatedAt = DateTime.UtcNow;
+        LowStockAlerts.QueueIfCrossed(db, item, quantityBefore);
 
         db.StockMovements.Add(new StockMovement
         {
@@ -569,8 +580,10 @@ public sealed class InventoryController(
         }
 
         var reason = string.IsNullOrWhiteSpace(request.Reason) ? "Unspecified" : request.Reason.Trim();
+        var quantityBefore = item.Quantity;
         item.Quantity -= request.Quantity;
         item.UpdatedAt = DateTime.UtcNow;
+        LowStockAlerts.QueueIfCrossed(db, item, quantityBefore);
 
         db.StockMovements.Add(new StockMovement
         {

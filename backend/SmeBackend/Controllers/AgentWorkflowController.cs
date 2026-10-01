@@ -1,8 +1,9 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Services.Inventory;
 using SmeBackend.Services;
 using SmeBackend.Shared;
 using System.Text.Json;
@@ -337,6 +338,10 @@ public class AgentWorkflowController : ControllerBase
     {
         var wf = await _db.AgentWorkflows.FindAsync(id);
         if (wf == null) return NotFound();
+        // StockSense reorders carry their own gate re-check and purchase-order
+        // placement; acting on one here would skip both.
+        if (StockSenseWorkflows.IsStockSense(wf.Objective))
+            return Conflict(new { message = "This is a StockSense reorder. Decide it from Inventory → StockSense (api/inventory/agent/reorders)." });
 
         // A plan the safety gate rejected, or one that failed, is stored with
         // ApprovalStatus "NotRequired" (no human decision was ever asked for),
@@ -694,6 +699,10 @@ public class AgentWorkflowController : ControllerBase
     {
         var wf = await _db.AgentWorkflows.FindAsync(id);
         if (wf == null) return NotFound();
+        // StockSense reorders carry their own gate re-check and purchase-order
+        // placement; acting on one here would skip both.
+        if (StockSenseWorkflows.IsStockSense(wf.Objective))
+            return Conflict(new { message = "This is a StockSense reorder. Decide it from Inventory → StockSense (api/inventory/agent/reorders)." });
 
         // Approval is an answer to a question the safety gate asked. Without
         // this check a manager could "approve" a plan the gate rejected and
@@ -732,6 +741,10 @@ public class AgentWorkflowController : ControllerBase
     {
         var wf = await _db.AgentWorkflows.FindAsync(id);
         if (wf == null) return NotFound();
+        // StockSense reorders carry their own gate re-check and purchase-order
+        // placement; acting on one here would skip both.
+        if (StockSenseWorkflows.IsStockSense(wf.Objective))
+            return Conflict(new { message = "This is a StockSense reorder. Decide it from Inventory → StockSense (api/inventory/agent/reorders)." });
 
         if (wf.Status is "Completed" or "Rejected" or "Failed")
             return Conflict(new { message = $"This workflow is already {wf.Status.ToLowerInvariant()} and cannot be rejected." });
@@ -764,6 +777,10 @@ public class AgentWorkflowController : ControllerBase
     {
         var wf = await _db.AgentWorkflows.FindAsync(id);
         if (wf == null) return NotFound();
+        // StockSense reorders carry their own gate re-check and purchase-order
+        // placement; acting on one here would skip both.
+        if (StockSenseWorkflows.IsStockSense(wf.Objective))
+            return Conflict(new { message = "This is a StockSense reorder. Decide it from Inventory → StockSense (api/inventory/agent/reorders)." });
 
         if (wf.ApprovalStatus != "Pending")
             return Conflict(new { message = "Only a workflow awaiting approval can be revised." });
