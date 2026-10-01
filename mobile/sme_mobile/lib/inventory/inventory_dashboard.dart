@@ -18,6 +18,7 @@ import 'inventory_models.dart';
 import 'purchase_order_approval_screen.dart';
 import 'stock_check_screen.dart';
 import 'stock_count_screen.dart';
+import 'stocksense_reorder.dart';
 
 class InventoryDashboard extends StatefulWidget {
   const InventoryDashboard({
@@ -37,6 +38,7 @@ class InventoryDashboard extends StatefulWidget {
 
 class _InventoryDashboardState extends State<InventoryDashboard> {
   late final _repository = InventoryDashboardRepository(widget.client);
+  late final _reorders = StockSenseReorderRepository(widget.client);
   DashboardSummary? _summary;
   List<InventoryItem> _allItems = const [];
   List<InventoryItem> _filteredItems = const [];
@@ -836,6 +838,32 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                 );
               }),
             ],
+            if (recommendations is List && recommendations.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                key: const Key('stocksense-request-reorder'),
+                icon: const Icon(Icons.add_shopping_cart),
+                label: const Text('Request reorder'),
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: AppColors.overlaySurface,
+                  builder: (_) => StockSenseReorderSheet(
+                    repository: _reorders,
+                    recommendations: recommendations.whereType<Map<String, dynamic>>().toList(),
+                    analysisWorkflowId: _inventoryAiPlan?['persisted_workflow_id'] as String?,
+                  ),
+                ),
+              ),
+            ],
+            TextButton.icon(
+              key: const Key('stocksense-my-reorders'),
+              icon: const Icon(Icons.receipt_long),
+              label: const Text('My reorder requests'),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => MyReordersScreen(repository: _reorders),
+              )),
+            ),
             if (_inventoryAiPlan!['warnings'] is List)
               ...(_inventoryAiPlan!['warnings'] as List)
                   .map((warning) => Padding(

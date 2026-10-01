@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.Models;
 using SmeBackend.Shared;
@@ -62,8 +62,10 @@ public static class RecipeConsumptionService
             var taken = Math.Min(wanted, Math.Max(0m, item.Quantity));
             var shortfall = wanted - taken;
 
+            var quantityBefore = item.Quantity;
             item.Quantity -= taken;
             item.UpdatedAt = now;
+            SmeBackend.Services.Inventory.LowStockAlerts.QueueIfCrossed(db, item, quantityBefore);
 
             db.StockMovements.Add(new StockMovement
             {

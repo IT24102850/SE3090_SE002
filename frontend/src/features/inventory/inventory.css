@@ -1409,3 +1409,55 @@
   .inventory-scope .inventory-analytics-hero-foot i,
   .inventory-scope .branch-health-pulse { animation: none; }
 }
+
+/* ── StockSense reorder workflow (components/Reorder*.tsx) ───────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.btn.btn-danger {
+  background: var(--color-critical);
+  border-color: var(--color-critical);
+  color: #fff;
+}
+.stocksense-reorders { margin-bottom: 20px; }
+.stocksense-reorder-list { display: grid; gap: 14px; }
+.stocksense-reorder-card {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.stocksense-reorder-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.stocksense-reorder-head h3 { margin: 0; color: var(--color-text); }
+.stocksense-gate-checks { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 4px; }
+.stocksense-gate-checks li { font-size: 0.9rem; color: var(--color-text-secondary); }
+.stocksense-gate-checks li.is-pass span { color: var(--color-good); font-weight: 700; }
+.stocksense-gate-checks li.is-fail { color: var(--color-text); }
+.stocksense-gate-checks li.is-fail span { color: var(--color-critical); font-weight: 700; }
+.stocksense-reorder-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.stocksense-reorder-actions input[type='text'] {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+.stocksense-reorder-form { margin-top: 18px; display: grid; gap: 12px; }
+.stocksense-reorder-form input[type='number'] { width: 6rem; }
