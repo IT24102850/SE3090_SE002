@@ -49,6 +49,22 @@ describe('LowStockAlertsPage inventory scope', () => {
     localStorage.clear();
   });
 
+  it('uses a model-neutral name for the StockSense engine', async () => {
+    render(
+      <AppToastProvider>
+        <ToastProvider>
+          <MemoryRouter>
+            <LowStockAlertsPage />
+          </MemoryRouter>
+        </ToastProvider>
+      </AppToastProvider>,
+    );
+
+    expect(await screen.findByText('AI MODEL')).toBeInTheDocument();
+    expect(screen.getByText('StockSense AI Agent')).toBeInTheDocument();
+    expect(screen.queryByText('Gemini 2.5 Flash Agent')).not.toBeInTheDocument();
+  });
+
   it('keeps catalogue details in Inventory Manager instead of repeating them', async () => {
     render(
       <AppToastProvider>

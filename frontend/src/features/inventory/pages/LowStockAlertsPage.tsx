@@ -340,7 +340,7 @@ export function LowStockAlertsPage() {
                 <div className="stocksense-hud-divider" />
                 <div className="stocksense-hud-item">
                   <span className="hud-metric-label">AI MODEL</span>
-                  <strong>Gemini 2.5 Flash Agent</strong>
+                  <strong>StockSense AI Agent</strong>
                 </div>
                 <div className="stocksense-hud-divider" />
                 <div className="stocksense-hud-item">
