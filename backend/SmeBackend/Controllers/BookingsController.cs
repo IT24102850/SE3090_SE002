@@ -935,6 +935,71 @@ public class BookingsController : ControllerBase
 
     /// <summary>The recurring pattern behind a booking, with every occurrence in the series.</summary>
     /// <summary>
+    /// Every booking that a resource going out of service would strand.
+    ///
+    /// Read-only, and the only new data the Disruption Recovery Copilot
+    /// needs: it is the agent's view of "who is affected", built from the
+    /// caller's own permissions. Deposit and attendee counts come back
+    /// because the recovery policy ranks by them.
+    /// </summary>
+    /// <response code="200">The affected bookings, earliest first.</response>
+    [HttpGet("affected")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    [ProducesResponseType(typeof(IReadOnlyList<AffectedBookingResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAffected(
+        [FromQuery] Guid resourceId,
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        CancellationToken ct)
+    {
+        if (to <= from) return BadRequest(new { message = "'to' must be after 'from'." });
+
+        var window = (to - from).TotalDays;
+        if (window > 90) return BadRequest(new { message = "Look at most 90 days ahead." });
+
+        var fromUtc = DateTimeUtil.AsUtc(from);
+        var toUtc = DateTimeUtil.AsUtc(to);
+
+        var bookings = await _db.Bookings.AsNoTracking()
+            .HoldingSeats(DateTime.UtcNow)
+            .Where(b => b.ResourceId == resourceId
+                        && b.Status != BookingStatus.Rejected
+                        && b.StartTime < toUtc
+                        && b.EndTime > fromUtc)
+            .OrderBy(b => b.StartTime)
+            .Take(200)
+            .Select(b => new
+            {
+                b.Id, b.BookedBy, b.BookingTypeId, b.StartTime, b.EndTime,
+                b.Status, b.AttendeeCount, b.DepositAmount, b.TotalCost,
+            })
+            .ToListAsync(ct);
+
+        var customerIds = bookings.Select(b => b.BookedBy).Distinct().ToList();
+        var customers = await _db.Users.AsNoTracking().IgnoreQueryFilters()
+            .Where(u => customerIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+
+        var typeIds = bookings.Select(b => b.BookingTypeId).Distinct().ToList();
+        var types = await _db.BookingTypes.AsNoTracking()
+            .Where(t => typeIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+
+        return Ok(bookings.Select(b => new AffectedBookingResponse(
+            b.Id,
+            customers.TryGetValue(b.BookedBy, out var name) ? name : "Customer",
+            b.BookedBy,
+            b.BookingTypeId,
+            types.TryGetValue(b.BookingTypeId, out var typeName) ? typeName : "Booking",
+            b.StartTime,
+            b.EndTime,
+            b.Status.ToString(),
+            b.AttendeeCount ?? 1,
+            b.DepositAmount is > 0,
+            b.TotalCost ?? 0m)).ToList());
+    }
+
+    /// <summary>
     /// The booking's timeline: every status change, reschedule and resource
     /// move, with who did it and when (Section 5's "history").
     ///
@@ -1860,3 +1925,17 @@ public sealed record BookingEventResponse(
     string? ActorRole,
     string? Reason,
     DateTime At);
+
+/// <summary>One booking stranded by a resource going out of service (GET api/bookings/affected).</summary>
+public sealed record AffectedBookingResponse(
+    Guid BookingId,
+    string CustomerName,
+    Guid CustomerId,
+    Guid BookingTypeId,
+    string BookingTypeName,
+    DateTime StartsAt,
+    DateTime EndsAt,
+    string Status,
+    int AttendeeCount,
+    bool DepositPaid,
+    decimal TotalCost);

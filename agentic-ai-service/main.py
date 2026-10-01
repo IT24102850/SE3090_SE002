@@ -38,6 +38,9 @@ from tools.inventory_tools import InventoryToolsClient  # noqa: E402
 from tools.schedule_tools import ScheduleToolsClient  # noqa: E402
 from agents import billing_planner, schedule_copilot  # noqa: E402
 from agents import platform_copilot  # noqa: E402
+from agents import disruption_copilot  # noqa: E402
+from schemas.disruption_contracts import DisruptionRequest, DisruptionTrace  # noqa: E402
+from tools.disruption_tools import DisruptionToolsClient  # noqa: E402
 from schemas.platform_contracts import PlatformPlanRequest, PlatformTrace  # noqa: E402
 from schemas.billing_contracts import (  # noqa: E402
     BillingNarrateRequest, BillingNarrateTrace, BillingPlanRequest, BillingPlanTrace,
@@ -425,3 +428,30 @@ def plan_platform_operations(request: PlatformPlanRequest) -> PlatformTrace:
         request,
         backend_base_url=os.getenv("BACKEND_API_BASE_URL", "http://localhost:5298/api"),
     )
+
+
+@app.post("/disruption/plan", response_model=DisruptionTrace, dependencies=[Depends(_require_internal_token)])
+def plan_disruption_recovery(request: DisruptionRequest) -> DisruptionTrace:
+    """Disruption Recovery Copilot: a resource is out, re-place its bookings.
+
+    Read-only by construction - every tool is a GET made with the calling
+    manager's own JWT, and nothing here moves a booking. A finished run comes
+    back AwaitingApproval (or Rejected, NoAction, or a safe Failed); all of
+    them are normal outcomes, so all return 200 with the full trace for
+    ASP.NET Core to persist. Only a malformed request is an HTTP error.
+    """
+    client = DisruptionToolsClient(
+        base_url=os.getenv("BACKEND_API_BASE_URL", "http://localhost:5298/api"),
+        auth_token=request.auth_token,
+    )
+    try:
+        trace = disruption_copilot.run(request, client)
+    finally:
+        client.close()
+    trace.workflow_id = str(uuid.uuid4())
+    logger.info("Disruption Copilot %s finished: %s (%d affected, %d proposal(s), %d tool call(s))",
+                trace.workflow_id, trace.status,
+                len(trace.impact.affected) if trace.impact else 0,
+                len(trace.action.proposals) if trace.action else 0,
+                len(trace.tool_calls))
+    return trace
