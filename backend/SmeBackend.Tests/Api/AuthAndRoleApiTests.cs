@@ -132,6 +132,24 @@ public sealed class AuthAndRoleApiTests(ApiWebApplicationFactory factory) : ICla
     }
 
     [Fact]
+    public async Task BookingHistory_RequiresAuthentication()
+    {
+        var response = await factory.CreateClient().GetAsync($"/api/bookings/{Guid.NewGuid()}/history");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BookingHistory_ForAnUnknownBooking_Returns404()
+    {
+        var client = await SignedInAs(UserRole.Manager);
+
+        var response = await client.GetAsync($"/api/bookings/{Guid.NewGuid()}/history");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task UnknownRoute_Returns404ProblemDetails()
     {
         var response = await factory.CreateClient().GetAsync("/api/does-not-exist");

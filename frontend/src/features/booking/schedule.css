@@ -115,3 +115,31 @@
   .sch-daynav-date { min-width: 130px; }
   .svc-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Booking history timeline (BookingHistoryTimeline.tsx) ─────────── */
+.booking-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.booking-timeline-item {
+  display: grid;
+  grid-template-columns: minmax(130px, auto) 1fr;
+  gap: 12px;
+  padding-left: 12px;
+  border-left: 3px solid var(--color-border, #d4d4d8);
+}
+.booking-timeline-item.is-created { border-left-color: #22c55e; }
+.booking-timeline-item.is-statuschanged { border-left-color: #3b82f6; }
+.booking-timeline-item.is-rescheduled { border-left-color: #f59e0b; }
+.booking-timeline-item.is-resourcechanged { border-left-color: #8b5cf6; }
+.booking-timeline-item.is-deleted { border-left-color: #ef4444; }
+.booking-timeline-when { font-size: 0.82rem; color: var(--color-text-muted, #71717a); }
+.booking-timeline-what strong { font-weight: 600; }
+@media (max-width: 640px) {
+  .booking-timeline-item { grid-template-columns: 1fr; gap: 2px; }
+}
