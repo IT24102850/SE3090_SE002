@@ -340,6 +340,8 @@ What each suite covers, as required by Section 12 of the specification:
 | Flutter | `mobile/sme_mobile/test/` | Unit (models), widgets, form validation (login), role navigation, API integration through the real Dio client with a fake HTTP adapter, secure storage |
 | Agentic AI | `agentic-ai-service/tests/` | Golden cases, planning and delegation, per-agent tool permissions, schema validation, the deterministic safety gate, approval enforcement, prompt-injection resistance, model fallback and safe failure. The model is mocked, so no test depends on an LLM |
 
+Performance: `k6 run tests/performance/load-test.js` load-tests the deployed API (concurrency, latency, failure rate, database round trip, Agentic AI latency); method and results are in [`PERFORMANCE_REPORT.md`](PERFORMANCE_REPORT.md).
+
 The PostgreSQL tests need Docker. Without it (a laptop without Docker Desktop
 running) they are reported as **Skipped** with that reason, never as passed;
 in GitHub Actions, where Docker is available, they run on every push.
@@ -454,4 +456,6 @@ No secrets, credentials, or private production data should be submitted to exter
 - [Tourism business template](tourism-business-template.md)
 - [Website booking widget](website-booking-widget.md)
 - [Architecture decision records](ADR/)
+- [Performance report](PERFORMANCE_REPORT.md) - k6 load tests of the deployed system
+- [Changes from the Group Task Assignment plan](CHANGES_FROM_PLAN.md)
 - [AI usage logs](.)

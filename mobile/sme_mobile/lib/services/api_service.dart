@@ -90,6 +90,57 @@ class ApiService {
 
   static bool _sessionExpiring = false;
 
+  static const _retriedKey = 'refresh-retried';
+
+  /// Only one refresh runs at a time: when a screen fires several requests
+  /// and they all come back 401, they wait on the same refresh instead of
+  /// each spending the (single-use) refresh token.
+  static Future<String?>? _refreshing;
+
+  static bool _canRefresh(RequestOptions request) =>
+      request.extra[_retriedKey] != true &&
+      !request.path.contains('/auth/login') &&
+      !request.path.contains('/auth/refresh') &&
+      !request.path.contains('/auth/logout');
+
+  static Future<String?> _refreshAccessToken() {
+    return _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+  }
+
+  static Future<String?> _doRefresh() async {
+    final refreshToken = await SecureStorageService.getRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) return null;
+    try {
+      // Straight through the same transport, but not through the interceptor:
+      // a 401 from /auth/refresh itself must not trigger another refresh.
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/auth/refresh',
+        data: {'refreshToken': refreshToken},
+        options: Options(extra: {_retriedKey: true}),
+      );
+      final access = response.data?['accessToken'] as String?;
+      final nextRefresh = response.data?['refreshToken'] as String?;
+      if (access == null || access.isEmpty) return null;
+      await SecureStorageService.saveToken(access);
+      if (nextRefresh != null) await SecureStorageService.saveRefreshToken(nextRefresh);
+      return access;
+    } on DioException {
+      return null;
+    }
+  }
+
+  /// Best-effort server-side sign-out: revokes the refresh token so it cannot
+  /// be used again even if the device is compromised later.
+  static Future<void> revokeRefreshToken() async {
+    final refreshToken = await SecureStorageService.getRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) return;
+    try {
+      await dio.post('/auth/logout', data: {'refreshToken': refreshToken});
+    } on DioException {
+      // Offline or the server is down: the local sign-out still happens.
+    }
+  }
+
   static Dio get dio {
     if (!_interceptorAttached) {
       _dio.interceptors.add(
@@ -102,11 +153,28 @@ class ApiService {
             return handler.next(options);
           },
           onError: (DioException error, handler) async {
-            if (error.response?.statusCode == 401) {
-              // Token expired / invalid → clear storage, then tell the app so
-              // it can send the user back to the login screen. Guarded so a
-              // burst of concurrent 401s (a screen fires several requests at
-              // once) only tears the session down once.
+            final request = error.requestOptions;
+            if (error.response?.statusCode == 401 && _canRefresh(request)) {
+              // The access token expired: trade the refresh token for a new
+              // pair once, then replay the request that failed.
+              final fresh = await _refreshAccessToken();
+              if (fresh != null) {
+                request.headers['Authorization'] = 'Bearer $fresh';
+                request.extra[_retriedKey] = true;
+                try {
+                  return handler.resolve(await _dio.fetch(request));
+                } on DioException catch (retryError) {
+                  return handler.next(retryError);
+                }
+              }
+            }
+            // A refused /auth/refresh is reported by the request that asked
+            // for it, below - handling it here too would sign out twice.
+            if (error.response?.statusCode == 401 && !request.path.contains('/auth/refresh')) {
+              // No refresh token, or the server refused it → clear storage,
+              // then tell the app so it can send the user back to the login
+              // screen. Guarded so a burst of concurrent 401s (a screen fires
+              // several requests at once) only tears the session down once.
               if (!_sessionExpiring) {
                 _sessionExpiring = true;
                 await SecureStorageService.clearAll();

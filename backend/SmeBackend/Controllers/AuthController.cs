@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
@@ -49,7 +49,7 @@ public class AuthController : ControllerBase
         var user = await _customers.RegisterAsync(email, dto.Password, dto.FullName, dto.Phone, dto.TenantId, dto.BranchId);
 
         var token = _jwtService.GenerateAccessToken(user);
-        var refreshToken = _jwtService.GenerateRefreshToken();
+        var refreshToken = await RefreshTokenStore.IssueAsync(_context, user.Id);
 
         return Ok(new AuthResponseDto
         {
@@ -99,7 +99,7 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Tenant is inactive" });
 
         var token = _jwtService.GenerateAccessToken(user);
-        var refreshToken = _jwtService.GenerateRefreshToken();
+        var refreshToken = await RefreshTokenStore.IssueAsync(_context, user.Id);
 
         return Ok(new AuthResponseDto
         {
@@ -130,10 +130,46 @@ public class AuthController : ControllerBase
         return Ok(new AuthResponseDto
         {
             AccessToken = _jwtService.GenerateAccessToken(membership),
-            RefreshToken = _jwtService.GenerateRefreshToken(),
+            RefreshToken = await RefreshTokenStore.IssueAsync(_context, membership.Id),
             ExpiresAt = DateTime.UtcNow.AddHours(2),
             User = MapToUserDto(membership)
         });
+    }
+
+    /// <summary>
+    /// Exchanges a refresh token for a new access token and a new refresh
+    /// token. Each refresh token works once; replaying a used one signs the
+    /// user out everywhere (see RefreshTokenStore).
+    /// </summary>
+    /// <response code="200">New tokens.</response>
+    /// <response code="401">The refresh token is unknown, expired, revoked or reused.</response>
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<AuthResponseDto>> Refresh([FromBody] RefreshRequestDto dto, CancellationToken ct)
+    {
+        var rotation = await RefreshTokenStore.RotateAsync(_context, dto.RefreshToken, ct);
+        if (rotation is null)
+            return Unauthorized(new { message = "Your session has expired. Please sign in again." });
+
+        return Ok(new AuthResponseDto
+        {
+            AccessToken = _jwtService.GenerateAccessToken(rotation.User),
+            RefreshToken = rotation.RefreshToken,
+            ExpiresAt = DateTime.UtcNow.AddHours(2),
+            User = MapToUserDto(rotation.User)
+        });
+    }
+
+    /// <summary>Signs out: revokes the given refresh token. Always 204, so it reveals nothing about the token.</summary>
+    [HttpPost("logout")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Logout([FromBody] RefreshRequestDto dto, CancellationToken ct)
+    {
+        await RefreshTokenStore.RevokeAsync(_context, dto.RefreshToken, ct);
+        return NoContent();
     }
 
     [HttpGet("me")]
@@ -203,6 +239,9 @@ public class AuthController : ControllerBase
         // The identity is what signs in, so it must carry the new hash too.
         if (user.Role == UserRole.Customer)
             await _customers.PropagatePasswordAsync(user.Id, user.PasswordHash);
+        // A new password ends every other session: a thief holding an old
+        // refresh token cannot keep minting access tokens with it.
+        await RefreshTokenStore.RevokeAllForUserAsync(_context, user.Id);
 
         return Ok(new { message = "Password changed." });
     }

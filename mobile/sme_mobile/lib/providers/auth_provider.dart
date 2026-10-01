@@ -341,6 +341,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Clear secure storage + reset state
   Future<void> logout() async {
+    await ApiService.revokeRefreshToken();
     await SecureStorageService.clearAll();
     state = const AuthState(isInitialized: true);
   }

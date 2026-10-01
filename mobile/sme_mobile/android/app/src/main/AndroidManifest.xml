@@ -7,6 +7,8 @@
 
     <!-- FR-B7: camera access for the staff QR check-in scanner -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Android 13+: needed to show booking/approval notifications -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="Unify"

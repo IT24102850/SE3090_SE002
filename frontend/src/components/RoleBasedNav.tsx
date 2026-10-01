@@ -1,6 +1,6 @@
 ﻿import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store/store';
-import { logout } from '../store/authSlice';
+import { signOut } from '../store/authSlice';
 
 const RoleBasedNav = () => {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -35,7 +35,7 @@ const RoleBasedNav = () => {
         </span>
         
         <button 
-          onClick={() => dispatch(logout())}
+          onClick={() => signOut(dispatch)}
           style={{
             background: '#dc2626',
             color: 'white',

@@ -6,6 +6,7 @@ import 'providers/auth_provider.dart';
 import 'screens/unify_auth/unify_login_screen.dart';
 import 'screens/role_home.dart';
 import 'screens/profile_setup_screen.dart';
+import 'services/device_notification_service.dart';
 import 'services/push_notification_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/ui/ui.dart';
@@ -37,6 +38,15 @@ class _MyAppState extends ConsumerState<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Device notifications follow the session: on at sign-in (including a
+    // restored session), off at sign-out.
+    ref.listen(authProvider.select((a) => a.isAuthenticated), (was, now) {
+      if (now) {
+        unawaited(DeviceNotificationService.instance.start());
+      } else if (was == true) {
+        unawaited(DeviceNotificationService.instance.stop());
+      }
+    });
     final auth = ref.watch(authProvider);
 
     Widget home;
