@@ -8,6 +8,7 @@ import { Icon } from '../ui/Icon';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
 import { getStoredToken } from '../authToken';
+import { ReorderApprovals } from '../components/ReorderApprovals';
 
 
 type WorkflowItem = {
@@ -144,6 +145,9 @@ export function AgentWorkflowMonitorPage() {
       if (!resp.ok) throw new Error(`Workflow request failed (${resp.status})`);
       const raw = await resp.json() as Array<Record<string, any>>;
       const data = raw
+        // StockSense reorders are decided in their own panel above, which
+        // re-runs the safety gate and places the purchase order.
+        .filter((workflow) => !String(workflow.objective ?? '').startsWith('[StockSense'))
         .filter((workflow) => !search || `${workflow.objective} ${workflow.id}`.toLowerCase().includes(search.toLowerCase()))
         .map((workflow): WorkflowItem => ({
           id: String(workflow.id),
@@ -255,6 +259,8 @@ export function AgentWorkflowMonitorPage() {
           <button className="btn btn-secondary" onClick={() => fetchItems()}>Refresh</button>
         </div>
       </header>
+
+      <ReorderApprovals canDecide={user?.role === 'Admin' || user?.role === 'Manager'} />
       {loadError && <p className="page-notice" role="alert">⚠ {loadError}</p>}
 
       <div className="workflow-live-strip">

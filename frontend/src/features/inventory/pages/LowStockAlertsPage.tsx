@@ -4,6 +4,7 @@ import { Badge, type BadgeTone } from '../ui/Badge';
 import { Icon } from '../ui/Icon';
 import { useToast } from '../ui/ToastContext';
 import { getStoredToken } from '../authToken';
+import { ReorderRequestForm } from '../components/ReorderRequestForm';
 
 type HealthStatus = 'Out of stock' | 'Below reorder' | 'Healthy';
 
@@ -42,7 +43,7 @@ type InventoryRecommendation = {
   estimated_total_cost?: number | null; confidence: number; reason: string;
 };
 type InventoryInsight = { category: string; title: string; detail: string; affected_items: string[] };
-type InventoryPlan = { workflow_id: string; status: string; planner_summary: string; data_sources: string[]; recommendations: InventoryRecommendation[]; insights: InventoryInsight[]; warnings: string[] };
+type InventoryPlan = { workflow_id: string; persisted_workflow_id?: string; status: string; planner_summary: string; data_sources: string[]; recommendations: InventoryRecommendation[]; insights: InventoryInsight[]; warnings: string[] };
 
 function insightIcon(category: string) {
   switch (category) {
@@ -237,7 +238,8 @@ export function LowStockAlertsPage() {
               <td>{item.reason}</td>
               <td><Link className="link-button" to={`/purchase-orders?reorderItemId=${encodeURIComponent(item.inventory_item_id)}&branchId=${encodeURIComponent(item.branch_id ?? '')}&quantity=${encodeURIComponent(item.recommended_quantity)}`}>Review order</Link></td>
             </tr>)}
-          </tbody></table></div></>}
+          </tbody></table></div>
+          <ReorderRequestForm recommendations={plan.recommendations} analysisWorkflowId={plan.persisted_workflow_id} /></>}
         </div>
       </section>}
       {planError && <p className="page-notice" role="alert" style={{ marginTop: 12 }}>{planError}</p>}
