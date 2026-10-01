@@ -57,11 +57,12 @@ namespace SmeBackend.Migrations
                 WHERE COALESCE(
                         (SELECT d.""LicensedCapacity"" FROM departures d
                           WHERE d.""Id"" = b.""DepartureId"" AND d.""LicensedCapacity"" > 0),
+                        -- CustomAttributes is jsonb, so it is read directly;
+                        -- jsonb_typeof guards against a capacity held as a
+                        -- string or an object, which ::int would choke on.
                         (SELECT CASE
-                                  WHEN r.""CustomAttributes"" IS NULL
-                                    OR btrim(r.""CustomAttributes"") = '' THEN NULL
-                                  WHEN jsonb_typeof((r.""CustomAttributes"")::jsonb -> 'capacity') = 'number'
-                                    THEN ((r.""CustomAttributes"")::jsonb ->> 'capacity')::int
+                                  WHEN jsonb_typeof(r.""CustomAttributes"" -> 'capacity') = 'number'
+                                    THEN (r.""CustomAttributes"" ->> 'capacity')::int
                                 END
                            FROM resources r WHERE r.""Id"" = b.""ResourceId""),
                         (SELECT NULLIF(r.""Capacity"", 0) FROM resources r WHERE r.""Id"" = b.""ResourceId""),
