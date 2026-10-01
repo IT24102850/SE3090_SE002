@@ -82,6 +82,21 @@ public class Booking
 
     public BookingPriority Priority { get; set; } = BookingPriority.Normal;
 
+    /// <summary>
+    /// True when this booking takes the whole resource, so no other booking
+    /// may overlap it; false for a seat on a shared resource (a boat, a
+    /// class) where overlapping bookings are summed against a capacity.
+    ///
+    /// It duplicates a decision <see cref="Shared.CapacityRules"/> already
+    /// makes from Resource, BookingType and Departure, and it exists for one
+    /// reason: the PostgreSQL exclusion constraint that makes double booking
+    /// impossible (migration AddBookingOverlapExclusion) is an index, and an
+    /// index cannot join to another table. The one bit it needs therefore
+    /// has to live on the row. Written only by
+    /// <see cref="Shared.BookingExclusivity"/>, never by a client.
+    /// </summary>
+    public bool OccupiesResourceExclusively { get; set; } = true;
+
     public int? AttendeeCount { get; set; }
 
     // ── Pay to confirm ─────────────────────────────────────────────

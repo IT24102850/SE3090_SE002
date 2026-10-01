@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
@@ -444,6 +444,7 @@ public class DeparturesController : ControllerBase
         var duration = target.ScheduledReturn - target.ScheduledDeparture;
 
         var moved = new List<object>();
+        var movedBookings = new List<Models.Booking>();
         var skipped = new List<object>();
 
         foreach (var booking in bookings.OrderBy(b => b.CreatedAt))
@@ -460,6 +461,7 @@ public class DeparturesController : ControllerBase
                 }
             }
 
+            movedBookings.Add(booking);
             booking.DepartureId = target.Id;
             booking.ResourceId = target.ResourceId;
             booking.StartTime = target.ScheduledDeparture;
@@ -475,6 +477,9 @@ public class DeparturesController : ControllerBase
             moved.Add(new { bookingId = booking.Id, seats });
         }
 
+        // The resource changed, so the exclusivity flag the overlap
+        // constraint reads has to be resolved again for the moved bookings.
+        await BookingExclusivity.ApplyManyAsync(_db, movedBookings);
         await _db.SaveChangesAsync();
 
         return Ok(new

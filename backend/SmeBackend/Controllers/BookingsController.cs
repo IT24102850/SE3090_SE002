@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
@@ -291,6 +291,7 @@ public class BookingsController : ControllerBase
             TotalCost = priced?.Total
         };
 
+        await BookingExclusivity.ApplyAsync(_db, booking);
         _db.Bookings.Add(booking);
 
         var resourceName = (await _db.Resources.FindAsync(dto.ResourceId))?.Name;
@@ -1451,6 +1452,7 @@ public class BookingsController : ControllerBase
         }
 
         var results = new List<BulkItemResult>();
+        var created = new List<Models.Booking>();
         foreach (var item in items)
         {
             var itemStart = DateTimeUtil.AsUtc(item.StartTime);
@@ -1489,9 +1491,11 @@ public class BookingsController : ControllerBase
                 Priority = Models.BookingPriority.Normal
             };
             _db.Bookings.Add(booking);
+            created.Add(booking);
             results.Add(new BulkItemResult(booking.Id, item.ResourceId, itemStart, true, null));
         }
 
+        await BookingExclusivity.ApplyManyAsync(_db, created);
         await _db.SaveChangesAsync();
         return new BatchOutcome(false, null, results);
     }
