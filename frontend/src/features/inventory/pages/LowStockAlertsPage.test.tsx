@@ -68,6 +68,26 @@ describe('LowStockAlertsPage inventory scope', () => {
     expect(screen.getByRole('dialog', { name: 'Choose AI analysis scope' })).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: 'Choose AI analysis scope' })).toHaveClass('stocksense-scope-modal');
     expect(screen.getByRole('radio', { name: /Full business/ })).toBeChecked();
+    expect(screen.getByLabelText('Inventory analysis options')).toHaveTextContent('Business-wide analysis');
+    expect(screen.getByLabelText('Inventory analysis options')).toHaveTextContent('Branch-specific analysis');
+    expect(screen.getByLabelText('Inventory analysis options')).toHaveTextContent('Focus on any of your 1 available branch.');
+  });
+
+  it('shows a StockSense refresh success message instead of a branch-list message', async () => {
+    render(
+      <AppToastProvider>
+        <ToastProvider>
+          <MemoryRouter>
+            <LowStockAlertsPage />
+          </MemoryRouter>
+        </ToastProvider>
+      </AppToastProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh now' }));
+
+    expect(await screen.findByText('StockSense workspace refreshed successfully.')).toBeInTheDocument();
+    expect(screen.queryByText(/Branch list refreshed successfully/)).not.toBeInTheDocument();
   });
 
   it('explains recommendation confidence and assumptions for review', async () => {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
+import { useConfirmation } from '../../shared/components/ConfirmationProvider';
 import {
   useApplyWorkflowMutation,
   useApproveWorkflowMutation,
@@ -49,6 +50,7 @@ function formatWorkflowDate(value?: string | null): string {
 }
 
 export default function AgentPlannerPage() {
+  const confirm = useConfirmation();
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const { show } = useToast();
@@ -102,7 +104,14 @@ export default function AgentPlannerPage() {
   };
 
   const handleReject = async (id: string) => {
-    const reason = window.prompt('Reason for rejecting this plan?') ?? '';
+    const reason = window.prompt('Reason for rejecting this plan?');
+    if (reason === null) return;
+    if (!await confirm({
+      title: 'Reject this schedule plan?',
+      message: 'The plan will be marked as rejected and will not be applied.',
+      confirmLabel: 'Reject plan',
+      tone: 'danger',
+    })) return;
     try {
       await rejectWorkflow({ id, reason }).unwrap();
       show('Workflow rejected.', 'success');

@@ -8,6 +8,7 @@ import { Icon } from '../ui/Icon';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
 import { getStoredToken } from '../authToken';
+import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 
 
 type WorkflowItem = {
@@ -84,6 +85,7 @@ function formatWorkflowConfidence(value: unknown) {
 }
 
 export function AgentWorkflowMonitorPage() {
+  const confirm = useConfirmation();
   // Recharts takes SVG attributes, which cannot resolve var(), so the
   // sparkline reads its stroke from the theme hook rather than a literal.
   const chart = useChartTheme();
@@ -202,7 +204,15 @@ export function AgentWorkflowMonitorPage() {
   }
 
   async function reject(id: string) {
-    const reason = prompt('Rejection reason (optional)') || 'rejected';
+    const enteredReason = prompt('Rejection reason (optional)');
+    if (enteredReason === null) return;
+    const reason = enteredReason || 'rejected';
+    if (!await confirm({
+      title: 'Reject this workflow?',
+      message: 'The proposed inventory workflow will be marked as rejected.',
+      confirmLabel: 'Reject workflow',
+      tone: 'danger',
+    })) return;
     try {
       const resp = await fetch(`${apiBaseUrl}/agent/workflow/${id}/reject`, {
         method: 'POST',

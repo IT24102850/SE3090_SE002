@@ -182,7 +182,7 @@ export const bookingApi = createApi({
       query: (body) => ({ url: '/tenant/staff', method: 'POST', body }),
       invalidatesTags: [{ type: 'Staff', id: 'LIST' }],
     }),
-    updateStaffMember: builder.mutation<StaffUser, { id: string; branchId?: string | null; isActive?: boolean }>({
+    updateStaffMember: builder.mutation<StaffUser, { id: string; branchId?: string | null; clearBranch?: boolean; fullName?: string; phone?: string; role?: StaffUser['role']; isActive?: boolean }>({
       query: ({ id, ...body }) => ({ url: `/tenant/staff/${id}`, method: 'PUT', body }),
       invalidatesTags: [{ type: 'Staff', id: 'LIST' }],
     }),

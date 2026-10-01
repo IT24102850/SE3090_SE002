@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../../store/store';
 import { useToast } from '../../../shared/components/Toast';
+import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 import { billingApi, errorMessage, type InvoiceTemplate, type TemplateBlock } from '../billingApi';
 import { useAsync } from '../useAsync';
 import InvoicePaper, { DEFAULT_BLOCKS, SAMPLE_PAPER } from '../components/InvoicePaper';
@@ -45,6 +46,7 @@ export default function InvoiceDesignerPage() {
   const { user } = useSelector((s: RootState) => s.auth);
   const canEdit = user?.role === 'Admin' || user?.role === 'Manager';
   const toast = useToast();
+  const confirm = useConfirmation();
   const { data: templates, reload } = useAsync(() => billingApi.listTemplates(), []);
   const [draft, setDraft] = useState<Draft>(blank);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -90,7 +92,12 @@ export default function InvoiceDesignerPage() {
   };
 
   const remove = async () => {
-    if (!draft.id || !window.confirm(`Delete "${draft.name}"?`)) return;
+    if (!draft.id || !await confirm({
+      title: 'Delete this invoice template?',
+      message: `Delete "${draft.name}"? This cannot be undone.`,
+      confirmLabel: 'Delete template',
+      tone: 'danger',
+    })) return;
     try {
       await billingApi.deleteTemplate(draft.id);
       setDraft(blank());

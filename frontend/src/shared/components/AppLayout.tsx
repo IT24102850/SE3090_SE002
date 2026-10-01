@@ -26,11 +26,7 @@ interface NavSection {
   items: NavItem[];
 }
 
-/* Sections are the ONLY nav definition — there is no separate flat list to
-   fall out of sync with, so an item cannot be dropped by regrouping. All 19
-   destinations that had a sidebar entry still have one; nothing was removed,
-   merged or hidden behind a "more" affordance. scripts/check-nav-parity.mjs
-   asserts that against the router's own paths and runs as part of the build. */
+/* Sections are the only navigation definition, grouped by destination area. */
 const NAV_SECTIONS: NavSection[] = [
   {
     id: 'overview',
@@ -85,7 +81,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Resources',
     items: [
       { path: '/resources', label: 'Resource Manager', icon: '🏢', roles: ['Admin', 'Manager'] },
-      { path: '/staff', label: 'Staff', icon: '🧑‍💼', roles: ['Admin', 'Manager'] },
+      { path: '/staff', label: 'Staff', icon: '🧑‍💼', roles: ['Manager'] },
       { path: '/branches', label: 'Branches', icon: '📍', roles: ['Admin'] },
     ],
   },
@@ -118,6 +114,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: '/business-profile', label: 'Business Profile', icon: '🏪', roles: ['Admin', 'Manager'] },
       { path: '/settings', label: 'Business Settings', icon: '⚙️', roles: ['Admin'] },
+      { path: '/users', label: 'People & access', icon: '👥', roles: ['Admin'] },
     ],
   },
 ];
@@ -341,7 +338,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                       <NavLink
                         key={item.path}
                         to={item.path}
-                        className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+                        className={({ isActive }) => `sidebar-link${item.path === '/users' ? ' sidebar-link-admin-shortcut' : ''}${isActive ? ' active' : ''}`}
                         onClick={() => setMobileNavOpen(false)}
                       >
                         <span className={`sidebar-link-icon${inventoryIconClass(item) ? ` ${inventoryIconClass(item)}` : ''}`} aria-hidden="true"><NavigationIcon item={item} /></span>

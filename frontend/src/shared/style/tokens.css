@@ -394,6 +394,82 @@ button, input, select, textarea { font-family: inherit; }
 *::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
 *::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); background-clip: content-box; }
 
+/* Shared animated header card across signed-in web pages. */
+.app-content .page-header,
+.inventory-scope .page-head {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: clamp(16px, 2.5vw, 25px);
+  background:
+    radial-gradient(ellipse at 94% 0%, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent 38%),
+    linear-gradient(120deg, var(--color-surface), color-mix(in srgb, var(--color-primary-soft) 44%, var(--color-surface)));
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
+  animation: shared-page-header-enter .45s cubic-bezier(.2, .75, .25, 1) both;
+}
+
+.app-content .page-header::after,
+.inventory-scope .page-head::before {
+  position: absolute;
+  z-index: -1;
+  top: -64px;
+  right: 9%;
+  width: 150px;
+  height: 150px;
+  content: '';
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 14%, transparent);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 18px color-mix(in srgb, var(--color-primary) 4%, transparent),
+    0 0 0 38px color-mix(in srgb, var(--color-primary) 3%, transparent);
+  animation: shared-header-orbit 8s ease-in-out infinite alternate;
+}
+
+.app-content .page-header > *,
+.inventory-scope .page-head > * {
+  position: relative;
+  z-index: 1;
+}
+
+.app-content .page-header .page-title {
+  letter-spacing: -.04em;
+}
+
+@keyframes shared-page-header-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shared-header-orbit {
+  from { transform: translate3d(0, 0, 0) scale(.96); }
+  to { transform: translate3d(-9px, 7px, 0) scale(1.04); }
+}
+
+@media (max-width: 560px) {
+  .app-content .page-header,
+  .inventory-scope .page-head {
+    padding: 15px;
+    border-radius: 16px;
+  }
+
+  .app-content .page-header::after,
+  .inventory-scope .page-head::before {
+    right: -54px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-content .page-header,
+  .inventory-scope .page-head,
+  .app-content .page-header::after,
+  .inventory-scope .page-head::before {
+    animation: none;
+  }
+}
+
 /* ── Layout shell ─────────────────────────────────────────── */
 .app-shell {
   display: flex;
@@ -1531,6 +1607,21 @@ body.modal-open { overflow: hidden; }
   padding-left: var(--space-2);
   margin-left: 6px;
   border-left: 1px solid var(--color-border);
+}
+
+.sidebar-link.sidebar-link-admin-shortcut {
+  margin-top: 5px;
+  color: var(--color-primary);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--color-primary-soft) 52%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
+
+.sidebar-link.sidebar-link-admin-shortcut:hover,
+.sidebar-link.sidebar-link-admin-shortcut.active {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary-soft) 82%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 /* Dialogs and form controls share the same expressive language as the dashboard. */

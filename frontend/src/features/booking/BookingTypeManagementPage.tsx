@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
 import Modal from '../../shared/components/Modal';
+import { useConfirmation } from '../../shared/components/ConfirmationProvider';
 import { useCreateBookingTypeMutation, useDeleteBookingTypeMutation, useGetBookingTypesQuery, useUpdateBookingTypeMutation } from '../../api/bookingApi';
 import { BOOKING_UNITS, type BookingType, type BookingUnit } from './types';
 
@@ -80,13 +81,19 @@ export default function BookingTypeManagementPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const { show } = useToast();
+  const confirm = useConfirmation();
 
   const { data: types, isLoading } = useGetBookingTypesQuery({ tenantId }, { skip: !tenantId });
   const [deleteType] = useDeleteBookingTypeMutation();
   const [editing, setEditing] = useState<BookingType | 'new' | null>(null);
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Archive this booking type?')) return;
+    if (!await confirm({
+      title: 'Archive this booking type?',
+      message: 'It will no longer be available for new bookings.',
+      confirmLabel: 'Archive type',
+      tone: 'danger',
+    })) return;
     try {
       await deleteType(id).unwrap();
       show('Booking type archived.', 'success');

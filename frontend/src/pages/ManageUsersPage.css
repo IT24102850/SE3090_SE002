@@ -1,0 +1,385 @@
+.inventory-scope .manage-users-page {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.inventory-scope .manage-users-hero,
+.inventory-scope .manage-users-card {
+  animation: manage-users-enter .48s cubic-bezier(.2, .75, .25, 1) both;
+}
+
+.inventory-scope .manage-users-layout > .manage-users-card {
+  animation-delay: .08s;
+}
+
+.inventory-scope .manage-users-results > .manage-users-card:nth-child(1) {
+  animation-delay: .16s;
+}
+
+.inventory-scope .manage-users-results > .manage-users-card:nth-child(2) {
+  animation-delay: .24s;
+}
+
+@keyframes manage-users-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.inventory-scope .manage-users-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  min-width: 0;
+  overflow: hidden;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  background:
+    radial-gradient(ellipse at 92% 0%, color-mix(in srgb, var(--color-primary) 17%, transparent), transparent 38%),
+    linear-gradient(120deg, var(--color-surface), color-mix(in srgb, var(--color-primary-soft) 48%, var(--color-surface)));
+  border: 1px solid var(--color-border);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.inventory-scope .manage-users-hero::after {
+  position: absolute;
+  right: 18%;
+  bottom: -4rem;
+  width: 11rem;
+  height: 11rem;
+  content: '';
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 15%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5rem color-mix(in srgb, var(--color-primary) 4%, transparent), 0 0 0 3rem color-mix(in srgb, var(--color-primary) 3%, transparent);
+}
+
+.inventory-scope .manage-users-kicker {
+  margin: 0 0 .45rem;
+  color: var(--color-primary);
+  font-size: .7rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+
+.inventory-scope .manage-users-hero h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.1rem);
+  letter-spacing: -.035em;
+}
+
+.inventory-scope .manage-users-hero p:last-child {
+  max-width: 40rem;
+  margin: .5rem 0 0;
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+}
+
+.inventory-scope .manage-users-admin-tag {
+  z-index: 1;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: .5rem;
+  padding: .55rem .8rem;
+  color: var(--color-primary);
+  font-size: .78rem;
+  font-weight: 750;
+  background: color-mix(in srgb, var(--color-primary-soft) 76%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, var(--color-border));
+  border-radius: 999px;
+}
+
+.inventory-scope .manage-users-admin-tag span {
+  font-size: 1rem;
+  animation: manage-users-sparkle 2.8s ease-in-out infinite;
+}
+
+@keyframes manage-users-sparkle {
+  0%, 100% { transform: scale(1) rotate(0); }
+  50% { transform: scale(1.16) rotate(12deg); }
+}
+
+.inventory-scope .manage-users-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 1.15rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.inventory-scope .manage-users-results {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.inventory-scope .manage-users-card {
+  display: grid;
+  gap: 1.1rem;
+  min-width: 0;
+  padding: clamp(1rem, 2vw, 1.3rem);
+  color: var(--color-text);
+  background: linear-gradient(145deg, var(--color-surface), color-mix(in srgb, var(--color-primary-soft) 13%, var(--color-surface)) 150%);
+  border: 1px solid var(--color-border);
+  border-radius: 1.05rem;
+  box-shadow: var(--shadow-sm);
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+.inventory-scope .manage-users-card:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.inventory-scope .manage-users-card-head {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  min-width: 0;
+}
+
+.inventory-scope .manage-users-card-head > div {
+  min-width: 0;
+}
+
+.inventory-scope .manage-users-card > h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.inventory-scope .manage-users-card-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: -.015em;
+}
+
+.inventory-scope .manage-users-card-head p {
+  margin: .2rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
+.inventory-scope .manage-users-card-icon {
+  display: grid;
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  color: var(--color-primary);
+  font-size: 1.35rem;
+  font-weight: 600;
+  background: var(--color-primary-soft);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 11%, transparent);
+  border-radius: .8rem;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+
+.inventory-scope .manage-users-card:hover .manage-users-card-icon {
+  transform: rotate(-4deg) scale(1.04);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.inventory-scope .manage-users-card-icon-pending {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+  border-color: color-mix(in srgb, var(--color-warning) 16%, transparent);
+}
+
+.inventory-scope .manage-users-card-icon-people {
+  font-size: 1.15rem;
+}
+
+.inventory-scope .manage-users-count {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: .4rem .65rem;
+  color: var(--color-text-secondary);
+  font-size: .72rem;
+  font-weight: 750;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+}
+
+.inventory-scope .manage-users-count-pending {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+  border-color: color-mix(in srgb, var(--color-warning) 20%, var(--color-border));
+}
+
+.inventory-scope .manage-users-field {
+  display: grid;
+  gap: .4rem;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: .84rem;
+  font-weight: 650;
+}
+
+.inventory-scope .manage-users-field input,
+.inventory-scope .manage-users-field select,
+.inventory-scope .manage-users-table-wrap select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: .55rem .7rem;
+  color: var(--color-text);
+  font: inherit;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border-strong);
+  border-radius: .6rem;
+  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+}
+
+.inventory-scope .manage-users-field input:focus,
+.inventory-scope .manage-users-field select:focus,
+.inventory-scope .manage-users-table-wrap select:focus {
+  border-color: var(--color-primary);
+  outline: 3px solid var(--color-primary-soft);
+}
+
+.inventory-scope .manage-users-field input:hover:not(:disabled),
+.inventory-scope .manage-users-field select:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border-strong));
+}
+
+.inventory-scope .manage-users-field input:disabled {
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  opacity: .75;
+}
+
+.inventory-scope .manage-users-table-wrap {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: .75rem;
+}
+
+.inventory-scope .manage-users-table-wrap .data-table {
+  min-width: 720px;
+}
+
+.inventory-scope .manage-users-table-wrap .data-table td {
+  white-space: nowrap;
+}
+
+.inventory-scope .manage-users-table-wrap .data-table tbody tr {
+  animation: manage-users-row-enter .32s ease both;
+  transition: background-color .16s ease;
+}
+
+.inventory-scope .manage-users-table-wrap .data-table tbody tr:nth-child(1) { animation-delay: .04s; }
+.inventory-scope .manage-users-table-wrap .data-table tbody tr:nth-child(2) { animation-delay: .08s; }
+.inventory-scope .manage-users-table-wrap .data-table tbody tr:nth-child(3) { animation-delay: .12s; }
+.inventory-scope .manage-users-table-wrap .data-table tbody tr:nth-child(4) { animation-delay: .16s; }
+.inventory-scope .manage-users-table-wrap .data-table tbody tr:nth-child(5) { animation-delay: .2s; }
+.inventory-scope .manage-users-table-wrap .data-table tbody tr:nth-child(6) { animation-delay: .24s; }
+
+.inventory-scope .manage-users-table-wrap .data-table tbody tr:hover {
+  background-color: var(--color-primary-soft);
+}
+
+@keyframes manage-users-row-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.inventory-scope .manage-users-table-wrap select {
+  width: auto;
+}
+
+.inventory-scope .manage-users-actions {
+  display: flex;
+  gap: .45rem;
+  align-items: center;
+}
+
+.inventory-scope .manage-users-actions .btn {
+  min-height: 34px;
+  padding: .4rem .65rem;
+  transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+}
+
+.inventory-scope .manage-users-actions .btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.inventory-scope .manage-users-card > .btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.inventory-scope .manage-users-actions .btn:active,
+.inventory-scope .manage-users-card > .btn:active {
+  transform: translateY(0) scale(.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inventory-scope .manage-users-hero,
+  .inventory-scope .manage-users-card,
+  .inventory-scope .manage-users-table-wrap .data-table tbody tr,
+  .inventory-scope .manage-users-admin-tag span {
+    animation: none;
+  }
+
+  .inventory-scope .manage-users-card,
+  .inventory-scope .manage-users-card-icon,
+  .inventory-scope .manage-users-actions .btn,
+  .inventory-scope .manage-users-card > .btn {
+    transition: none;
+  }
+
+  .inventory-scope .manage-users-card:hover,
+  .inventory-scope .manage-users-card:hover .manage-users-card-icon,
+  .inventory-scope .manage-users-actions .btn:hover:not(:disabled),
+  .inventory-scope .manage-users-card > .btn:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .inventory-scope .manage-users-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .inventory-scope .manage-users-hero {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: .9rem;
+    padding: 1.1rem;
+  }
+
+  .inventory-scope .manage-users-hero::after {
+    right: -4rem;
+  }
+
+  .inventory-scope .manage-users-card {
+    padding: .9rem;
+  }
+
+  .inventory-scope .manage-users-table-wrap .data-table {
+    min-width: 680px;
+  }
+
+  .inventory-scope .manage-users-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

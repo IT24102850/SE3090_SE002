@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../../store/store';
 import { useToast } from '../../../shared/components/Toast';
+import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 import { billingApi, errorMessage, type BillingAnalysis, type BillingWorkflow, type ThresholdConfig } from '../billingApi';
 import { addDays, dateTime, humanize, isoDay, money } from '../format';
 import { useAsync } from '../useAsync';
@@ -33,6 +34,7 @@ export default function BillingAgentMonitorPage() {
   const { user } = useSelector((s: RootState) => s.auth);
   const isAdmin = user?.role === 'Admin';
   const toast = useToast();
+  const confirm = useConfirmation();
   const [tab, setTab] = useState<Tab>('queue');
 
   const queue = useAsync(() => billingApi.workflows({ kind: 'approval', status: 'Pending' }), []);
@@ -73,6 +75,12 @@ export default function BillingAgentMonitorPage() {
     try {
       const reason = approve ? undefined : window.prompt('Reason for rejecting?') ?? undefined;
       if (!approve && reason === undefined) return;
+      if (!approve && !await confirm({
+        title: 'Reject this billing proposal?',
+        message: 'The proposal will be marked as rejected and will not be applied.',
+        confirmLabel: 'Reject proposal',
+        tone: 'danger',
+      })) return;
       const r = approve ? await billingApi.approveWorkflow(wf.id) : await billingApi.rejectWorkflow(wf.id, reason);
       toast.show(r.message, 'success');
       refresh();

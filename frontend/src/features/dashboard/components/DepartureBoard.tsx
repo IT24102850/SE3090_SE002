@@ -4,6 +4,7 @@ import {
   useSetSafetyChecklistMutation,
 } from '../../../api/bookingApi';
 import { useToast } from '../../../shared/components/Toast';
+import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 import { formatTime } from '../../../shared/dateUtils';
 import {
   DEPARTURE_STATUS_COLORS,
@@ -120,6 +121,7 @@ export default function DepartureBoard({
   const [setStatus] = useSetDepartureStatusMutation();
   const [expanded, setExpanded] = useState<string | null>(null);
   const toast = useToast();
+  const confirm = useConfirmation();
 
   const move = async (departure: DepartureSummary, status: DepartureStatus) => {
     try {
@@ -131,7 +133,12 @@ export default function DepartureBoard({
       // the checklist, because the gate exists for a reason.
       const data = (error as { data?: { message?: string; requiresOverride?: boolean } })?.data;
       if (data?.requiresOverride && isAdmin) {
-        if (window.confirm(`${data.message}\n\nOverride and mark this departure at sea anyway?`)) {
+        if (await confirm({
+          title: 'Override safety checklist?',
+          message: `${data.message} Override and mark this departure at sea anyway?`,
+          confirmLabel: 'Override safety check',
+          tone: 'danger',
+        })) {
           try {
             await setStatus({ id: departure.id, status, overrideSafetyChecklist: true }).unwrap();
             toast.show('Departure marked at sea with a safety-checklist override.', 'success');

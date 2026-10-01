@@ -7,6 +7,7 @@ import LandingPage from './features/marketing/LandingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './shared/components/AppLayout';
 import { ToastProvider } from './shared/components/Toast';
+import { ConfirmationProvider } from './shared/components/ConfirmationProvider';
 import './features/inventory/inventory.css';
 import { ToastProvider as InventoryToastProvider } from './features/inventory/ui/ToastContext';
 
@@ -25,6 +26,7 @@ const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const EmbedBookingPage = lazy(() => import('./features/embed/EmbedBookingPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
+const ManageUsersPage = lazy(() => import('./pages/ManageUsersPage').then((module) => ({ default: module.ManageUsersPage })));
 const DashboardRouter = lazy(() => import('./features/dashboard/DashboardRouter'));
 const BookingManagerPage = lazy(() => import('./features/booking/BookingManagerPage'));
 const ResourceManagerPage = lazy(() => import('./features/booking/ResourceManagerPage'));
@@ -112,9 +114,10 @@ function App() {
   return (
     <Provider store={store}>
       <ToastProvider>
-        <AuthInitializer>
-          <BrowserRouter>
-            <Suspense fallback={<RouteFallback />}>
+        <ConfirmationProvider>
+          <AuthInitializer>
+            <BrowserRouter>
+              <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
@@ -249,8 +252,16 @@ function App() {
               <Route
                 path="/staff"
                 element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                  <ProtectedRoute allowedRoles={['Manager']}>
                     <Shell><StaffManagementPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin']}>
+                    <InventoryShell><ManageUsersPage /></InventoryShell>
                   </ProtectedRoute>
                 }
               />
@@ -482,9 +493,10 @@ function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="*" element={<div style={{ padding: '2rem' }}><h1>404 - Page Not Found</h1></div>} />
             </Routes>
-            </Suspense>
-          </BrowserRouter>
-        </AuthInitializer>
+              </Suspense>
+            </BrowserRouter>
+          </AuthInitializer>
+        </ConfirmationProvider>
       </ToastProvider>
     </Provider>
   );

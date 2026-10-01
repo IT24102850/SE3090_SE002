@@ -801,31 +801,154 @@ body:has(.inventory-scope) .app-shell::after,
 @keyframes inventory-toast-enter { from { opacity: 0; transform: translate3d(30px, 10px, 0) scale(.95); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
 
 /* StockSense AI: focused inventory-health workspace */
-.inventory-scope .stocksense-page { display: grid; gap: 1.2rem; }
+.inventory-scope .stocksense-page { display: grid; align-content: start; gap: 1.2rem; }
 .inventory-scope .stocksense-hero {
-  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 2rem;
-  min-height: 218px; margin: 0; padding: clamp(1.5rem, 4vw, 2.6rem); overflow: hidden;
-  color: #fff; border: 1px solid color-mix(in srgb, var(--color-primary) 38%, transparent); border-radius: 1.5rem;
-  background: radial-gradient(circle at 78% 12%, rgba(34,211,238,.32), transparent 28%),
-    radial-gradient(circle at 96% 100%, rgba(129,140,248,.42), transparent 35%), var(--gradient-hero);
-  box-shadow: 0 24px 60px -34px rgba(37,99,235,.65);
+  position: relative; box-sizing: border-box; display: grid; align-self: start; align-content: start; align-items: start;
+  grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "copy actions" "modes modes"; gap: .75rem 1.25rem;
+  width: 100%; height: auto !important; min-height: 0; max-height: none; margin: 0; padding: clamp(1rem, 2vw, 1.35rem); overflow: hidden;
+  color: #fff; border: 1px solid rgba(165, 243, 252, .24); border-radius: 1.5rem;
+  background:
+    radial-gradient(ellipse 65% 80% at 85% 15%, rgba(34, 211, 238, .24), transparent 60%),
+    radial-gradient(ellipse 55% 70% at 15% 100%, rgba(129, 140, 248, .26), transparent 55%),
+    linear-gradient(135deg, #070e22 0%, #0d1a3b 50%, #151940 100%);
+  box-shadow: 0 24px 60px -28px rgba(3, 10, 30, .85), 0 0 0 1px rgba(255, 255, 255, .05), inset 0 1px 0 rgba(255, 255, 255, .2);
 }
-.inventory-scope .stocksense-hero::before { content: ''; position: absolute; right: 9%; top: -82px; width: 290px; height: 290px; border: 1px solid rgba(255,255,255,.12); border-radius: 50%; box-shadow: 0 0 0 34px rgba(255,255,255,.035), 0 0 0 70px rgba(255,255,255,.025); }
-.inventory-scope .stocksense-hero::after { content: ''; position: absolute; right: 15%; bottom: -95px; width: 190px; height: 190px; border-radius: 50%; background: rgba(34,211,238,.14); filter: blur(5px); }
-.inventory-scope .stocksense-hero-copy { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: 1rem; max-width: 720px; }
-.inventory-scope .stocksense-brandmark { display: grid; place-items: center; flex: 0 0 3.55rem; width: 3.55rem; height: 3.55rem; color: #fff; border: 1px solid rgba(255,255,255,.32); border-radius: 1.1rem; background: linear-gradient(145deg, rgba(255,255,255,.2), rgba(255,255,255,.07)); box-shadow: inset 0 1px 0 rgba(255,255,255,.24), 0 9px 24px rgba(3,10,30,.2); backdrop-filter: blur(10px); }
-.inventory-scope .stocksense-brandmark svg { overflow: visible; filter: drop-shadow(0 2px 6px rgba(103,232,249,.45)); }
-.inventory-scope .stocksense-hero .eyebrow { color: #a5f3fc; }
-.inventory-scope .stocksense-hero h1 { margin: .28rem 0 .45rem; color: #fff; background: none; -webkit-text-fill-color: #fff; font-size: clamp(2rem, 4vw, 2.85rem); letter-spacing: -.045em; }
-.inventory-scope .stocksense-hero .page-sub { max-width: 610px; color: rgba(255,255,255,.78); font-size: .98rem; line-height: 1.55; }
-.inventory-scope .stocksense-capabilities { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.1rem; }
-.inventory-scope .stocksense-capabilities span { padding: .36rem .62rem; color: rgba(255,255,255,.92); font-size: .72rem; font-weight: 650; border: 1px solid rgba(255,255,255,.19); border-radius: 999px; background: rgba(255,255,255,.09); backdrop-filter: blur(8px); }
-.inventory-scope .stocksense-hero-actions { position: relative; z-index: 2; display: grid; justify-items: end; flex: 0 0 auto; }
-.inventory-scope .stocksense-hero .live-indicator { color: #14213d; font-size: .76rem; font-weight: 750; background: rgba(255,255,255,.96); border-color: rgba(255,255,255,.76); box-shadow: 0 8px 22px rgba(3,10,30,.18); }
-.inventory-scope .stocksense-hero .live-indicator span { background: #138a4a; box-shadow: 0 0 0 4px rgba(19,138,74,.15); }
-.inventory-scope .stocksense-hero .btn-primary { padding: .8rem 1.05rem; color: #0a1a3a; font-weight: 800; border: 1px solid rgba(255,255,255,.3); border-radius: .8rem; background: linear-gradient(120deg, #a5f3fc, #bfdbfe 58%, #ddd6fe); box-shadow: 0 12px 28px -14px rgba(0,0,0,.7); }
-.inventory-scope .stocksense-hero .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 18px 30px -15px rgba(0,0,0,.8); }
-.inventory-scope .stocksense-hero .btn-secondary { color: #fff; border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.09); }
+.inventory-scope .stocksense-hero::before {
+  content: ''; position: absolute; right: 4%; top: -80px; width: 280px; height: 280px;
+  border: 1px solid rgba(165, 243, 252, .14); border-radius: 50%;
+  box-shadow: 0 0 0 32px rgba(165, 243, 252, .03), 0 0 0 68px rgba(99, 102, 241, .02);
+  pointer-events: none;
+}
+.inventory-scope .stocksense-hero::after {
+  content: ''; position: absolute; right: 12%; bottom: -85px; width: 180px; height: 180px;
+  border-radius: 50%; background: rgba(34, 211, 238, .12); filter: blur(25px); pointer-events: none;
+}
+.inventory-scope .stocksense-hero-copy { position: relative; z-index: 1; grid-area: copy; display: flex; align-items: flex-start; gap: .9rem; }
+.inventory-scope .stocksense-brandmark {
+  display: grid; place-items: center; flex: 0 0 3.25rem; width: 3.25rem; height: 3.25rem; color: #fff;
+  border: 1px solid rgba(165, 243, 252, .45); border-radius: 1rem;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .07));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 12px 30px rgba(3, 10, 30, .35), 0 0 24px rgba(34, 211, 238, .3);
+  backdrop-filter: blur(12px);
+  transition: transform .25s ease, box-shadow .25s ease;
+}
+.inventory-scope .stocksense-brandmark:hover {
+  transform: scale(1.05) rotate(-3deg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 16px 36px rgba(3, 10, 30, .45), 0 0 32px rgba(34, 211, 238, .45);
+}
+.inventory-scope .stocksense-brandmark svg { overflow: visible; filter: drop-shadow(0 2px 8px rgba(103, 232, 249, .6)); }
+.inventory-scope .stocksense-hero .eyebrow { color: #a5f3fc; font-weight: 850; letter-spacing: .12em; }
+.inventory-scope .stocksense-hero h1 {
+  margin: .2rem 0 .3rem;
+  font-size: clamp(1.9rem, 3.4vw, 2.5rem); letter-spacing: -.045em; line-height: 1.08;
+  background: linear-gradient(135deg, #ffffff 30%, #a5f3fc 75%, #c4b5fd 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 14px rgba(34, 211, 238, .2));
+}
+.inventory-scope .stocksense-hero .page-sub { max-width: 610px; color: rgba(230, 240, 255, .82); font-size: .98rem; line-height: 1.6; margin: 0; }
+.inventory-scope .stocksense-capabilities { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .7rem; }
+.inventory-scope .stocksense-capabilities span {
+  padding: .3rem .6rem; color: #f0fdf4; font-size: .7rem; font-weight: 700;
+  border: 1px solid rgba(165, 243, 252, .24); border-radius: 999px;
+  background: rgba(165, 243, 252, .08); backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+  transition: all .18s ease;
+}
+.inventory-scope .stocksense-capabilities span:hover {
+  background: rgba(165, 243, 252, .16); border-color: rgba(165, 243, 252, .45);
+  transform: translateY(-1px);
+}
+.inventory-scope .stocksense-hero-actions {
+  position: relative; z-index: 2; grid-area: actions;
+  display: flex; flex-direction: column; align-items: flex-end; gap: .5rem;
+  padding-top: .1rem;
+}
+.inventory-scope .stocksense-hero-status-row { display: flex; justify-content: flex-end; width: 100%; }
+.inventory-scope .stocksense-hero-btn-row {
+  display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; justify-content: flex-end; width: 100%;
+}
+.inventory-scope .stocksense-hero .live-indicator {
+  color: #0c1a33; font-size: .76rem; font-weight: 800; letter-spacing: .02em;
+  background: rgba(255, 255, 255, .96); border: 1px solid rgba(255, 255, 255, .8);
+  border-radius: 999px; padding: .32rem .75rem;
+  box-shadow: 0 8px 24px rgba(3, 10, 30, .22);
+}
+.inventory-scope .stocksense-hero .live-indicator span { background: #10b981; box-shadow: 0 0 0 4px rgba(16, 185, 129, .2); }
+.inventory-scope .stocksense-hero .stocksense-analyze-button {
+  padding: .8rem 1.25rem; min-width: 195px; min-height: 48px;
+  color: #fff; font-size: .92rem; font-weight: 850; letter-spacing: .02em;
+  border: 1px solid rgba(209, 216, 255, .45); border-radius: .85rem;
+  background: linear-gradient(115deg, #3b82f6 0%, #6366f1 52%, #8b5cf6 100%);
+  box-shadow: 0 10px 25px -5px rgba(99, 102, 241, .45), inset 0 1px rgba(255, 255, 255, .32);
+  transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
+}
+.inventory-scope .stocksense-hero .stocksense-analyze-button:hover:not(:disabled) {
+  transform: translateY(-2px); filter: brightness(1.1);
+  box-shadow: 0 14px 30px -4px rgba(99, 102, 241, .6), inset 0 1px rgba(255, 255, 255, .42);
+}
+.inventory-scope .stocksense-hero-refresh-btn {
+  display: inline-flex; align-items: center; gap: .45rem; min-height: 48px; padding: 0 1.05rem;
+  color: #eff6ff; font-size: .84rem; font-weight: 750; border-radius: .85rem;
+  border: 1px solid rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .08);
+  backdrop-filter: blur(12px); box-shadow: 0 6px 18px rgba(0, 0, 0, .25);
+  transition: all .2s ease; cursor: pointer;
+}
+.inventory-scope .stocksense-hero-refresh-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, .16); border-color: rgba(165, 243, 252, .45);
+  transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0, 0, 0, .35);
+}
+.inventory-scope .stocksense-refresh-icon { font-size: .95rem; }
+.inventory-scope .stocksense-cta-hint {
+  display: inline-flex; align-items: center; gap: .4rem;
+  color: #a5f3fc; font-size: .72rem; font-weight: 650; letter-spacing: .02em;
+}
+.inventory-scope .stocksense-cta-hint .hint-bullet { color: #38bdf8; font-size: .65rem; }
+.inventory-scope .stocksense-hero-modes {
+  position: relative; z-index: 2; grid-area: modes;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem;
+  margin-top: 0;
+}
+.inventory-scope .stocksense-hero-orbit {
+  position: absolute; z-index: 0; top: 18%; right: 7%;
+  width: 18rem; height: 18rem; pointer-events: none;
+}
+.inventory-scope .stocksense-hero-mode-clickable {
+  display: flex; align-items: center; gap: .75rem; min-width: 0; width: 100%;
+  padding: .6rem .8rem; border: 1px solid rgba(165, 243, 252, .18); border-radius: .85rem;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .075), rgba(255, 255, 255, .025));
+  backdrop-filter: blur(12px); text-align: left; cursor: pointer; color: #fff;
+  transition: transform .22s cubic-bezier(.16, 1, .3, 1), border-color .22s ease, box-shadow .22s ease, background .22s ease;
+}
+.inventory-scope .stocksense-hero-mode-clickable:hover {
+  transform: translateY(-3px); border-color: rgba(165, 243, 252, .55);
+  background: linear-gradient(135deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, .045));
+  box-shadow: 0 12px 28px -10px rgba(34, 211, 238, .3);
+}
+.inventory-scope .stocksense-hero-mode-clickable:active { transform: translateY(0); }
+.inventory-scope .stocksense-hero-mode-icon {
+  display: grid; flex: 0 0 2.3rem; width: 2.3rem; height: 2.3rem; place-items: center; color: #a5f3fc;
+  border: 1px solid rgba(165, 243, 252, .3); border-radius: .7rem;
+  background: rgba(165, 243, 252, .1); box-shadow: 0 4px 12px rgba(34, 211, 238, .12);
+  transition: transform .2s ease;
+}
+.inventory-scope .stocksense-hero-mode-clickable:hover .stocksense-hero-mode-icon {
+  transform: scale(1.08) rotate(-4deg);
+}
+.inventory-scope .stocksense-mode-body { display: grid; gap: .22rem; min-width: 0; flex: 1; }
+.inventory-scope .stocksense-mode-headline { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
+.inventory-scope .stocksense-hero-mode strong { color: #f8fbff; font-size: .88rem; font-weight: 800; letter-spacing: -.01em; }
+.inventory-scope .stocksense-mode-badge {
+  display: inline-block; padding: .15rem .5rem; font-size: .62rem; font-weight: 800; letter-spacing: .04em;
+  color: #a5f3fc; border: 1px solid rgba(165, 243, 252, .3); border-radius: 999px; background: rgba(165, 243, 252, .12);
+}
+.inventory-scope .stocksense-mode-body > span { color: rgba(215, 230, 255, .78); font-size: .75rem; line-height: 1.45; }
+.inventory-scope .stocksense-mode-arrow-icon {
+  font-size: 1.25rem; font-weight: 700; color: #a5f3fc; opacity: .65;
+  transition: transform .2s ease, opacity .2s ease; margin-left: auto; padding-left: .5rem;
+}
+.inventory-scope .stocksense-hero-mode-clickable:hover .stocksense-mode-arrow-icon {
+  transform: translateX(4px); opacity: 1;
+}
 .inventory-scope .stocksense-guide { position: relative; padding: clamp(1.2rem, 3vw, 1.8rem); overflow: hidden; border: 1px solid color-mix(in srgb, var(--color-primary) 17%, var(--color-border)); border-radius: 1.3rem; background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--color-accent-soft) 72%, transparent), transparent 34%), var(--color-surface); box-shadow: var(--shadow-sm); }
 .inventory-scope .stocksense-guide-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.2rem; }
 .inventory-scope .stocksense-guide-heading h2 { max-width: 690px; margin: .25rem 0 .35rem; font-size: clamp(1.25rem, 2.2vw, 1.75rem); letter-spacing: -.035em; }
@@ -1017,17 +1140,511 @@ body:has(.inventory-scope) .app-shell::after,
 @keyframes stocksense-stage-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes stocksense-progress-enter { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes stocksense-meter { 0% { transform: translateX(-110%); } 50% { transform: translateX(125%); } 100% { transform: translateX(290%); } }
+
+/* StockSense Hero additions */
+.inventory-scope .stocksense-hero-eyebrow-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+.inventory-scope .stocksense-model-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .42rem;
+  padding: .22rem .55rem;
+  font-size: .68rem;
+  font-weight: 750;
+  letter-spacing: .04em;
+  color: #a5f3fc;
+  border: 1px solid rgba(165, 243, 252, .32);
+  border-radius: 999px;
+  background: rgba(165, 243, 252, .1);
+  box-shadow: 0 0 12px rgba(34, 211, 238, .15);
+}
+.inventory-scope .stocksense-status-pulse {
+  width: .42rem;
+  height: .42rem;
+  border-radius: 50%;
+  background: #22d3ee;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, .28);
+  animation: stocksense-pulse 2s ease-in-out infinite;
+}
+@keyframes stocksense-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: .6; }
+}
+
+/* StockSense Ready HUD (Idle State) */
+.inventory-scope .stocksense-ready-hud {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.2rem, 2.5vw, 1.6rem);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  border-radius: 1.25rem;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-surface) 92%, #0e1e3e), var(--color-surface));
+  box-shadow: 0 14px 34px -18px rgba(14, 30, 62, .35), var(--shadow-sm);
+}
+.inventory-scope .stocksense-hud-glow {
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99, 102, 241, .18), transparent 70%);
+  pointer-events: none;
+}
+.inventory-scope .stocksense-hud-content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(260px, .9fr);
+  gap: 1.5rem;
+  align-items: center;
+}
+.inventory-scope .stocksense-hud-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  margin-bottom: .45rem;
+  font-size: .66rem;
+  font-weight: 850;
+  letter-spacing: .1em;
+  color: var(--color-primary);
+}
+.inventory-scope .stocksense-hud-dot {
+  width: .46rem;
+  height: .46rem;
+  border-radius: 50%;
+  background: var(--color-good);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-good) 25%, transparent);
+}
+.inventory-scope .stocksense-hud-left h3 {
+  margin: 0 0 .4rem;
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  letter-spacing: -.025em;
+  color: var(--color-text);
+}
+.inventory-scope .stocksense-hud-left p {
+  margin: 0 0 1rem;
+  font-size: .84rem;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  max-width: 62ch;
+}
+.inventory-scope .stocksense-hud-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: .75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: .85rem;
+  background: color-mix(in srgb, var(--color-surface) 60%, var(--color-primary-soft));
+}
+.inventory-scope .stocksense-hud-item {
+  display: grid;
+  gap: .15rem;
+}
+.inventory-scope .hud-metric-label {
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: var(--color-text-muted);
+}
+.inventory-scope .stocksense-hud-item strong {
+  font-size: .85rem;
+  color: var(--color-text);
+}
+.inventory-scope .stocksense-hud-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--color-border);
+}
+.inventory-scope .stocksense-hud-card {
+  padding: 1.2rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 32%, var(--color-border));
+  border-radius: 1rem;
+  background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--color-primary-soft) 40%, transparent), transparent 60%), var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+.inventory-scope .hud-card-kicker {
+  display: inline-block;
+  font-size: .64rem;
+  font-weight: 850;
+  letter-spacing: .12em;
+  color: var(--color-primary);
+  margin-bottom: .3rem;
+}
+.inventory-scope .stocksense-hud-card h4 {
+  margin: 0 0 .3rem;
+  font-size: 1.05rem;
+}
+.inventory-scope .stocksense-hud-card p {
+  margin: 0 0 .95rem;
+  font-size: .78rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+.inventory-scope .stocksense-hud-actions {
+  display: flex;
+  gap: .65rem;
+  flex-wrap: wrap;
+}
+.inventory-scope .hud-launch-btn {
+  font-weight: 800;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--color-primary) 32%, transparent);
+}
+.inventory-scope .hud-scope-btn {
+  font-size: .78rem;
+}
+
+/* AI Head Actions */
+.inventory-scope .stocksense-ai-head-actions {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+.inventory-scope .stocksense-copy-btn {
+  padding: .35rem .7rem;
+  font-size: .75rem;
+  font-weight: 750;
+  border-radius: .6rem;
+}
+
+/* Brief Pills */
+.inventory-scope .stocksense-brief-pills {
+  display: flex;
+  gap: .5rem;
+  flex-wrap: wrap;
+  margin: .75rem 0 .5rem;
+}
+.inventory-scope .brief-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .3rem .65rem;
+  font-size: .72rem;
+  color: #e0f2fe;
+  border: 1px solid rgba(165, 243, 252, .24);
+  border-radius: 999px;
+  background: rgba(165, 243, 252, .08);
+  backdrop-filter: blur(6px);
+}
+.inventory-scope .brief-pill strong {
+  color: #fff;
+  font-weight: 800;
+}
+
+/* Visual Overlay Telemetry */
+.inventory-scope .stocksense-visual-overlay-telemetry {
+  position: absolute;
+  top: .8rem;
+  left: .8rem;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+.inventory-scope .stocksense-visual-overlay-telemetry span {
+  font-size: .52rem;
+  font-weight: 850;
+  letter-spacing: .1em;
+  color: #a5f3fc;
+  padding: .2rem .45rem;
+  border-radius: .4rem;
+  background: rgba(10, 20, 45, .72);
+  border: 1px solid rgba(165, 243, 252, .2);
+  backdrop-filter: blur(8px);
+}
+
+/* Category Filter Tabs for Insights */
+.inventory-scope .stocksense-category-filters {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  flex-wrap: wrap;
+}
+.inventory-scope .stocksense-filter-tab {
+  padding: .32rem .68rem;
+  font-size: .72rem;
+  font-weight: 750;
+  text-transform: capitalize;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: all .18s ease;
+}
+.inventory-scope .stocksense-filter-tab:hover {
+  color: var(--color-text);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
+}
+.inventory-scope .stocksense-filter-tab.is-active {
+  color: #fff;
+  border-color: transparent;
+  background: var(--color-primary);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+
+/* Reorder Toolbar: Search & Filter Chips */
+.inventory-scope .stocksense-reorder-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .85rem;
+  flex-wrap: wrap;
+  margin-bottom: .9rem;
+  padding: .7rem .85rem;
+  border: 1px solid var(--color-border);
+  border-radius: .85rem;
+  background: var(--color-surface);
+}
+.inventory-scope .stocksense-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 240px;
+  max-width: 380px;
+}
+.inventory-scope .stocksense-search-wrap .search-icon {
+  position: absolute;
+  left: .75rem;
+  font-size: .85rem;
+  opacity: .5;
+  pointer-events: none;
+}
+.inventory-scope .stocksense-search-input {
+  width: 100%;
+  padding: .45rem .75rem .45rem 2.2rem;
+  font-size: .8rem;
+  border: 1px solid var(--color-border);
+  border-radius: .65rem;
+  background: color-mix(in srgb, var(--color-surface) 90%, var(--color-primary-soft));
+  color: var(--color-text);
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.inventory-scope .stocksense-search-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+.inventory-scope .stocksense-clear-btn {
+  position: absolute;
+  right: .55rem;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: .2rem .4rem;
+  font-size: .75rem;
+  border-radius: .3rem;
+}
+.inventory-scope .stocksense-filter-chips {
+  display: flex;
+  gap: .4rem;
+  flex-wrap: wrap;
+}
+.inventory-scope .stocksense-chip {
+  padding: .32rem .65rem;
+  font-size: .72rem;
+  font-weight: 700;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary-soft));
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all .16s ease;
+}
+.inventory-scope .stocksense-chip:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  color: var(--color-text);
+}
+.inventory-scope .stocksense-chip.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 800;
+}
+.inventory-scope .stocksense-chip.chip-critical.is-active {
+  border-color: var(--color-critical);
+  background: var(--color-critical-soft);
+  color: var(--color-critical);
+}
+.inventory-scope .stocksense-empty-filter {
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  border: 1px dashed var(--color-border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+}
+.inventory-scope .stocksense-empty-filter p {
+  margin: 0 0 .8rem;
+  color: var(--color-text-muted);
+  font-size: .88rem;
+}
+
+/* Card Urgency & Status Elements */
+.inventory-scope .stocksense-recommendation-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+}
+.inventory-scope .stocksense-recommendation-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.inventory-scope .stocksense-recommendation-card.is-out-of-stock {
+  border-color: color-mix(in srgb, var(--color-critical) 35%, var(--color-border));
+}
+.inventory-scope .stocksense-recommendation-card.is-below-reorder {
+  border-color: color-mix(in srgb, var(--color-warning) 30%, var(--color-border));
+}
+.inventory-scope .stocksense-card-status-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--color-primary);
+}
+.inventory-scope .stocksense-recommendation-card.is-out-of-stock .stocksense-card-status-strip {
+  background: var(--color-critical);
+  box-shadow: 0 0 10px var(--color-critical);
+}
+.inventory-scope .stocksense-recommendation-card.is-below-reorder .stocksense-card-status-strip {
+  background: var(--color-warning);
+}
+.inventory-scope .stocksense-item-badge-row {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  margin-bottom: .2rem;
+}
+.inventory-scope .stocksense-item-badge-row .eyebrow {
+  margin: 0;
+}
+.inventory-scope .stocksense-urgency-badge {
+  padding: .15rem .45rem;
+  font-size: .6rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  border-radius: 4px;
+}
+.inventory-scope .urgency-danger {
+  color: #fff;
+  background: var(--color-critical);
+}
+.inventory-scope .urgency-warning {
+  color: #78350f;
+  background: #fde68a;
+}
+.inventory-scope .urgency-info {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+/* Stock Gauge Bar */
+.inventory-scope .stocksense-stock-gauge-wrap {
+  margin: .85rem 0 .45rem;
+  padding: .65rem .85rem;
+  border-radius: .7rem;
+  background: color-mix(in srgb, var(--color-surface) 80%, var(--color-primary-soft));
+  border: 1px solid var(--color-border);
+}
+.inventory-scope .stocksense-gauge-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: .45rem;
+  font-size: .7rem;
+  color: var(--color-text-secondary);
+}
+.inventory-scope .gauge-label-current strong {
+  color: var(--color-text);
+}
+.inventory-scope .gauge-label-reorder strong {
+  color: var(--color-warning);
+}
+.inventory-scope .gauge-label-suggested strong {
+  color: var(--color-good);
+}
+.inventory-scope .stocksense-gauge-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  overflow: visible;
+  display: flex;
+}
+.inventory-scope .gauge-fill-current {
+  height: 100%;
+  border-radius: 999px 0 0 999px;
+  transition: width .4s ease;
+}
+.inventory-scope .gauge-fill-current.is-good {
+  background: var(--color-good);
+}
+.inventory-scope .gauge-fill-current.is-low {
+  background: var(--color-warning);
+}
+.inventory-scope .gauge-fill-current.is-zero {
+  width: 0 !important;
+}
+.inventory-scope .gauge-fill-suggested {
+  height: 100%;
+  background: repeating-linear-gradient(45deg, #10b981, #10b981 4px, #34d399 4px, #34d399 8px);
+  border-radius: 0 999px 999px 0;
+  opacity: .85;
+  transition: width .4s ease;
+}
+.inventory-scope .gauge-marker-reorder {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--color-critical);
+  box-shadow: 0 0 4px var(--color-critical);
+  z-index: 2;
+}
+.inventory-scope .stocksense-suggested-highlight {
+  color: var(--color-good) !important;
+  font-weight: 850 !important;
+}
+.inventory-scope .stocksense-po-link {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-weight: 800;
+  transition: gap .18s ease;
+}
+.inventory-scope .stocksense-po-link:hover {
+  gap: .65rem;
+}
 @media (max-width: 980px) {
   .inventory-scope .stocksense-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .inventory-scope .stocksense-hero { align-items: flex-start; }
+  .inventory-scope .stocksense-hero { height: auto !important; min-height: 0; max-height: none; grid-template-columns: minmax(0, 1fr); grid-template-areas: "copy" "actions" "modes"; align-items: start; gap: .85rem; }
+  .inventory-scope .stocksense-hero-copy { max-width: 100%; }
+  .inventory-scope .stocksense-hero-actions { display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: .5rem; padding-top: 0; }
+  .inventory-scope .stocksense-hero-status-row { justify-content: flex-start; }
+  .inventory-scope .stocksense-hero-btn-row { justify-content: flex-start; }
+  .inventory-scope .stocksense-hero-modes { width: 100%; margin-top: 0; }
 }
 @media (max-width: 680px) {
-  .inventory-scope .stocksense-hero { display: grid; gap: 1.4rem; padding: 1.35rem; border-radius: 1.1rem; }
-  .inventory-scope .stocksense-hero-copy { gap: .7rem; }
-  .inventory-scope .stocksense-brandmark { flex-basis: 2.65rem; width: 2.65rem; height: 2.65rem; }
-  .inventory-scope .stocksense-hero-actions { justify-items: stretch; grid-template-columns: 1fr 1fr; }
-  .inventory-scope .stocksense-hero-actions .live-indicator { grid-column: 1 / -1; }
-  .inventory-scope .stocksense-hero-actions .stocksense-analyze-button { grid-column: 1 / -1; }
+  .inventory-scope .stocksense-hero { display: grid; height: auto !important; max-height: none; gap: .85rem; padding: 1rem; border-radius: 1.2rem; }
+  .inventory-scope .stocksense-hero-copy { gap: .8rem; }
+  .inventory-scope .stocksense-brandmark { flex-basis: 3rem; width: 3rem; height: 3rem; border-radius: .9rem; }
+  .inventory-scope .stocksense-hero-actions { width: 100%; align-items: stretch; }
+  .inventory-scope .stocksense-hero-status-row { justify-content: stretch; }
+  .inventory-scope .stocksense-hero .live-indicator { width: 100%; text-align: center; justify-content: center; }
+  .inventory-scope .stocksense-hero-btn-row { display: flex; flex-direction: column; width: 100%; gap: .55rem; }
+  .inventory-scope .stocksense-hero .stocksense-analyze-button,
+  .inventory-scope .stocksense-hero-refresh-btn { width: 100%; min-width: 0; justify-content: center; }
+  .inventory-scope .stocksense-cta-hint { justify-content: center; }
+  .inventory-scope .stocksense-hero-modes { grid-template-columns: 1fr; gap: .7rem; }
+  .inventory-scope .stocksense-hero-mode-clickable { padding: .85rem 1rem; }
   .inventory-scope .stocksense-kpis { gap: .6rem; }
   .inventory-scope .stocksense-kpi { min-height: 94px; grid-template-columns: 1fr; gap: .4rem; padding: .85rem; }
   .inventory-scope .stocksense-kpi .metric-icon-bubble { display: none; }
@@ -1670,7 +2287,7 @@ body:has(.inventory-scope) .app-shell::after,
 .inventory-scope .inventory-analytics-hero { isolation: isolate; min-height: 212px; padding: 1.45rem 1.8rem 1rem; border: 1px solid rgba(145, 174, 255, .24); border-radius: 1.25rem; background: radial-gradient(ellipse at 75% 15%, rgba(67, 111, 232, .28), transparent 38%), radial-gradient(ellipse at 95% 100%, rgba(138, 88, 214, .2), transparent 34%), linear-gradient(120deg, #101A35 0%, #17264B 48%, #202656 100%); box-shadow: 0 18px 44px rgba(14, 25, 55, .20); }.inventory-scope .inventory-analytics-hero::before { position: absolute; z-index: -1; inset: 0; content: ''; opacity: .18; background-image: linear-gradient(rgba(255,255,255,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.09) 1px, transparent 1px); background-size: 32px 32px; mask-image: linear-gradient(90deg, transparent, #000); }
 .inventory-scope .inventory-analytics-hero::after { display: none !important; content: none !important; animation: none !important; }
 .inventory-scope .inventory-analytics-hero-top, .inventory-scope .inventory-analytics-hero-content, .inventory-scope .inventory-analytics-hero-foot { position: relative; z-index: 1; }.inventory-scope .inventory-analytics-mark { color: #93B7FF; border-color: rgba(145, 174, 255, .32); border-radius: 14px; background: linear-gradient(145deg, rgba(67, 111, 232, .24), rgba(67, 111, 232, .04)); }.inventory-scope .inventory-analytics-hero .eyebrow { color: #93B7FF; }.inventory-scope .inventory-analytics-period { color: #C4D7FF; border-color: rgba(145, 174, 255, .2); background: rgba(255,255,255,.08); }.inventory-scope .inventory-analytics-refresh { color: #ffffff; background: linear-gradient(135deg, #3366e8, #605dec); border-color: transparent; box-shadow: 0 8px 20px rgba(51, 102, 232, .28); }.inventory-scope .inventory-analytics-refresh:hover:not(:disabled) { color: #ffffff; background: linear-gradient(135deg, #4374f3, #716ef0); }.inventory-scope .inventory-analytics-metric { border-top: 3px solid var(--metric-accent); border-radius: .95rem; animation: inventory-card-arrive .62s cubic-bezier(.2,.8,.2,1) backwards; }.inventory-scope .inventory-analytics-metric:nth-child(2) { animation-delay: .08s; }.inventory-scope .inventory-analytics-metric:nth-child(3) { animation-delay: .16s; }.inventory-scope .inventory-analytics-metric:nth-child(4) { animation-delay: .24s; }.inventory-scope .inventory-analytics-panel { overflow: hidden; border-radius: 1rem; box-shadow: var(--shadow-sm); }.inventory-scope .inventory-analytics-panel-head { background: linear-gradient(100deg, color-mix(in srgb, var(--color-primary-soft) 65%, var(--color-surface)), var(--color-surface)); }
-@media (max-width: 760px) { .inventory-scope .stocksense-hero { min-height: 0; align-items: flex-start; flex-direction: column; gap: 1rem; padding: 1.25rem; }.inventory-scope .stocksense-hero-actions { width: 100%; justify-items: stretch; grid-template-columns: 1fr 1fr; }.inventory-scope .stocksense-updated { grid-column: 1 / -1; justify-self: start; }.inventory-scope .branch-overview-hero { min-height: 0; align-items: flex-start; flex-direction: column; gap: 1rem; padding: 1.25rem; }.inventory-scope .branch-overview-art { top: -75px; right: -25px; opacity: .58; transform: scale(.78); transform-origin: top right; }.inventory-scope .branch-overview-hero-copy { max-width: 88%; }.inventory-scope .branch-overview-refresh { width: 100%; }.inventory-scope .branch-overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }.inventory-scope .inventory-analytics-hero { padding: 1.15rem; }.inventory-scope .inventory-analytics-hero::after { animation-duration: 10s; } }
+@media (max-width: 760px) { .inventory-scope .stocksense-hero { min-height: 0; grid-template-columns: 1fr; grid-template-areas: "copy" "actions" "modes"; gap: .75rem; padding: 1.15rem; }.inventory-scope .stocksense-hero-actions { width: 100%; align-items: flex-start; padding-top: 0; }.inventory-scope .stocksense-hero-btn-row { justify-content: flex-start; }.inventory-scope .stocksense-updated { justify-self: start; }.inventory-scope .branch-overview-hero { min-height: 0; align-items: flex-start; flex-direction: column; gap: 1rem; padding: 1.25rem; }.inventory-scope .branch-overview-art { top: -75px; right: -25px; opacity: .58; transform: scale(.78); transform-origin: top right; }.inventory-scope .branch-overview-hero-copy { max-width: 88%; }.inventory-scope .branch-overview-refresh { width: 100%; }.inventory-scope .branch-overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }.inventory-scope .inventory-analytics-hero { padding: 1.15rem; }.inventory-scope .inventory-analytics-hero::after { animation-duration: 10s; } }
 @media (prefers-reduced-motion: reduce) { .inventory-scope .stocksense-kpi, .inventory-scope .stocksense-insight-card, .inventory-scope .branch-overview-hero::after, .inventory-scope .branch-overview-art *, .inventory-scope .branch-card, .inventory-scope .branch-health-pulse, .inventory-scope .inventory-analytics-hero::after { animation: none; transition: none; }.inventory-scope .branch-card:hover, .inventory-scope .branch-overview-metric:hover, .inventory-scope .stocksense-insight-card:hover, .inventory-scope .inventory-analytics-metric:hover { transform: none; } }
 
 /* Persistent live status feedback: green means synced, amber/red means updating or stale. */
@@ -2737,6 +3354,21 @@ body:has(.inventory-scope) .app-content::after {
   .po-print-signatures span { padding-top: 7px; color: #536078; border-top: 1px solid #8792a5; font-size: 8pt; }
   .po-print-note { display: block !important; margin: 22px 0 0; padding-top: 8px; color: #6a768a !important; border-top: 1px solid #e0e5ee; font-size: 7.5pt; text-align: center; }
   * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
+}
+
+.inventory-scope .stocksense-hero { min-height: 0 !important; }
+.inventory-scope .stocksense-hero > .stocksense-hero-orbit { position: absolute !important; }
+.inventory-scope .stocksense-page { container: stocksense-page / inline-size; }
+@container stocksense-page (max-width: 760px) {
+  .inventory-scope .stocksense-hero {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "copy" "actions" "modes";
+    gap: .75rem;
+  }
+  .inventory-scope .stocksense-hero-copy { max-width: 100%; }
+  .inventory-scope .stocksense-hero-actions { width: 100%; align-items: flex-start; padding-top: 0; }
+  .inventory-scope .stocksense-hero-status-row { justify-content: flex-start; }
+  .inventory-scope .stocksense-hero-btn-row { justify-content: flex-start; }
 }
 
 /* Inventory cards get a clear light-catching edge on hover/focus without a

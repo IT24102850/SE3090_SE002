@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
+import { useConfirmation } from '../../shared/components/ConfirmationProvider';
 import Modal from '../../shared/components/Modal';
 import { useCreateBranchMutation, useDeleteBranchMutation, useGetBranchesQuery, useUpdateBranchMutation } from '../../api/bookingApi';
 import type { Branch } from '../booking/types';
@@ -11,13 +12,19 @@ export default function BranchesPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const { show } = useToast();
+  const confirm = useConfirmation();
 
   const { data: branches, isLoading } = useGetBranchesQuery({ tenantId }, { skip: !tenantId });
   const [deleteBranch] = useDeleteBranchMutation();
   const [editing, setEditing] = useState<Branch | 'new' | null>(null);
 
   const handleDeactivate = async (id: string) => {
-    if (!window.confirm('Deactivate this branch?')) return;
+    if (!await confirm({
+      title: 'Deactivate this branch?',
+      message: 'Users and resources assigned to this branch may be affected.',
+      confirmLabel: 'Deactivate branch',
+      tone: 'danger',
+    })) return;
     try {
       await deleteBranch(id).unwrap();
       show('Branch deactivated.', 'success');
