@@ -1,7 +1,7 @@
 import { defineRailway, github, project, service } from "railway/iac";
 
 const repository = "hasaranga0630/SEF-Project";
-const branch = "main";
+const branch = "dev";
 
 export default defineRailway(() => {
   const api = service("sme-backend", {
