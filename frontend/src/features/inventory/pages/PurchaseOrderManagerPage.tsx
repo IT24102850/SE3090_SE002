@@ -8,7 +8,7 @@ import { Badge, type BadgeTone } from '../ui/Badge';
 import { useToast } from '../ui/ToastContext';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
 
-type POStatus = 'Draft' | 'InReview' | 'Placed' | 'InTransit' | 'PartiallyReceived' | 'Received' | 'Cancelled';
+type POStatus = 'Draft' | 'InReview' | 'Placed' | 'InTransit' | 'PartiallyReceived' | 'Received' | 'Rejected' | 'Cancelled';
 
 type TimelineEvent = {
   status: POStatus;
@@ -129,6 +129,7 @@ const statusLabels: Record<POStatus, string> = {
   InTransit: 'In transit',
   PartiallyReceived: 'Partially received',
   Received: 'Received',
+  Rejected: 'Rejected',
   Cancelled: 'Cancelled',
 };
 
@@ -139,11 +140,12 @@ const statusTone: Record<POStatus, BadgeTone> = {
   InTransit: 'blue',
   PartiallyReceived: 'amber',
   Received: 'green',
+  Rejected: 'red',
   Cancelled: 'red',
 };
 
 
-const statusFilters = ['All statuses', ...lifecycleSteps.map((step) => statusLabels[step]), statusLabels.PartiallyReceived, 'Cancelled'] as const;
+const statusFilters = ['All statuses', ...lifecycleSteps.map((step) => statusLabels[step]), statusLabels.PartiallyReceived, statusLabels.Rejected, 'Cancelled'] as const;
 type StatusFilter = (typeof statusFilters)[number];
 
 const fallbackOrders: PurchaseOrder[] = [
@@ -304,7 +306,7 @@ async function apiErrorMessage(response: Response, path: string): Promise<string
 
 function normalizeStatus(raw: string): POStatus {
   const cleaned = raw.replace(/\s|-/g, '');
-  const match = (['Draft', 'InReview', 'Placed', 'InTransit', 'PartiallyReceived', 'Received', 'Cancelled'] as const)
+  const match = (['Draft', 'InReview', 'Placed', 'InTransit', 'PartiallyReceived', 'Received', 'Rejected', 'Cancelled'] as const)
     .find((status) => status.toLowerCase() === cleaned.toLowerCase());
   return match ?? 'Draft';
 }
@@ -337,7 +339,7 @@ function nextPoNumber(orders: PurchaseOrder[]) {
 }
 
 function nextStatus(current: POStatus): POStatus | null {
-  if (current === 'Cancelled' || current === 'Received') return null;
+  if (current === 'Cancelled' || current === 'Rejected' || current === 'Received') return null;
   if (current === 'InTransit' || current === 'PartiallyReceived') return null;
   const index = lifecycleSteps.indexOf(current);
   if (index === -1 || index >= lifecycleSteps.length - 1) return null;
@@ -378,8 +380,8 @@ function PurchaseOrderTimestamp({ value, dateOnly = false }: { value: string; da
 }
 
 function LifecycleTracker({ status, compact = false }: { status: POStatus; compact?: boolean }) {
-  if (status === 'Cancelled') {
-    return <span className="lifecycle-cancelled">Cancelled</span>;
+  if (status === 'Cancelled' || status === 'Rejected') {
+    return <span className="lifecycle-cancelled">{statusLabels[status]}</span>;
   }
 
   const activeIndex = lifecycleSteps.indexOf(status === 'PartiallyReceived' ? 'InTransit' : status);
@@ -414,6 +416,8 @@ type PoItemDraft = {
 function CreatePoModal({
   onClose,
   onCreate,
+  canCreateMultiBranch,
+  requiresReview,
   branches,
   suppliers,
   inventoryItems,
@@ -424,6 +428,8 @@ function CreatePoModal({
   creating,
 }: {
   onClose: () => void;
+  canCreateMultiBranch: boolean;
+  requiresReview: boolean;
   onCreate: (draft: {
     branchOrders: Array<{
       branchId: string;
@@ -668,6 +674,7 @@ function CreatePoModal({
                       checked={selectedBranchIds.includes(branch.id)}
                       onChange={(event) => changeBranches(branch.id, event.target.checked)}
                       aria-label={`Order for ${branch.name}`}
+                      disabled={!canCreateMultiBranch}
                     />
                     <span>{branch.name}</span>
                   </label>
@@ -805,8 +812,12 @@ function CreatePoModal({
             {confirmOpen && (
               <ConfirmDialog
                 title={`Create ${selectedBranchIds.length} purchase order${selectedBranchIds.length === 1 ? '' : 's'}?`}
-                message={`Create separate branch orders from ${poNumber.trim()} for ${formatPrice(grandTotal)} across ${selectedBranchIds.length} branch${selectedBranchIds.length === 1 ? '' : 'es'}? Each branch order will be saved as Draft.`}
-                confirmLabel={`Create ${selectedBranchIds.length} order${selectedBranchIds.length === 1 ? '' : 's'}`}
+                message={requiresReview
+                  ? `Submit ${poNumber.trim()} for ${formatPrice(grandTotal)} to Manager or Admin review?`
+                  : `Create separate branch orders from ${poNumber.trim()} for ${formatPrice(grandTotal)} across ${selectedBranchIds.length} branch${selectedBranchIds.length === 1 ? '' : 'es'}? Each branch order will be saved as Draft.`}
+                confirmLabel={requiresReview
+                  ? `Submit ${selectedBranchIds.length} order${selectedBranchIds.length === 1 ? '' : 's'}`
+                  : `Create ${selectedBranchIds.length} order${selectedBranchIds.length === 1 ? '' : 's'}`}
                 onConfirm={() => { void confirmCreate(); }}
                 onCancel={() => setConfirmOpen(false)}
               />
@@ -1086,6 +1097,8 @@ export function PurchaseOrderManagerPage() {
   const token = getStoredToken();
   const { user } = useSelector((state: RootState) => state.auth);
   const canManagePurchaseOrders = user?.role === 'Admin' || user?.role === 'Manager';
+  const canCreatePurchaseOrders = canManagePurchaseOrders || user?.role === 'Staff';
+  const canCreateMultiBranchPurchaseOrders = user?.role === 'Admin';
   const canReceivePurchaseOrders = canManagePurchaseOrders || user?.role === 'Staff';
   const [searchParams] = useSearchParams();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -1126,7 +1139,7 @@ export function PurchaseOrderManagerPage() {
       setOrders(loadedOrders);
       setOptions(referenceData);
       setSelectedId((current) => current && loadedOrders.some((order) => order.id === current) ? current : loadedOrders[0]?.id ?? null);
-      if (canManagePurchaseOrders && reorderItemId && referenceData.items?.some((item) => item.id === reorderItemId)) setShowCreate(true);
+      if (canCreatePurchaseOrders && reorderItemId && referenceData.items?.some((item) => item.id === reorderItemId)) setShowCreate(true);
       if (!referenceData.branches.length || !referenceData.suppliers.length) {
         setLoadError('Orders loaded, but branches or suppliers are unavailable. Refresh the data or add the missing records before creating an order.');
       }
@@ -1140,7 +1153,7 @@ export function PurchaseOrderManagerPage() {
     } finally {
       if (isActive()) setLoading(false);
     }
-  }, [canManagePurchaseOrders, notify, reorderItemId, token]);
+  }, [canCreatePurchaseOrders, canManagePurchaseOrders, notify, reorderItemId, token]);
 
   useEffect(() => {
     let active = true;
@@ -1208,10 +1221,10 @@ export function PurchaseOrderManagerPage() {
 
   const stats = useMemo(() => ({
     total: orders.length,
-    open: orders.filter((order) => order.status !== 'Received' && order.status !== 'Cancelled').length,
+    open: orders.filter((order) => !['Received', 'Rejected', 'Cancelled'].includes(order.status)).length,
     inTransit: orders.filter((order) => order.status === 'InTransit' || order.status === 'PartiallyReceived').length,
     received: orders.filter((order) => order.status === 'Received').length,
-    value: orders.filter((order) => order.status !== 'Received' && order.status !== 'Cancelled').reduce((sum, order) => sum + order.amount, 0),
+    value: orders.filter((order) => !['Received', 'Rejected', 'Cancelled'].includes(order.status)).reduce((sum, order) => sum + order.amount, 0),
   }), [orders]);
 
   async function advanceStatus(order: PurchaseOrder) {
@@ -1243,7 +1256,7 @@ export function PurchaseOrderManagerPage() {
   }
 
   async function cancelOrder(order: PurchaseOrder) {
-    if (!canManagePurchaseOrders || statusSavingId || order.status === 'Received' || order.status === 'Cancelled') return;
+    if (!canManagePurchaseOrders || statusSavingId || order.status === 'Received' || order.status === 'Rejected' || order.status === 'Cancelled') return;
     const now = new Date().toISOString();
     const timelineEvent: TimelineEvent = { status: 'Cancelled', at: now, by: performer, note: 'Cancelled by user' };
     setOrders((prev) => prev.map((candidate) => (
@@ -1263,6 +1276,37 @@ export function PurchaseOrderManagerPage() {
       setStatusSavingId(null);
     }
     notify(`${order.number} was cancelled.`, 'info');
+  }
+
+  async function rejectOrder(order: PurchaseOrder) {
+    if (!canManagePurchaseOrders || statusSavingId || order.status !== 'InReview') return;
+    setStatusSavingId(order.id);
+    try {
+      const updated = await apiPut<PurchaseOrderResponse>(
+        `/purchase-orders/${order.id}/status`,
+        token,
+        { status: 'Rejected' },
+      );
+      setOrders((prev) => prev.map((candidate) =>
+        candidate.id === order.id
+          ? responseToOrder(updated, {
+            ...candidate,
+            timeline: [...candidate.timeline, {
+              status: 'Rejected',
+              at: updated.updatedAt,
+              by: performer,
+              note: 'Rejected by reviewer',
+            }],
+          })
+          : candidate,
+      ));
+      notify(`${order.number} was rejected.`, 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The purchase order could not be rejected.';
+      notify(message, 'error');
+    } finally {
+      setStatusSavingId(null);
+    }
   }
 
   async function recordReceipt(order: PurchaseOrder, items: Array<{
@@ -1328,7 +1372,7 @@ export function PurchaseOrderManagerPage() {
     supplierId: string;
     number: string;
   }) {
-    if (!canManagePurchaseOrders) return;
+    if (!canCreatePurchaseOrders || (!canCreateMultiBranchPurchaseOrders && draft.branchOrders.length !== 1)) return;
     const supplier = options.suppliers.find((option) => option.id === draft.supplierId);
     const selectedBranches = draft.branchOrders.map((order) =>
       options.branches.find((option) => option.id === order.branchId));
@@ -1346,12 +1390,12 @@ export function PurchaseOrderManagerPage() {
         supplier: supplier.name,
         branchId: branch.id,
         branch: branch.name,
-        status: 'Draft',
+        status: canManagePurchaseOrders ? 'Draft' : 'InReview',
         amount: totalAmount,
         lineItems: branchOrder.items.length,
         createdAt: now,
         updatedAt: now,
-        timeline: [{ status: 'Draft', at: now, by: performer }],
+        timeline: [{ status: canManagePurchaseOrders ? 'Draft' : 'InReview', at: now, by: performer }],
         items: branchOrder.items.map((item, itemIndex) => ({
           id: `temp-${branchIndex}-${itemIndex}`,
           inventoryItemId: item.inventoryItemId,
@@ -1390,7 +1434,12 @@ export function PurchaseOrderManagerPage() {
       setSelectedId(liveOrders[0]?.id ?? null);
       setShowCreate(false);
       const totalAmount = liveOrders.reduce((sum, order) => sum + order.amount, 0);
-      notify(`${liveOrders.length} purchase order${liveOrders.length === 1 ? '' : 's'} created successfully for ${selectedBranches.map((branch) => branch!.name).join(', ')} (Total: ${formatPrice(totalAmount)}).`, 'success');
+      notify(
+        user?.role === 'Staff'
+          ? `${liveOrders[0].number} submitted for Manager or Admin review.`
+          : `${liveOrders.length} purchase order${liveOrders.length === 1 ? '' : 's'} created successfully for ${selectedBranches.map((branch) => branch!.name).join(', ')} (Total: ${formatPrice(totalAmount)}).`,
+        'success',
+      );
     } catch (err: any) {
       console.error(err);
       notify(`Could not create ${draft.number}: ${err?.message || 'Check connection'}`, 'error');
@@ -1416,7 +1465,7 @@ export function PurchaseOrderManagerPage() {
         <div className="purchase-orders-hero-art" aria-hidden="true"><span className="purchase-orders-art-ring" /><span className="purchase-orders-art-icon">▤</span><i /><i /><i /></div>
         <div className="purchase-orders-hero-actions">
           <button className="btn purchase-orders-refresh" type="button" onClick={() => { void loadOrders().then((ok) => { if (ok) notify('Purchase order data refreshed.', 'success'); }); }} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh data'}</button>
-          {canManagePurchaseOrders && <button className="btn purchase-orders-create" type="button" onClick={() => setShowCreate(true)} disabled={!options.branches.length || !options.suppliers.length}>＋ Create order</button>}
+          {canCreatePurchaseOrders && <button className="btn purchase-orders-create" type="button" onClick={() => setShowCreate(true)} disabled={!options.branches.length || !options.suppliers.length}>＋ Create order</button>}
         </div>
       </header>
 
@@ -1596,6 +1645,11 @@ export function PurchaseOrderManagerPage() {
                           : `Advance to ${statusLabels[nextStatus(selected.status)!]}`}
                     </button>
                   ) : null}
+                  {canManagePurchaseOrders && selected.status === 'InReview' && (
+                    <button type="button" className="btn btn-secondary" onClick={() => rejectOrder(selected)} disabled={statusSavingId !== null}>
+                      {statusSavingId === selected.id ? 'Saving…' : 'Reject request'}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-secondary"
@@ -1614,7 +1668,7 @@ export function PurchaseOrderManagerPage() {
                       {statusSavingId === selected.id ? 'Saving…' : 'Receive items'}
                     </button>
                   )}
-                  {canManagePurchaseOrders && selected.status !== 'Received' && selected.status !== 'Cancelled' && (
+                  {canManagePurchaseOrders && selected.status !== 'Received' && selected.status !== 'Rejected' && selected.status !== 'Cancelled' && (
                     <button type="button" className="btn btn-secondary" onClick={() => cancelOrder(selected)} disabled={statusSavingId !== null}>{statusSavingId === selected.id ? 'Saving…' : 'Cancel PO'}</button>
                   )}
                 </div>
@@ -1727,11 +1781,13 @@ export function PurchaseOrderManagerPage() {
         <CreatePoModal
           onClose={() => setShowCreate(false)}
           onCreate={createOrder}
+          canCreateMultiBranch={canCreateMultiBranchPurchaseOrders}
+          requiresReview={user?.role === 'Staff'}
           branches={options.branches}
           suppliers={options.suppliers}
           inventoryItems={options.items ?? []}
           defaultNumber={nextPoNumber(orders)}
-          defaultBranchId={reorderBranchId ?? user?.branchId}
+          defaultBranchId={user?.role === 'Staff' ? user.branchId : reorderBranchId ?? user?.branchId}
           initialInventoryItemId={reorderItemId}
           initialQuantity={reorderQuantity}
           creating={creating}

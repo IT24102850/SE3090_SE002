@@ -44,7 +44,11 @@ public sealed class InventoryAccessHandler : AuthorizationHandler<InventoryAcces
         // trusted internal staff provisioning, not ordinary role assignment.
         if (context.User.IsInRole(UserRole.Staff.ToString()) &&
             context.User.FindAll(ComponentClaimType)
-                .Any(claim => claim.Value is "*" || claim.Value == requirement.Component))
+                .Any(claim => claim.Value is "*" || claim.Value == requirement.Component) &&
+            (!requirement.Component.StartsWith("purchase-orders.", StringComparison.Ordinal) ||
+                resource.BranchId.HasValue &&
+                Guid.TryParse(context.User.FindFirst(BranchIdClaimType)?.Value, out var staffBranchId) &&
+                staffBranchId == resource.BranchId.Value))
         {
             context.Succeed(requirement);
         }

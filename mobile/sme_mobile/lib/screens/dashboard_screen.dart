@@ -392,7 +392,9 @@ class _DashboardDrawer extends ConsumerWidget {
                 ),
                 if (!isCustomer)
                   const _DrawerSectionLabel(label: 'BUSINESS OPERATIONS'),
-                if (user.role == 'Admin' || user.role == 'Manager')
+                if (user.role == 'Admin' ||
+                    user.role == 'Manager' ||
+                    user.role == 'Staff')
                   _DrawerItem(
                     icon: Icons.storefront_outlined,
                     label: 'Business Profile',
@@ -463,7 +465,9 @@ class _DashboardDrawer extends ConsumerWidget {
                       ));
                     },
                   ),
-                if (user.role == 'Admin' || user.role == 'Manager')
+                if (user.role == 'Admin' ||
+                    user.role == 'Manager' ||
+                    user.role == 'Staff')
                   _DrawerItem(
                     icon: Icons.receipt_long_outlined,
                     label: 'Purchase orders',
@@ -473,7 +477,9 @@ class _DashboardDrawer extends ConsumerWidget {
                       Navigator.of(context).push(slideFadeRoute(
                         PurchaseOrderApprovalScreen(
                           client: AuthenticatedApiClient(),
-                          canApprove: true,
+                          canApprove:
+                              user.role == 'Admin' || user.role == 'Manager',
+                          canCreate: true,
                           canReceive: true,
                         ),
                       ));
@@ -963,7 +969,7 @@ List<_QuickActionGroup> _quickActionsFor(
           slideFadeRoute(StockCountScreen(client: client)),
         ),
       ));
-  if (role == 'Admin' || role == 'Manager') {
+  if (role == 'Admin' || role == 'Manager' || role == 'Staff') {
     addAction(
         'Inventory',
         _QuickActionCard(
@@ -972,7 +978,12 @@ List<_QuickActionGroup> _quickActionsFor(
           color: color,
           imageUrl: _quickActionImages['Purchase orders'],
           onTap: () => Navigator.of(context).push(slideFadeRoute(
-            PurchaseOrderApprovalScreen(client: client, canApprove: true),
+            PurchaseOrderApprovalScreen(
+              client: client,
+              canApprove: role == 'Admin' || role == 'Manager',
+              canCreate: true,
+              canReceive: true,
+            ),
           )),
         ));
   }

@@ -22,6 +22,7 @@ enum PurchaseOrderStatus {
   inTransit,
   partiallyReceived,
   received,
+  rejected,
   cancelled;
 
   String get label {
@@ -38,6 +39,8 @@ enum PurchaseOrderStatus {
         return 'Partially Received';
       case PurchaseOrderStatus.received:
         return 'Received';
+      case PurchaseOrderStatus.rejected:
+        return 'Rejected';
       case PurchaseOrderStatus.cancelled:
         return 'Cancelled';
     }
@@ -57,6 +60,8 @@ enum PurchaseOrderStatus {
         return 'PartiallyReceived';
       case PurchaseOrderStatus.received:
         return 'Received';
+      case PurchaseOrderStatus.rejected:
+        return 'Rejected';
       case PurchaseOrderStatus.cancelled:
         return 'Cancelled';
     }
@@ -76,6 +81,7 @@ enum PurchaseOrderStatus {
         return const Color(0xFFFBBF24);
       case PurchaseOrderStatus.received:
         return const Color(0xFF10B981); // Emerald
+      case PurchaseOrderStatus.rejected:
       case PurchaseOrderStatus.cancelled:
         return const Color(0xFFF43F5E); // Rose
     }
@@ -95,6 +101,7 @@ enum PurchaseOrderStatus {
         return Icons.inventory_rounded;
       case PurchaseOrderStatus.received:
         return Icons.check_circle_rounded;
+      case PurchaseOrderStatus.rejected:
       case PurchaseOrderStatus.cancelled:
         return Icons.cancel_rounded;
     }
@@ -126,9 +133,10 @@ enum PurchaseOrderStatus {
       case 'fulfilled':
       case 'completed':
         return PurchaseOrderStatus.received;
+      case 'rejected':
+        return PurchaseOrderStatus.rejected;
       case 'cancelled':
       case 'canceled':
-      case 'rejected':
         return PurchaseOrderStatus.cancelled;
       default:
         return PurchaseOrderStatus.draft;
@@ -137,6 +145,7 @@ enum PurchaseOrderStatus {
 
   bool get isTerminal =>
       this == PurchaseOrderStatus.received ||
+      this == PurchaseOrderStatus.rejected ||
       this == PurchaseOrderStatus.cancelled;
   bool get isOpen => !isTerminal;
   bool get needsApproval =>
@@ -161,6 +170,7 @@ enum PurchaseOrderStatus {
       case PurchaseOrderStatus.received:
         return 4;
       case PurchaseOrderStatus.cancelled:
+      case PurchaseOrderStatus.rejected:
         return -1;
     }
   }
@@ -171,11 +181,14 @@ class PurchaseOrderApprovalScreen extends StatefulWidget {
     super.key,
     required this.client,
     required this.canApprove,
+    bool? canCreate,
     bool? canReceive,
-  }) : canReceive = canReceive ?? canApprove;
+  })  : canCreate = canCreate ?? canApprove,
+        canReceive = canReceive ?? canApprove;
 
   final AuthenticatedApiClient client;
   final bool canApprove;
+  final bool canCreate;
   final bool canReceive;
 
   @override
@@ -381,14 +394,15 @@ class _PurchaseOrderApprovalScreenState
     }
   }
 
-  Future<void> _cancelOrder(_PurchaseOrder order) async {
+  Future<void> _cancelOrder(_PurchaseOrder order, {bool reject = false}) async {
     final confirmed = await showAppConfirmation(
       context: context,
-      title: 'Cancel Purchase Order?',
-      message:
-          'Are you sure you want to cancel order ${order.number}? This will abort procurement.',
-      confirmLabel: 'Cancel Order',
-      icon: Icons.cancel_outlined,
+      title: reject ? 'Reject Purchase Order?' : 'Cancel Purchase Order?',
+      message: reject
+          ? 'Reject order ${order.number}? It will be closed without placing the order.'
+          : 'Are you sure you want to cancel order ${order.number}? This will abort procurement.',
+      confirmLabel: reject ? 'Reject Request' : 'Cancel Order',
+      icon: reject ? Icons.block_outlined : Icons.cancel_outlined,
       accent: const Color(0xFFF43F5E),
       isDestructive: true,
     );
@@ -398,26 +412,35 @@ class _PurchaseOrderApprovalScreenState
     try {
       final response = await widget.client.put(
         '/api/purchase-orders/${order.id}/status',
-        body: {'status': PurchaseOrderStatus.cancelled.apiValue},
+        body: {
+          'status': (reject
+                  ? PurchaseOrderStatus.rejected
+                  : PurchaseOrderStatus.cancelled)
+              .apiValue
+        },
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(_apiError(response.body, response.statusCode));
       }
       if (!mounted) return;
       setState(() {
-        order.status = PurchaseOrderStatus.cancelled;
+        order.status = reject
+            ? PurchaseOrderStatus.rejected
+            : PurchaseOrderStatus.cancelled;
         order.updatedAt = DateTime.now().toUtc().toIso8601String();
         order.approving = false;
       });
       showAppNotification(
-        '${order.number} has been cancelled.',
-        tone: AppNotificationTone.warning,
+        reject
+            ? '${order.number} was rejected.'
+            : '${order.number} has been cancelled.',
+        tone: reject ? AppNotificationTone.error : AppNotificationTone.warning,
       );
     } catch (error) {
       if (mounted) {
         setState(() => order.approving = false);
         showAppNotification(
-          'Could not cancel order. ${error is StateError ? error.message : 'Please retry.'}',
+          '${reject ? 'Could not reject request.' : 'Could not cancel order.'} ${error is StateError ? error.message : 'Please retry.'}',
           tone: AppNotificationTone.error,
         );
       }
@@ -478,6 +501,7 @@ class _PurchaseOrderApprovalScreenState
       backgroundColor: Colors.transparent,
       builder: (ctx) => _CreateOrderBottomSheet(
         client: widget.client,
+        requiresReview: !widget.canApprove,
         onCreated: () => _load(showSuccess: true),
       ),
     );
@@ -574,7 +598,7 @@ class _PurchaseOrderApprovalScreenState
   Widget build(BuildContext context) {
     return AppBackgroundScaffold(
       showParticles: false,
-      floatingActionButton: widget.canApprove
+      floatingActionButton: widget.canCreate
           ? FloatingActionButton.extended(
               backgroundColor: AppColors.cyan,
               foregroundColor: const Color(0xFF0A111E),
@@ -786,6 +810,9 @@ class _PurchaseOrderApprovalScreenState
     final receivedCount = _allOrders
         .where((o) => o.status == PurchaseOrderStatus.received)
         .length;
+    final rejectedCount = _allOrders
+        .where((o) => o.status == PurchaseOrderStatus.rejected)
+        .length;
     final cancelledCount = _allOrders
         .where((o) => o.status == PurchaseOrderStatus.cancelled)
         .length;
@@ -855,22 +882,32 @@ class _PurchaseOrderApprovalScreenState
                 decoration: BoxDecoration(
                   color: widget.canApprove
                       ? const Color(0xFF10B981).withValues(alpha: 0.18)
-                      : Colors.white.withValues(alpha: 0.08),
+                      : widget.canCreate
+                          ? AppColors.cyan.withValues(alpha: 0.18)
+                          : Colors.white.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: widget.canApprove
                         ? const Color(0xFF10B981).withValues(alpha: 0.4)
-                        : AppColors.glassBorder,
+                        : widget.canCreate
+                            ? AppColors.cyan.withValues(alpha: 0.4)
+                            : AppColors.glassBorder,
                   ),
                 ),
                 child: Text(
-                  widget.canApprove ? 'APPROVAL PERMITTED' : 'READ ONLY AUDIT',
+                  widget.canApprove
+                      ? 'APPROVAL PERMITTED'
+                      : widget.canCreate
+                          ? 'REQUEST CREATION'
+                          : 'READ ONLY AUDIT',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     color: widget.canApprove
                         ? const Color(0xFF10B981)
-                        : AppColors.textMuted,
+                        : widget.canCreate
+                            ? AppColors.cyan
+                            : AppColors.textMuted,
                   ),
                 ),
               ),
@@ -899,7 +936,7 @@ class _PurchaseOrderApprovalScreenState
           // Sub-label: breakdown
           const SizedBox(height: 4),
           Text(
-            '${_openOrders.length} open · $receivedCount received · $cancelledCount cancelled',
+            '${_openOrders.length} open · $receivedCount received · $rejectedCount rejected · $cancelledCount cancelled',
             style: AppTextStyles.caption.copyWith(
               color: AppColors.textMuted,
               fontSize: 11,
@@ -1221,7 +1258,8 @@ class _PurchaseOrderApprovalScreenState
   }
 
   Widget _buildLifecycleStepper(PurchaseOrderStatus current) {
-    if (current == PurchaseOrderStatus.cancelled) {
+    if (current == PurchaseOrderStatus.cancelled ||
+        current == PurchaseOrderStatus.rejected) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
@@ -1230,13 +1268,14 @@ class _PurchaseOrderApprovalScreenState
           border:
               Border.all(color: const Color(0xFFF43F5E).withValues(alpha: 0.3)),
         ),
-        child: const Row(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cancel_rounded, size: 14, color: Color(0xFFF43F5E)),
-            SizedBox(width: 6),
-            Text('Order Cancelled',
-                style: TextStyle(
+            const Icon(Icons.cancel_rounded,
+                size: 14, color: Color(0xFFF43F5E)),
+            const SizedBox(width: 6),
+            Text('Order ${current.label}',
+                style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFFF43F5E))),
@@ -1498,7 +1537,7 @@ class _PurchaseOrderApprovalScreenState
     final canReceiveThisOrder = widget.canReceive &&
         (status == PurchaseOrderStatus.inTransit ||
             status == PurchaseOrderStatus.partiallyReceived);
-    if (!widget.canApprove && !canReceiveThisOrder) {
+    if (!widget.canApprove && !canReceiveThisOrder && !status.isTerminal) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         alignment: Alignment.center,
@@ -1548,7 +1587,9 @@ class _PurchaseOrderApprovalScreenState
               icon: Icons.close_rounded,
               color: const Color(0xFFF43F5E),
               height: 44,
-              onPressed: order.approving ? null : () => _cancelOrder(order),
+              onPressed: order.approving
+                  ? null
+                  : () => _cancelOrder(order, reject: true),
             ),
           ),
           const SizedBox(width: 10),
@@ -1674,7 +1715,7 @@ class _PurchaseOrderApprovalScreenState
           Text(
             status == PurchaseOrderStatus.received
                 ? 'Stock received & added to inventory.'
-                : 'Order cancelled.',
+                : 'Order ${status.label.toLowerCase()}.',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -1727,10 +1768,12 @@ class _PurchaseOrderApprovalScreenState
 class _CreateOrderBottomSheet extends StatefulWidget {
   const _CreateOrderBottomSheet({
     required this.client,
+    required this.requiresReview,
     required this.onCreated,
   });
 
   final AuthenticatedApiClient client;
+  final bool requiresReview;
   final VoidCallback onCreated;
 
   @override
@@ -1963,9 +2006,11 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
         if (!mounted) return;
         Navigator.pop(context);
         showAppNotification(
-          isMultiBranch
-              ? 'Purchase orders ${generatedNumbers.join(', ')} created successfully.'
-              : 'Purchase order $number created successfully.',
+          widget.requiresReview
+              ? 'Purchase order $number submitted for Manager or Admin review.'
+              : isMultiBranch
+                  ? 'Purchase orders ${generatedNumbers.join(', ')} created successfully.'
+                  : 'Purchase order $number created successfully.',
           tone: AppNotificationTone.success,
         );
         widget.onCreated();

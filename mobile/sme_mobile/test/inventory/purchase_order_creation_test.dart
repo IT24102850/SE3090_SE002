@@ -106,6 +106,50 @@ void main() {
     dio.close();
   });
 
+  testWidgets(
+      'staff can create an assigned-branch request without approval rights',
+      (tester) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final adapter = _PurchaseOrderApiAdapter(assignedBranchOnly: true);
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api'))
+      ..httpClientAdapter = adapter;
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: PushNotificationService.navigatorKey,
+        scaffoldMessengerKey: appMessengerKey,
+        home: PurchaseOrderApprovalScreen(
+          client: AuthenticatedApiClient(dio: dio),
+          canApprove: false,
+          canCreate: true,
+          canReceive: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('New PO'), findsOneWidget);
+    await tester.tap(find.text('New PO'));
+    await tester.pumpAndSettle();
+    expect(find.text('North Branch'), findsNothing);
+    await tester.ensureVisible(find.text('Create Purchase Order').last);
+    await tester.tap(find.text('Create Purchase Order').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Dismiss notification'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+
+    expect(adapter.createdOrder?['branchId'], mainBranchId);
+    expect(adapter.createdBatch, isNull);
+    expect(adapter.createdOrder?['supplierId'],
+        _PurchaseOrderApiAdapter.supplierOneId);
+    expect(adapter.createdOrder?['items'], hasLength(1));
+    expect(tester.takeException(), isNull);
+    dio.close();
+  });
+
   testWidgets('creates branch-specific orders in one batch request',
       (tester) async {
     tester.view.physicalSize = const Size(430, 900);
@@ -254,6 +298,10 @@ class _PurchaseOrderApiAdapter implements HttpClientAdapter {
   static const teaItemId = 'a78856d1-1b82-4d06-a4fa-e21f3fa52a02';
   static const northTeaItemId = 'a78856d1-1b82-4d06-a4fa-e21f3fa52a03';
 
+  _PurchaseOrderApiAdapter({this.assignedBranchOnly = false});
+
+  final bool assignedBranchOnly;
+
   Map<String, dynamic>? createdOrder;
   Map<String, dynamic>? createdBatch;
   List<Map<String, dynamic>> purchaseOrders = const [];
@@ -265,46 +313,50 @@ class _PurchaseOrderApiAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     if (options.uri.path == '/api/purchase-orders/options') {
+      const branches = [
+        {'id': '3b4dbe2a-a430-40b1-afdb-fb2171cefb88', 'name': 'Main Branch'},
+        {'id': 'd91f3b79-e72e-4bc5-9aa0-f59b362a1003', 'name': 'North Branch'},
+      ];
+      const items = [
+        {
+          'id': 'cd28fddd-f09a-435c-9772-12831bc65001',
+          'name': 'Coffee from Supplier One',
+          'sku': 'COF-01',
+          'unitCost': 120,
+          'supplierId': supplierOneId,
+          'branchId': '3b4dbe2a-a430-40b1-afdb-fb2171cefb88',
+        },
+        {
+          'id': teaItemId,
+          'name': 'Tea from Supplier Two',
+          'sku': 'TEA-02',
+          'unitCost': 75,
+          'supplierId': supplierTwoId,
+          'branchId': '3b4dbe2a-a430-40b1-afdb-fb2171cefb88',
+          'branchName': 'Main Branch',
+        },
+        {
+          'id': northTeaItemId,
+          'name': 'Tea from Supplier Two',
+          'sku': 'TEA-02',
+          'unitCost': 75,
+          'supplierId': supplierTwoId,
+          'branchId': 'd91f3b79-e72e-4bc5-9aa0-f59b362a1003',
+          'branchName': 'North Branch',
+        },
+      ];
       return _jsonResponse({
-        'branches': [
-          {'id': '3b4dbe2a-a430-40b1-afdb-fb2171cefb88', 'name': 'Main Branch'},
-          {
-            'id': 'd91f3b79-e72e-4bc5-9aa0-f59b362a1003',
-            'name': 'North Branch'
-          },
-        ],
+        'branches': assignedBranchOnly ? [branches.first] : branches,
         'suppliers': [
           {'id': supplierOneId, 'name': 'Supplier One'},
           {'id': supplierTwoId, 'name': 'Supplier Two'},
         ],
-        'items': [
-          {
-            'id': 'cd28fddd-f09a-435c-9772-12831bc65001',
-            'name': 'Coffee from Supplier One',
-            'sku': 'COF-01',
-            'unitCost': 120,
-            'supplierId': supplierOneId,
-            'branchId': '3b4dbe2a-a430-40b1-afdb-fb2171cefb88',
-          },
-          {
-            'id': teaItemId,
-            'name': 'Tea from Supplier Two',
-            'sku': 'TEA-02',
-            'unitCost': 75,
-            'supplierId': supplierTwoId,
-            'branchId': '3b4dbe2a-a430-40b1-afdb-fb2171cefb88',
-            'branchName': 'Main Branch',
-          },
-          {
-            'id': northTeaItemId,
-            'name': 'Tea from Supplier Two',
-            'sku': 'TEA-02',
-            'unitCost': 75,
-            'supplierId': supplierTwoId,
-            'branchId': 'd91f3b79-e72e-4bc5-9aa0-f59b362a1003',
-            'branchName': 'North Branch',
-          },
-        ],
+        'items': assignedBranchOnly
+            ? items
+                .where((item) =>
+                    item['branchId'] == '3b4dbe2a-a430-40b1-afdb-fb2171cefb88')
+                .toList()
+            : items,
       });
     }
     if (options.uri.path == '/api/purchase-orders' && options.method == 'GET') {

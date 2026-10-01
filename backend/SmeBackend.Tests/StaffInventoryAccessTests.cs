@@ -22,13 +22,14 @@ public class StaffInventoryAccessTests
         })
         .Build();
 
-    private static User NewUser(UserRole role) => new()
+    private static User NewUser(UserRole role, Guid? branchId = null) => new()
     {
         Id = Guid.NewGuid(),
         TenantId = Guid.NewGuid(),
         Email = $"{role}@example.test".ToLowerInvariant(),
         FullName = $"{role} User",
         Role = role,
+        BranchId = branchId,
     };
 
     private static ClaimsPrincipal PrincipalFromToken(string token)
@@ -62,7 +63,7 @@ public class StaffInventoryAccessTests
         Assert.Contains("inventory.read", components);
         Assert.Contains("inventory.write", components);
         Assert.Contains("purchase-orders.read", components);
-        Assert.DoesNotContain("purchase-orders.write", components);
+        Assert.Contains("purchase-orders.write", components);
         Assert.DoesNotContain("*", components);
     }
 
@@ -95,15 +96,28 @@ public class StaffInventoryAccessTests
     [Theory]
     [InlineData("inventory.read", true)]
     [InlineData("inventory.write", true)]
-    [InlineData("purchase-orders.read", true)]
+    [InlineData("purchase-orders.read", false)]
     [InlineData("purchase-orders.write", false)]
     public async Task StaffToken_IsAuthorizedByInventoryAccessHandler(string component, bool expected)
     {
         var user = NewUser(UserRole.Staff);
         var principal = PrincipalFromToken(new JwtService(Config).GenerateAccessToken(user));
 
-        // Tenant-wide scope (no branch), which is what the mobile list calls use.
+        // Purchase-order operations require a branch-scoped resource.
         Assert.Equal(expected, await Authorize(principal, component, user.TenantId, null));
+    }
+
+    [Theory]
+    [InlineData("purchase-orders.read")]
+    [InlineData("purchase-orders.write")]
+    public async Task StaffToken_IsAuthorizedOnlyForAssignedPurchaseOrderBranch(string component)
+    {
+        var branchId = Guid.NewGuid();
+        var user = NewUser(UserRole.Staff, branchId);
+        var principal = PrincipalFromToken(new JwtService(Config).GenerateAccessToken(user));
+
+        Assert.True(await Authorize(principal, component, user.TenantId, branchId));
+        Assert.False(await Authorize(principal, component, user.TenantId, Guid.NewGuid()));
     }
 
     [Fact]

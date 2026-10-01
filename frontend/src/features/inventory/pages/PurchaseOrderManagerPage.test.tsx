@@ -8,7 +8,7 @@ import { ToastProvider as AppToastProvider } from '../../../shared/components/To
 import { ToastProvider } from '../ui/ToastContext';
 import { PurchaseOrderManagerPage } from './PurchaseOrderManagerPage';
 
-function renderPage() {
+function renderPage(role: 'Admin' | 'Manager' | 'Staff' = 'Manager') {
   const store = configureStore({
     reducer: { auth: authReducer },
     preloadedState: {
@@ -17,7 +17,8 @@ function renderPage() {
           id: 'user-1',
           email: 'manager@example.test',
           fullName: 'Test Manager',
-          role: 'Manager' as const,
+          role,
+          branchId: role === 'Staff' ? 'branch-1' : undefined,
           tenantId: 'tenant-1',
         },
         token: 'test-token',
@@ -73,7 +74,7 @@ describe('PurchaseOrderManagerPage catalog-linked order items', () => {
       return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
     }));
 
-    renderPage();
+    renderPage('Admin');
     expect(document.querySelector('.purchase-orders-register-wrap .purchase-orders-register-table')).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: /Create order/ }));
     const itemSelect = screen.getByLabelText('Inventory item for line 1');
@@ -126,7 +127,7 @@ describe('PurchaseOrderManagerPage catalog-linked order items', () => {
       return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
     }));
 
-    renderPage();
+    renderPage('Admin');
     fireEvent.click(await screen.findByRole('button', { name: /Create order/ }));
     fireEvent.click(screen.getByLabelText('Order for North branch'));
     const northBranchQuantity = screen.getByLabelText('Quantity for North branch, line 1');
@@ -155,6 +156,59 @@ describe('PurchaseOrderManagerPage catalog-linked order items', () => {
         { branchId: 'branch-2', items: [{ inventoryItemId: 'item-1', description: 'Tea', quantity: 4, unitPrice: 50 }] },
       ],
     });
+  });
+
+  it('lets staff submit a purchase order for their assigned branch for review', async () => {
+    let createRequest: Record<string, unknown> | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/purchase-orders?page=')) {
+        return new Response(JSON.stringify({ items: [], totalCount: 0, totalPages: 0 }), { status: 200 });
+      }
+      if (url.endsWith('/api/purchase-orders/options')) {
+        return new Response(JSON.stringify({
+          branches: [{ id: 'branch-1', name: 'Main branch' }],
+          suppliers: [{ id: 'supplier-1', name: 'Supplier One' }],
+          items: [
+            { id: 'item-1', name: 'Tea', sku: 'TEA-1', unitCost: 50, branchId: 'branch-1', supplierId: 'supplier-1' },
+          ],
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/purchase-orders') && init?.method === 'POST') {
+        createRequest = JSON.parse(String(init.body));
+        return new Response(JSON.stringify({
+          id: 'po-staff',
+          number: createRequest.number,
+          branchId: 'branch-1',
+          branch: 'Main branch',
+          supplierId: 'supplier-1',
+          supplier: 'Supplier One',
+          status: 'InReview',
+          totalAmount: 50,
+          lineItems: 1,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+          items: [],
+        }), { status: 201 });
+      }
+      return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
+    }));
+
+    renderPage('Staff');
+    fireEvent.click(await screen.findByRole('button', { name: /Create order/ }));
+    expect(screen.getByLabelText('Order for Main branch')).toBeDisabled();
+    expect(screen.queryByLabelText('Order for North branch')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create purchase order' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit 1 order' }));
+
+    expect(await screen.findByText(/submitted for Manager or Admin review/)).toBeInTheDocument();
+    expect(createRequest).toMatchObject({
+      branchId: 'branch-1',
+      supplierId: 'supplier-1',
+      status: 'Draft',
+    });
+    expect(screen.getByText('Awaiting approval by a Manager or Admin.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reject request' })).not.toBeInTheDocument();
   });
 
   it('updates remaining quantity live as accepted and damaged units are entered', async () => {

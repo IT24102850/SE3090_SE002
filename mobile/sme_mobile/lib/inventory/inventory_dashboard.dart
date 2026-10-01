@@ -812,6 +812,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                     builder: (_) => PurchaseOrderApprovalScreen(
                       client: widget.client,
                       canApprove: widget.canApprove,
+                      canCreate: widget.canApprove || widget.role == 'Staff',
                       canReceive: widget.canReceive,
                     ),
                   ),
@@ -875,6 +876,8 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                 title: 'Purchase Orders',
                 subtitle: widget.canApprove
                     ? 'Review & place'
+                    : widget.role == 'Staff'
+                        ? 'Create a branch request'
                     : widget.canReceive
                         ? 'View & receive'
                         : 'View queue',
@@ -885,6 +888,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                     builder: (_) => PurchaseOrderApprovalScreen(
                       client: widget.client,
                       canApprove: widget.canApprove,
+                      canCreate: widget.canApprove || widget.role == 'Staff',
                       canReceive: widget.canReceive,
                     ),
                   ),

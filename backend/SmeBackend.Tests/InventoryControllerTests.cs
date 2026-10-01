@@ -1558,6 +1558,54 @@ public class InventoryAnalyticsTests
 public class PurchaseOrdersControllerTests
 {
     [Fact]
+    public async Task StaffCanCreateOnlyAssignedBranchOrdersAndTheyEnterReview()
+    {
+        var tenantId = Guid.NewGuid();
+        var assignedBranchId = Guid.NewGuid();
+        var otherBranchId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+
+        await using var db = CreateDbContext(tenantContext);
+        db.Branches.AddRange(
+            new Branch { Id = assignedBranchId, TenantId = tenantId, Name = "Assigned branch" },
+            new Branch { Id = otherBranchId, TenantId = tenantId, Name = "Other branch" });
+        db.Suppliers.Add(new Supplier { Id = supplierId, TenantId = tenantId, Name = "Supplier" });
+        await db.SaveChangesAsync();
+
+        var authorizationService = new Mock<IAuthorizationService>();
+        authorizationService.Setup(x => x.AuthorizeAsync(
+                It.IsAny<ClaimsPrincipal>(),
+                It.IsAny<object?>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(AuthorizationResult.Success());
+        var controller = new PurchaseOrdersController(db, authorizationService.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, role: UserRole.Staff, branchId: assignedBranchId)
+                }
+            }
+        };
+
+        var created = await controller.CreatePurchaseOrder(
+            new CreatePurchaseOrderRequest(assignedBranchId, supplierId, "PO-STAFF-001"),
+            CancellationToken.None);
+        var response = Assert.IsType<PurchaseOrderResponse>(
+            Assert.IsType<CreatedAtActionResult>(created.Result).Value);
+        Assert.Equal("InReview", response.Status);
+
+        var crossBranch = await controller.CreatePurchaseOrder(
+            new CreatePurchaseOrderRequest(otherBranchId, supplierId, "PO-STAFF-002"),
+            CancellationToken.None);
+        Assert.IsType<ForbidResult>(crossBranch.Result);
+        Assert.Single(await db.PurchaseOrders.ToListAsync());
+    }
+
+    [Fact]
     public async Task CreatePurchaseOrder_WithItems_PersistsItemsAndComputesTotals()
     {
         var tenantId = Guid.NewGuid();
@@ -1863,6 +1911,43 @@ public class PurchaseOrdersControllerTests
     }
 
     [Fact]
+    public async Task UpdatePurchaseOrderStatus_AdminCanRejectInReviewOrder()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = await CreateControllerWithOrder(tenantId, "InReview");
+        await using var disposeDb = db;
+
+        var result = await controller.UpdatePurchaseOrderStatus(
+            Guid.Parse("9f95fa89-1018-49de-a82e-3442303956a1"),
+            new UpdatePurchaseOrderStatusRequest("Rejected"),
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("Rejected", (await db.PurchaseOrders.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task UpdatePurchaseOrderStatus_StaffCannotApproveOrReject()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = await CreateControllerWithOrder(tenantId, "InReview");
+        await using var disposeDb = db;
+        var order = await db.PurchaseOrders.SingleAsync();
+        controller.HttpContext.User = CreateUser(
+            tenantId,
+            role: UserRole.Staff,
+            branchId: order.BranchId);
+
+        var result = await controller.UpdatePurchaseOrderStatus(
+            order.Id,
+            new UpdatePurchaseOrderStatusRequest("Placed"),
+            CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        Assert.Equal("InReview", order.Status);
+    }
+
+    [Fact]
     public async Task UpdatePurchaseOrderStatus_MobileTokenCanApproveInReviewOrder()
     {
         var tenantId = Guid.NewGuid();
@@ -2151,7 +2236,8 @@ public class PurchaseOrdersControllerTests
         Guid tenantId,
         bool mobileClient = false,
         UserRole role = UserRole.Admin,
-        string? fullName = null)
+        string? fullName = null,
+        Guid? branchId = null)
     {
         var claims = new List<Claim>
         {
@@ -2160,6 +2246,8 @@ public class PurchaseOrdersControllerTests
         };
         if (fullName is not null)
             claims.Add(new Claim("fullName", fullName));
+        if (branchId.HasValue)
+            claims.Add(new Claim(InventoryAccessHandler.BranchIdClaimType, branchId.Value.ToString()));
         if (mobileClient)
             claims.Add(new Claim(InventoryAccessHandler.ClientPlatformClaimType, "mobile"));
         return new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"));

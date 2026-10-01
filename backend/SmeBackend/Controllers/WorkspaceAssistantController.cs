@@ -37,7 +37,12 @@ public sealed class WorkspaceAssistantController(AppDbContext db) : ControllerBa
             .Take(8)
             .ToListAsync(cancellationToken);
         var branchCount = await db.Branches.CountAsync(branch => branch.TenantId == tenantId && branch.IsActive, cancellationToken);
-        var openOrders = await db.PurchaseOrders.CountAsync(order => order.TenantId == tenantId && order.Status != "Received" && order.Status != "Cancelled", cancellationToken);
+        var openOrders = await db.PurchaseOrders.CountAsync(
+            order => order.TenantId == tenantId &&
+                order.Status != "Received" &&
+                order.Status != "Rejected" &&
+                order.Status != "Cancelled",
+            cancellationToken);
         var bookingCount = await db.Bookings.CountAsync(booking => booking.TenantId == tenantId && booking.Status != SmeBackend.Models.BookingStatus.Cancelled, cancellationToken);
 
         string answer;

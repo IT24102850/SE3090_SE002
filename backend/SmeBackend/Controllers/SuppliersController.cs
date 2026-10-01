@@ -53,8 +53,12 @@ public sealed class SuppliersController(
                 group => group.Key,
                 group => new SupplierOrderSummary(
                     group.Count(),
-                    group.Count(order => !string.Equals(order.Status, "Cancelled", StringComparison.OrdinalIgnoreCase)),
-                    group.Where(order => !string.Equals(order.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                    group.Count(order =>
+                        !string.Equals(order.Status, "Cancelled", StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(order.Status, "Rejected", StringComparison.OrdinalIgnoreCase)),
+                    group.Where(order =>
+                            !string.Equals(order.Status, "Cancelled", StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(order.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
                         .Sum(order => orderTotals.GetValueOrDefault(order.Id)),
                     group.Max(order => order.CreatedAt)));
 

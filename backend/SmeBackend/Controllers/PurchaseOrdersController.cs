@@ -24,6 +24,7 @@ public sealed class PurchaseOrdersController(
         "InTransit",
         "PartiallyReceived",
         "Received",
+        "Rejected",
         "Cancelled",
     ];
 
@@ -196,6 +197,13 @@ public sealed class PurchaseOrdersController(
             return ValidationProblem(ModelState);
         }
 
+        if (User.IsInRole(UserRole.Staff.ToString()) &&
+            (!Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var staffBranchId) ||
+                staffBranchId != request.BranchId))
+        {
+            return Forbid();
+        }
+
         if (await db.PurchaseOrders.IgnoreQueryFilters()
             .AnyAsync(order => order.TenantId == tenantId && order.Number == number, cancellationToken))
         {
@@ -208,7 +216,7 @@ public sealed class PurchaseOrdersController(
             BranchId = request.BranchId,
             SupplierId = request.SupplierId,
             Number = number,
-            Status = status,
+            Status = User.IsInRole(UserRole.Staff.ToString()) ? "InReview" : status,
         };
 
         var itemsToCreate = new List<PurchaseOrderItem>();
@@ -252,6 +260,13 @@ public sealed class PurchaseOrdersController(
                         ModelState.AddModelError(
                             $"items[{i}].inventoryItemId",
                             "Choose an inventory item assigned to the purchase order's supplier.");
+                        return ValidationProblem(ModelState);
+                    }
+                    if (User.IsInRole(UserRole.Staff.ToString()) && invItem.BranchId != request.BranchId)
+                    {
+                        ModelState.AddModelError(
+                            $"items[{i}].inventoryItemId",
+                            "Staff can only use inventory items assigned to their purchase order branch.");
                         return ValidationProblem(ModelState);
                     }
                     if (!invItem.UnitCost.HasValue || itemReq.UnitPrice != invItem.UnitCost.Value)
@@ -306,6 +321,11 @@ public sealed class PurchaseOrdersController(
         if (!TryGetTenantId(out var tenantId))
         {
             return Unauthorized();
+        }
+
+        if (!User.IsInRole(UserRole.Admin.ToString()) && !User.IsInRole(UserRole.Manager.ToString()))
+        {
+            return Forbid();
         }
 
         var number = request.Number?.Trim();
@@ -515,6 +535,11 @@ public sealed class PurchaseOrdersController(
                 InventoryAuthorizationPolicies.PurchaseOrderWrite,
                 tenantId,
                 order.BranchId))
+        {
+            return Forbid();
+        }
+
+        if (!User.IsInRole(UserRole.Admin.ToString()) && !User.IsInRole(UserRole.Manager.ToString()))
         {
             return Forbid();
         }
@@ -917,14 +942,14 @@ public sealed class PurchaseOrdersController(
 
     private Guid? ResolveBranchScope(Guid? requestedBranchId)
     {
-        if (User.IsInRole(UserRole.Admin.ToString()) || requestedBranchId.HasValue)
+        if (User.IsInRole(UserRole.Admin.ToString()))
         {
             return requestedBranchId;
         }
 
         return Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var branchId)
             ? branchId
-            : null;
+            : requestedBranchId;
     }
 
     private async Task<IReadOnlyList<PurchaseOrderResponse>> ToResponsesAsync(
@@ -1058,7 +1083,7 @@ public sealed class PurchaseOrdersController(
         return current switch
         {
             "Draft" => next == "InReview",
-            "InReview" => next == "Placed",
+            "InReview" => next is "Placed" or "Rejected",
             "Placed" => next == "InTransit",
             "InTransit" => false,
             _ => false,
