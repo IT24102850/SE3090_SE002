@@ -54,6 +54,10 @@ void main() {
     expect(find.text('Low stock item'), findsOneWidget);
     expect(find.text('Healthy item'), findsNothing);
     expect(find.text('Empty item'), findsNothing);
+    expect(find.text('Main'), findsOneWidget);
+    expect(find.text('North'), findsOneWidget);
+    expect(find.text('2 units'), findsOneWidget);
+    expect(find.text('7 units'), findsOneWidget);
     expect(
       find.byKey(const Key('dashboard-filter-low-stock')),
       findsOneWidget,
@@ -82,6 +86,16 @@ class _DashboardApiAdapter implements HttpClientAdapter {
             'reorderLevel': 5,
             'unitCost': 10,
             'branch': 'Main',
+          },
+          {
+            'id': 'low-2',
+            'name': 'Low stock item',
+            'sku': 'LOW-001',
+            'quantity': 7,
+            'unit': 'units',
+            'reorderLevel': 5,
+            'unitCost': 10,
+            'branch': 'North',
           },
           {
             'id': 'healthy-1',

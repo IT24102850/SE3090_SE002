@@ -323,7 +323,7 @@ public sealed class PurchaseOrdersController(
             return Unauthorized();
         }
 
-        if (!User.IsInRole(UserRole.Admin.ToString()) && !User.IsInRole(UserRole.Manager.ToString()))
+        if (!User.IsInRole(UserRole.Admin.ToString()))
         {
             return Forbid();
         }

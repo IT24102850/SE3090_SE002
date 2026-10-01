@@ -1749,6 +1749,22 @@ public class PurchaseOrdersControllerTests
         Assert.Equal(2, persistedOrders.Count);
         Assert.Equal(3m, persistedOrders.Single(order => order.BranchId == mainBranchId).Items.Single().Quantity);
         Assert.Equal(7m, persistedOrders.Single(order => order.BranchId == northBranchId).Items.Single().Quantity);
+
+        controller.HttpContext.User = CreateUser(
+            tenantId,
+            role: UserRole.Manager,
+            branchId: mainBranchId);
+        var managerBatch = await controller.CreatePurchaseOrdersForBranches(
+            new CreatePurchaseOrdersForBranchesRequest(
+                "PO-BATCH-MANAGER",
+                supplierId,
+                [
+                    new BranchPurchaseOrderRequest(mainBranchId, [new PurchaseOrderItemRequest(itemId, null, 1m, 1500m)]),
+                    new BranchPurchaseOrderRequest(northBranchId, [new PurchaseOrderItemRequest(itemId, null, 1m, 1500m)]),
+                ]),
+            CancellationToken.None);
+        Assert.IsType<ForbidResult>(managerBatch.Result);
+        Assert.Equal(2, await db.PurchaseOrders.CountAsync());
     }
 
     [Theory]

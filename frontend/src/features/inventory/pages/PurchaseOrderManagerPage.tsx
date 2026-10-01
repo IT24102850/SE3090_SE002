@@ -522,6 +522,17 @@ function CreatePoModal({
       : current.filter((id) => id !== branchId));
   }
 
+  function selectAllBranches() {
+    setSelectedBranchIds(branches.map((branch) => branch.id));
+    setItems((current) => current.map((item) => ({
+      ...item,
+      quantities: Object.fromEntries(branches.map((branch) => [
+        branch.id,
+        item.quantities[branch.id] || 1,
+      ])),
+    })));
+  }
+
   function changeSupplier(nextSupplierId: string) {
     const nextSupplierItems = inventoryItems.filter(
       (item) => item.supplierId === nextSupplierId,
@@ -681,9 +692,19 @@ function CreatePoModal({
                 ))}
               </div>
               <small className="po-branch-help">
-                Each selected branch gets its own purchase order and stock receipt.
+                Any supplier catalog item can be ordered to the selected destinations. Each selected branch gets its own purchase order and stock receipt.
                 {selectedBranchIds.length > 1 && ` Generated numbers: ${selectedBranchIds.map((_, index) => `${poNumber.trim() || 'PO'}-${String(index + 1).padStart(2, '0')}`).join(', ')}.`}
               </small>
+              {canCreateMultiBranch && branches.length > 1 && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={selectAllBranches}
+                  aria-label="Select all branches"
+                >
+                  Select all branches
+                </button>
+              )}
             </div>
             <label className="form-field form-field-wide">
               Supplier

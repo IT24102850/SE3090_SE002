@@ -167,6 +167,7 @@ void main() {
         home: PurchaseOrderApprovalScreen(
           client: AuthenticatedApiClient(dio: dio),
           canApprove: true,
+          canCreateMultiBranch: true,
         ),
       ),
     );
@@ -179,9 +180,22 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(
-      find.byKey(const Key('po-branch-checkbox-$northBranchId')),
+      find.byKey(const ValueKey(
+          'po-item-dropdown-${_PurchaseOrderApiAdapter.supplierTwoId}')),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('North Branch').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('po-select-all-branches')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<CheckboxListTile>(
+            find.byKey(const Key('po-branch-checkbox-$northBranchId')),
+          )
+          .value,
+      isTrue,
+    );
     await tester.enterText(
       find.byKey(const Key('po-quantity-field-$northBranchId')),
       '4',
@@ -210,6 +224,14 @@ void main() {
     expect(
       (branchOrders[1]['items'] as List).single['quantity'],
       4.0,
+    );
+    expect(
+      (branchOrders[0]['items'] as List).single['inventoryItemId'],
+      _PurchaseOrderApiAdapter.northTeaItemId,
+    );
+    expect(
+      (branchOrders[1]['items'] as List).single['inventoryItemId'],
+      _PurchaseOrderApiAdapter.northTeaItemId,
     );
     expect(tester.takeException(), isNull);
     dio.close();

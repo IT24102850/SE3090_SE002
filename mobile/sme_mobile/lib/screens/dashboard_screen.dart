@@ -480,6 +480,7 @@ class _DashboardDrawer extends ConsumerWidget {
                           canApprove:
                               user.role == 'Admin' || user.role == 'Manager',
                           canCreate: true,
+                          canCreateMultiBranch: user.role == 'Admin',
                           canReceive: true,
                         ),
                       ));
@@ -982,6 +983,7 @@ List<_QuickActionGroup> _quickActionsFor(
               client: client,
               canApprove: role == 'Admin' || role == 'Manager',
               canCreate: true,
+              canCreateMultiBranch: role == 'Admin',
               canReceive: true,
             ),
           )),

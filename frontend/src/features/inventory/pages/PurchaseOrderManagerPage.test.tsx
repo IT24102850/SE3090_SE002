@@ -129,11 +129,13 @@ describe('PurchaseOrderManagerPage catalog-linked order items', () => {
 
     renderPage('Admin');
     fireEvent.click(await screen.findByRole('button', { name: /Create order/ }));
-    fireEvent.click(screen.getByLabelText('Order for North branch'));
+    fireEvent.click(screen.getByRole('button', { name: 'Select all branches' }));
+    expect(screen.getByLabelText('Order for Main branch')).toBeChecked();
+    expect(screen.getByLabelText('Order for North branch')).toBeChecked();
     const northBranchQuantity = screen.getByLabelText('Quantity for North branch, line 1');
     expect(northBranchQuantity).toHaveAttribute('step', '1');
     fireEvent.change(northBranchQuantity, { target: { value: '9.982' } });
-    expect(northBranchQuantity).toHaveValue(0);
+    expect(northBranchQuantity).toHaveValue(1);
     fireEvent.change(northBranchQuantity, { target: { value: '4' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create purchase order' }));
     fireEvent.click(screen.getByRole('button', { name: 'Create 2 orders' }));

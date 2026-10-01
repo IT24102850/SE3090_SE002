@@ -183,6 +183,7 @@ class PurchaseOrderApprovalScreen extends StatefulWidget {
     required this.canApprove,
     bool? canCreate,
     bool? canReceive,
+    this.canCreateMultiBranch = false,
   })  : canCreate = canCreate ?? canApprove,
         canReceive = canReceive ?? canApprove;
 
@@ -190,6 +191,7 @@ class PurchaseOrderApprovalScreen extends StatefulWidget {
   final bool canApprove;
   final bool canCreate;
   final bool canReceive;
+  final bool canCreateMultiBranch;
 
   @override
   State<PurchaseOrderApprovalScreen> createState() =>
@@ -502,6 +504,7 @@ class _PurchaseOrderApprovalScreenState
       builder: (ctx) => _CreateOrderBottomSheet(
         client: widget.client,
         requiresReview: !widget.canApprove,
+        canCreateMultiBranch: widget.canCreateMultiBranch,
         onCreated: () => _load(showSuccess: true),
       ),
     );
@@ -1769,11 +1772,13 @@ class _CreateOrderBottomSheet extends StatefulWidget {
   const _CreateOrderBottomSheet({
     required this.client,
     required this.requiresReview,
+    required this.canCreateMultiBranch,
     required this.onCreated,
   });
 
   final AuthenticatedApiClient client;
   final bool requiresReview;
+  final bool canCreateMultiBranch;
   final VoidCallback onCreated;
 
   @override
@@ -1900,15 +1905,30 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
         if (!_selectedBranchIds.contains(branchId)) {
           _selectedBranchIds = [..._selectedBranchIds, branchId];
           final quantity = _quantityControllers[branchId];
-          if (quantity == null ||
-              quantity.text.trim().isEmpty ||
-              quantity.text == '0') {
+          if (quantity == null) {
             _quantityControllers[branchId] = TextEditingController(text: '1');
+          } else if (quantity.text.trim().isEmpty || quantity.text == '0') {
+            quantity.text = '1';
           }
         }
       } else {
         _selectedBranchIds =
             _selectedBranchIds.where((id) => id != branchId).toList();
+      }
+    });
+  }
+
+  void _selectAllBranches() {
+    setState(() {
+      _selectedBranchIds =
+          _branches.map((branch) => '${branch['id']}').toList();
+      for (final branchId in _selectedBranchIds) {
+        final controller = _quantityControllers[branchId];
+        if (controller == null) {
+          _quantityControllers[branchId] = TextEditingController(text: '1');
+        } else if (controller.text.trim().isEmpty || controller.text == '0') {
+          controller.text = '1';
+        }
       }
     });
   }
@@ -2127,13 +2147,25 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Choose each destination. A separate purchase order will be created for every selected branch.',
+                  'Supplier catalog items can be ordered for any selected destination. A separate purchase order will be created for every selected branch.',
                   style: TextStyle(
                     color: AppColors.textMuted,
                     fontSize: 12,
                     height: 1.35,
                   ),
                 ),
+                if (widget.canCreateMultiBranch && _branches.length > 1)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      key: const Key('po-select-all-branches'),
+                      onPressed: _loading || _loadingOptions
+                          ? null
+                          : _selectAllBranches,
+                      icon: const Icon(Icons.done_all_rounded, size: 17),
+                      label: const Text('Select all branches'),
+                    ),
+                  ),
                 const SizedBox(height: 6),
                 ..._branches.map((branch) {
                   final branchId = '${branch['id']}';

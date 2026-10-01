@@ -191,6 +191,28 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
     return list;
   }
 
+  List<List<InventoryItem>> get _visibleStockGroups {
+    final groups = <List<InventoryItem>>[];
+    final seen = <String>{};
+    for (final item in _filteredItems) {
+      final key = _stockGroupKey(item);
+      if (!seen.add(key)) continue;
+      final group = _allItems
+          .where((candidate) => _stockGroupKey(candidate) == key)
+          .toList()
+        ..sort((a, b) => a.branch.toLowerCase().compareTo(b.branch.toLowerCase()));
+      groups.add(group);
+    }
+    return groups;
+  }
+
+  String _stockGroupKey(InventoryItem item) {
+    final sku = item.sku.trim().toLowerCase();
+    return sku.isNotEmpty
+        ? 'sku:$sku'
+        : 'name:${item.name.trim().toLowerCase()}|${item.category.trim().toLowerCase()}';
+  }
+
   void _fail(String message) {
     if (!mounted) return;
     setState(() {
@@ -624,8 +646,8 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                                     ),
                                   )
                           else
-                            ..._filteredItems
-                                .map((item) => _buildItemCard(item)),
+                            ..._visibleStockGroups
+                                .map((items) => _buildItemCard(items)),
                         ],
                       ),
                     ),
@@ -813,6 +835,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                       client: widget.client,
                       canApprove: widget.canApprove,
                       canCreate: widget.canApprove || widget.role == 'Staff',
+                      canCreateMultiBranch: widget.role == 'Admin',
                       canReceive: widget.canReceive,
                     ),
                   ),
@@ -889,6 +912,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                       client: widget.client,
                       canApprove: widget.canApprove,
                       canCreate: widget.canApprove || widget.role == 'Staff',
+                      canCreateMultiBranch: widget.role == 'Admin',
                       canReceive: widget.canReceive,
                     ),
                   ),
@@ -1197,22 +1221,30 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
     );
   }
 
-  Widget _buildItemCard(InventoryItem item) {
-    final isOutOfStock = item.quantity <= 0;
-    final isLow = item.isLowStock;
-    final statusColor = isOutOfStock
+  Widget _buildItemCard(List<InventoryItem> items) {
+    final item = items.first;
+    final outOfStockBranches =
+        items.where((stock) => stock.quantity <= 0).length;
+    final lowStockBranches = items
+        .where((stock) => stock.quantity > 0 && stock.isLowStock)
+        .length;
+    final totalQuantity =
+        items.fold<double>(0, (total, stock) => total + stock.quantity);
+    final totalReorderLevel =
+        items.fold<double>(0, (total, stock) => total + stock.reorderLevel);
+    final statusColor = outOfStockBranches > 0
         ? const Color(0xFFF16D83)
-        : isLow
+        : lowStockBranches > 0
             ? const Color(0xFFF3B64D)
             : const Color(0xFF55D6C2);
-    final statusText = isOutOfStock
-        ? 'OUT OF STOCK'
-        : isLow
-            ? 'LOW STOCK'
-            : 'IN STOCK';
-    final progress = item.reorderLevel > 0
-        ? (item.quantity / item.reorderLevel).clamp(0.0, 1.0)
-        : (item.quantity > 0 ? 1.0 : 0.0);
+    final statusText = outOfStockBranches > 0
+        ? 'OUT AT $outOfStockBranches'
+        : lowStockBranches > 0
+            ? 'LOW AT $lowStockBranches'
+            : '${items.length} ${items.length == 1 ? 'BRANCH' : 'BRANCHES'}';
+    final progress = totalReorderLevel > 0
+        ? (totalQuantity / totalReorderLevel).clamp(0.0, 1.0)
+        : (totalQuantity > 0 ? 1.0 : 0.0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 11),
@@ -1237,12 +1269,12 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
               ),
               const SizedBox(width: 8),
               _InventoryStatusBadge(
-                key: ValueKey('${item.id}:$statusText'),
+                key: ValueKey('${item.sku}:$statusText'),
                 label: statusText,
                 color: statusColor,
-                icon: isOutOfStock
+                icon: outOfStockBranches > 0
                     ? Icons.remove_shopping_cart_rounded
-                    : isLow
+                    : lowStockBranches > 0
                         ? Icons.warning_amber_rounded
                         : Icons.check_circle_outline_rounded,
               ),
@@ -1255,9 +1287,6 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                 _ItemInfoChip(label: item.sku, icon: Icons.qr_code_2_rounded),
                 _ItemInfoChip(
                     label: item.category, icon: Icons.category_outlined),
-                if (item.branch.isNotEmpty)
-                  _ItemInfoChip(
-                      label: item.branch, icon: Icons.storefront_outlined),
               ],
             ),
             const SizedBox(height: 15),
@@ -1272,7 +1301,7 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                       letterSpacing: .7)),
               const Spacer(),
               Text(
-                '${_formatQuantity(item.quantity)} ${item.unit}',
+                '${_formatQuantity(totalQuantity)} ${item.unit}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.subtitle
@@ -1280,6 +1309,8 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
               ),
             ]),
             const SizedBox(height: 8),
+            ...items.map((stock) => _buildBranchStockRow(stock)),
+            const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
@@ -1290,61 +1321,108 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
               ),
             ),
             const SizedBox(height: 6),
-            Row(children: [
-              Expanded(
-                child: Text(
-                  item.reorderLevel > 0
-                      ? 'Reorder at ${_formatQuantity(item.reorderLevel)} ${item.unit}'
-                      : 'No reorder level set',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.textSecondary),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${item.unitCost == null ? 'Unit cost not set' : 'LKR ${item.unitCost!.toStringAsFixed(2)}'} / ${item.unit}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.caption
-                    .copyWith(color: AppColors.textMuted, fontSize: 10),
-              ),
-            ]),
-            const SizedBox(height: 12),
-            Row(children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _showItemQrLabel(item),
-                  icon: const Icon(Icons.qr_code_2_rounded, size: 17),
-                  label: const Text('Item label'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textSecondary,
-                    minimumSize: const Size(0, 40),
-                    side: const BorderSide(color: AppColors.glassBorder),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(11)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: FilledButton.tonalIcon(
-                  onPressed: () => _quickAdjustItem(item),
-                  icon: const Icon(Icons.tune_rounded, size: 17),
-                  label: const Text('Adjust stock'),
-                  style: FilledButton.styleFrom(
-                    foregroundColor: AppColors.cyan,
-                    backgroundColor: AppColors.cyan.withValues(alpha: .12),
-                    minimumSize: const Size(0, 40),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(11)),
-                  ),
-                ),
-              ),
-            ]),
+            Text(
+              '${item.unitCost == null ? 'Unit cost not set' : 'LKR ${item.unitCost!.toStringAsFixed(2)}'} / ${item.unit}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption
+                  .copyWith(color: AppColors.textMuted, fontSize: 10),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBranchStockRow(InventoryItem item) {
+    final outOfStock = item.quantity <= 0;
+    final lowStock = item.isLowStock;
+    final statusColor = outOfStock
+        ? const Color(0xFFF16D83)
+        : lowStock
+            ? const Color(0xFFF3B64D)
+            : const Color(0xFF55D6C2);
+    final statusLabel = outOfStock
+        ? 'OUT'
+        : lowStock
+            ? 'LOW'
+            : 'OK';
+
+    return Container(
+      key: ValueKey('dashboard-branch-stock-${item.id}'),
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .035),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.storefront_outlined,
+              color: AppColors.cyan, size: 15),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.branch.isEmpty ? 'Unassigned branch' : item.branch,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  'Reorder at ${_formatQuantity(item.reorderLevel)} ${item.unit}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textMuted,
+                    fontSize: 9,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${_formatQuantity(item.quantity)} ${item.unit}',
+            style: AppTextStyles.caption.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            statusLabel,
+            style: AppTextStyles.caption.copyWith(
+              color: statusColor,
+              fontWeight: FontWeight.w800,
+              fontSize: 9,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Adjust stock at ${item.branch}',
+            onPressed: () => _quickAdjustItem(item),
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.tune_rounded,
+                color: AppColors.cyan, size: 17),
+          ),
+          IconButton(
+            tooltip: 'Item label for ${item.branch}',
+            onPressed: () => _showItemQrLabel(item),
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.qr_code_2_rounded,
+                color: AppColors.textSecondary, size: 17),
+          ),
+        ],
       ),
     );
   }
