@@ -141,6 +141,7 @@ describe('CustomerShopPage', () => {
   it('lets a customer add products and place an order for pickup', async () => {
     renderPage();
 
+    expect(screen.getByText('Handpicked for you')).toBeTruthy();
     expect(await screen.findByText('Fresh tea leaves')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /add fresh tea leaves to basket/i }));
     fireEvent.click(screen.getByRole('button', { name: /add one fresh tea leaves/i }));

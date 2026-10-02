@@ -143,7 +143,14 @@ export default function CustomerShopPage() {
     <div className="cust-page cust-shop-page">
       <section className="cust-shop-hero">
         <div className="cust-shop-orbit" aria-hidden="true">✦</div>
-        <div>
+        <div className="cust-shop-hero-showcase" aria-hidden="true">
+          <span className="cust-shop-hero-item cust-shop-hero-item-primary">🍃</span>
+          <span className="cust-shop-hero-item cust-shop-hero-item-secondary">✨</span>
+          <span className="cust-shop-hero-item cust-shop-hero-item-tertiary">🎁</span>
+          <span className="cust-shop-hero-showcase-glow" />
+          <span className="cust-shop-hero-showcase-label"><i>✦</i> Handpicked for you</span>
+        </div>
+        <div className="cust-shop-hero-copy">
           <span className="cust-shop-kicker">A little something for you</span>
           <h1>Shop {tenant?.name ?? 'the store'}</h1>
           <p>Find something you love, then choose pickup or delivery. Pay when your order arrives.</p>
