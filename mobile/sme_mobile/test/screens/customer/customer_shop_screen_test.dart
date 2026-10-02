@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sme_mobile/inventory/authenticated_api_client.dart';
@@ -175,6 +176,75 @@ void main() {
     expect(tester.takeException(), isNull);
     dio.close();
   });
+
+  testWidgets('delivery checkout shows a map and allows placing a GPS pin',
+      (tester) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final adapter = _CustomerShopApiAdapter();
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api'))
+      ..httpClientAdapter = adapter;
+    final geocodingDio = Dio()..httpClientAdapter = adapter;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          navigatorKey: PushNotificationService.navigatorKey,
+          home: CustomerShopScreen(
+            client: AuthenticatedApiClient(dio: dio),
+            geocodingClient: geocodingDio,
+            initialBranchId: branchId,
+            tenantId: 'tenant-main',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add Fresh tea leaves to basket'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Basket · 1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Deliver to me'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FlutterMap), findsOneWidget);
+    expect(find.text('Search a place or landmark'), findsOneWidget);
+    await tester.enterText(
+      find.ancestor(
+        of: find.text('Search a place or landmark'),
+        matching: find.byType(TextField),
+      ),
+      'Colombo',
+    );
+    expect(find.text('Colombo'), findsOneWidget);
+    await tester.tap(find.byTooltip('Search places'));
+    await tester.pumpAndSettle();
+    expect(find.text('Colombo, Sri Lanka'), findsOneWidget,
+        reason: 'Requests: ${adapter.requests}');
+    await tester.tap(find.text('Colombo, Sri Lanka'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Pin selected.'), findsOneWidget);
+    await tester.enterText(
+      find.ancestor(
+        of: find.text('Delivery address'),
+        matching: find.byType(TextField),
+      ),
+      '12 Main Road',
+    );
+
+    await tester.ensureVisible(find.text('Place order'));
+    await tester.tap(find.text('Place order'));
+    await tester.pumpAndSettle();
+
+    expect(adapter.createdOrder?['deliveryLatitude'], isA<double>(),
+        reason: 'Order body: ${adapter.createdOrder}');
+    expect(adapter.createdOrder?['deliveryLongitude'], isA<double>());
+    expect(tester.takeException(), isNull);
+    dio.close();
+    geocodingDio.close();
+  });
 }
 
 class _CustomerShopApiAdapter implements HttpClientAdapter {
@@ -192,6 +262,23 @@ class _CustomerShopApiAdapter implements HttpClientAdapter {
     requests.add('${options.method} ${options.path}');
     Object response;
     var statusCode = 200;
+    if (options.uri.host == 'nominatim.openstreetmap.org') {
+      response = [
+        {
+          'place_id': 42,
+          'lat': '6.9271',
+          'lon': '79.8612',
+          'display_name': 'Colombo, Sri Lanka',
+        }
+      ];
+      return ResponseBody.fromString(
+        jsonEncode(response),
+        statusCode,
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType],
+        },
+      );
+    }
     if (path.endsWith('/customer-orders/branches')) {
       statusCode = 404;
       response = {'message': 'Not found'};

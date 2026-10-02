@@ -14,6 +14,7 @@ import {
   type CustomerOrderProduct,
   useGetTenantQuery,
 } from '../../api/bookingApi';
+import DeliveryLocationPicker, { type DeliveryPin } from './DeliveryLocationPicker';
 import './customer.css';
 
 type FulfillmentMethod = 'Pickup' | 'Delivery';
@@ -44,8 +45,7 @@ export default function CustomerShopPage() {
   const [fulfillmentMethod, setFulfillmentMethod] = useState<FulfillmentMethod>('Pickup');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [notes, setNotes] = useState('');
-  const [deliveryPin, setDeliveryPin] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locationError, setLocationError] = useState('');
+  const [deliveryPin, setDeliveryPin] = useState<DeliveryPin | null>(null);
   const [businessPickerOpen, setBusinessPickerOpen] = useState(false);
   const [businessError, setBusinessError] = useState('');
   const {
@@ -122,23 +122,6 @@ export default function CustomerShopPage() {
     } catch (error) {
       setOrderError(getErrorMessage(error));
     }
-  }
-
-  function captureDeliveryPin() {
-    setLocationError('');
-    if (!navigator.geolocation) {
-      setLocationError('Location is not available in this browser. You can still enter your address.');
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => setDeliveryPin({ latitude: coords.latitude, longitude: coords.longitude }),
-      (error) => setLocationError(
-        error.code === error.PERMISSION_DENIED
-          ? 'Location access was declined. You can still enter your address.'
-          : 'We could not get your location. Please try again or enter your address.',
-      ),
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
-    );
   }
 
   async function switchBusiness(tenantId: string) {
@@ -285,14 +268,8 @@ export default function CustomerShopPage() {
                       <label className="cust-shop-field">Delivery address
                         <textarea value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} required maxLength={500} placeholder="Street, town, and a helpful landmark" />
                       </label>
-                      <div className="cust-shop-gps">
-                        <button type="button" className="btn btn-secondary" onClick={captureDeliveryPin}>
-                          {deliveryPin ? '✓ Delivery pin attached' : '⌖ Add my delivery pin'}
-                        </button>
-                        <span>Your location is shared with this business only for this order.</span>
-                        {deliveryPin && <button type="button" className="cust-shop-clear-pin" onClick={() => setDeliveryPin(null)}>Remove pin</button>}
-                        {locationError && <small role="alert">{locationError}</small>}
-                      </div>
+                      <p className="cust-shop-gps-note">Adding a pin is optional. It is shared with this business for this order only.</p>
+                      <DeliveryLocationPicker value={deliveryPin} onChange={setDeliveryPin} />
                     </>
                   )}
                   <label className="cust-shop-field">A note for the team <span>(optional)</span>

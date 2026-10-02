@@ -79,6 +79,14 @@ describe('CustomerShopPage', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const url = new URL(request.url);
+      if (url.hostname === 'nominatim.openstreetmap.org') {
+        return Response.json([{
+          place_id: 42,
+          lat: '6.9271',
+          lon: '79.8612',
+          display_name: 'Colombo, Sri Lanka',
+        }]);
+      }
       if (url.pathname.endsWith('/tenant/public')) {
         return Response.json([
           { id: 'tenant-1', name: 'Willow Market', businessType: 'Retail' },
@@ -161,46 +169,24 @@ describe('CustomerShopPage', () => {
     expect(screen.getByLabelText('Delivery address')).toBeTruthy();
   });
 
-  it('submits a delivery GPS pin only after the customer requests it', async () => {
-    const descriptor = Object.getOwnPropertyDescriptor(navigator, 'geolocation');
-    const getCurrentPosition = vi.fn((success: PositionCallback) => success({
-      coords: {
-        latitude: 6.9271,
-        longitude: 79.8612,
-        accuracy: 5,
-        altitude: null,
-        altitudeAccuracy: null,
-        heading: null,
-        speed: null,
-      } as GeolocationCoordinates,
-      timestamp: Date.now(),
-    } as GeolocationPosition));
-    Object.defineProperty(navigator, 'geolocation', {
-      configurable: true,
-      value: { getCurrentPosition },
+  it('searches for a place and submits its delivery pin only after selection', async () => {
+    renderPage();
+    expect(await screen.findByText('Fresh tea leaves')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /add fresh tea leaves to basket/i }));
+    fireEvent.click(screen.getByLabelText('Deliver to me'));
+    fireEvent.change(screen.getByLabelText('Delivery address'), { target: { value: '12 Main Road' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /search delivery location/i }), { target: { value: 'Colombo' } });
+    fireEvent.click(screen.getByRole('button', { name: /search$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /colombo, sri lanka/i }));
+    expect(screen.getByText(/Pin set · 6\.92710, 79\.86120/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /place my order/i }));
+
+    await waitFor(() => expect(placedBody).not.toBeNull());
+    expect(placedBody).toMatchObject({
+      fulfillmentMethod: 'Delivery',
+      deliveryLatitude: 6.9271,
+      deliveryLongitude: 79.8612,
     });
-
-    try {
-      renderPage();
-      expect(await screen.findByText('Fresh tea leaves')).toBeTruthy();
-      fireEvent.click(screen.getByRole('button', { name: /add fresh tea leaves to basket/i }));
-      fireEvent.click(screen.getByLabelText('Deliver to me'));
-      fireEvent.change(screen.getByLabelText('Delivery address'), { target: { value: '12 Main Road' } });
-      fireEvent.click(screen.getByRole('button', { name: /add my delivery pin/i }));
-      expect(await screen.findByText(/location is shared with this business only for this order/i)).toBeTruthy();
-      fireEvent.click(screen.getByRole('button', { name: /place my order/i }));
-
-      await waitFor(() => expect(placedBody).not.toBeNull());
-      expect(placedBody).toMatchObject({
-        fulfillmentMethod: 'Delivery',
-        deliveryLatitude: 6.9271,
-        deliveryLongitude: 79.8612,
-      });
-      expect(getCurrentPosition).toHaveBeenCalledOnce();
-    } finally {
-      if (descriptor) Object.defineProperty(navigator, 'geolocation', descriptor);
-      else Reflect.deleteProperty(navigator, 'geolocation');
-    }
   });
 
   it('lets a customer switch business from the shop and refreshes the session', async () => {

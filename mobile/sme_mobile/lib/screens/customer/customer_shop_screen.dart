@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../inventory/authenticated_api_client.dart';
@@ -19,12 +22,14 @@ class CustomerShopScreen extends StatefulWidget {
     this.initialBranchId,
     this.tenantId,
     this.onJoinBusiness,
+    this.geocodingClient,
   }) : client = client ?? AuthenticatedApiClient();
 
   final AuthenticatedApiClient client;
   final String? initialBranchId;
   final String? tenantId;
   final Future<bool> Function(String tenantId)? onJoinBusiness;
+  final Dio? geocodingClient;
 
   @override
   State<CustomerShopScreen> createState() => _CustomerShopScreenState();
@@ -33,6 +38,8 @@ class CustomerShopScreen extends StatefulWidget {
 class _CustomerShopScreenState extends State<CustomerShopScreen> {
   final _addressController = TextEditingController();
   final _notesController = TextEditingController();
+  final _locationSearchController = TextEditingController();
+  final _deliveryMapController = MapController();
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _orders = [];
@@ -49,6 +56,10 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
   double? _deliveryLatitude;
   double? _deliveryLongitude;
   String? _deliveryLocationMessage;
+  List<Map<String, dynamic>> _deliveryPlaceResults = [];
+  String? _deliverySearchError;
+  bool _searchingDeliveryPlace = false;
+  bool _deliveryMapReady = false;
   bool _loading = true;
   bool _submitting = false;
   bool _refreshingOrders = false;
@@ -69,6 +80,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     _trackingTimer?.cancel();
     _addressController.dispose();
     _notesController.dispose();
+    _locationSearchController.dispose();
     super.dispose();
   }
 
@@ -259,6 +271,87 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     return true;
   }
 
+  void _setDeliveryPin(
+      double latitude, double longitude, StateSetter setSheetState) {
+    setSheetState(() {
+      _deliveryLatitude = latitude;
+      _deliveryLongitude = longitude;
+      _deliveryLocationMessage =
+          'Pin selected. It will be shared with this business for this order only.';
+      _deliveryPlaceResults = [];
+      _deliverySearchError = null;
+    });
+    if (_deliveryMapReady) {
+      _deliveryMapController.move(LatLng(latitude, longitude), 15);
+    }
+  }
+
+  Future<void> _searchDeliveryPlaces(
+      BuildContext sheetContext, StateSetter setSheetState) async {
+    final query = _locationSearchController.text.trim();
+    if (query.isEmpty) {
+      setSheetState(
+          () => _deliverySearchError = 'Enter a place or address to search.');
+      return;
+    }
+    setSheetState(() {
+      _searchingDeliveryPlace = true;
+      _deliverySearchError = null;
+      _deliveryPlaceResults = [];
+    });
+    try {
+      final response = await (widget.geocodingClient ?? Dio()).get<dynamic>(
+        'https://nominatim.openstreetmap.org/search',
+        queryParameters: {'format': 'jsonv2', 'limit': 5, 'q': query},
+        options: Options(
+          headers: {'User-Agent': 'UnifySME/1.0 (customer delivery map)'},
+          responseType: ResponseType.json,
+        ),
+      );
+      if (response.data is! List) {
+        throw const FormatException('The place search returned an invalid response.');
+      }
+      final places = (response.data as List).whereType<Map>().map((place) {
+        final latitude = double.tryParse(place['lat']?.toString() ?? '');
+        final longitude = double.tryParse(place['lon']?.toString() ?? '');
+        final label = place['display_name']?.toString();
+        if (latitude == null ||
+            longitude == null ||
+            label == null ||
+            label.isEmpty) {
+          throw const FormatException(
+              'The place search returned an invalid location.');
+        }
+        return <String, dynamic>{
+          'latitude': latitude,
+          'longitude': longitude,
+          'label': label,
+        };
+      }).toList();
+      if (!mounted || !sheetContext.mounted) return;
+      setSheetState(() {
+        _deliveryPlaceResults = places;
+        if (places.isEmpty) {
+          _deliverySearchError =
+              'No places found. Try a nearby town or landmark.';
+        }
+      });
+    } on DioException {
+      if (mounted && sheetContext.mounted) {
+        setSheetState(() => _deliverySearchError =
+            'Place search is unavailable right now. You can still tap the map to place a pin.');
+      }
+    } on FormatException catch (error) {
+      if (mounted && sheetContext.mounted) {
+        setSheetState(() => _deliverySearchError = error.message);
+      }
+    } finally {
+      if (mounted && sheetContext.mounted) {
+        setSheetState(() => _searchingDeliveryPlace = false);
+      }
+    }
+  }
+
   Future<void> _captureDeliveryPin(
       BuildContext sheetContext, StateSetter setSheetState) async {
     if (_capturingDeliveryLocation) return;
@@ -288,12 +381,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
         ),
       );
       if (!mounted || !sheetContext.mounted) return;
-      setSheetState(() {
-        _deliveryLatitude = position.latitude;
-        _deliveryLongitude = position.longitude;
-        _deliveryLocationMessage =
-            'GPS pin ready. It will be shared with this business for this order only.';
-      });
+      _setDeliveryPin(position.latitude, position.longitude, setSheetState);
     } catch (error) {
       if (!mounted || !sheetContext.mounted) return;
       setSheetState(() {
@@ -497,11 +585,6 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                       ),
                     ),
                     if (_delivery) ...[
-                      Text(
-                        'Optional: this pin is shared with the business for this order only.',
-                        style: AppTextStyles.caption,
-                      ),
-                      const SizedBox(height: 5),
                       TextField(
                         controller: _addressController,
                         maxLength: 500,
@@ -510,6 +593,134 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                         decoration: const InputDecoration(
                           labelText: 'Delivery address',
                           hintText: 'Street, town, and a helpful landmark',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Optional: search or tap the map to place a delivery pin. It is shared with the business for this order only.',
+                        style: AppTextStyles.caption,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _locationSearchController,
+                              maxLength: 180,
+                              decoration: const InputDecoration(
+                                counterText: '',
+                                prefixIcon: Icon(Icons.search_rounded),
+                                labelText: 'Search a place or landmark',
+                                hintText: 'Town, street or nearby place',
+                              ),
+                              onSubmitted: (_) =>
+                                  _searchDeliveryPlaces(
+                                      context, setSheetState),
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          IconButton.filledTonal(
+                            tooltip: 'Search places',
+                            onPressed: _searchingDeliveryPlace
+                                ? null
+                                : () => _searchDeliveryPlaces(
+                                    context, setSheetState),
+                            icon: _searchingDeliveryPlace
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.search_rounded),
+                          ),
+                        ],
+                      ),
+                      if (_deliverySearchError != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _deliverySearchError!,
+                          style: AppTextStyles.caption
+                              .copyWith(color: AppColors.error),
+                        ),
+                      ],
+                      if (_deliveryPlaceResults.isNotEmpty)
+                        ..._deliveryPlaceResults.map((place) => ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.place_outlined,
+                                  color: AppColors.cyan),
+                              title: Text(
+                                place['label'] as String,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.caption,
+                              ),
+                              onTap: () => _setDeliveryPin(
+                                place['latitude'] as double,
+                                place['longitude'] as double,
+                                setSheetState,
+                              ),
+                            )),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: SizedBox(
+                          height: 210,
+                          child: FlutterMap(
+                            mapController: _deliveryMapController,
+                            options: MapOptions(
+                              initialCenter: LatLng(
+                                _deliveryLatitude ?? 6.9271,
+                                _deliveryLongitude ?? 79.8612,
+                              ),
+                              initialZoom:
+                                  _deliveryLatitude == null ? 13 : 15,
+                              onMapReady: () => _deliveryMapReady = true,
+                              onTap: (_, point) => _setDeliveryPin(
+                                point.latitude,
+                                point.longitude,
+                                setSheetState,
+                              ),
+                            ),
+                            children: [
+                              TileLayer(
+                                urlTemplate:
+                                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                userAgentPackageName: 'com.example.sme_mobile',
+                              ),
+                              if (_deliveryLatitude != null &&
+                                  _deliveryLongitude != null)
+                                MarkerLayer(
+                                  markers: [
+                                    Marker(
+                                      point: LatLng(
+                                        _deliveryLatitude!,
+                                        _deliveryLongitude!,
+                                      ),
+                                      width: 44,
+                                      height: 52,
+                                      child: const Icon(
+                                        Icons.location_pin,
+                                        size: 44,
+                                        color: AppColors.error,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              RichAttributionWidget(
+                                attributions: [
+                                  TextSourceAttribution(
+                                    'OpenStreetMap contributors',
+                                    onTap: () => unawaited(launchUrl(
+                                      Uri.parse(
+                                          'https://www.openstreetmap.org/copyright'),
+                                      mode: LaunchMode.externalApplication,
+                                    )),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 5),
@@ -528,8 +739,8 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                                 ? Icons.my_location_rounded
                                 : Icons.location_on_rounded),
                         label: Text(_deliveryLatitude == null
-                            ? 'Add an optional GPS pin'
-                            : 'Delivery pin attached'),
+                            ? '◎ Use my current location'
+                            : 'Move map to my current location'),
                       ),
                       if (_deliveryLocationMessage != null) ...[
                         const SizedBox(height: 4),
@@ -544,6 +755,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                             _deliveryLatitude = null;
                             _deliveryLongitude = null;
                             _deliveryLocationMessage = 'Delivery pin removed.';
+                            _deliveryPlaceResults = [];
                           }),
                           child: const Text('Remove delivery pin'),
                         ),
