@@ -13,6 +13,7 @@ public class ChangePasswordTests
     private sealed class StubJwtService : IJwtService
     {
         public string GenerateAccessToken(User user) => "stub";
+        public string GenerateMobileAccessToken(User user) => "mobile-stub";
         public string GeneratePlatformAccessToken(User user, string jti, DateTime expiresAt) => "stub";
         public string GenerateRefreshToken() => "stub";
         public ClaimsPrincipal? ValidateToken(string token) => null;
@@ -33,7 +34,8 @@ public class ChangePasswordTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var controller = new AuthController(db, new StubJwtService(), new CustomerAccountService(db));
+        var controller = new AuthController(db, new StubJwtService(), new CustomerAccountService(db),
+            new StubPasswordResetManager(), new StubMobileExternalAuthService());
         TestHelpers.SetUser(controller, user.Id, user.TenantId, Roles.Admin);
         return (controller, user);
     }

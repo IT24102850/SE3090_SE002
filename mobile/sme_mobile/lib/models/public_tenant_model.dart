@@ -7,6 +7,7 @@ class PublicTenant {
   final String businessType;
   final String? subType;
   final String? logoUrl;
+  final String? coverImageUrl;
 
   const PublicTenant({
     required this.id,
@@ -14,9 +15,10 @@ class PublicTenant {
     required this.businessType,
     this.subType,
     this.logoUrl,
+    this.coverImageUrl,
   });
 
-  // GET /api/tenant/public returns { id, name, businessType, subType, logoUrl }
+  // GET /api/tenant/public returns the public listing fields only.
   // — note the field is `name`, not `businessName`.
   factory PublicTenant.fromJson(Map<String, dynamic> json) {
     return PublicTenant(
@@ -25,6 +27,7 @@ class PublicTenant {
       businessType: json['businessType'] as String,
       subType: json['subType'] as String?,
       logoUrl: json['logoUrl'] as String?,
+      coverImageUrl: json['coverImageUrl'] as String?,
     );
   }
 }

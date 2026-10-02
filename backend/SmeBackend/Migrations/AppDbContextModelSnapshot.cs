@@ -971,10 +971,17 @@ namespace SmeBackend.Migrations
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
+                    b.Property<decimal?>("SellingPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<string>("Sku")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("SupplierId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -994,6 +1001,8 @@ namespace SmeBackend.Migrations
                     b.HasIndex("BranchId");
 
                     b.HasIndex("CategoryId");
+
+                    b.HasIndex("SupplierId");
 
                     b.HasIndex("UnitId");
 
@@ -2469,6 +2478,10 @@ namespace SmeBackend.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal>("DamagedQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
@@ -2483,6 +2496,13 @@ namespace SmeBackend.Migrations
                         .HasColumnType("numeric(18,3)");
 
                     b.Property<decimal>("ReceivedQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<bool>("ReceivingClosed")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("ShortageQuantity")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
@@ -2510,6 +2530,91 @@ namespace SmeBackend.Migrations
 
                             t.HasCheckConstraint("CK_purchase_order_items_unit_price_non_negative", "\"UnitPrice\" >= 0");
                         });
+                });
+
+            modelBuilder.Entity("SmeBackend.Models.PurchaseOrderReceipt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PurchaseOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReceivedBy")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PurchaseOrderId");
+
+                    b.HasIndex("TenantId", "PurchaseOrderId", "ReceivedAt");
+
+                    b.ToTable("PurchaseOrderReceipts");
+                });
+
+            modelBuilder.Entity("SmeBackend.Models.PurchaseOrderReceiptItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AcceptedQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("DamagedQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal>("DeliveredQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("PurchaseOrderItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PurchaseOrderReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ShortageQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PurchaseOrderItemId");
+
+                    b.HasIndex("PurchaseOrderReceiptId");
+
+                    b.ToTable("PurchaseOrderReceiptItems");
                 });
 
             modelBuilder.Entity("SmeBackend.Models.RecurringPattern", b =>
@@ -2877,6 +2982,10 @@ namespace SmeBackend.Migrations
                     b.Property<DateTime>("OccurredAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("PerformedBy")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
                     b.Property<Guid?>("PurchaseOrderId")
                         .HasColumnType("uuid");
 
@@ -3011,6 +3120,9 @@ namespace SmeBackend.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("LeadTimeDays")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -3030,7 +3142,10 @@ namespace SmeBackend.Migrations
                     b.HasIndex("TenantId", "Name")
                         .IsUnique();
 
-                    b.ToTable("Suppliers");
+                    b.ToTable("Suppliers", t =>
+                        {
+                            t.HasCheckConstraint("CK_Suppliers_LeadTimeDays", "\"LeadTimeDays\" IS NULL OR \"LeadTimeDays\" BETWEEN 1 AND 90");
+                        });
                 });
 
             modelBuilder.Entity("SmeBackend.Models.Tenant", b =>
@@ -3422,6 +3537,11 @@ namespace SmeBackend.Migrations
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("SmeBackend.Models.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("SmeBackend.Models.InventoryUnit", "Unit")
                         .WithMany()
                         .HasForeignKey("UnitId")
@@ -3430,6 +3550,8 @@ namespace SmeBackend.Migrations
                     b.Navigation("Branch");
 
                     b.Navigation("Category");
+
+                    b.Navigation("Supplier");
 
                     b.Navigation("Unit");
                 });
@@ -3562,6 +3684,30 @@ namespace SmeBackend.Migrations
                     b.HasOne("SmeBackend.Models.PurchaseOrder", null)
                         .WithMany("Items")
                         .HasForeignKey("PurchaseOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SmeBackend.Models.PurchaseOrderReceipt", b =>
+                {
+                    b.HasOne("SmeBackend.Models.PurchaseOrder", null)
+                        .WithMany("Receipts")
+                        .HasForeignKey("PurchaseOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SmeBackend.Models.PurchaseOrderReceiptItem", b =>
+                {
+                    b.HasOne("SmeBackend.Models.PurchaseOrderItem", null)
+                        .WithMany()
+                        .HasForeignKey("PurchaseOrderItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SmeBackend.Models.PurchaseOrderReceipt", null)
+                        .WithMany("Items")
+                        .HasForeignKey("PurchaseOrderReceiptId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -3735,6 +3881,13 @@ namespace SmeBackend.Migrations
                 });
 
             modelBuilder.Entity("SmeBackend.Models.PurchaseOrder", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Receipts");
+                });
+
+            modelBuilder.Entity("SmeBackend.Models.PurchaseOrderReceipt", b =>
                 {
                     b.Navigation("Items");
                 });

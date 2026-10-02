@@ -18,7 +18,9 @@ class InventoryItem {
     required this.unit,
     required this.reorderLevel,
     required this.unitCost,
+    required this.sellingPrice,
     required this.branch,
+    this.branchId,
   });
 
   final String id;
@@ -28,11 +30,13 @@ class InventoryItem {
   final double quantity;
   final String unit;
   final double reorderLevel;
-  final double unitCost;
+  final double? unitCost;
+  final double? sellingPrice;
   final String branch;
+  final String? branchId;
 
-  bool get isLowStock => quantity <= 0 || quantity < reorderLevel;
-  double get totalValue => quantity * unitCost;
+  bool get isLowStock => quantity <= 0 || quantity <= reorderLevel;
+  double get totalValue => quantity * (unitCost ?? 0);
 
   factory InventoryItem.fromJson(Map<String, dynamic> json) => InventoryItem(
         id: '${json['id']}',
@@ -42,8 +46,10 @@ class InventoryItem {
         quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
         unit: json['unit'] as String? ?? 'units',
         reorderLevel: (json['reorderLevel'] as num?)?.toDouble() ?? 10,
-        unitCost: (json['unitCost'] as num?)?.toDouble() ?? 0,
+        unitCost: (json['unitCost'] as num?)?.toDouble(),
+        sellingPrice: (json['sellingPrice'] as num?)?.toDouble(),
         branch: json['branch'] as String? ?? 'Main branch',
+        branchId: json['branchId'] as String?,
       );
 }
 

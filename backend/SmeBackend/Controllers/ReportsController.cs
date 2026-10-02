@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -160,6 +161,150 @@ public sealed class ReportsController(
             buckets.Any(bucket => bucket.Revenue > 0) ? null : "No sales were recorded for the selected reporting window."));
     }
 
+    [HttpGet("sales-activity")]
+    public async Task<ActionResult<SalesActivityReportResponse>> GetSalesActivity(
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] Guid? branchId = null,
+        [FromQuery, Range(1, int.MaxValue)] int page = 1,
+        [FromQuery, Range(1, 100)] int pageSize = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+        branchId = ResolveBranchScope(branchId);
+
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService,
+                InventoryAuthorizationPolicies.InventoryRead,
+                tenantId,
+                branchId))
+        {
+            return Forbid();
+        }
+
+        var range = NormalizeRange(from, to);
+        if (range is null)
+        {
+            AddDateRangeValidationError();
+            return ValidationProblem(ModelState);
+        }
+
+        var salesQuery = db.Sales
+            .AsNoTracking()
+            .Where(sale =>
+                sale.TenantId == tenantId &&
+                sale.OccurredAt >= range.Value.From &&
+                sale.OccurredAt < range.Value.ToExclusive);
+        if (branchId.HasValue)
+        {
+            salesQuery = salesQuery.Where(sale => sale.BranchId == branchId.Value);
+        }
+
+        var salesCount = await salesQuery.CountAsync(cancellationToken);
+        var totalRevenue = await salesQuery.SumAsync(sale => (decimal?)sale.Amount, cancellationToken) ?? 0;
+        var saleMovementQuery = db.StockMovements
+            .AsNoTracking()
+            .Where(movement =>
+                movement.TenantId == tenantId &&
+                movement.MovementType == "Sale" &&
+                movement.OccurredAt >= range.Value.From &&
+                movement.OccurredAt < range.Value.ToExclusive);
+        if (branchId.HasValue)
+        {
+            saleMovementQuery = saleMovementQuery.Where(movement => movement.BranchId == branchId.Value);
+        }
+        var costSummary = await saleMovementQuery
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                MovementCount = group.Count(),
+                MissingCostCount = group.Count(movement => movement.UnitCost == null),
+                CostOfGoodsSold = group.Sum(movement =>
+                    (decimal?)((movement.UnitCost ?? 0m) * Math.Abs(movement.Quantity))),
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        var costOfGoodsSold = salesCount == 0
+            ? 0m
+            : costSummary is { MovementCount: > 0, MissingCostCount: 0 }
+                ? costSummary.CostOfGoodsSold ?? 0m
+                : (decimal?)null;
+        var grossProfit = costOfGoodsSold.HasValue
+            ? totalRevenue - costOfGoodsSold.Value
+            : (decimal?)null;
+
+        var totalPages = (int)Math.Ceiling(salesCount / (double)pageSize);
+        var skip = page > totalPages ? salesCount : (page - 1) * pageSize;
+        var recentSales = await salesQuery
+            .OrderByDescending(sale => sale.OccurredAt)
+            .ThenByDescending(sale => sale.Id)
+            .Skip(skip)
+            .Take(pageSize)
+            .Select(sale => new
+            {
+                sale.Id,
+                sale.Reference,
+                sale.OccurredAt,
+                sale.Amount,
+            })
+            .ToListAsync(cancellationToken);
+
+        var references = recentSales.Select(sale => sale.Reference).ToList();
+        var saleMovements = await (
+            from movement in db.StockMovements.AsNoTracking()
+            join item in db.InventoryItems.AsNoTracking()
+                on movement.InventoryItemId equals item.Id
+            where movement.TenantId == tenantId &&
+                  movement.MovementType == "Sale" &&
+                  movement.Reference != null &&
+                  (!branchId.HasValue || movement.BranchId == branchId.Value) &&
+                  references.Contains(movement.Reference)
+            select new
+            {
+                movement.Reference,
+                ItemName = item.Name,
+                Quantity = Math.Abs(movement.Quantity),
+                movement.UnitCost,
+            }).ToListAsync(cancellationToken);
+        var movementsByReference = saleMovements
+            .GroupBy(movement => movement.Reference!)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var recent = recentSales.Select(sale =>
+        {
+            var lines = movementsByReference.GetValueOrDefault(sale.Reference) ?? [];
+            return new SalesActivityItemResponse(
+                sale.Id,
+                sale.Reference,
+                sale.OccurredAt,
+                sale.Amount,
+                lines.Sum(line => line.Quantity),
+                lines.Select(line => line.ItemName).Distinct().ToList(),
+                lines.Count == 0 || lines.Any(line => !line.UnitCost.HasValue)
+                    ? null
+                    : lines.Sum(line => line.Quantity * line.UnitCost!.Value),
+                lines.Count == 0 || lines.Any(line => !line.UnitCost.HasValue)
+                    ? null
+                    : sale.Amount - lines.Sum(line => line.Quantity * line.UnitCost!.Value));
+        }).ToList();
+
+        return Ok(new SalesActivityReportResponse(
+            range.Value.From,
+            range.Value.ToInclusive,
+            branchId,
+            salesCount,
+            totalRevenue,
+            salesCount == 0 ? 0 : totalRevenue / salesCount,
+            costOfGoodsSold,
+            grossProfit,
+            page,
+            pageSize,
+            totalPages,
+            recent));
+    }
+
     [HttpGet("patient-count")]
     public async Task<ActionResult<PatientCountReportResponse>> GetPatientCount(
         [FromQuery] DateTime? from = null,
@@ -315,6 +460,31 @@ public sealed record RevenueBucketResponse(
     DateTime Date,
     string Label,
     decimal Revenue);
+
+public sealed record SalesActivityReportResponse(
+    DateTime From,
+    DateTime To,
+    Guid? BranchId,
+    int SalesCount,
+    decimal TotalRevenue,
+    decimal AverageSale,
+    decimal? CostOfGoodsSold,
+    decimal? GrossProfit,
+    int Page,
+    int PageSize,
+    int TotalPages,
+    IReadOnlyList<SalesActivityItemResponse> RecentSales);
+
+public sealed record SalesActivityItemResponse(
+    Guid Id,
+    string Reference,
+    DateTime OccurredAt,
+    decimal Amount,
+    decimal Quantity,
+    IReadOnlyList<string> Items,
+    decimal? CostOfGoodsSold,
+    decimal? GrossProfit);
+
 
 public sealed record PatientCountReportResponse(
     DateTime From,

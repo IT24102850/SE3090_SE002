@@ -26,6 +26,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage'));
 const PricingPage = lazy(() => import('./features/subscription/PricingPage'));
 const SubscriptionPage = lazy(() => import('./features/subscription/SubscriptionPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 // Public, chrome-less: the booking widget a business embeds on its own site.
 const EmbedBookingPage = lazy(() => import('./features/embed/EmbedBookingPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -128,6 +129,8 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ForgotPasswordPage />} />
               <Route path="/embed/book/:tenantId" element={<EmbedBookingPage />} />
 
               <Route

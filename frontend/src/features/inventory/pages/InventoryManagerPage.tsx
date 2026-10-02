@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { QRCodeSVG } from 'qrcode.react';
@@ -16,17 +16,21 @@ type StockRow = {
   categoryId?: string;
   unitId?: string;
   branchId?: string;
+  supplierId?: string;
   sku: string;
   item: string;
   category: string;
   unit: string;
-  price: number;
+  costPrice: number | null;
+  sellingPrice: number | null;
   qty: number;
   reorder: number;
   owner: string;
 };
 
 type StockForm = Omit<StockRow, 'sku'>;
+type SupplierOption = { id: string; name: string; leadTimeDays: number | null };
+type InventoryCategoryOption = { id: string; name: string };
 
 const PAGE_SIZE = 5;
 
@@ -45,15 +49,17 @@ const emptyForm: StockForm = {
   item: '',
   category: categoryOptions[0],
   unit: '',
-  price: 0,
+  costPrice: null,
+  sellingPrice: null,
   qty: 0,
   reorder: 10,
   owner: '',
+  supplierId: undefined,
 };
 
 function deriveStatus(qty: number, reorder: number): StockStatus {
-  if (qty === 0) return 'Out of stock';
-  if (reorder > 0 && qty / reorder < 0.45) return 'Low stock';
+  if (qty <= 0) return 'Out of stock';
+  if (reorder > 0 && qty <= reorder) return 'Low stock';
   return 'In stock';
 }
 
@@ -61,9 +67,50 @@ function formatPrice(amount: number) {
   return `LKR ${amount.toLocaleString()}`;
 }
 
-function displayCategory(category: string | null | undefined, itemName: string) {
-  if (category?.trim()) return category.trim();
+function parseCsvRow(line: string): string[] {
+  const values: string[] = [];
+  let value = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index++) {
+    const character = line[index];
+    if (character === '"' && quoted && line[index + 1] === '"') {
+      value += '"';
+      index++;
+    } else if (character === '"') {
+      quoted = !quoted;
+    } else if (character === ',' && !quoted) {
+      values.push(value.trim());
+      value = '';
+    } else {
+      value += character;
+    }
+  }
+  values.push(value.trim());
+  return values;
+}
+
+function displayCategory(category: string | null | undefined, itemName: string, availableCategories: InventoryCategoryOption[] = []) {
+  const storedCategory = category?.trim();
+  const genericCategory = storedCategory && /^(other|other items|general|uncategorized|supplies)$/i.test(storedCategory);
+  if (storedCategory && !genericCategory) return storedCategory;
   const normalized = itemName.toLowerCase();
+  const healthcareRules: Array<[RegExp, RegExp, RegExp]> = [
+    [/\b(pharmaceutical|medicine|medication|tablet|capsule|drug|pharma|vaccine|antibiotic|paracetamol|syrup|ointment)\b/i, /pharma|medicine|medication|drug/i, /suppl|general|other/i],
+    [/\b(glove|mask|gown|apron|face shield|respirator|protective equipment|ppe)\b/i, /ppe|protective/i, /suppl|general|other/i],
+    [/\b(syringe|needle|bandage|gauze|cotton|thermometer|stethoscope|iv set|surgical|wound|medical|first aid|test kit|specimen)\b/i, /medical|clinical/i, /suppl|equipment|general|other/i],
+    [/\b(paper|pen|stationery|office|folder|printer)\b/i, /office|stationery|admin/i, /suppl|general|other/i],
+  ];
+  for (const [itemPattern, categoryPattern, fallbackPattern] of healthcareRules) {
+    if (itemPattern.test(normalized)) {
+      const match = availableCategories.find((option) => categoryPattern.test(option.name))
+        ?? availableCategories.find((option) => fallbackPattern.test(option.name));
+      if (match) return match.name;
+    }
+  }
+  if (storedCategory) return storedCategory;
+  if (availableCategories.length) {
+    return availableCategories.find((option) => /other|general|misc/i.test(option.name))?.name ?? 'Uncategorized';
+  }
   if (/(laptop|computer|usb|printer|electronic|tech)/.test(normalized)) return 'Technology';
   if (/(paper|cabinet|marker|stationery|office|desk|chair)/.test(normalized)) return 'Office essentials';
   if (/(water|rice|food|beverage|coffee|sugar|milk|provision)/.test(normalized)) return 'Provisions';
@@ -81,9 +128,9 @@ function nextSku(items: StockRow[]) {
 
 function StockLevelBar({ qty, reorder }: { qty: number; reorder: number }) {
   const pct = reorder > 0 ? Math.min(100, (qty / reorder) * 100) : qty > 0 ? 100 : 0;
-  const tone = qty === 0 ? 'red' : pct < 45 ? 'amber' : 'green';
+  const tone = qty <= 0 ? 'red' : reorder > 0 && qty <= reorder ? 'amber' : 'green';
   return (
-    <div className="stock-level stock-level-wide" title={`${Math.round(pct)}% of reorder level`}>
+    <div className="stock-level stock-level-wide" role="progressbar" aria-label="Stock level relative to reorder point" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} aria-valuetext={`${qty} on hand; reorder point ${reorder}`} title={`${Math.round(pct)}% of reorder level`}>
       <div className={`stock-level-fill stock-level-${tone}`} style={{ width: `${Math.max(4, pct)}%` }} />
     </div>
   );
@@ -103,16 +150,22 @@ void Stars;
 
 function ItemModal({
   title,
+  isEditing,
   initial,
   onClose,
   onSave,
   saving,
+  suppliers,
+  categories: inventoryCategories,
 }: {
   title: string;
+  isEditing: boolean;
   initial: StockForm;
   onClose: () => void;
   onSave: (form: StockForm) => void;
   saving: boolean;
+  suppliers: SupplierOption[];
+  categories: InventoryCategoryOption[];
 }) {
   const [form, setForm] = useState(initial);
   const [error, setError] = useState('');
@@ -128,6 +181,10 @@ function ItemModal({
       setError('Item name is required.');
       return;
     }
+    if (!isEditing && inventoryCategories.length && !form.categoryId) {
+      setError('Choose a category for this inventory item.');
+      return;
+    }
     if (!form.unit.trim()) {
       setError('Unit is required.');
       return;
@@ -136,8 +193,17 @@ function ItemModal({
       setError('Owner is required.');
       return;
     }
-    if (form.price < 0 || form.qty < 0 || form.reorder < 0) {
-      setError('Price, quantity, and reorder level must be zero or greater.');
+    if ((form.costPrice ?? 0) < 0 ||
+        (form.sellingPrice ?? 0) < 0 ||
+        form.qty < 0 ||
+        form.reorder < 0) {
+      setError('Prices, quantity, and reorder level must be zero or greater.');
+      return;
+    }
+    if (form.costPrice != null &&
+        form.sellingPrice != null &&
+        form.sellingPrice <= form.costPrice) {
+      setError('Selling price must be greater than unit cost to make a profit.');
       return;
     }
     setConfirmOpen(true);
@@ -156,7 +222,7 @@ function ItemModal({
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <p className="modal-error">{error}</p>}
+          {error && <p className="modal-error" role="alert">{error}</p>}
           <div className="form-grid">
             <label className="form-field form-field-wide">
               Item name
@@ -164,8 +230,23 @@ function ItemModal({
             </label>
             <label className="form-field">
               Category
-              <select value={form.category} onChange={(event) => update('category', event.target.value)}>
-                {categoryOptions.map((option) => <option key={option}>{option}</option>)}
+              <select
+                value={inventoryCategories.length ? (form.categoryId ?? '') : form.category}
+                onChange={(event) => {
+                  const selected = inventoryCategories.find((option) => option.id === event.target.value);
+                  setForm((previous) => ({
+                    ...previous,
+                    category: selected?.name ?? event.target.value,
+                    categoryId: selected?.id,
+                  }));
+                }}
+              >
+                {inventoryCategories.length
+                  ? <>
+                    <option value="">Uncategorized — choose a category</option>
+                    {inventoryCategories.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                  </>
+                  : categoryOptions.map((option) => <option key={option}>{option}</option>)}
               </select>
             </label>
             <label className="form-field">
@@ -173,8 +254,12 @@ function ItemModal({
               <input value={form.unit} onChange={(event) => update('unit', event.target.value)} placeholder="e.g. kg, bag, pack" />
             </label>
             <label className="form-field">
-              Unit price (LKR)
-              <input type="number" min={0} step={1} value={form.price || ''} onChange={(event) => update('price', Number(event.target.value))} />
+              Unit cost (LKR)
+              <input type="number" min={0} step="0.01" value={form.costPrice ?? ''} onChange={(event) => update('costPrice', event.target.value === '' ? null : Number(event.target.value))} />
+            </label>
+            <label className="form-field">
+              Selling price (LKR)
+              <input type="number" min={0} step="0.01" value={form.sellingPrice ?? ''} onChange={(event) => update('sellingPrice', event.target.value === '' ? null : Number(event.target.value))} />
             </label>
             <label className="form-field">
               Quantity on hand
@@ -188,7 +273,21 @@ function ItemModal({
               Owner
               <input value={form.owner} onChange={(event) => update('owner', event.target.value)} placeholder="Staff member responsible" />
             </label>
+            <label className="form-field form-field-wide">
+              Preferred supplier for AI planning
+              <select value={form.supplierId ?? ''} onChange={(event) => update('supplierId', event.target.value || undefined)}>
+                <option value="">No supplier assigned</option>
+                {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}{supplier.leadTimeDays ? ` (${supplier.leadTimeDays} days)` : ' (lead time not set)'}</option>)}
+              </select>
+            </label>
           </div>
+          {form.costPrice != null &&
+            form.sellingPrice != null &&
+            form.sellingPrice > form.costPrice && (
+              <p className="modal-hint" aria-live="polite">
+                Gross profit per unit: {formatPrice(form.sellingPrice - form.costPrice)}
+              </p>
+            )}
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save item'}</button>
@@ -216,6 +315,8 @@ export function InventoryManagerPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState<StockRow[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [inventoryCategories, setInventoryCategories] = useState<InventoryCategoryOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -226,6 +327,16 @@ export function InventoryManagerPage() {
   const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; sku: string } | null>(null);
   const [qrItem, setQrItem] = useState<StockRow | null>(null);
   const [deleteSku, setDeleteSku] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const categoryFilterOptions = useMemo(() => [
+    categories[0],
+    ...Array.from(new Set([
+      ...(inventoryCategories.length ? inventoryCategories.map((option) => option.name) : categoryOptions),
+      ...items.map((row) => row.category),
+    ].filter((value) => value && value !== categories[0]))).sort((a, b) => a.localeCompare(b)),
+  ], [inventoryCategories, items]);
 
   const filtered = useMemo(() => {
     const queryLower = query.trim().toLowerCase();
@@ -235,7 +346,9 @@ export function InventoryManagerPage() {
         queryLower === '' ||
         row.item.toLowerCase().includes(queryLower) ||
         row.sku.toLowerCase().includes(queryLower) ||
-        row.owner.toLowerCase().includes(queryLower);
+        row.owner.toLowerCase().includes(queryLower) ||
+        row.category.toLowerCase().includes(queryLower) ||
+        row.unit.toLowerCase().includes(queryLower);
       const matchesCategory = category === 'All categories' || row.category === category;
       const matchesStatus = status === 'All statuses' || rowStatus === status;
       return matchesQuery && matchesCategory && matchesStatus;
@@ -262,44 +375,51 @@ export function InventoryManagerPage() {
     const total = items.reduce((sum, row) => sum + row.qty, 0);
     const low = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Low stock').length;
     const out = items.filter((row) => deriveStatus(row.qty, row.reorder) === 'Out of stock').length;
-    const value = items.reduce((sum, row) => sum + row.qty * row.price, 0);
+    const value = items.reduce((sum, row) => sum + row.qty * (row.costPrice ?? 0), 0);
     const categories = new Set(items.map((row) => row.category).filter(Boolean)).size;
     return { items: items.length, total, low, out, value, categories };
   }, [items]);
 
   const editingItem = modal?.mode === 'edit' ? items.find((row) => row.sku === modal.sku) : undefined;
 
-  async function loadInventory(): Promise<boolean> {
+  async function loadInventory(categoryOptionsForItems = inventoryCategories): Promise<boolean> {
     setLoading(true);
     setLoadError('');
     try {
-      const response = await fetch('/api/inventory?page=1&pageSize=100', {
-        headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
-      });
-      if (!response.ok) throw new Error(`Inventory request failed (${response.status})`);
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => null);
-        throw new Error(errorBody?.message || errorBody?.title || `Inventory request failed (${response.status})`);
+      const headers = { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' };
+      const firstResponse = await fetch('/api/inventory?page=1&pageSize=100', { headers });
+      if (!firstResponse.ok) {
+        const errorBody = await firstResponse.json().catch(() => null);
+        throw new Error(errorBody?.message || errorBody?.title || `Inventory request failed (${firstResponse.status})`);
       }
-      const data = await response.json();
-      setItems((data.items ?? []).map((item: any): StockRow => ({
+      const firstPage = await firstResponse.json();
+      const totalPages = Math.max(1, Number(firstPage.totalPages) || 1);
+      const remainingPages = await Promise.all(
+        Array.from({ length: totalPages - 1 }, async (_, index) => {
+          const response = await fetch(`/api/inventory?page=${index + 2}&pageSize=100`, { headers });
+          if (!response.ok) throw new Error(`Inventory page ${index + 2} failed (${response.status})`);
+          return response.json();
+        }),
+      );
+      const allRows = [firstPage, ...remainingPages].flatMap((pageData) => pageData.items ?? []);
+      setItems(allRows.map((item: any): StockRow => ({
         id: item.id,
         sku: item.sku,
         item: item.name,
-        category: displayCategory(item.category, item.name),
+        category: displayCategory(item.category, item.name, categoryOptionsForItems),
         unit: item.unit ?? 'unit',
         categoryId: item.categoryId ?? undefined,
         unitId: item.unitId ?? undefined,
         branchId: item.branchId ?? undefined,
-        price: Number(item.unitCost ?? 0),
+        supplierId: item.supplierId ?? undefined,
+        costPrice: item.unitCost == null ? null : Number(item.unitCost),
+        sellingPrice: item.sellingPrice == null ? null : Number(item.sellingPrice),
         qty: Number(item.quantity ?? 0),
         reorder: Number(item.reorderLevel ?? 0),
         owner: item.branch ?? 'Inventory Admin',
       })));
     } catch (error) {
       console.error(error);
-      setItems([]);
-      setLoadError('Unable to load inventory from the database. Refresh and try again.');
       const message = error instanceof Error ? error.message : 'Unable to load inventory from the database.';
       setLoadError(`${message} Refresh and try again.`);
       notify(message, 'error');
@@ -310,8 +430,125 @@ export function InventoryManagerPage() {
     return true;
   }
 
+  function exportInventoryCsv() {
+    if (!items.length) {
+      notify('No inventory items to export.', 'warning');
+      return;
+    }
+    const header = 'Item,SKU,Category,On Hand,Unit,Reorder Level,Unit Cost (LKR),Selling Price (LKR),Owner';
+    const lines = items.map(r =>
+      [r.item, r.sku, r.category, r.qty, r.unit, r.reorder, r.costPrice ?? '', r.sellingPrice ?? '', r.owner]
+        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+        .join(',')
+    );
+    const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `inventory-catalog-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify(`Exported ${items.length} inventory items to CSV.`, 'success');
+  }
+
+  async function handleCsvImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        throw new Error('CSV file is empty or missing headers.');
+      }
+      // Simple parse: skip header
+      let createdCount = 0;
+      let failedCount = 0;
+      const stagedItems = [...items];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCsvRow(lines[i]);
+        if (!cols[0]) continue;
+        const name = cols[0];
+        const category = cols[2] || inventoryCategories[0]?.name || categoryOptions[0];
+        const categoryId = inventoryCategories.find((option) => option.name.toLowerCase() === category.toLowerCase())?.id;
+        const qty = Number(cols[3]) || 0;
+        const unit = cols[4] || 'unit';
+        const reorder = Number(cols[5]) || 10;
+        const costPrice = Number(cols[6]) || 0;
+        const importedSellingPrice = Number(cols[7]);
+        const sellingPrice = cols[7] && Number.isFinite(importedSellingPrice)
+          ? importedSellingPrice
+          : null;
+        const sku = nextSku(stagedItems);
+        const res = await fetch('/api/inventory', {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: token ? 'Bearer ' + token : '' },
+          body: JSON.stringify({
+            name,
+            sku,
+            description: `${category} (${unit})`,
+            categoryId: categoryId ?? null,
+            category,
+            quantity: qty,
+            reorderLevel: reorder,
+            unitCost: costPrice,
+            sellingPrice,
+            branchId: user?.branchId ?? null,
+          }),
+        });
+        if (res.ok) {
+          createdCount++;
+          stagedItems.push({ sku, item: name, category, unit, costPrice, sellingPrice, qty, reorder, owner: 'Inventory Admin' });
+        } else {
+          failedCount++;
+        }
+      }
+      await loadInventory();
+      notify(
+        failedCount
+          ? `Imported ${createdCount} items. ${failedCount} rows could not be imported.`
+          : `Successfully imported ${createdCount} items from CSV.`,
+        failedCount ? 'warning' : 'success',
+      );
+    } catch (err: any) {
+      notify(err?.message || 'Failed to import CSV.', 'error');
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
   useEffect(() => {
-    void loadInventory();
+    let active = true;
+    async function loadCategoriesAndInventory() {
+      let options: InventoryCategoryOption[] = [];
+      try {
+        const response = await fetch('/api/inventory/categories', {
+          headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' },
+        });
+        if (!response.ok) throw new Error(`Inventory categories request failed (${response.status})`);
+        const result = await response.json();
+        options = Array.isArray(result) ? result : [];
+        if (active) setInventoryCategories(options);
+      } catch (error) {
+        console.error(error);
+      }
+      if (active) await loadInventory(options);
+    }
+    void loadCategoriesAndInventory();
+    return () => { active = false; };
+  }, [token]);
+
+  useEffect(() => {
+    let active = true;
+    void fetch('/api/suppliers', { headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Supplier request failed (${response.status})`);
+        return response.json();
+      })
+      .then((result) => { if (active) setSuppliers(Array.isArray(result.items) ? result.items : []); })
+      .catch((error) => { console.error(error); });
+    return () => { active = false; };
   }, [token]);
 
   async function handleRefresh() {
@@ -333,17 +570,27 @@ export function InventoryManagerPage() {
           name: form.item,
           sku: existing?.sku ?? nextSku(items),
           description: null,
-          categoryId: existing?.categoryId ?? null,
+          categoryId: form.categoryId ?? existing?.categoryId ?? null,
+          category: existing && !form.categoryId ? null : form.category,
           unitId: existing?.unitId ?? null,
           branchId: existing?.branchId ?? user?.branchId ?? null,
           ...(existing ? {} : { quantity: form.qty }),
           reorderLevel: form.reorder,
-          unitCost: form.price,
+          unitCost: form.costPrice,
+          sellingPrice: form.sellingPrice,
+          supplierId: form.supplierId ?? null,
+          ...(existing ? { clearSupplier: !form.supplierId } : {}),
         }),
       });
       if (!response.ok) {
         const errJson = await response.json().catch(() => null);
-        const errDetail = errJson?.message || errJson?.title || `Save failed (${response.status})`;
+        const validationErrors = errJson?.errors;
+        const fieldErrors = validationErrors && typeof validationErrors === 'object'
+          ? Object.values(validationErrors).flat().filter((message): message is string => typeof message === 'string')
+          : [];
+        const errDetail = fieldErrors.length
+          ? fieldErrors.join(' ')
+          : errJson?.message || errJson?.title || `Save failed (${response.status})`;
         throw new Error(errDetail);
       }
       if (existing && form.qty !== existing.qty) {
@@ -397,10 +644,12 @@ export function InventoryManagerPage() {
 
   const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
+  const hasActiveFilters = Boolean(query.trim()) || category !== categories[0] || status !== statusFilters[0];
 
   return (
     <div className="page inventory-manager-page">
       <header className="inventory-manager-hero">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
         <div className="inventory-manager-hero-copy">
           <p className="inventory-manager-eyebrow"><span aria-hidden="true">◆</span> INVENTORY CONTROL CENTER</p>
           <h1>Inventory manager</h1>
@@ -419,14 +668,22 @@ export function InventoryManagerPage() {
           <span className="inventory-manager-art-label">STOCK<br />VISIBILITY</span>
         </div>
         <div className="page-actions">
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".csv"
+            style={{ display: 'none' }}
+            onChange={handleCsvImport}
+          />
           <button className="btn btn-secondary inventory-manager-refresh" type="button" onClick={() => void handleRefresh()} disabled={loading}><span aria-hidden="true">↻</span> {loading ? 'Refreshing…' : 'Refresh data'}</button>
-          <button className="btn btn-secondary" type="button" onClick={() => notify('Import is ready for a CSV file. File selection will be available next.', 'warning')}><span aria-hidden="true">⇧</span> Import</button>
+          <button className="btn btn-secondary" type="button" onClick={() => fileInputRef.current?.click()} disabled={importing || loading} title="Import items from CSV file"><span aria-hidden="true">⇧</span> {importing ? 'Importing…' : 'Import CSV'}</button>
+          <button className="btn btn-secondary" type="button" onClick={exportInventoryCsv} title="Export inventory catalogue as CSV"><span aria-hidden="true">⇩</span> Export CSV</button>
           <Link className="btn btn-secondary inventory-manager-suppliers-link" to="/suppliers"><span aria-hidden="true">♧</span> Suppliers</Link>
           <button className="btn btn-primary inventory-manager-add" type="button" onClick={() => setModal({ mode: 'add' })}><span aria-hidden="true">＋</span> Add item</button>
         </div>
       </header>
       {loadError && <p className="page-notice">{loadError}</p>}
-      {loading && <div className="panel p-6">Loading live inventory…</div>}
+      {loading && <div className="inventory-manager-loading" role="status"><span className="inventory-manager-loading-dot" />{items.length ? 'Refreshing inventory data…' : 'Loading inventory data…'}</div>}
 
       <section className="stat-strip" aria-label="Inventory summary">
         <article className="stat metric-card inventory-manager-metric inventory-manager-metric-items"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="inventory" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">CATALOGUE</span><strong className="inventory-manager-metric-value">{stats.items}</strong><span className="inventory-manager-metric-label">Items tracked</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">01</span></div><div className="inventory-manager-metric-detail">Organized across {stats.categories} {stats.categories === 1 ? 'category' : 'categories'}</div></article>
@@ -454,17 +711,60 @@ export function InventoryManagerPage() {
               />
             </div>
             <select className="filter-select" value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filter by category">
-              {categories.map((option) => <option key={option}>{option}</option>)}
+              {categoryFilterOptions.map((option) => <option key={option}>{option}</option>)}
             </select>
             <select className="filter-select" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} aria-label="Filter by status">
               {statusFilters.map((option) => <option key={option}>{option}</option>)}
             </select>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                className="btn btn-ghost inventory-clear-filters"
+                onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+          <div className="inventory-quick-filters" role="group" aria-label="Quick stock status filters">
+            <button
+              type="button"
+              className={`inventory-chip${status === 'All statuses' ? ' is-active' : ''}`}
+              aria-pressed={status === 'All statuses'}
+              onClick={() => setStatus('All statuses')}
+            >
+              All Items <strong>({stats.items})</strong>
+            </button>
+            <button
+              type="button"
+              className={`inventory-chip chip-green${status === 'In stock' ? ' is-active' : ''}`}
+              aria-pressed={status === 'In stock'}
+              onClick={() => setStatus('In stock')}
+            >
+              In Stock <strong>({Math.max(0, stats.items - stats.low - stats.out)})</strong>
+            </button>
+            <button
+              type="button"
+              className={`inventory-chip chip-amber${status === 'Low stock' ? ' is-active' : ''}`}
+              aria-pressed={status === 'Low stock'}
+              onClick={() => setStatus('Low stock')}
+            >
+              Low Stock <strong>({stats.low})</strong>
+            </button>
+            <button
+              type="button"
+              className={`inventory-chip chip-red${status === 'Out of stock' ? ' is-active' : ''}`}
+              aria-pressed={status === 'Out of stock'}
+              onClick={() => setStatus('Out of stock')}
+            >
+              Out of Stock <strong>({stats.out})</strong>
+            </button>
           </div>
 
           <div className="table-wrap">
             <table className="data-table">
               <thead>
-                <tr><th>Item</th><th>Category</th><th>On hand</th><th>Stock level</th><th>Unit price</th><th>Status</th><th>Actions</th></tr>
+                <tr><th>Item</th><th>Category</th><th>On hand</th><th>Stock level</th><th>Unit cost</th><th>Selling price</th><th>Status</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {paged.map((row) => {
@@ -476,9 +776,10 @@ export function InventoryManagerPage() {
                         <p className="cell-sub">{row.sku} · {row.owner}</p>
                       </td>
                       <td><span className="category-pill">{row.category}</span></td>
-                      <td><span className="qty">{row.qty}</span> <span className="cell-sub">{row.unit}s</span></td>
+                      <td><span className="qty">{row.qty}</span> <span className="cell-sub">{row.unit}</span></td>
                       <td><StockLevelBar qty={row.qty} reorder={row.reorder} /></td>
-                      <td className="amount">{formatPrice(row.price)}</td>
+                      <td className="amount">{row.costPrice == null ? 'Not set' : formatPrice(row.costPrice)}</td>
+                      <td className="amount">{row.sellingPrice == null ? 'Not set' : formatPrice(row.sellingPrice)}</td>
                       <td><Badge tone={statusTone[rowStatus]}>{rowStatus}</Badge></td>
                       <td>
                         <div className="row-actions">
@@ -491,7 +792,7 @@ export function InventoryManagerPage() {
                   );
                 })}
                 {paged.length === 0 && (
-                  <tr><td colSpan={7} className="empty-state">No items match your filters.</td></tr>
+                  <tr><td colSpan={8} className="empty-state"><div className="inventory-manager-empty"><strong>{items.length === 0 ? 'Your catalogue is ready for its first item' : 'No items match these filters'}</strong><span>{items.length === 0 ? 'Add an item to start tracking quantity, reorder levels, and stock value.' : 'Try another search or clear the active filters.'}</span>{items.length === 0 ? <button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'add' })}>Add first item</button> : hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); }}>Clear filters</button> : null}</div></td></tr>
                 )}
               </tbody>
             </table>
@@ -542,12 +843,15 @@ export function InventoryManagerPage() {
       {modal && (
         <ItemModal
           title={modal.mode === 'add' ? 'Add inventory item' : 'Edit inventory item'}
+          isEditing={modal.mode === 'edit'}
           initial={modal.mode === 'edit' && editingItem
-            ? { item: editingItem.item, category: editingItem.category, unit: editingItem.unit, price: editingItem.price, qty: editingItem.qty, reorder: editingItem.reorder, owner: editingItem.owner }
-            : emptyForm}
+            ? { item: editingItem.item, category: editingItem.category, categoryId: editingItem.categoryId, unit: editingItem.unit, costPrice: editingItem.costPrice, sellingPrice: editingItem.sellingPrice, qty: editingItem.qty, reorder: editingItem.reorder, owner: editingItem.owner, supplierId: editingItem.supplierId }
+            : { ...emptyForm, category: inventoryCategories[0]?.name ?? categoryOptions[0], categoryId: inventoryCategories[0]?.id }}
           onClose={() => setModal(null)}
           onSave={handleSave}
           saving={saving}
+          suppliers={suppliers}
+          categories={inventoryCategories}
         />
       )}
 

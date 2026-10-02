@@ -1,10 +1,65 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 import { loginUser, clearError } from '../store/authSlice';
 import { AppDispatch, RootState } from '../store/store';
 import { useToast } from '../shared/components/Toast';
 import '../features/marketing/landing.css';
+import './auth-enhanced.css';
+
+/* ── Interactive Particle Canvas ─────────────────────────────── */
+function ParticleCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const particles: { x: number; y: number; r: number; dx: number; dy: number; alpha: number }[] = [];
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    for (let i = 0; i < 40; i++) {
+      particles.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        r: Math.random() * 2.2 + 0.6,
+        dx: (Math.random() - 0.5) * 0.35,
+        dy: (Math.random() - 0.5) * 0.35,
+        alpha: Math.random() * 0.45 + 0.15,
+      });
+    }
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of particles) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(37,99,235,${p.alpha})`;
+        ctx.fill();
+        p.x += p.dx;
+        p.y += p.dy;
+        if (p.x < 0 || p.x > canvas.width) p.dx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.dy *= -1;
+      }
+      animRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => {
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(animRef.current);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="lp-particle-canvas" aria-hidden="true" />;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -44,18 +99,13 @@ export default function LoginPage() {
     dispatch(loginUser({ email: email.trim(), password }));
   };
 
-  const handleFillDemo = () => {
-    setEmail('admin@unify.work');
-    setPassword('Admin123!');
-    show('Filled demo credentials (admin@unify.work)', 'info');
-  };
-
   const handleForgotPassword = () => {
-    show('Contact your workspace administrator or support@unify.work to reset credentials.', 'info');
+    navigate(`/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`);
   };
 
   return (
     <main className="lp lp-home lp-auth-page">
+      <ParticleCanvas />
       {/* Dynamic Background Glow Orbs */}
       <div className="lp-auth-mesh" aria-hidden="true">
         <div className="lp-auth-orb-1" />
@@ -124,7 +174,7 @@ export default function LoginPage() {
       <div className="lp-auth-shell">
         {/* Left Side: Editorial & Real Project Photography Showcase */}
         <section className="lp-auth-showcase" aria-label="Why Unify">
-          <div className="lp-auth-photo-frame">
+          <div className="lp-auth-photo-frame lp-float-card">
             <img
               src="/landing/operations-hub.jpg"
               alt="Operations team coordinating bookings, shift handovers and stock in real time"
@@ -277,21 +327,12 @@ export default function LoginPage() {
                 />
                 <span>Remember this device</span>
               </label>
-
-              <button
-                type="button"
-                className="lp-auth-demo-btn"
-                onClick={handleFillDemo}
-                title="Fill sample demo credentials for instant testing"
-              >
-                <span>⚡ Fill Demo Admin</span>
-              </button>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="lp-auth-submit-btn"
+              className="lp-auth-submit-btn lp-btn-shine"
             >
               {loading ? (
                 <>

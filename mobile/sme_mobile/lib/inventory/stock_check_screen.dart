@@ -136,12 +136,11 @@ class _StockCheckScreenState extends State<StockCheckScreen> {
       if (matchingItem != null) {
         final endpoint = _operation == StockOperation.checkIn
             ? '/api/inventory/${matchingItem.id}/receive'
-            : '/api/inventory/${matchingItem.id}/adjust';
+            : '/api/inventory/${matchingItem.id}/issue';
         final response = await widget.client.post(
           endpoint,
           body: {
-            'quantity':
-                _operation == StockOperation.checkIn ? quantity : -quantity,
+            'quantity': quantity,
             'reference': 'MOBILE-SCANNER',
             'notes': 'Recorded from mobile barcode scanner',
           },

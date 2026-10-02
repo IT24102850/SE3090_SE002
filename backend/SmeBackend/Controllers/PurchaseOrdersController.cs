@@ -26,6 +26,7 @@ public sealed class PurchaseOrdersController(
         "InReview",
         "Placed",
         "InTransit",
+        "PartiallyReceived",
         "Received",
         "Cancelled",
     ];
@@ -119,9 +120,15 @@ public sealed class PurchaseOrdersController(
             .Select(supplier => new PurchaseOrderOption(supplier.Id, supplier.Name))
             .ToListAsync(cancellationToken);
         var items = await db.InventoryItems.AsNoTracking()
-            .Where(item => item.IsActive)
+            .Where(item => item.TenantId == tenantId && item.IsActive)
             .OrderBy(item => item.Name)
-            .Select(item => new PurchaseOrderItemOption(item.Id, item.Name, item.Sku, item.UnitCost, item.BranchId))
+            .Select(item => new PurchaseOrderItemOption(
+                item.Id,
+                item.Name,
+                item.Sku,
+                item.UnitCost,
+                item.BranchId,
+                item.SupplierId))
             .ToListAsync(cancellationToken);
 
         return Ok(new PurchaseOrderOptionsResponse(branches, suppliers, items));
@@ -175,6 +182,12 @@ public sealed class PurchaseOrdersController(
             return ValidationProblem(ModelState);
         }
 
+        if (!string.Equals(status, "Draft", StringComparison.Ordinal))
+        {
+            ModelState.AddModelError("status", "New purchase orders must start as Draft and be submitted for review.");
+            return ValidationProblem(ModelState);
+        }
+
         if (await db.PurchaseOrders.IgnoreQueryFilters()
             .AnyAsync(order => order.TenantId == tenantId && order.Number == number, cancellationToken))
         {
@@ -224,6 +237,13 @@ public sealed class PurchaseOrdersController(
                     if (!inventoryItemMap.TryGetValue(itemReq.InventoryItemId.Value, out var invItem))
                     {
                         ModelState.AddModelError($"items[{i}].inventoryItemId", "The specified inventory item does not exist for this tenant.");
+                        return ValidationProblem(ModelState);
+                    }
+                    if (invItem.BranchId != request.BranchId)
+                    {
+                        ModelState.AddModelError(
+                            $"items[{i}].inventoryItemId",
+                            "Choose an inventory item assigned to the purchase order's destination branch.");
                         return ValidationProblem(ModelState);
                     }
                     if (string.IsNullOrWhiteSpace(desc))
@@ -297,13 +317,22 @@ public sealed class PurchaseOrdersController(
             return ValidationProblem(ModelState);
         }
 
+        if (!IsAllowedStatusTransition(order.Status, status))
+        {
+            return Conflict(new { message = $"A purchase order cannot move from {order.Status} to {status}." });
+        }
+
+        if (string.Equals(status, "Placed", StringComparison.Ordinal) &&
+            !User.IsInRole(UserRole.Admin.ToString()) &&
+            !User.IsInRole(UserRole.Manager.ToString()))
+        {
+            return Forbid();
+        }
+
         order.Status = status;
         order.UpdatedAt = DateTime.UtcNow;
-        if (string.Equals(status, "Received", StringComparison.OrdinalIgnoreCase))
-        {
-            await ReceiveInventoryAsync(order, tenantId, cancellationToken);
-        }
-        NotificationHelper.Queue(db, tenantId, null, "PurchaseOrderUpdated", "Purchase order updated", $"{order.Number} moved to {status}.");
+        var actor = User.FindFirst("fullName")?.Value ?? User.Identity?.Name ?? "An authorized user";
+        NotificationHelper.Queue(db, tenantId, null, "PurchaseOrderUpdated", "Purchase order updated", $"{order.Number} moved to {status} by {actor}.");
 
         await db.SaveChangesAsync(cancellationToken);
 
@@ -311,49 +340,224 @@ public sealed class PurchaseOrdersController(
         return Ok(response);
     }
 
-    private async Task ReceiveInventoryAsync(
-        PurchaseOrder order,
-        Guid tenantId,
+    [HttpPost("{id:guid}/receive")]
+    public async Task<ActionResult<PurchaseOrderResponse>> ReceivePurchaseOrder(
+        Guid id,
+        ReceivePurchaseOrderRequest request,
         CancellationToken cancellationToken)
     {
-        var items = await db.PurchaseOrderItems
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+
+        var order = await db.PurchaseOrders
+            .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+        if (order is null)
+        {
+            return NotFound();
+        }
+
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService,
+                InventoryAuthorizationPolicies.InventoryWrite,
+                tenantId,
+                order.BranchId))
+        {
+            return Forbid();
+        }
+
+        if (order.Status is not ("Placed" or "InTransit" or "PartiallyReceived"))
+        {
+            return Conflict(new { message = "Only placed or in-transit purchase orders can be received." });
+        }
+
+        if (request.Items is null || request.Items.Count == 0)
+        {
+            ModelState.AddModelError("items", "Enter receiving details for at least one purchase order item.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.Items.GroupBy(item => item.PurchaseOrderItemId).Any(group => group.Count() > 1))
+        {
+            ModelState.AddModelError("items", "Each purchase order line can be submitted only once per receipt.");
+            return ValidationProblem(ModelState);
+        }
+
+        var orderItems = await db.PurchaseOrderItems
             .Where(item => item.PurchaseOrderId == order.Id)
             .ToListAsync(cancellationToken);
-
-        foreach (var orderItem in items)
+        var orderItemsById = orderItems.ToDictionary(item => item.Id);
+        var receipt = new PurchaseOrderReceipt
         {
-            if (!orderItem.InventoryItemId.HasValue)
+            TenantId = tenantId,
+            PurchaseOrderId = order.Id,
+            ReceivedAt = DateTime.UtcNow,
+            ReceivedBy = CurrentActorName(),
+        };
+        var inventoryItemIds = new HashSet<Guid>();
+        var receiptInventoryItemIds = new Dictionary<Guid, Guid>();
+
+        for (var index = 0; index < request.Items.Count; index++)
+        {
+            var received = request.Items[index];
+            if (!orderItemsById.TryGetValue(received.PurchaseOrderItemId, out var orderItem))
             {
+                ModelState.AddModelError($"items[{index}].purchaseOrderItemId", "This line does not belong to the purchase order.");
                 continue;
             }
 
-            var inventoryItem = await db.InventoryItems
-                .SingleOrDefaultAsync(item =>
-                    item.TenantId == tenantId &&
-                    item.Id == orderItem.InventoryItemId.Value,
-                    cancellationToken);
-
-            if (inventoryItem is null)
+            if (received.DeliveredQuantity < 0 || received.DamagedQuantity < 0)
+            {
+                ModelState.AddModelError($"items[{index}]", "Delivered and damaged quantities cannot be negative.");
+                continue;
+            }
+            if (received.Notes is { Length: > 1000 })
+            {
+                ModelState.AddModelError($"items[{index}].notes", "Notes cannot exceed 1000 characters.");
+                continue;
+            }
+            if (received.DamagedQuantity > received.DeliveredQuantity)
+            {
+                ModelState.AddModelError($"items[{index}].damagedQuantity", "Damaged quantity cannot exceed delivered quantity.");
+                continue;
+            }
+            if (received.DeliveredQuantity == 0 && received.DamagedQuantity > 0)
+            {
+                ModelState.AddModelError($"items[{index}].deliveredQuantity", "Enter the delivered quantity before recording damage.");
+                continue;
+            }
+            if (received.DeliveredQuantity == 0 && !received.CloseRemainingAsShort)
             {
                 continue;
             }
-
-            var remainingQuantity = orderItem.Quantity - orderItem.ReceivedQuantity;
-            if (remainingQuantity <= 0)
+            if (orderItem.ReceivingClosed)
             {
+                ModelState.AddModelError($"items[{index}]", "This purchase order line has already been fully accounted for.");
                 continue;
             }
 
-            // Inventory SKUs are tenant-unique, so receiving moves the selected
-            // catalog item into the PO's branch. If it was catalogued under
-            // another branch, the received quantity becomes that branch's stock.
-            var movedFromAnotherBranch = inventoryItem.BranchId != order.BranchId;
-            inventoryItem.BranchId = order.BranchId;
-            inventoryItem.Quantity = movedFromAnotherBranch
-                ? remainingQuantity
-                : inventoryItem.Quantity + remainingQuantity;
-            inventoryItem.UnitCost = orderItem.UnitPrice;
-            orderItem.ReceivedQuantity += remainingQuantity;
+            var accountedQuantity = orderItem.ReceivedQuantity +
+                                    orderItem.DamagedQuantity +
+                                    orderItem.ShortageQuantity;
+            var remainingQuantity = orderItem.Quantity - accountedQuantity;
+            if (received.DeliveredQuantity > remainingQuantity)
+            {
+                ModelState.AddModelError(
+                    $"items[{index}].deliveredQuantity",
+                    $"Delivered quantity cannot exceed the remaining {remainingQuantity:0.###} units.");
+                continue;
+            }
+
+            var acceptedQuantity = received.DeliveredQuantity - received.DamagedQuantity;
+            if (received.InventoryItemId.HasValue &&
+                orderItem.InventoryItemId.HasValue &&
+                received.InventoryItemId != orderItem.InventoryItemId)
+            {
+                ModelState.AddModelError(
+                    $"items[{index}].inventoryItemId",
+                    "This purchase order line is already linked to a different inventory item.");
+                continue;
+            }
+
+            var inventoryItemId = orderItem.InventoryItemId ?? received.InventoryItemId;
+            if (acceptedQuantity > 0 && !inventoryItemId.HasValue)
+            {
+                ModelState.AddModelError(
+                    $"items[{index}].inventoryItemId",
+                    "Select an inventory item in the destination branch before accepting stock from this line.");
+                continue;
+            }
+
+            if (inventoryItemId.HasValue)
+            {
+                inventoryItemIds.Add(inventoryItemId.Value);
+                receiptInventoryItemIds[orderItem.Id] = inventoryItemId.Value;
+            }
+
+            var shortageQuantity = received.CloseRemainingAsShort
+                ? remainingQuantity - received.DeliveredQuantity
+                : 0m;
+            orderItem.ReceivedQuantity += acceptedQuantity;
+            orderItem.DamagedQuantity += received.DamagedQuantity;
+            orderItem.ShortageQuantity += shortageQuantity;
+            orderItem.ReceivingClosed =
+                orderItem.ReceivedQuantity + orderItem.DamagedQuantity + orderItem.ShortageQuantity >= orderItem.Quantity;
+
+            receipt.Items.Add(new PurchaseOrderReceiptItem
+            {
+                TenantId = tenantId,
+                PurchaseOrderItemId = orderItem.Id,
+                DeliveredQuantity = received.DeliveredQuantity,
+                AcceptedQuantity = acceptedQuantity,
+                DamagedQuantity = received.DamagedQuantity,
+                ShortageQuantity = shortageQuantity,
+                Notes = string.IsNullOrWhiteSpace(received.Notes) ? null : received.Notes.Trim(),
+            });
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+        if (receipt.Items.Count == 0)
+        {
+            ModelState.AddModelError("items", "Enter a delivered quantity or close a line by recording its remaining units as short.");
+            return ValidationProblem(ModelState);
+        }
+
+        var inventoryItems = inventoryItemIds.Count == 0
+            ? new Dictionary<Guid, InventoryItem>()
+            : await db.InventoryItems
+                .Where(item => item.TenantId == tenantId && item.IsActive && inventoryItemIds.Contains(item.Id))
+                .ToDictionaryAsync(item => item.Id, cancellationToken);
+
+        foreach (var receiptItem in receipt.Items)
+        {
+            if (receiptItem.AcceptedQuantity <= 0) continue;
+
+            var orderItem = orderItemsById[receiptItem.PurchaseOrderItemId];
+            if (!receiptInventoryItemIds.TryGetValue(orderItem.Id, out var inventoryItemId)) continue;
+            if (!inventoryItems.TryGetValue(inventoryItemId, out var inventoryItem))
+            {
+                ModelState.AddModelError("items", $"Inventory item for '{orderItem.Description}' is unavailable or inactive.");
+                return ValidationProblem(ModelState);
+            }
+            if (!inventoryItem.BranchId.HasValue)
+            {
+                ModelState.AddModelError("items", $"Inventory item '{inventoryItem.Name}' must be assigned to a branch before receiving.");
+                return ValidationProblem(ModelState);
+            }
+            if (inventoryItem.BranchId != order.BranchId)
+            {
+                ModelState.AddModelError(
+                    "items",
+                    $"Inventory item '{inventoryItem.Name}' belongs to another branch and cannot receive this purchase order.");
+                return ValidationProblem(ModelState);
+            }
+
+            orderItem.InventoryItemId = inventoryItem.Id;
+            var previousQuantity = inventoryItem.Quantity;
+            var previousCost = inventoryItem.UnitCost;
+            inventoryItem.Quantity += receiptItem.AcceptedQuantity;
+            inventoryItem.UnitCost = previousQuantity <= 0
+                ? orderItem.UnitPrice
+                : previousCost.HasValue
+                    ? decimal.Round(
+                        (previousQuantity * previousCost.Value +
+                         receiptItem.AcceptedQuantity * orderItem.UnitPrice) /
+                        inventoryItem.Quantity,
+                        2,
+                        MidpointRounding.AwayFromZero)
+                    : null;
+
+            var receiptNotes = new List<string> { $"Received from purchase order {order.Number}." };
+            if (receiptItem.DamagedQuantity > 0)
+                receiptNotes.Add($"Damaged: {receiptItem.DamagedQuantity:0.###}.");
+            if (receiptItem.ShortageQuantity > 0)
+                receiptNotes.Add($"Short: {receiptItem.ShortageQuantity:0.###}.");
+            if (!string.IsNullOrWhiteSpace(receiptItem.Notes))
+                receiptNotes.Add(receiptItem.Notes);
 
             db.StockMovements.Add(new StockMovement
             {
@@ -363,13 +567,43 @@ public sealed class PurchaseOrdersController(
                 SupplierId = order.SupplierId,
                 PurchaseOrderId = order.Id,
                 MovementType = "PurchaseReceived",
-                Quantity = remainingQuantity,
+                Quantity = receiptItem.AcceptedQuantity,
                 UnitCost = orderItem.UnitPrice,
                 Reference = order.Number,
-                Notes = $"Received from purchase order {order.Number}.",
+                Notes = string.Join(" ", receiptNotes),
+                OccurredAt = receipt.ReceivedAt,
+                PerformedBy = receipt.ReceivedBy,
             });
         }
+
+        // Added through the set, not through order.Receipts: BaseEntity assigns Id in
+        // its initialiser, so a new child discovered on a tracked parent's collection
+        // already has a key and change detection files it as an update of a row that
+        // was never inserted. An explicit Add states the intent and cascades to Items.
+        db.PurchaseOrderReceipts.Add(receipt);
+        order.Status = orderItems.All(item => item.ReceivingClosed)
+            ? "Received"
+            : "PartiallyReceived";
+        order.UpdatedAt = receipt.ReceivedAt;
+        NotificationHelper.Queue(
+            db,
+            tenantId,
+            null,
+            "PurchaseOrderReceived",
+            "Purchase order receipt recorded",
+            $"{order.Number}: {receipt.Items.Sum(item => item.AcceptedQuantity):0.###} accepted, " +
+            $"{receipt.Items.Sum(item => item.DamagedQuantity):0.###} damaged, " +
+            $"{receipt.Items.Sum(item => item.ShortageQuantity):0.###} short.");
+
+        await db.SaveChangesAsync(cancellationToken);
+        var response = (await ToResponsesAsync([order], cancellationToken)).Single();
+        return Ok(response);
     }
+
+    private string CurrentActorName() =>
+        User.FindFirst("fullName")?.Value ??
+        User.Identity?.Name ??
+        "Authorized user";
 
     private bool TryGetTenantId(out Guid tenantId) =>
         Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out tenantId);
@@ -407,6 +641,33 @@ public sealed class PurchaseOrdersController(
             .Where(item => orders.Select(order => order.Id).Contains(item.PurchaseOrderId))
             .OrderBy(item => item.CreatedAt)
             .ToListAsync(cancellationToken);
+        var orderIds = orders.Select(order => order.Id).ToList();
+        var receipts = await db.PurchaseOrderReceipts.AsNoTracking()
+            .Where(receipt => orderIds.Contains(receipt.PurchaseOrderId))
+            .OrderByDescending(receipt => receipt.ReceivedAt)
+            .ToListAsync(cancellationToken);
+        var receiptIds = receipts.Select(receipt => receipt.Id).ToList();
+        var receiptItems = await db.PurchaseOrderReceiptItems.AsNoTracking()
+            .Where(item => receiptIds.Contains(item.PurchaseOrderReceiptId))
+            .ToListAsync(cancellationToken);
+        var receiptsByOrderId = receipts
+            .GroupJoin(
+                receiptItems,
+                receipt => receipt.Id,
+                item => item.PurchaseOrderReceiptId,
+                (receipt, items) => (receipt.PurchaseOrderId, Receipt: new PurchaseOrderReceiptResponse(
+                    receipt.Id,
+                    receipt.ReceivedAt,
+                    receipt.ReceivedBy,
+                    items.Select(item => new PurchaseOrderReceiptItemResponse(
+                        item.PurchaseOrderItemId,
+                        item.DeliveredQuantity,
+                        item.AcceptedQuantity,
+                        item.DamagedQuantity,
+                        item.ShortageQuantity,
+                        item.Notes)).ToList())))
+            .GroupBy(entry => entry.PurchaseOrderId)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<PurchaseOrderReceiptResponse>)group.Select(entry => entry.Receipt).ToList());
 
         var invItemIds = orderItems
             .Where(item => item.InventoryItemId.HasValue)
@@ -432,7 +693,10 @@ public sealed class PurchaseOrdersController(
                     item.Quantity,
                     item.UnitPrice,
                     item.Quantity * item.UnitPrice,
-                    item.ReceivedQuantity
+                    item.ReceivedQuantity,
+                    item.DamagedQuantity,
+                    item.ShortageQuantity,
+                    item.ReceivingClosed
                 )).ToList());
 
         return orders
@@ -451,7 +715,8 @@ public sealed class PurchaseOrdersController(
                     items.Count,
                     order.CreatedAt,
                     order.UpdatedAt,
-                    items);
+                    items,
+                    receiptsByOrderId.GetValueOrDefault(order.Id) ?? []);
             })
             .ToList();
     }
@@ -474,6 +739,21 @@ public sealed class PurchaseOrdersController(
 
     private void AddStatusValidationError() =>
         ModelState.AddModelError("status", $"Status must be one of: {string.Join(", ", AllowedStatuses)}.");
+
+    private static bool IsAllowedStatusTransition(string current, string next)
+    {
+        if (string.Equals(next, "Cancelled", StringComparison.Ordinal))
+            return current is "Draft" or "InReview" or "Placed" or "InTransit" or "PartiallyReceived";
+
+        return current switch
+        {
+            "Draft" => next == "InReview",
+            "InReview" => next == "Placed",
+            "Placed" => next == "InTransit",
+            "InTransit" => false,
+            _ => false,
+        };
+    }
 }
 
 public sealed record PurchaseOrderListResponse(
@@ -491,7 +771,24 @@ public sealed record PurchaseOrderItemResponse(
     decimal Quantity,
     decimal UnitPrice,
     decimal LineTotal,
-    decimal ReceivedQuantity);
+    decimal ReceivedQuantity,
+    decimal DamagedQuantity,
+    decimal ShortageQuantity,
+    bool ReceivingClosed);
+
+public sealed record PurchaseOrderReceiptItemResponse(
+    Guid PurchaseOrderItemId,
+    decimal DeliveredQuantity,
+    decimal AcceptedQuantity,
+    decimal DamagedQuantity,
+    decimal ShortageQuantity,
+    string? Notes);
+
+public sealed record PurchaseOrderReceiptResponse(
+    Guid Id,
+    DateTime ReceivedAt,
+    string ReceivedBy,
+    IReadOnlyList<PurchaseOrderReceiptItemResponse> Items);
 
 public sealed record PurchaseOrderResponse(
     Guid Id,
@@ -505,7 +802,8 @@ public sealed record PurchaseOrderResponse(
     int LineItems,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    IReadOnlyList<PurchaseOrderItemResponse>? Items = null);
+    IReadOnlyList<PurchaseOrderItemResponse>? Items = null,
+    IReadOnlyList<PurchaseOrderReceiptResponse>? Receipts = null);
 
 public sealed record PurchaseOrderOption(Guid Id, string Name);
 
@@ -514,7 +812,8 @@ public sealed record PurchaseOrderItemOption(
     string Name,
     string Sku,
     decimal? UnitCost,
-    Guid? BranchId);
+    Guid? BranchId,
+    Guid? SupplierId);
 
 public sealed record PurchaseOrderOptionsResponse(
     IReadOnlyList<PurchaseOrderOption> Branches,
@@ -535,3 +834,14 @@ public sealed record CreatePurchaseOrderRequest(
     IReadOnlyList<PurchaseOrderItemRequest>? Items = null);
 
 public sealed record UpdatePurchaseOrderStatusRequest(string? Status);
+
+public sealed record ReceivePurchaseOrderRequest(
+    IReadOnlyList<ReceivePurchaseOrderItemRequest>? Items);
+
+public sealed record ReceivePurchaseOrderItemRequest(
+    Guid PurchaseOrderItemId,
+    decimal DeliveredQuantity,
+    decimal DamagedQuantity,
+    bool CloseRemainingAsShort,
+    string? Notes,
+    Guid? InventoryItemId = null);
