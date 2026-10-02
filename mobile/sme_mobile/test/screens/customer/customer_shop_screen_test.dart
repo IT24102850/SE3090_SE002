@@ -123,6 +123,58 @@ void main() {
     expect(tester.takeException(), isNull);
     dio.close();
   });
+
+  testWidgets('shopper can switch businesses after locations have loaded',
+      (tester) async {
+    const business = PublicTenant(
+      id: 'business-2',
+      businessName: 'Town Pantry',
+      businessType: 'Retail',
+    );
+    final adapter = _CustomerShopApiAdapter();
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api'))
+      ..httpClientAdapter = adapter;
+    String? joinedTenantId;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          publicTenantsProvider.overrideWith((ref) async => [business]),
+        ],
+        child: MaterialApp(
+          navigatorKey: PushNotificationService.navigatorKey,
+          home: CustomerShopScreen(
+            client: AuthenticatedApiClient(dio: dio),
+            initialBranchId: branchId,
+            tenantId: 'tenant-main',
+            onJoinBusiness: (tenantId) async {
+              joinedTenantId = tenantId;
+              return true;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Fresh tea leaves'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Switch business'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.ancestor(
+        of: find.text('Town Pantry'),
+        matching: find.byType(GlassCard),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Shop this business'));
+    await tester.pumpAndSettle();
+
+    expect(joinedTenantId, business.id);
+    expect(adapter.requests, contains('GET /branches?tenantId=business-2'));
+    expect(find.text('Fresh tea leaves'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    dio.close();
+  });
 }
 
 class _CustomerShopApiAdapter implements HttpClientAdapter {

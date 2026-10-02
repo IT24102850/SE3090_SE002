@@ -10,7 +10,10 @@ public class CustomerOrder : BaseEntity, ITenantScoped
     public string PaymentStatus { get; set; } = "DueOnFulfillment";
     public string FulfillmentMethod { get; set; } = "Pickup";
     public string? DeliveryAddress { get; set; }
+    public decimal? DeliveryLatitude { get; set; }
+    public decimal? DeliveryLongitude { get; set; }
     public string? Notes { get; set; }
     public decimal Total { get; set; }
     public IList<CustomerOrderItem> Items { get; set; } = new List<CustomerOrderItem>();
+    public IList<CustomerOrderStatusUpdate> StatusUpdates { get; set; } = new List<CustomerOrderStatusUpdate>();
 }

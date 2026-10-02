@@ -1,9 +1,11 @@
 using System.Security.Claims;
+using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Services.Billing;
 using SmeBackend.Shared;
 
 namespace SmeBackend.Controllers;
@@ -12,7 +14,7 @@ namespace SmeBackend.Controllers;
 [Authorize(Roles = nameof(UserRole.Customer))]
 [Route("api/customer-orders")]
 [Produces("application/json")]
-public sealed class CustomerOrdersController(AppDbContext db) : ControllerBase
+public sealed class CustomerOrdersController(AppDbContext db, IBillingMessenger messenger) : ControllerBase
 {
     [HttpGet("branches")]
     public async Task<ActionResult<IReadOnlyList<CustomerOrderBranchResponse>>> GetBranches(
@@ -75,6 +77,7 @@ public sealed class CustomerOrdersController(AppDbContext db) : ControllerBase
             .Where(order => order.TenantId == tenantId && order.CustomerId == customerId)
             .OrderByDescending(order => order.CreatedAt)
             .Include(order => order.Items)
+            .Include(order => order.StatusUpdates)
             .ToListAsync(cancellationToken);
         return Ok(orders.Select(ToResponse).ToList());
     }
@@ -106,6 +109,14 @@ public sealed class CustomerOrdersController(AppDbContext db) : ControllerBase
         if (request.Notes?.Length > 1000)
         {
             return BadRequest(new { message = "Order notes cannot exceed 1,000 characters." });
+        }
+        if (request.DeliveryLatitude.HasValue != request.DeliveryLongitude.HasValue ||
+            request.DeliveryLatitude is < -90 or > 90 ||
+            request.DeliveryLongitude is < -180 or > 180 ||
+            (fulfillmentMethod == "Pickup" &&
+             (request.DeliveryLatitude.HasValue || request.DeliveryLongitude.HasValue)))
+        {
+            return BadRequest(new { message = "Delivery coordinates must be a valid latitude/longitude pair for a delivery order." });
         }
 
         if (!await db.Branches.AnyAsync(
@@ -159,8 +170,18 @@ public sealed class CustomerOrdersController(AppDbContext db) : ControllerBase
             PaymentStatus = "DueOnFulfillment",
             FulfillmentMethod = fulfillmentMethod,
             DeliveryAddress = fulfillmentMethod == "Delivery" ? deliveryAddress : null,
+            DeliveryLatitude = fulfillmentMethod == "Delivery" ? request.DeliveryLatitude : null,
+            DeliveryLongitude = fulfillmentMethod == "Delivery" ? request.DeliveryLongitude : null,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
         };
+        order.StatusUpdates.Add(new CustomerOrderStatusUpdate
+        {
+            TenantId = tenantId,
+            CustomerOrderId = orderId,
+            Status = "Pending",
+            Message = "Order placed and waiting for the business to confirm.",
+            ChangedByUserId = customerId,
+        });
 
         foreach (var item in inventoryItems.OrderBy(item => item.Id))
         {
@@ -262,7 +283,28 @@ public sealed class CustomerOrdersController(AppDbContext db) : ControllerBase
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
+        await EmailOrderUpdateAsync(tenantId, customerId, order, "Your order is placed", cancellationToken);
         return CreatedAtAction(nameof(GetMyOrders), new { }, ToResponse(order));
+    }
+
+    private async Task EmailOrderUpdateAsync(
+        Guid tenantId,
+        Guid customerId,
+        CustomerOrder order,
+        string subject,
+        CancellationToken cancellationToken)
+    {
+        var email = await db.Users.IgnoreQueryFilters().AsNoTracking()
+            .Where(user => user.Id == customerId && user.TenantId == tenantId && user.IsActive)
+            .Select(user => user.Email)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(email)) return;
+
+        var safeNumber = HtmlEncoder.Default.Encode(order.Number);
+        var safeStatus = HtmlEncoder.Default.Encode(order.Status);
+        var html = $"<p>Your order <strong>{safeNumber}</strong> is now <strong>{safeStatus}</strong>.</p>" +
+                   $"<p>Total: LKR {order.Total:0.00}. Payment is due when you receive your order.</p>";
+        await messenger.SendEmailAsync(email, subject, html, ct: cancellationToken);
     }
 
     private bool TryGetIdentity(out Guid tenantId, out Guid customerId)
@@ -275,7 +317,7 @@ public sealed class CustomerOrdersController(AppDbContext db) : ControllerBase
         return hasTenant && hasCustomer;
     }
 
-    private static CustomerOrderResponse ToResponse(CustomerOrder order) =>
+    public static CustomerOrderResponse ToResponse(CustomerOrder order) =>
         new(
             order.Id,
             order.BranchId,
@@ -284,6 +326,8 @@ public sealed class CustomerOrdersController(AppDbContext db) : ControllerBase
             order.PaymentStatus,
             order.FulfillmentMethod,
             order.DeliveryAddress,
+            order.DeliveryLatitude,
+            order.DeliveryLongitude,
             order.Notes,
             order.Total,
             order.CreatedAt,
@@ -294,7 +338,13 @@ public sealed class CustomerOrdersController(AppDbContext db) : ControllerBase
                 item.UnitName,
                 item.Quantity,
                 item.UnitPrice,
-                item.LineTotal)).ToList());
+                item.LineTotal)).ToList(),
+            order.StatusUpdates.OrderBy(update => update.CreatedAt)
+                .Select(update => new CustomerOrderStatusUpdateResponse(
+                    update.Status,
+                    update.Message,
+                    update.CreatedAt))
+                .ToList());
 }
 
 public sealed record CustomerOrderBranchResponse(Guid Id, string Name, string? Address);
@@ -313,7 +363,9 @@ public sealed record PlaceCustomerOrderRequest(
     string FulfillmentMethod,
     string? DeliveryAddress,
     string? Notes,
-    IReadOnlyList<PlaceCustomerOrderLineRequest> Items);
+    IReadOnlyList<PlaceCustomerOrderLineRequest> Items,
+    decimal? DeliveryLatitude = null,
+    decimal? DeliveryLongitude = null);
 public sealed record CustomerOrderLineResponse(
     Guid InventoryItemId,
     string ItemName,
@@ -322,6 +374,7 @@ public sealed record CustomerOrderLineResponse(
     decimal Quantity,
     decimal UnitPrice,
     decimal LineTotal);
+public sealed record CustomerOrderStatusUpdateResponse(string Status, string Message, DateTime CreatedAt);
 public sealed record CustomerOrderResponse(
     Guid Id,
     Guid BranchId,
@@ -330,7 +383,10 @@ public sealed record CustomerOrderResponse(
     string PaymentStatus,
     string FulfillmentMethod,
     string? DeliveryAddress,
+    decimal? DeliveryLatitude,
+    decimal? DeliveryLongitude,
     string? Notes,
     decimal Total,
     DateTime CreatedAt,
-    IReadOnlyList<CustomerOrderLineResponse> Items);
+    IReadOnlyList<CustomerOrderLineResponse> Items,
+    IReadOnlyList<CustomerOrderStatusUpdateResponse> StatusUpdates);

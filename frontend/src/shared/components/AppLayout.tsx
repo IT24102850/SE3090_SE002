@@ -93,6 +93,7 @@ const NAV_SECTIONS: NavSection[] = [
       { path: '/suppliers', label: 'Suppliers', icon: '🏭', roles: ['Admin', 'Staff'] },
       { path: '/stock-movements', label: 'Physical Counts & Activity', icon: '🔄', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/purchase-orders', label: 'Purchase Orders', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/customer-orders', label: 'Customer orders', icon: '🛍️', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/sales', label: 'Sales', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/stocksense-ai', label: 'StockSense AI', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/branch-overview', label: 'Branch Overview', icon: '🏬', roles: ['Admin', 'Manager', 'Staff'] },

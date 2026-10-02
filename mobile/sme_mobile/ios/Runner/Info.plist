@@ -48,7 +48,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Staff use the camera to scan booking and inventory codes or attach evidence photos.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Staff may attach their current location to a physical stock audit when they choose to do so.</string>
+	<string>Location is requested only when you choose to attach a GPS pin to a customer delivery order or physical stock audit.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unify uses Face ID to securely unlock your saved session on this device.</string>
 	<key>CFBundleURLTypes</key>

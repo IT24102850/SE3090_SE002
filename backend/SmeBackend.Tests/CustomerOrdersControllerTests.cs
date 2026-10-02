@@ -8,6 +8,8 @@ using SmeBackend.Controllers;
 using SmeBackend.Data;
 using SmeBackend.Models;
 using SmeBackend.Services;
+using SmeBackend.Services.Billing;
+using SmeBackend.DTOs;
 
 namespace SmeBackend.Tests;
 
@@ -48,8 +50,17 @@ public class CustomerOrdersControllerTests
         await using var db = CreateDbContext(tenantId);
         db.Branches.Add(new Branch { TenantId = tenantId, Id = branchId, Name = "Main" });
         db.InventoryItems.Add(item);
+        db.Users.Add(new User
+        {
+            Id = customerId,
+            TenantId = tenantId,
+            Email = "customer@example.test",
+            FullName = "Test Customer",
+            Role = UserRole.Customer,
+        });
         await db.SaveChangesAsync();
-        var controller = CreateController(db, tenantId, customerId);
+        var messenger = new NoopBillingMessenger();
+        var controller = CreateController(db, tenantId, customerId, messenger);
 
         var result = await controller.PlaceOrder(
             new PlaceCustomerOrderRequest(
@@ -71,6 +82,7 @@ public class CustomerOrdersControllerTests
         var movement = Assert.Single(await db.StockMovements.ToListAsync());
         Assert.Equal("CustomerOrder", movement.MovementType);
         Assert.Equal(-2m, movement.Quantity);
+        Assert.Single(messenger.SentEmails);
         var notification = Assert.Single(await db.Notifications.ToListAsync());
         Assert.Equal(customerId, notification.UserId);
 
@@ -133,6 +145,47 @@ public class CustomerOrdersControllerTests
     }
 
     [Fact]
+    public async Task PlaceOrder_StoresOptionalDeliveryPinAndInitialTrackingUpdate()
+    {
+        var tenantId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var item = Product(tenantId, branchId, "Tea", 10m, 75m);
+        await using var db = CreateDbContext(tenantId);
+        db.Branches.Add(new Branch { TenantId = tenantId, Id = branchId, Name = "Main" });
+        db.InventoryItems.Add(item);
+        db.Users.Add(new User
+        {
+            Id = customerId,
+            TenantId = tenantId,
+            Email = "customer@example.test",
+            FullName = "Test Customer",
+            Role = UserRole.Customer,
+        });
+        await db.SaveChangesAsync();
+        var messenger = new NoopBillingMessenger();
+        var controller = CreateController(db, tenantId, customerId, messenger);
+
+        var result = await controller.PlaceOrder(
+            new PlaceCustomerOrderRequest(
+                branchId,
+                "Delivery",
+                "12 Main Road",
+                null,
+                [new PlaceCustomerOrderLineRequest(item.Id, 1m)],
+                6.9271m,
+                79.8612m),
+            CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var order = Assert.IsType<CustomerOrderResponse>(created.Value);
+        Assert.Equal(6.9271m, order.DeliveryLatitude);
+        Assert.Equal(79.8612m, order.DeliveryLongitude);
+        Assert.Equal("Pending", Assert.Single(order.StatusUpdates).Status);
+        Assert.Single(messenger.SentEmails);
+    }
+
+    [Fact]
     public async Task GetMyOrders_DoesNotReturnAnotherCustomersOrders()
     {
         var tenantId = Guid.NewGuid();
@@ -162,6 +215,95 @@ public class CustomerOrdersControllerTests
         Assert.Equal(nameof(UserRole.Customer), authorize.Roles);
     }
 
+    [Fact]
+    public async Task ManagerCanCancelOrderAndReleaseReservedStockOnce()
+    {
+        var tenantId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var item = Product(tenantId, branchId, "Tea", 8m, 75m);
+        await using var db = CreateDbContext(tenantId);
+        db.Branches.Add(new Branch { TenantId = tenantId, Id = branchId, Name = "Main" });
+        db.InventoryItems.Add(item);
+        var order = new CustomerOrder
+        {
+            TenantId = tenantId,
+            CustomerId = customerId,
+            BranchId = branchId,
+            Number = "ORD-CANCEL",
+            Status = "Pending",
+        };
+        order.Items.Add(new CustomerOrderItem
+        {
+            TenantId = tenantId,
+            CustomerOrderId = order.Id,
+            InventoryItemId = item.Id,
+            ItemName = item.Name,
+            Sku = item.Sku,
+            Quantity = 2m,
+            UnitPrice = 75m,
+            LineTotal = 150m,
+        });
+        db.CustomerOrders.Add(order);
+        var customer = new User
+        {
+            Id = customerId,
+            TenantId = tenantId,
+            Email = "customer@example.test",
+            FullName = "Test Customer",
+            Role = UserRole.Customer,
+        };
+        db.Users.Add(customer);
+        await db.SaveChangesAsync();
+        var messenger = new NoopBillingMessenger();
+        var controller = CreateManagerController(db, tenantId, messenger);
+
+        var result = await controller.UpdateStatus(
+            order.Id,
+            new UpdateCustomerOrderStatusRequest("Cancelled", null),
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(10m, (await db.InventoryItems.SingleAsync()).Quantity);
+        Assert.Equal("Cancelled", (await db.CustomerOrders.SingleAsync()).Status);
+        Assert.Equal("CustomerOrderCancellation", Assert.Single(await db.StockMovements.ToListAsync()).MovementType);
+        Assert.Single(messenger.SentEmails);
+        var secondUpdate = await controller.UpdateStatus(
+            order.Id,
+            new UpdateCustomerOrderStatusRequest("Cancelled", null),
+            CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(secondUpdate);
+        Assert.Equal(10m, (await db.InventoryItems.SingleAsync()).Quantity);
+        Assert.Single(messenger.SentEmails);
+    }
+
+    [Fact]
+    public async Task StaffCannotUpdateAnOrderOutsideTheirAssignedBranch()
+    {
+        var tenantId = Guid.NewGuid();
+        var assignedBranchId = Guid.NewGuid();
+        var otherBranchId = Guid.NewGuid();
+        await using var db = CreateDbContext(tenantId);
+        var order = new CustomerOrder
+        {
+            TenantId = tenantId,
+            CustomerId = Guid.NewGuid(),
+            BranchId = otherBranchId,
+            Number = "ORD-OTHER-BRANCH",
+        };
+        db.CustomerOrders.Add(order);
+        await db.SaveChangesAsync();
+        var controller = CreateStaffController(db, tenantId, assignedBranchId);
+
+        var result = await controller.UpdateStatus(
+            order.Id,
+            new UpdateCustomerOrderStatusRequest("Confirmed", null),
+            CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(result);
+        Assert.Equal("Pending", (await db.CustomerOrders.SingleAsync()).Status);
+    }
+
     private static InventoryItem Product(Guid tenantId, Guid branchId, string name, decimal quantity, decimal? price) =>
         new()
         {
@@ -177,7 +319,8 @@ public class CustomerOrdersControllerTests
     private static CustomerOrdersController CreateController(
         AppDbContext db,
         Guid tenantId,
-        Guid customerId)
+        Guid customerId,
+        NoopBillingMessenger? messenger = null)
     {
         var claims = new[]
         {
@@ -185,7 +328,7 @@ public class CustomerOrdersControllerTests
             new Claim(ClaimTypes.NameIdentifier, customerId.ToString()),
             new Claim(ClaimTypes.Role, UserRole.Customer.ToString()),
         };
-        return new CustomerOrdersController(db)
+        return new CustomerOrdersController(db, messenger ?? new NoopBillingMessenger())
         {
             ControllerContext = new ControllerContext
             {
@@ -195,6 +338,76 @@ public class CustomerOrdersControllerTests
                 },
             },
         };
+    }
+
+    private static CustomerOrderManagementController CreateManagerController(
+        AppDbContext db,
+        Guid tenantId,
+        NoopBillingMessenger? messenger = null)
+    {
+        var claims = new[]
+        {
+            new Claim("tenantId", tenantId.ToString()),
+            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new Claim(ClaimTypes.Role, UserRole.Manager.ToString()),
+        };
+        return new CustomerOrderManagementController(db, messenger ?? new NoopBillingMessenger())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Tests")),
+                },
+            },
+        };
+    }
+
+    private static CustomerOrderManagementController CreateStaffController(
+        AppDbContext db,
+        Guid tenantId,
+        Guid branchId)
+    {
+        var claims = new[]
+        {
+            new Claim("tenantId", tenantId.ToString()),
+            new Claim("branchId", branchId.ToString()),
+            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new Claim(ClaimTypes.Role, UserRole.Staff.ToString()),
+        };
+        return new CustomerOrderManagementController(db, new NoopBillingMessenger())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Tests")),
+                },
+            },
+        };
+    }
+
+    private sealed class NoopBillingMessenger : IBillingMessenger
+    {
+        public List<(string To, string Subject, string Html)> SentEmails { get; } = [];
+
+        public Task<MessageDeliveryResponse> SendEmailAsync(
+            string to,
+            string subject,
+            string html,
+            EmailAttachment? attachment = null,
+            CancellationToken ct = default)
+        {
+            SentEmails.Add((to, subject, html));
+            return Task.FromResult(new MessageDeliveryResponse("Email", to, false, true, null, null));
+        }
+
+        public Task<MessageDeliveryResponse> SendTextAsync(
+            string channel,
+            string to,
+            string body,
+            CancellationToken ct = default) =>
+            Task.FromResult(new MessageDeliveryResponse(channel, to, false, true, null, null));
     }
 
     private static AppDbContext CreateDbContext(Guid tenantId)

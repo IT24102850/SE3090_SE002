@@ -56,6 +56,7 @@ public class AppDbContext : DbContext
     public DbSet<PurchaseOrderReceiptItem> PurchaseOrderReceiptItems { get; set; } = null!;
     public DbSet<CustomerOrder> CustomerOrders { get; set; } = null!;
     public DbSet<CustomerOrderItem> CustomerOrderItems { get; set; } = null!;
+    public DbSet<CustomerOrderStatusUpdate> CustomerOrderStatusUpdates { get; set; } = null!;
     public DbSet<StockMovement> StockMovements { get; set; } = null!;
     public DbSet<PhysicalStockCount> PhysicalStockCounts { get; set; } = null!;
     public DbSet<Sale> Sales { get; set; } = null!;
@@ -527,11 +528,14 @@ public class AppDbContext : DbContext
             entity.Property(order => order.PaymentStatus).HasMaxLength(24).IsRequired();
             entity.Property(order => order.FulfillmentMethod).HasMaxLength(16).IsRequired();
             entity.Property(order => order.DeliveryAddress).HasMaxLength(500);
+            entity.Property(order => order.DeliveryLatitude).HasPrecision(9, 6);
+            entity.Property(order => order.DeliveryLongitude).HasPrecision(9, 6);
             entity.Property(order => order.Notes).HasMaxLength(1000);
             entity.Property(order => order.Total).HasPrecision(18, 2);
             entity.HasOne<User>().WithMany().HasForeignKey(order => order.CustomerId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Branch>().WithMany().HasForeignKey(order => order.BranchId).OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(order => order.Items).WithOne().HasForeignKey(item => item.CustomerOrderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(order => order.StatusUpdates).WithOne().HasForeignKey(update => update.CustomerOrderId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<CustomerOrderItem>(entity =>
         {
@@ -541,6 +545,12 @@ public class AppDbContext : DbContext
             entity.Property(item => item.Quantity).HasPrecision(18, 3);
             entity.Property(item => item.UnitPrice).HasPrecision(18, 2);
             entity.Property(item => item.LineTotal).HasPrecision(18, 2);
+        });
+        modelBuilder.Entity<CustomerOrderStatusUpdate>(entity =>
+        {
+            entity.Property(update => update.Status).HasMaxLength(24).IsRequired();
+            entity.Property(update => update.Message).HasMaxLength(500).IsRequired();
+            entity.HasIndex(update => new { update.CustomerOrderId, update.CreatedAt });
         });
         modelBuilder.Entity<Subscription>(entity =>
         {

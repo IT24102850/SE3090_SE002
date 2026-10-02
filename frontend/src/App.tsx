@@ -45,6 +45,7 @@ const MyBookingsPage = lazy(() => import('./features/customer/MyBookingsPage'));
 const CustomerAiPlannerPage = lazy(() => import('./features/customer/CustomerAiPlannerPage'));
 const BusinessInfoPage = lazy(() => import('./features/customer/BusinessInfoPage'));
 const CustomerShopPage = lazy(() => import('./features/customer/CustomerShopPage'));
+const CustomerOrderManagementPage = lazy(() => import('./features/customer/CustomerOrderManagementPage'));
 const InventoryManagerPage = lazy(() => import('./features/inventory/pages/InventoryManagerPage').then((m) => ({ default: m.InventoryManagerPage })));
 const SuppliersPage = lazy(() => import('./features/inventory/pages/SuppliersPage').then((m) => ({ default: m.SuppliersPage })));
 const StockMovementLogPage = lazy(() => import('./features/inventory/pages/StockMovementLogPage').then((m) => ({ default: m.StockMovementLogPage })));
@@ -175,6 +176,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Customer']}>
                     <Shell><CustomerShopPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/customer-orders"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <InventoryShell><CustomerOrderManagementPage /></InventoryShell>
                   </ProtectedRoute>
                 }
               />

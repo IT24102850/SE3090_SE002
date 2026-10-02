@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../inventory/authenticated_api_client.dart';
 import '../../models/public_tenant_model.dart';
@@ -42,17 +45,28 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
   String _search = '';
   bool _showOrders = false;
   bool _delivery = false;
+  bool _capturingDeliveryLocation = false;
+  double? _deliveryLatitude;
+  double? _deliveryLongitude;
+  String? _deliveryLocationMessage;
   bool _loading = true;
   bool _submitting = false;
+  bool _refreshingOrders = false;
+  String? _orderRefreshError;
+  Timer? _trackingTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _trackingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && _showOrders) unawaited(_refreshOrders());
+    });
   }
 
   @override
   void dispose() {
+    _trackingTimer?.cancel();
     _addressController.dispose();
     _notesController.dispose();
     super.dispose();
@@ -117,12 +131,38 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
         _orders = orders;
         _branchId = branchId;
         _products = products;
+        _orderRefreshError = null;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _refreshOrders() async {
+    if (_refreshingOrders || _loading) return;
+    _refreshingOrders = true;
+    try {
+      final response = await widget.client.get('/customer-orders');
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw _responseError(
+            response.body, 'Could not refresh your order tracking.');
+      }
+      final orders = _decodeList(response.body);
+      if (!mounted) return;
+      setState(() {
+        _orders = orders;
+        _orderRefreshError = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _orderRefreshError =
+            error.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      _refreshingOrders = false;
     }
   }
 
@@ -172,6 +212,27 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
   }
 
   Future<void> _findBusiness() async {
+    if (_cart.isNotEmpty) {
+      final shouldSwitch = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Switch business?'),
+          content: const Text(
+              'Your current basket will be cleared. Your memberships and order history stay saved.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Keep shopping'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Switch business'),
+            ),
+          ],
+        ),
+      );
+      if (shouldSwitch != true || !mounted) return;
+    }
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => BookBusinessListScreen(
@@ -196,6 +257,55 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     });
     Navigator.of(context).pop();
     return true;
+  }
+
+  Future<void> _captureDeliveryPin(
+      BuildContext sheetContext, StateSetter setSheetState) async {
+    if (_capturingDeliveryLocation) return;
+    setSheetState(() {
+      _capturingDeliveryLocation = true;
+      _deliveryLocationMessage = null;
+      _cartError = null;
+    });
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        throw StateError(
+            'Turn on location services or enter your address manually.');
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw StateError(
+            'Location permission was not granted. You can still enter your address manually.');
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      if (!mounted || !sheetContext.mounted) return;
+      setSheetState(() {
+        _deliveryLatitude = position.latitude;
+        _deliveryLongitude = position.longitude;
+        _deliveryLocationMessage =
+            'GPS pin ready. It will be shared with this business for this order only.';
+      });
+    } catch (error) {
+      if (!mounted || !sheetContext.mounted) return;
+      setSheetState(() {
+        _deliveryLocationMessage = error is StateError
+            ? error.message.toString()
+            : 'Could not get your location. Enter your address and try again.';
+      });
+    } finally {
+      if (mounted && sheetContext.mounted) {
+        setSheetState(() => _capturingDeliveryLocation = false);
+      }
+    }
   }
 
   List<String> get _categories => [
@@ -387,6 +497,11 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                       ),
                     ),
                     if (_delivery) ...[
+                      Text(
+                        'Optional: this pin is shared with the business for this order only.',
+                        style: AppTextStyles.caption,
+                      ),
+                      const SizedBox(height: 5),
                       TextField(
                         controller: _addressController,
                         maxLength: 500,
@@ -397,6 +512,41 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                           hintText: 'Street, town, and a helpful landmark',
                         ),
                       ),
+                      const SizedBox(height: 5),
+                      OutlinedButton.icon(
+                        onPressed: _capturingDeliveryLocation
+                            ? null
+                            : () => _captureDeliveryPin(context, setSheetState),
+                        icon: _capturingDeliveryLocation
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Icon(_deliveryLatitude == null
+                                ? Icons.my_location_rounded
+                                : Icons.location_on_rounded),
+                        label: Text(_deliveryLatitude == null
+                            ? 'Add an optional GPS pin'
+                            : 'Delivery pin attached'),
+                      ),
+                      if (_deliveryLocationMessage != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _deliveryLocationMessage!,
+                          style: AppTextStyles.caption,
+                        ),
+                      ],
+                      if (_deliveryLatitude != null)
+                        TextButton(
+                          onPressed: () => setSheetState(() {
+                            _deliveryLatitude = null;
+                            _deliveryLongitude = null;
+                            _deliveryLocationMessage = 'Delivery pin removed.';
+                          }),
+                          child: const Text('Remove delivery pin'),
+                        ),
                       const SizedBox(height: 8),
                     ],
                     TextField(
@@ -502,6 +652,8 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
           'branchId': _branchId,
           'fulfillmentMethod': _delivery ? 'Delivery' : 'Pickup',
           'deliveryAddress': _delivery ? _addressController.text.trim() : null,
+          'deliveryLatitude': _delivery ? _deliveryLatitude : null,
+          'deliveryLongitude': _delivery ? _deliveryLongitude : null,
           'notes': _notesController.text.trim().isEmpty
               ? null
               : _notesController.text.trim(),
@@ -522,6 +674,9 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
         _cart.clear();
         _addressController.clear();
         _notesController.clear();
+        _deliveryLatitude = null;
+        _deliveryLongitude = null;
+        _deliveryLocationMessage = null;
         _showOrders = true;
       });
       await _load();
@@ -710,6 +865,10 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
         ? ''
         : '${created.day}/${created.month}/${created.year} · ${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
     final isDelivery = order['fulfillmentMethod'] == 'Delivery';
+    final updates = (order['statusUpdates'] as List? ?? const [])
+        .whereType<Map>()
+        .map((update) => Map<String, dynamic>.from(update))
+        .toList();
     return GlassCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -730,6 +889,50 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
               _OrderStatusChip(status: order['status'] as String? ?? 'Pending'),
             ],
           ),
+          if (updates.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text('Order journey', style: AppTextStyles.subtitle),
+            const SizedBox(height: 8),
+            ...updates.asMap().entries.map((entry) {
+              final update = entry.value;
+              final time =
+                  DateTime.tryParse(update['createdAt'] as String? ?? '');
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      entry.key == updates.length - 1
+                          ? Icons.radio_button_checked
+                          : Icons.check_circle,
+                      size: 18,
+                      color: entry.key == updates.length - 1
+                          ? AppColors.cyan
+                          : AppColors.success,
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(update['status'] as String? ?? 'Update',
+                              style: AppTextStyles.body),
+                          Text(update['message'] as String? ?? '',
+                              style: AppTextStyles.caption),
+                          if (time != null)
+                            Text(
+                              '${time.day}/${time.month}/${time.year} · ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+                              style: AppTextStyles.caption,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
           const SizedBox(height: 12),
           ...items.map((item) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -759,6 +962,34 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                       AppTextStyles.subtitle.copyWith(color: AppColors.cyan)),
             ],
           ),
+          if (isDelivery &&
+              order['deliveryLatitude'] is num &&
+              order['deliveryLongitude'] is num)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () async {
+                  final latitude =
+                      (order['deliveryLatitude'] as num).toDouble();
+                  final longitude =
+                      (order['deliveryLongitude'] as num).toDouble();
+                  final uri = Uri.https('www.google.com', '/maps/search/', {
+                    'api': '1',
+                    'query': '$latitude,$longitude',
+                  });
+                  if (!await launchUrl(uri,
+                          mode: LaunchMode.externalApplication) &&
+                      mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Could not open the map app.')),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('View delivery pin'),
+              ),
+            ),
         ],
       ),
     );
@@ -773,6 +1004,11 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
       appBar: GlassAppBar(
         title: 'Shop & orders',
         actions: [
+          IconButton(
+            tooltip: 'Switch business',
+            onPressed: _findBusiness,
+            icon: const Icon(Icons.storefront_outlined),
+          ),
           _CartAppBarAction(count: cartCount, onPressed: _openCart),
         ],
       ),
@@ -805,6 +1041,23 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
               ),
               if (_showOrders) ...[
                 const SizedBox(height: 16),
+                if (_orderRefreshError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline,
+                            color: AppColors.warning, size: 18),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            'Order updates paused: $_orderRefreshError. Pull down to retry.',
+                            style: AppTextStyles.caption,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (_loading)
                   const AppLoader()
                 else if (_error != null)

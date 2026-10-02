@@ -20,9 +20,12 @@ const order = {
   paymentStatus: 'DueOnFulfillment',
   fulfillmentMethod: 'Pickup',
   deliveryAddress: null,
+  deliveryLatitude: null,
+  deliveryLongitude: null,
   notes: null,
   total: 150,
   createdAt: '2026-10-02T08:00:00Z',
+  statusUpdates: [],
   items: [{
     inventoryItemId: itemId,
     itemName: 'Fresh tea leaves',
@@ -64,9 +67,36 @@ describe('CustomerShopPage', () => {
   beforeEach(() => {
     orders = [...initialOrders];
     placedBody = null;
+    localStorage.clear();
+    localStorage.setItem('token', 'fake-token');
+    localStorage.setItem('user', JSON.stringify({
+      id: 'customer-1',
+      tenantId: 'tenant-1',
+      role: 'Customer',
+      fullName: 'Taylor Customer',
+      email: 'customer@example.test',
+    }));
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const url = new URL(request.url);
+      if (url.pathname.endsWith('/tenant/public')) {
+        return Response.json([
+          { id: 'tenant-1', name: 'Willow Market', businessType: 'Retail' },
+          { id: 'tenant-2', name: 'Bramble Books', businessType: 'Bookshop' },
+        ]);
+      }
+      if (url.pathname.endsWith('/auth/join/tenant-2')) {
+        return Response.json({
+          accessToken: 'tenant-two-token',
+          user: {
+            id: 'customer-1',
+            tenantId: 'tenant-2',
+            role: 'Customer',
+            fullName: 'Taylor Customer',
+            email: 'customer@example.test',
+          },
+        });
+      }
       if (url.pathname.endsWith('/tenant')) {
         return Response.json({ id: 'tenant-1', name: 'Willow Market' });
       }
@@ -129,5 +159,57 @@ describe('CustomerShopPage', () => {
 
     expect(placedBody).toBeNull();
     expect(screen.getByLabelText('Delivery address')).toBeTruthy();
+  });
+
+  it('submits a delivery GPS pin only after the customer requests it', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(navigator, 'geolocation');
+    const getCurrentPosition = vi.fn((success: PositionCallback) => success({
+      coords: {
+        latitude: 6.9271,
+        longitude: 79.8612,
+        accuracy: 5,
+        altitude: null,
+        altitudeAccuracy: null,
+        heading: null,
+        speed: null,
+      } as GeolocationCoordinates,
+      timestamp: Date.now(),
+    } as GeolocationPosition));
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: { getCurrentPosition },
+    });
+
+    try {
+      renderPage();
+      expect(await screen.findByText('Fresh tea leaves')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /add fresh tea leaves to basket/i }));
+      fireEvent.click(screen.getByLabelText('Deliver to me'));
+      fireEvent.change(screen.getByLabelText('Delivery address'), { target: { value: '12 Main Road' } });
+      fireEvent.click(screen.getByRole('button', { name: /add my delivery pin/i }));
+      expect(await screen.findByText(/location is shared with this business only for this order/i)).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /place my order/i }));
+
+      await waitFor(() => expect(placedBody).not.toBeNull());
+      expect(placedBody).toMatchObject({
+        fulfillmentMethod: 'Delivery',
+        deliveryLatitude: 6.9271,
+        deliveryLongitude: 79.8612,
+      });
+      expect(getCurrentPosition).toHaveBeenCalledOnce();
+    } finally {
+      if (descriptor) Object.defineProperty(navigator, 'geolocation', descriptor);
+      else Reflect.deleteProperty(navigator, 'geolocation');
+    }
+  });
+
+  it('lets a customer switch business from the shop and refreshes the session', async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: /switch business/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /bramble books/i }));
+
+    await waitFor(() => expect(localStorage.getItem('token')).toBe('tenant-two-token'));
+    expect(JSON.parse(localStorage.getItem('user') ?? '{}').tenantId).toBe('tenant-2');
   });
 });

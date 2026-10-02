@@ -1,6 +1,7 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
 import { API_BASE_URL, LOCAL_API_BASE_URL } from './apiBaseUrl';
+import type { User } from '../store/authSlice';
 import type {
   AgentWorkflow,
   AvailabilityDay,
@@ -763,6 +764,12 @@ export const bookingApi = createApi({
     getCustomerOrderBranches: builder.query<CustomerOrderBranch[], void>({
       query: () => '/customer-orders/branches',
     }),
+    getPublicCustomerBusinesses: builder.query<PublicCustomerBusiness[], void>({
+      query: () => '/tenant/public',
+    }),
+    joinCustomerBusiness: builder.mutation<{ accessToken: string; user: User }, string>({
+      query: (tenantId) => ({ url: `/auth/join/${tenantId}`, method: 'POST' }),
+    }),
     getCustomerProducts: builder.query<CustomerOrderProduct[], { branchId: string }>({
       query: ({ branchId }) => ({ url: '/customer-orders/products', params: { branchId } }),
       providesTags: (_result, _error, { branchId }) => [{ type: 'CustomerOrder', id: `PRODUCTS-${branchId}` }],
@@ -778,6 +785,21 @@ export const bookingApi = createApi({
         { type: 'CustomerOrder', id: `PRODUCTS-${branchId}` },
       ],
     }),
+    getManagedCustomerOrders: builder.query<ManagedCustomerOrder[], void>({
+      query: () => '/customer-orders/manage',
+      providesTags: [{ type: 'CustomerOrder', id: 'MANAGED' }],
+    }),
+    updateCustomerOrderStatus: builder.mutation<
+      { orderId: string; number: string; status: string; message: string },
+      { orderId: string; status: string; message?: string }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/customer-orders/manage/${orderId}/status`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: [{ type: 'CustomerOrder', id: 'MANAGED' }, { type: 'CustomerOrder', id: 'LIST' }],
+    }),
   }),
 });
 
@@ -785,6 +807,14 @@ export interface CustomerOrderBranch {
   id: string;
   name: string;
   address?: string | null;
+}
+
+export interface PublicCustomerBusiness {
+  id: string;
+  name: string;
+  businessType: string;
+  subType?: string | null;
+  logoUrl?: string | null;
 }
 
 export interface CustomerOrderProduct {
@@ -816,16 +846,33 @@ export interface CustomerOrder {
   paymentStatus: string;
   fulfillmentMethod: string;
   deliveryAddress?: string | null;
+  deliveryLatitude?: number | null;
+  deliveryLongitude?: number | null;
   notes?: string | null;
   total: number;
   createdAt: string;
   items: CustomerOrderLine[];
+  statusUpdates: CustomerOrderStatusUpdate[];
+}
+
+export interface CustomerOrderStatusUpdate {
+  status: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface ManagedCustomerOrder {
+  order: CustomerOrder;
+  customerName: string;
+  branchName: string;
 }
 
 export interface PlaceCustomerOrderRequest {
   branchId: string;
   fulfillmentMethod: 'Pickup' | 'Delivery';
   deliveryAddress?: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
   notes?: string;
   items: Array<{ inventoryItemId: string; quantity: number }>;
 }
@@ -942,7 +989,11 @@ export const {
   useApplyWorkflowMutation,
   useAskWorkspaceAssistantMutation,
   useGetCustomerOrderBranchesQuery,
+  useGetPublicCustomerBusinessesQuery,
+  useJoinCustomerBusinessMutation,
   useGetCustomerProductsQuery,
   useGetMyCustomerOrdersQuery,
   usePlaceCustomerOrderMutation,
+  useGetManagedCustomerOrdersQuery,
+  useUpdateCustomerOrderStatusMutation,
 } = bookingApi;

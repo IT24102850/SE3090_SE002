@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import type { RootState } from '../../store/store';
+import { switchBusinessSession } from '../../store/authSlice';
 import {
+  bookingApi,
+  useGetPublicCustomerBusinessesQuery,
   useGetCustomerOrderBranchesQuery,
   useGetCustomerProductsQuery,
+  useJoinCustomerBusinessMutation,
   useGetMyCustomerOrdersQuery,
   usePlaceCustomerOrderMutation,
   type CustomerOrder,
@@ -15,12 +19,12 @@ import './customer.css';
 type FulfillmentMethod = 'Pickup' | 'Delivery';
 const currency = new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR', maximumFractionDigits: 2 });
 
-function getErrorMessage(error: unknown) {
+function getErrorMessage(error: unknown, fallback = 'We could not place that order. Please try again.') {
   if (error && typeof error === 'object' && 'data' in error) {
     const data = (error as { data?: { message?: string } }).data;
     if (data?.message) return data.message;
   }
-  return 'We could not place that order. Please try again.';
+  return fallback;
 }
 
 function orderDate(value: string) {
@@ -29,6 +33,7 @@ function orderDate(value: string) {
 
 export default function CustomerShopPage() {
   const { user } = useSelector((state: RootState) => state.auth);
+  const dispatch = useDispatch();
   const { data: tenant } = useGetTenantQuery({ tenantId: user?.tenantId ?? '' }, { skip: !user?.tenantId });
   const { data: branches = [], isLoading: branchesLoading, isError: branchesError } = useGetCustomerOrderBranchesQuery();
   const [selectedBranchId, setSelectedBranchId] = useState(user?.branchId ?? '');
@@ -39,12 +44,23 @@ export default function CustomerShopPage() {
   const [fulfillmentMethod, setFulfillmentMethod] = useState<FulfillmentMethod>('Pickup');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [deliveryPin, setDeliveryPin] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationError, setLocationError] = useState('');
+  const [businessPickerOpen, setBusinessPickerOpen] = useState(false);
+  const [businessError, setBusinessError] = useState('');
+  const {
+    data: businesses = [],
+    isLoading: businessesLoading,
+    isError: businessesError,
+    refetch: refetchBusinesses,
+  } = useGetPublicCustomerBusinessesQuery();
+  const [joinBusiness, { isLoading: isJoiningBusiness }] = useJoinCustomerBusinessMutation();
   const [orderError, setOrderError] = useState('');
   const [placeOrder, { isLoading: isPlacingOrder }] = usePlaceCustomerOrderMutation();
   const { data: products = [], isLoading: productsLoading, isError: productsError, refetch: refetchProducts } =
     useGetCustomerProductsQuery({ branchId: selectedBranchId }, { skip: !selectedBranchId });
   const { data: orders = [], isLoading: ordersLoading, isError: ordersError, refetch: refetchOrders } =
-    useGetMyCustomerOrdersQuery();
+    useGetMyCustomerOrdersQuery(undefined, { pollingInterval: 30000, refetchOnFocus: true });
 
   useEffect(() => {
     if (!branches.length) return;
@@ -92,16 +108,51 @@ export default function CustomerShopPage() {
         branchId: selectedBranchId,
         fulfillmentMethod,
         deliveryAddress: fulfillmentMethod === 'Delivery' ? deliveryAddress.trim() : undefined,
+        deliveryLatitude: fulfillmentMethod === 'Delivery' ? deliveryPin?.latitude : undefined,
+        deliveryLongitude: fulfillmentMethod === 'Delivery' ? deliveryPin?.longitude : undefined,
         notes: notes.trim() || undefined,
         items: cartItems.map(({ product, quantity }) => ({ inventoryItemId: product.id, quantity })),
       }).unwrap();
       setCart({});
       setDeliveryAddress('');
+      setDeliveryPin(null);
       setNotes('');
       setActiveTab('orders');
       await Promise.all([refetchOrders(), refetchProducts()]);
     } catch (error) {
       setOrderError(getErrorMessage(error));
+    }
+  }
+
+  function captureDeliveryPin() {
+    setLocationError('');
+    if (!navigator.geolocation) {
+      setLocationError('Location is not available in this browser. You can still enter your address.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => setDeliveryPin({ latitude: coords.latitude, longitude: coords.longitude }),
+      (error) => setLocationError(
+        error.code === error.PERMISSION_DENIED
+          ? 'Location access was declined. You can still enter your address.'
+          : 'We could not get your location. Please try again or enter your address.',
+      ),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
+    );
+  }
+
+  async function switchBusiness(tenantId: string) {
+    if (cartCount > 0 && !window.confirm('Switching businesses clears your current basket. Continue?')) return;
+    setBusinessError('');
+    try {
+      const session = await joinBusiness(tenantId).unwrap();
+      dispatch(switchBusinessSession(session));
+      dispatch(bookingApi.util.resetApiState());
+      setCart({});
+      setSelectedBranchId('');
+      setBusinessPickerOpen(false);
+    } catch (error) {
+      setBusinessError(getErrorMessage(error, 'Could not connect to that business. Please try again.'));
     }
   }
 
@@ -139,6 +190,9 @@ export default function CustomerShopPage() {
             </select>
           </label>
         )}
+        <button type="button" className="btn btn-secondary cust-shop-switch" onClick={() => setBusinessPickerOpen(true)}>
+          <span aria-hidden="true">↗</span> Switch business
+        </button>
       </div>
 
       {activeTab === 'shop' ? (
@@ -227,9 +281,19 @@ export default function CustomerShopPage() {
                     <label><input type="radio" name="fulfillment" checked={fulfillmentMethod === 'Delivery'} onChange={() => setFulfillmentMethod('Delivery')} /> Deliver to me</label>
                   </fieldset>
                   {fulfillmentMethod === 'Delivery' && (
-                    <label className="cust-shop-field">Delivery address
-                      <textarea value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} required maxLength={500} placeholder="Street, town, and a helpful landmark" />
-                    </label>
+                    <>
+                      <label className="cust-shop-field">Delivery address
+                        <textarea value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} required maxLength={500} placeholder="Street, town, and a helpful landmark" />
+                      </label>
+                      <div className="cust-shop-gps">
+                        <button type="button" className="btn btn-secondary" onClick={captureDeliveryPin}>
+                          {deliveryPin ? '✓ Delivery pin attached' : '⌖ Add my delivery pin'}
+                        </button>
+                        <span>Your location is shared with this business only for this order.</span>
+                        {deliveryPin && <button type="button" className="cust-shop-clear-pin" onClick={() => setDeliveryPin(null)}>Remove pin</button>}
+                        {locationError && <small role="alert">{locationError}</small>}
+                      </div>
+                    </>
                   )}
                   <label className="cust-shop-field">A note for the team <span>(optional)</span>
                     <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={1000} placeholder="Anything we should know?" />
@@ -263,6 +327,35 @@ export default function CustomerShopPage() {
           )}
         </section>
       )}
+      {businessPickerOpen && (
+        <div className="cust-shop-modal-backdrop" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setBusinessPickerOpen(false);
+        }}>
+          <section className="cust-shop-business-modal card" role="dialog" aria-modal="true" aria-labelledby="business-switch-title">
+            <button type="button" className="cust-shop-modal-close" aria-label="Close business picker" onClick={() => setBusinessPickerOpen(false)}>×</button>
+            <span className="cust-shop-kicker">Your next favorite</span>
+            <h2 id="business-switch-title">Choose a business</h2>
+            <p>Switching connects your shopping session to another business. Your other memberships stay saved.</p>
+            {businessError && <p className="cust-shop-error" role="alert">{businessError}</p>}
+            {businessesLoading ? (
+              <div className="cust-shop-message" aria-busy="true">Finding businesses…</div>
+            ) : businessesError ? (
+              <div className="cust-shop-message" role="alert">We could not load businesses. <button className="btn btn-secondary" type="button" onClick={() => refetchBusinesses()}>Try again</button></div>
+            ) : (
+              <div className="cust-shop-business-list">
+                {businesses.map((business) => (
+                  <button key={business.id} type="button" disabled={isJoiningBusiness || business.id === user?.tenantId} onClick={() => void switchBusiness(business.id)}>
+                    <span className="cust-shop-business-icon" aria-hidden="true">🏪</span>
+                    <span><strong>{business.name}</strong><small>{business.businessType}{business.id === user?.tenantId ? ' · Current business' : ''}</small></span>
+                    <span aria-hidden="true">{business.id === user?.tenantId ? '✓' : '→'}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {isJoiningBusiness && <p className="cust-shop-message" aria-live="polite">Connecting to your business…</p>}
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -283,6 +376,21 @@ function OrderCard({ order, branchName }: { order: CustomerOrder; branchName: st
         <span>{order.fulfillmentMethod === 'Delivery' ? `Delivery · ${order.deliveryAddress}` : `Pickup at ${branchName}`} · Pay when you receive it</span>
         <strong>{currency.format(order.total)}</strong>
       </div>
+      {order.statusUpdates?.length > 0 && (
+        <ol className="cust-shop-timeline" aria-label={`Tracking updates for ${order.number}`}>
+          {order.statusUpdates.map((update, index) => (
+            <li key={`${order.id}-${update.createdAt}-${update.status}`} className={index === order.statusUpdates.length - 1 ? 'current' : 'complete'}>
+              <span className="cust-shop-timeline-dot" aria-hidden="true">{index === order.statusUpdates.length - 1 ? '✦' : '✓'}</span>
+              <div><strong>{update.status}</strong><p>{update.message}</p><time dateTime={update.createdAt}>{orderDate(update.createdAt)}</time></div>
+            </li>
+          ))}
+        </ol>
+      )}
+      {order.deliveryLatitude != null && order.deliveryLongitude != null && (
+        <a className="cust-shop-map-link" href={`https://www.google.com/maps/search/?api=1&query=${order.deliveryLatitude},${order.deliveryLongitude}`} target="_blank" rel="noreferrer">
+          ⌖ View your shared delivery pin
+        </a>
+      )}
     </article>
   );
 }
