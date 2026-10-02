@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Diagnostics;
+﻿using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,6 +54,11 @@ public sealed class GlobalExceptionHandler(
         KeyNotFoundException => (StatusCodes.Status404NotFound, "Not found"),
         ArgumentException or FormatException => (StatusCodes.Status400BadRequest, "Invalid request"),
         DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, "The record was changed by someone else"),
+        // The booking overlap exclusion constraint (23P01) is the database
+        // refusing a double booking two requests raced for. It is an ordinary
+        // conflict for the caller, not a server fault.
+        DbUpdateException { InnerException: Npgsql.PostgresException { SqlState: "23P01" } }
+            => (StatusCodes.Status409Conflict, "That time slot was just taken"),
         DbUpdateException => (StatusCodes.Status409Conflict, "The change violates a data constraint"),
         _ => (StatusCodes.Status500InternalServerError, "Internal server error"),
     };

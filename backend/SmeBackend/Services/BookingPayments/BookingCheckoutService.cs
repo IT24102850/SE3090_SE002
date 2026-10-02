@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using SmeBackend.Controllers;
 using SmeBackend.Data;
 using SmeBackend.DTOs;
@@ -131,6 +131,7 @@ public sealed class BookingCheckoutService(
             PaymentMode = rules.Mode.ToString(),
             HoldExpiresAt = holdExpiresAt,
         };
+        await SmeBackend.Shared.BookingExclusivity.ApplyAsync(db, booking, ct);
         db.Bookings.Add(booking);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);

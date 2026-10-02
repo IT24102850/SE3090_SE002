@@ -1468,3 +1468,19 @@ export interface SchoolGradebook {
   scale: { grade: string; min: number }[];
   assessments: SchoolAssessment[];
 }
+
+/** One entry of a booking's timeline (GET /api/bookings/{id}/history). */
+export interface BookingEvent {
+  id: string;
+  /** Created | StatusChanged | Rescheduled | ResourceChanged | Deleted */
+  type: string;
+  /** Previous value; null when the booking was created. */
+  from: string | null;
+  to: string | null;
+  actorUserId: string | null;
+  /** Null for a background service, which reports actorRole 'System'. */
+  actorName: string | null;
+  actorRole: string | null;
+  reason: string | null;
+  at: string;
+}

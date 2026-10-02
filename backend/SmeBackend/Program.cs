@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.RateLimiting;
+﻿using Microsoft.AspNetCore.RateLimiting;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -177,6 +177,7 @@ builder.Services.AddSingleton<IPlatformSecretProtector, PlatformSecretProtector>
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddScoped<ICurrentActor, CurrentActor>();
 builder.Services.AddScoped<ICustomerAccountService, CustomerAccountService>();
 
 // Pay to confirm a booking: the booking half of the payment flow, built on

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SmeBackend.Data;
@@ -12,9 +13,11 @@ using SmeBackend.Data;
 namespace SmeBackend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261001221306_AddBookingOverlapExclusion")]
+    partial class AddBookingOverlapExclusion
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -284,54 +287,6 @@ namespace SmeBackend.Migrations
 
                             t.HasCheckConstraint("CK_bookings_end_after_start", "\"EndTime\" > \"StartTime\"");
                         });
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.BookingEvent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ActorRole")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<Guid?>("ActorUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BookingId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FromValue")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ToValue")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BookingId", "CreatedAt");
-
-                    b.HasIndex("TenantId", "CreatedAt");
-
-                    b.ToTable("booking_events", (string)null);
                 });
 
             modelBuilder.Entity("SmeBackend.Models.BookingReminder", b =>
@@ -3475,15 +3430,6 @@ namespace SmeBackend.Migrations
                     b.Navigation("BookingType");
 
                     b.Navigation("Resource");
-                });
-
-            modelBuilder.Entity("SmeBackend.Models.BookingEvent", b =>
-                {
-                    b.HasOne("SmeBackend.Models.Booking", null)
-                        .WithMany()
-                        .HasForeignKey("BookingId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("SmeBackend.Models.BookingReminder", b =>

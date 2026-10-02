@@ -5,6 +5,24 @@ namespace SmeBackend.Tests.Api;
 
 public sealed class ErrorHandlingAndCorsTests
 {
+    [Fact]
+    public void GlobalExceptionHandler_MapsTheOverlapExclusionViolationTo409()
+    {
+        // 23P01 is what PostgreSQL raises when the booking overlap exclusion
+        // constraint refuses a double booking two requests raced for. The
+        // caller gets a conflict, not a 500.
+        var pg = new Npgsql.PostgresException(
+            messageText: "conflicting key value violates exclusion constraint",
+            severity: "ERROR",
+            invariantSeverity: "ERROR",
+            sqlState: Npgsql.PostgresErrorCodes.ExclusionViolation);
+
+        var (status, title) = GlobalExceptionHandler.Map(new DbUpdateException("conflict", pg));
+
+        Assert.Equal(409, status);
+        Assert.Equal("That time slot was just taken", title);
+    }
+
     [Theory]
     [InlineData(typeof(ArgumentException), 400)]
     [InlineData(typeof(FormatException), 400)]

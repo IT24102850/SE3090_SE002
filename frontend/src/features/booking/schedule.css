@@ -115,3 +115,81 @@
   .sch-daynav-date { min-width: 130px; }
   .svc-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Booking history timeline (BookingHistoryTimeline.tsx) ─────────── */
+.booking-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.booking-timeline-item {
+  display: grid;
+  grid-template-columns: minmax(130px, auto) 1fr;
+  gap: 12px;
+  padding-left: 12px;
+  border-left: 3px solid var(--color-border, #d4d4d8);
+}
+.booking-timeline-item.is-created { border-left-color: #22c55e; }
+.booking-timeline-item.is-statuschanged { border-left-color: #3b82f6; }
+.booking-timeline-item.is-rescheduled { border-left-color: #f59e0b; }
+.booking-timeline-item.is-resourcechanged { border-left-color: #8b5cf6; }
+.booking-timeline-item.is-deleted { border-left-color: #ef4444; }
+.booking-timeline-when { font-size: 0.82rem; color: var(--color-text-muted, #71717a); }
+.booking-timeline-what strong { font-weight: 600; }
+@media (max-width: 640px) {
+  .booking-timeline-item { grid-template-columns: 1fr; gap: 2px; }
+}
+
+/* ── Disruption Recovery (DisruptionRecoveryPage.tsx) ──────────────── */
+.disruption-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 16px 20px;
+  align-items: end;
+}
+.disruption-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.disruption-field-wide { grid-column: 1 / -1; }
+.disruption-field > label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text-secondary, #a1a1aa);
+}
+.disruption-form select,
+.disruption-form input[type='text'],
+.disruption-form input[type='date'] {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-border, #3f3f46);
+  border-radius: 10px;
+  background: var(--color-surface-muted, #18181b);
+  color: var(--color-text, #fafafa);
+  font: inherit;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.disruption-form select:focus-visible,
+.disruption-form input:focus-visible {
+  outline: none;
+  border-color: var(--color-primary, #7c6cff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary, #7c6cff) 28%, transparent);
+}
+.disruption-form input::placeholder { color: var(--color-text-muted, #71717a); }
+.disruption-date-range {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+.disruption-date-range span { color: var(--color-text-muted, #71717a); }
+.disruption-hint { margin: 2px 0 0; font-size: 0.8rem; color: var(--color-text-muted, #71717a); }
+.disruption-actions { display: flex; align-items: end; }
+.disruption-actions .btn { white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .disruption-form { grid-template-columns: 1fr; }
+  .disruption-actions .btn { width: 100%; }
+}

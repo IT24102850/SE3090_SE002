@@ -1,4 +1,4 @@
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+﻿import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { useEffect, useState, type ReactNode } from 'react';
 import { RootState } from '../../store/store';
@@ -69,6 +69,7 @@ const NAV_SECTIONS: NavSection[] = [
       { path: '/booking-types', label: 'Booking Types', icon: '🏷️', roles: ['Admin', 'Manager'] },
       { path: '/resources', label: 'Resource Manager', icon: '🏢', roles: ['Admin', 'Manager'] },
       { path: '/planner', label: 'Schedule Copilot', icon: '✦', roles: ['Admin', 'Manager'] },
+      { path: '/disruption-recovery', label: 'Disruption Recovery', icon: '🛟', roles: ['Admin', 'Manager'] },
       { path: '/agent-workflows', label: 'Agent Workflows', icon: '🛰️', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/reports', label: 'Reports', icon: '📈', roles: ['Admin', 'Manager'] },
       { path: '/my-schedule', label: 'My Schedule', icon: '🩺', roles: ['Staff'] },

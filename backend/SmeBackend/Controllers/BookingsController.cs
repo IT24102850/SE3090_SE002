@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
@@ -291,6 +291,7 @@ public class BookingsController : ControllerBase
             TotalCost = priced?.Total
         };
 
+        await BookingExclusivity.ApplyAsync(_db, booking);
         _db.Bookings.Add(booking);
 
         var resourceName = (await _db.Resources.FindAsync(dto.ResourceId))?.Name;
@@ -933,6 +934,128 @@ public class BookingsController : ControllerBase
     }
 
     /// <summary>The recurring pattern behind a booking, with every occurrence in the series.</summary>
+    /// <summary>
+    /// Every booking that a resource going out of service would strand.
+    ///
+    /// Read-only, and the only new data the Disruption Recovery Copilot
+    /// needs: it is the agent's view of "who is affected", built from the
+    /// caller's own permissions. Deposit and attendee counts come back
+    /// because the recovery policy ranks by them.
+    /// </summary>
+    /// <response code="200">The affected bookings, earliest first.</response>
+    [HttpGet("affected")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
+    [ProducesResponseType(typeof(IReadOnlyList<AffectedBookingResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAffected(
+        [FromQuery] Guid resourceId,
+        [FromQuery] DateTime from,
+        [FromQuery] DateTime to,
+        CancellationToken ct)
+    {
+        if (to <= from) return BadRequest(new { message = "'to' must be after 'from'." });
+
+        var window = (to - from).TotalDays;
+        if (window > 90) return BadRequest(new { message = "Look at most 90 days ahead." });
+
+        var fromUtc = DateTimeUtil.AsUtc(from);
+        var toUtc = DateTimeUtil.AsUtc(to);
+
+        var bookings = await _db.Bookings.AsNoTracking()
+            .HoldingSeats(DateTime.UtcNow)
+            .Where(b => b.ResourceId == resourceId
+                        && b.Status != BookingStatus.Rejected
+                        && b.StartTime < toUtc
+                        && b.EndTime > fromUtc)
+            .OrderBy(b => b.StartTime)
+            .Take(200)
+            .Select(b => new
+            {
+                b.Id, b.BookedBy, b.BookingTypeId, b.StartTime, b.EndTime,
+                b.Status, b.AttendeeCount, b.DepositAmount, b.TotalCost,
+            })
+            .ToListAsync(ct);
+
+        var customerIds = bookings.Select(b => b.BookedBy).Distinct().ToList();
+        var customers = await _db.Users.AsNoTracking().IgnoreQueryFilters()
+            .Where(u => customerIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+
+        var typeIds = bookings.Select(b => b.BookingTypeId).Distinct().ToList();
+        var types = await _db.BookingTypes.AsNoTracking()
+            .Where(t => typeIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+
+        return Ok(bookings.Select(b => new AffectedBookingResponse(
+            b.Id,
+            customers.TryGetValue(b.BookedBy, out var name) ? name : "Customer",
+            b.BookedBy,
+            b.BookingTypeId,
+            types.TryGetValue(b.BookingTypeId, out var typeName) ? typeName : "Booking",
+            b.StartTime,
+            b.EndTime,
+            b.Status.ToString(),
+            b.AttendeeCount ?? 1,
+            b.DepositAmount is > 0,
+            b.TotalCost ?? 0m)).ToList());
+    }
+
+    /// <summary>
+    /// The booking's timeline: every status change, reschedule and resource
+    /// move, with who did it and when (Section 5's "history").
+    ///
+    /// Same visibility rule as the booking itself - staff see any booking in
+    /// their tenant, a customer only their own. Resource ids are resolved to
+    /// names so the timeline reads as a sentence rather than a pair of GUIDs.
+    /// </summary>
+    /// <response code="200">The timeline, oldest first.</response>
+    /// <response code="404">No such booking in this tenant.</response>
+    [HttpGet("{id:guid}/history")]
+    [ProducesResponseType(typeof(IReadOnlyList<BookingEventResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetHistory(Guid id, CancellationToken ct)
+    {
+        var booking = await _db.Bookings.AsNoTracking().IgnoreQueryFilters()
+            .FirstOrDefaultAsync(b => b.Id == id, ct);
+        if (booking == null) return NotFound();
+
+        var ownership = await CheckOwnershipAsync(booking);
+        if (ownership != null) return ownership;
+
+        var events = await _db.BookingEvents.AsNoTracking()
+            .Where(e => e.BookingId == id)
+            .OrderBy(e => e.CreatedAt).ThenBy(e => e.Id)
+            .ToListAsync(ct);
+
+        var actorIds = events.Where(e => e.ActorUserId.HasValue).Select(e => e.ActorUserId!.Value).Distinct().ToList();
+        var actors = await _db.Users.AsNoTracking().IgnoreQueryFilters()
+            .Where(u => actorIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+
+        var resourceIds = events
+            .Where(e => e.Type == "ResourceChanged")
+            .SelectMany(e => new[] { e.FromValue, e.ToValue })
+            .Where(v => Guid.TryParse(v, out _))
+            .Select(Guid.Parse!).Distinct().ToList();
+        var resources = resourceIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Resources.AsNoTracking().IgnoreQueryFilters()
+                .Where(r => resourceIds.Contains(r.Id))
+                .ToDictionaryAsync(r => r.Id, r => r.Name, ct);
+
+        string? Display(string? value) =>
+            value is not null && Guid.TryParse(value, out var guid) && resources.TryGetValue(guid, out var name)
+                ? name
+                : value;
+
+        return Ok(events.Select(e => new BookingEventResponse(
+            e.Id, e.Type,
+            e.Type == "ResourceChanged" ? Display(e.FromValue) : e.FromValue,
+            e.Type == "ResourceChanged" ? Display(e.ToValue) : e.ToValue,
+            e.ActorUserId,
+            e.ActorUserId.HasValue && actors.TryGetValue(e.ActorUserId.Value, out var who) ? who : null,
+            e.ActorRole, e.Reason, e.CreatedAt)).ToList());
+    }
+
     [HttpGet("{id:guid}/series")]
     public async Task<IActionResult> GetSeries(Guid id, CancellationToken ct)
     {
@@ -1451,6 +1574,7 @@ public class BookingsController : ControllerBase
         }
 
         var results = new List<BulkItemResult>();
+        var created = new List<Models.Booking>();
         foreach (var item in items)
         {
             var itemStart = DateTimeUtil.AsUtc(item.StartTime);
@@ -1489,9 +1613,11 @@ public class BookingsController : ControllerBase
                 Priority = Models.BookingPriority.Normal
             };
             _db.Bookings.Add(booking);
+            created.Add(booking);
             results.Add(new BulkItemResult(booking.Id, item.ResourceId, itemStart, true, null));
         }
 
+        await BookingExclusivity.ApplyManyAsync(_db, created);
         await _db.SaveChangesAsync();
         return new BatchOutcome(false, null, results);
     }
@@ -1788,3 +1914,28 @@ public record CreateRecurringBookingDto(
 );
 public record BulkItemResult(Guid? BookingId, Guid ResourceId, DateTime StartTime, bool Success, string? Reason);
 public record ReserveEquipmentDto(Guid EquipmentItemId, decimal Quantity);
+/// <summary>One entry of a booking's timeline (GET api/bookings/{id}/history).</summary>
+public sealed record BookingEventResponse(
+    Guid Id,
+    string Type,
+    string? From,
+    string? To,
+    Guid? ActorUserId,
+    string? ActorName,
+    string? ActorRole,
+    string? Reason,
+    DateTime At);
+
+/// <summary>One booking stranded by a resource going out of service (GET api/bookings/affected).</summary>
+public sealed record AffectedBookingResponse(
+    Guid BookingId,
+    string CustomerName,
+    Guid CustomerId,
+    Guid BookingTypeId,
+    string BookingTypeName,
+    DateTime StartsAt,
+    DateTime EndsAt,
+    string Status,
+    int AttendeeCount,
+    bool DepositPaid,
+    decimal TotalCost);

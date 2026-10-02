@@ -8,9 +8,20 @@ public class AppDbContext : DbContext
 {
     private readonly ITenantContext _tenantContext;
 
-    public AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext) : base(options)
+    // Optional: background services and tests build a context with no request
+    // behind it, and their changes are recorded as "System".
+    private readonly ICurrentActor? _currentActor;
+
+    public AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext)
+        : this(options, tenantContext, null)
+    {
+    }
+
+    public AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext, ICurrentActor? currentActor)
+        : base(options)
     {
         _tenantContext = tenantContext;
+        _currentActor = currentActor;
     }
 
     // Core / shared
@@ -25,6 +36,7 @@ public class AppDbContext : DbContext
     public DbSet<BookingReminder> BookingReminders { get; set; } = null!;
     public DbSet<RecurringPattern> RecurringPatterns { get; set; } = null!;
     public DbSet<AgentWorkflow> AgentWorkflows { get; set; } = null!;
+    public DbSet<BookingEvent> BookingEvents { get; set; } = null!;
     public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
     public DbSet<Resource> Resources { get; set; } = null!;
     public DbSet<BookingType> BookingTypes { get; set; } = null!;
@@ -108,6 +120,7 @@ public class AppDbContext : DbContext
     {
         AddDefaultInventoryCatalogs();
         ApplyTenantScope();
+        RecordBookingHistory();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
@@ -115,8 +128,14 @@ public class AppDbContext : DbContext
     {
         AddDefaultInventoryCatalogs();
         ApplyTenantScope();
+        RecordBookingHistory();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
+
+    /// Appends the booking timeline for whatever is about to be saved. Runs
+    /// before the save so the original values are still readable.
+    private void RecordBookingHistory() =>
+        BookingHistoryRecorder.Capture(ChangeTracker, _currentActor, e => BookingEvents.Add(e));
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -167,6 +186,23 @@ public class AppDbContext : DbContext
         });
 
         // ==================== BOOKINGS ====================
+        modelBuilder.Entity<BookingEvent>(entity =>
+        {
+            entity.ToTable("booking_events");
+            // The timeline is always read for one booking, newest last.
+            entity.HasIndex(e => new { e.BookingId, e.CreatedAt });
+            entity.HasIndex(e => new { e.TenantId, e.CreatedAt });
+            entity.Property(e => e.Type).HasMaxLength(40).IsRequired();
+            entity.Property(e => e.FromValue).HasMaxLength(200);
+            entity.Property(e => e.ToValue).HasMaxLength(200);
+            entity.Property(e => e.ActorRole).HasMaxLength(40);
+            entity.Property(e => e.Reason).HasMaxLength(500);
+            entity.HasOne<Booking>()
+                  .WithMany()
+                  .HasForeignKey(e => e.BookingId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<Booking>(entity =>
         {
             entity.ToTable("bookings", t =>
@@ -174,6 +210,9 @@ public class AppDbContext : DbContext
                 // Data-integrity rules the database itself enforces, whatever
                 // code path writes the row (migration AddDataIntegrityChecks).
                 t.HasCheckConstraint("CK_bookings_end_after_start", "\"EndTime\" > \"StartTime\"");
+                // The overlap exclusion constraint itself is raw SQL in
+                // migration AddBookingOverlapExclusion: EF Core cannot model
+                // an EXCLUDE ... USING gist constraint.
                 t.HasCheckConstraint("CK_bookings_attendee_count_positive", "\"AttendeeCount\" IS NULL OR \"AttendeeCount\" > 0");
             });
             entity.HasQueryFilter(b => b.DeletedAt == null);

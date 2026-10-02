@@ -4,6 +4,7 @@ import { API_BASE_URL, LOCAL_API_BASE_URL } from './apiBaseUrl';
 import { expireSession, refreshSession } from './sessionRefresh';
 import type {
   AgentWorkflow,
+  BookingEvent,
   AvailabilityDay,
   DepartureBoard,
   DepartureForecast,
@@ -241,6 +242,13 @@ export const bookingApi = createApi({
     // invalidatesTags rather than reading fields off the mutation result.
     getBooking: builder.query<unknown, string>({
       query: (id) => `/bookings/${id}`,
+      providesTags: (_r, _e, id) => [{ type: 'Booking', id }],
+    }),
+    // The booking's timeline - every status change, reschedule and resource
+    // move, with who did it (backend BookingsController.GetHistory). Tagged
+    // on the booking, so cancelling or rescheduling refetches it.
+    getBookingHistory: builder.query<BookingEvent[], string>({
+      query: (id) => `/bookings/${id}/history`,
       providesTags: (_r, _e, id) => [{ type: 'Booking', id }],
     }),
     // ticketBreakdown is asymmetric on purpose: the client POSTs an array
@@ -892,6 +900,7 @@ export const {
   useUpdateMyProfileMutation,
   useGetBookingsQuery,
   useGetBookingQuery,
+  useGetBookingHistoryQuery,
   useCreateBookingMutation,
   useUpdateBookingMutation,
   useDeleteBookingMutation,
