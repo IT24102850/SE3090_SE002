@@ -97,6 +97,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'People & Places',
     items: [
       { path: '/staff', label: 'Staff', icon: '🧑‍💼', roles: ['Admin', 'Manager'] },
+      { path: '/users', label: 'Users & Access', icon: '🔑', roles: ['Admin'] },
       { path: '/branches', label: 'Branches', icon: '📍', roles: ['Admin'] },
     ],
   },

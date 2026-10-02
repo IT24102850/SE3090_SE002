@@ -9,10 +9,12 @@ import '../models/booking_event_model.dart';
 import '../models/branch_model.dart';
 import '../models/disruption_models.dart';
 import '../models/inventory_models.dart';
+import '../models/managed_user_model.dart';
 import '../models/owner_models.dart';
 import '../models/resource_model.dart';
 import '../services/admin_billing_repository.dart';
 import '../services/agent_repository.dart';
+import '../services/access_repository.dart';
 import '../services/disruption_repository.dart';
 import '../services/inventory_repository.dart';
 import '../services/owner_repository.dart';
@@ -276,6 +278,25 @@ final bookingHistoryProvider =
     FutureProvider.autoDispose.family<List<BookingEvent>, String>((ref, bookingId) async {
   if (bookingId.isEmpty) return const [];
   return ref.watch(ownerRepositoryProvider).bookingHistory(bookingId);
+});
+
+// ── Users & Access (Admin only) ─────────────────────────────────────────
+
+final accessRepositoryProvider = Provider<AccessRepository>(
+    (ref) => AccessRepository(ref.watch(apiServiceProvider)));
+
+/// Everyone with a login, and the people still waiting to be let in, in one
+/// read: the screen shows them as two lists but they are never out of step
+/// with each other, because approving moves a row between them.
+final accessDirectoryProvider = FutureProvider.autoDispose<
+    ({List<ManagedUser> users, List<ManagedUser> pending, List<AccessBranch> branches})>((ref) async {
+  final repo = ref.watch(accessRepositoryProvider);
+  final results = await Future.wait([repo.users(), repo.pending(), repo.branches()]);
+  return (
+    users: results[0] as List<ManagedUser>,
+    pending: results[1] as List<ManagedUser>,
+    branches: results[2] as List<AccessBranch>,
+  );
 });
 
 // ── Disruption Recovery Copilot ─────────────────────────────────────────

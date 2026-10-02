@@ -33,6 +33,7 @@ import 'reports/reports_screen.dart';
 import 'resources/branches_screen.dart';
 import 'resources/resource_manager_screen.dart';
 import 'resources/staff_screen.dart';
+import 'resources/users_access_screen.dart';
 import 'scheduling/booking_manager_screen.dart';
 import 'scheduling/booking_types_screen.dart';
 import 'scheduling/multi_branch_schedule_screen.dart';
@@ -207,6 +208,11 @@ const List<OwnerSection> ownerSections = [
         icon: Icons.groups_outlined,
         roles: _adminManager,
         build: StaffScreen.new),
+    OwnerDestination(
+        label: 'Users & Access',
+        icon: Icons.key_outlined,
+        roles: _admin,
+        build: UsersAccessScreen.new),
     OwnerDestination(
         label: 'Branches',
         icon: Icons.location_on_outlined,
