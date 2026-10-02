@@ -1,61 +1,73 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sme_mobile/screens/owner/owner_nav.dart';
 
 /// Guards the promise that the phone gives an owner everything the web
-/// sidebar does. The expected list is copied from
-/// `frontend/src/shared/components/AppLayout.tsx` — every NAV_SECTIONS entry
-/// whose roles include Admin, Manager or Staff. The customer section is
-/// deliberately absent: those destinations are the Flutter app's customer
-/// tabs, not part of the owner workspace.
+/// sidebar does.
+///
+/// This test used to hold a hand-copied list of the web's destinations, and
+/// that is exactly how it failed: Disruption Recovery was added to the web
+/// sidebar, no one updated the copy, and the test went on passing while the
+/// app was missing a screen. A parity guard that is transcribed from the thing
+/// it guards only catches the drift someone remembered to tell it about.
+///
+/// So it now reads `AppLayout.tsx` itself. If the file moves the test says so
+/// rather than silently passing on an empty list — a guard that cannot find
+/// its source is a guard that is not guarding.
 void main() {
-  // label -> the roles the web sidebar shows it to.
-  const webOwnerNav = <String, List<String>>{
-    'Dashboard': ['Admin', 'Manager', 'Staff'],
-    'Reports': ['Admin', 'Manager'],
-    'Booking Manager': ['Admin', 'Manager', 'Staff'],
-    'My Schedule': ['Staff'],
-    'Multi-Branch Schedule': ['Admin', 'Manager'],
-    'Booking Types': ['Admin', 'Manager'],
-    'Billing Dashboard': ['Admin', 'Manager'],
-    'Invoices': ['Admin', 'Manager', 'Staff'],
-    'Subscriptions': ['Admin', 'Manager', 'Staff'],
-    'Insurance Claims': ['Admin', 'Manager', 'Staff'],
-    'Commission Rules': ['Admin', 'Manager', 'Staff'],
-    'Billing Agent': ['Admin', 'Manager'],
-    'Invoice Designer': ['Admin', 'Manager'],
-    'Form Builder': ['Admin', 'Manager'],
-    'Payment Gateways': ['Admin'],
-    'Resource Manager': ['Admin', 'Manager'],
-    'Staff': ['Admin', 'Manager'],
-    'Branches': ['Admin'],
-    'Inventory Manager': ['Admin', 'Manager', 'Staff'],
-    'Stock Movements': ['Admin', 'Manager', 'Staff'],
-    'Purchase Orders': ['Admin', 'Manager', 'Staff'],
-    'Low Stock Alerts': ['Admin', 'Manager', 'Staff'],
-    'Branch Overview': ['Admin', 'Manager', 'Staff'],
-    'Inventory Analytics': ['Admin', 'Manager'],
-    'Schedule Copilot': ['Admin', 'Manager'],
-    'Agent Workflows': ['Admin', 'Manager', 'Staff'],
-    'Business Profile': ['Admin', 'Manager'],
-    'Business Settings': ['Admin'],
-    'Your Unify Plan': ['Admin', 'Manager'],
-  };
+  /// Only the owner workspace. A destination the web shows to Customers alone
+  /// belongs to the Flutter app's customer tabs, not to this navigation, and
+  /// `Customer` is dropped even from entries that also serve staff.
+  const ownerRoles = {'Admin', 'Manager', 'Staff'};
+
+  final layout = File('../../frontend/src/shared/components/AppLayout.tsx');
+
+  Map<String, Set<String>> webOwnerNav() {
+    final source = layout.readAsStringSync();
+    // { path: '/x', label: 'Y', icon: 'z', roles: ['Admin', 'Manager'] }
+    final entry = RegExp(
+      r"""label:\s*'([^']+)'\s*,\s*icon:\s*'[^']*'\s*,\s*roles:\s*\[([^\]]*)\]""",
+    );
+    final roleName = RegExp(r"'([A-Za-z]+)'");
+
+    final found = <String, Set<String>>{};
+    for (final match in entry.allMatches(source)) {
+      final roles = roleName
+          .allMatches(match.group(2)!)
+          .map((m) => m.group(1)!)
+          .where(ownerRoles.contains)
+          .toSet();
+      if (roles.isEmpty) continue;
+      found[match.group(1)!] = roles;
+    }
+    return found;
+  }
 
   Map<String, OwnerDestination> byLabel() => {
         for (final section in ownerSections)
           for (final destination in section.items) destination.label: destination,
       };
 
+  test('the web sidebar is where it is expected to be', () {
+    expect(layout.existsSync(), isTrue,
+        reason: 'AppLayout.tsx was not found at ${layout.path}. '
+            'Point this test at its new home - do not delete the check.');
+    expect(webOwnerNav(), isNotEmpty,
+        reason: 'Parsed no destinations out of AppLayout.tsx. The sidebar format '
+            'changed and this test is no longer reading it.');
+  });
+
   test('every owner destination in the web sidebar exists in the app', () {
     final app = byLabel();
-    final missing = webOwnerNav.keys.where((label) => !app.containsKey(label)).toList();
+    final missing = webOwnerNav().keys.where((label) => !app.containsKey(label)).toList();
     expect(missing, isEmpty, reason: 'These web destinations have no Flutter screen: $missing');
   });
 
   test('each destination is visible to the same roles as on the web', () {
     final app = byLabel();
     final wrong = <String>[];
-    for (final entry in webOwnerNav.entries) {
+    for (final entry in webOwnerNav().entries) {
       final destination = app[entry.key];
       if (destination == null) continue;
       for (final role in entry.value) {
@@ -86,5 +98,15 @@ void main() {
         expect(destination.build(), isNotNull, reason: '${destination.label} did not build');
       }
     }
+  });
+
+  test('Disruption Recovery is reachable for the roles that can approve one', () {
+    final destination = byLabel()['Disruption Recovery'];
+    expect(destination, isNotNull, reason: 'The Disruption Recovery screen is not in the nav.');
+    expect(destination!.visibleTo('Admin'), isTrue);
+    expect(destination.visibleTo('Manager'), isTrue);
+    // Applying a recovery moves other people's bookings; that is not a Staff
+    // decision on the web either.
+    expect(destination.visibleTo('Staff'), isFalse);
   });
 }

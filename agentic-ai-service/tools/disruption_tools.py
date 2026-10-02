@@ -37,6 +37,22 @@ ALLOWED_TOOLS: dict[str, frozenset[str]] = {
 }
 
 
+def _as_items(payload: Any) -> list[dict[str, Any]]:
+    """Normalise a list endpoint to a list of records.
+
+    Some of the API's collections answer a bare array and some answer a paged
+    envelope, and which one a given route uses is not something this service
+    should have to track. Left unhandled the failure is also badly disguised:
+    iterating a dict yields its keys, so the first `.get` on a record raises
+    "'str' object has no attribute 'get'" far from the endpoint that caused it.
+    """
+    if isinstance(payload, dict):
+        payload = payload.get("items", [])
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
+
+
 def _records(tool_name: str):
     """Record every invocation, including the ones that fail or are refused."""
 
@@ -95,7 +111,7 @@ class DisruptionToolsClient:
     @_records("list_affected_bookings")
     def list_affected_bookings(self, resource_id: str, date_from: str, date_to: str) -> list[dict[str, Any]]:
         """Every booking the outage would strand, earliest first."""
-        return self._get("/bookings/affected", {"resourceId": resource_id, "from": date_from, "to": date_to})
+        return _as_items(self._get("/bookings/affected", {"resourceId": resource_id, "from": date_from, "to": date_to}))
 
     @_records("get_resource")
     def get_resource(self, resource_id: str) -> dict[str, Any]:
@@ -104,11 +120,17 @@ class DisruptionToolsClient:
 
     @_records("list_resources")
     def list_resources(self, tenant_id: str, branch_id: str | None = None) -> list[dict[str, Any]]:
-        """Candidate substitutes: every resource of this business."""
-        params: dict[str, Any] = {"tenantId": tenant_id}
+        """Candidate substitutes: every resource of this business.
+
+        /resources answers a paged envelope, not a bare array, and pages at 20
+        by default. Both matter here: iterating the envelope yields its keys as
+        strings rather than resources, and a substitute that falls off page one
+        is a substitute the Recovery agent will never offer.
+        """
+        params: dict[str, Any] = {"tenantId": tenant_id, "pageSize": 100}
         if branch_id:
             params["branchId"] = branch_id
-        return self._get("/resources", params)
+        return _as_items(self._get("/resources", params))
 
     # ── Recovery ────────────────────────────────────────────────────────
     @_records("find_free_slots")
@@ -122,7 +144,7 @@ class DisruptionToolsClient:
     @_records("detect_conflicts")
     def detect_conflicts(self, resource_id: str, date_from: str, date_to: str) -> list[dict[str, Any]]:
         """What is already on a resource in a window - the gate's own check."""
-        return self._get("/bookings/affected", {"resourceId": resource_id, "from": date_from, "to": date_to})
+        return _as_items(self._get("/bookings/affected", {"resourceId": resource_id, "from": date_from, "to": date_to}))
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         try:

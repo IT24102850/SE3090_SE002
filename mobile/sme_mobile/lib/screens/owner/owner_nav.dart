@@ -40,6 +40,7 @@ import 'scheduling/availability_slots_screen.dart';
 import 'scheduling/recurring_series_screen.dart';
 import 'automation/agent_workflows_screen.dart';
 import 'automation/ai_planner_screen.dart';
+import 'automation/disruption_recovery_screen.dart';
 
 /// One owner destination — the mobile counterpart of an entry in the web
 /// app's sidebar. `roles` mirrors that sidebar's own role list exactly, so
@@ -140,7 +141,7 @@ const List<OwnerSection> ownerSections = [
     OwnerDestination(
         label: 'Recurring Series',
         icon: Icons.repeat_outlined,
-        roles: _adminManager,
+        roles: _staffUp,
         build: RecurringSeriesScreen.new),
     OwnerDestination(
         label: 'Vessels & Crew',
@@ -221,7 +222,7 @@ const List<OwnerSection> ownerSections = [
     OwnerDestination(
         label: 'StockSense AI',
         icon: Icons.auto_awesome_outlined,
-        roles: _adminManager,
+        roles: _staffUp,
         build: StockSenseAiScreen.new),
     OwnerDestination(
         label: 'Stock Movements',
@@ -236,7 +237,7 @@ const List<OwnerSection> ownerSections = [
     OwnerDestination(
         label: 'Suppliers',
         icon: Icons.handshake_outlined,
-        roles: _adminManager,
+        roles: _staffUp,
         build: SuppliersScreen.new),
     OwnerDestination(
         label: 'Low Stock Alerts',
@@ -260,6 +261,11 @@ const List<OwnerSection> ownerSections = [
         icon: Icons.auto_awesome_outlined,
         roles: _adminManager,
         build: AiPlannerAdminScreen.new),
+    OwnerDestination(
+        label: 'Disruption Recovery',
+        icon: Icons.health_and_safety_outlined,
+        roles: _adminManager,
+        build: DisruptionRecoveryScreen.new),
     OwnerDestination(
         label: 'Agent Workflows',
         icon: Icons.satellite_alt_outlined,

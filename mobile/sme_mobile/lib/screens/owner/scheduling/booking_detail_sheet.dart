@@ -8,6 +8,7 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/ui/ui.dart';
 import '../owner_widgets.dart';
+import 'booking_history_timeline.dart';
 import 'scheduling_kit.dart';
 
 /// Opens the detail sheet for one booking.
@@ -210,6 +211,8 @@ class _BookingDetailSheetState extends ConsumerState<BookingDetailSheet> {
                 ],
               ),
             ],
+            const SizedBox(height: 18),
+            BookingHistoryTimeline(bookingId: b.id),
           ],
         ),
       ),
