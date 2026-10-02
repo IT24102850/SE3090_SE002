@@ -934,6 +934,63 @@ public class BookingsController : ControllerBase
     }
 
     /// <summary>The recurring pattern behind a booking, with every occurrence in the series.</summary>
+    /// <summary>
+    /// The booking's timeline: every status change, reschedule and resource
+    /// move, with who did it and when (Section 5's "history").
+    ///
+    /// Same visibility rule as the booking itself - staff see any booking in
+    /// their tenant, a customer only their own. Resource ids are resolved to
+    /// names so the timeline reads as a sentence rather than a pair of GUIDs.
+    /// </summary>
+    /// <response code="200">The timeline, oldest first.</response>
+    /// <response code="404">No such booking in this tenant.</response>
+    [HttpGet("{id:guid}/history")]
+    [ProducesResponseType(typeof(IReadOnlyList<BookingEventResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetHistory(Guid id, CancellationToken ct)
+    {
+        var booking = await _db.Bookings.AsNoTracking().IgnoreQueryFilters()
+            .FirstOrDefaultAsync(b => b.Id == id, ct);
+        if (booking == null) return NotFound();
+
+        var ownership = await CheckOwnershipAsync(booking);
+        if (ownership != null) return ownership;
+
+        var events = await _db.BookingEvents.AsNoTracking()
+            .Where(e => e.BookingId == id)
+            .OrderBy(e => e.CreatedAt).ThenBy(e => e.Id)
+            .ToListAsync(ct);
+
+        var actorIds = events.Where(e => e.ActorUserId.HasValue).Select(e => e.ActorUserId!.Value).Distinct().ToList();
+        var actors = await _db.Users.AsNoTracking().IgnoreQueryFilters()
+            .Where(u => actorIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+
+        var resourceIds = events
+            .Where(e => e.Type == "ResourceChanged")
+            .SelectMany(e => new[] { e.FromValue, e.ToValue })
+            .Where(v => Guid.TryParse(v, out _))
+            .Select(Guid.Parse!).Distinct().ToList();
+        var resources = resourceIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Resources.AsNoTracking().IgnoreQueryFilters()
+                .Where(r => resourceIds.Contains(r.Id))
+                .ToDictionaryAsync(r => r.Id, r => r.Name, ct);
+
+        string? Display(string? value) =>
+            value is not null && Guid.TryParse(value, out var guid) && resources.TryGetValue(guid, out var name)
+                ? name
+                : value;
+
+        return Ok(events.Select(e => new BookingEventResponse(
+            e.Id, e.Type,
+            e.Type == "ResourceChanged" ? Display(e.FromValue) : e.FromValue,
+            e.Type == "ResourceChanged" ? Display(e.ToValue) : e.ToValue,
+            e.ActorUserId,
+            e.ActorUserId.HasValue && actors.TryGetValue(e.ActorUserId.Value, out var who) ? who : null,
+            e.ActorRole, e.Reason, e.CreatedAt)).ToList());
+    }
+
     [HttpGet("{id:guid}/series")]
     public async Task<IActionResult> GetSeries(Guid id, CancellationToken ct)
     {
@@ -1792,3 +1849,14 @@ public record CreateRecurringBookingDto(
 );
 public record BulkItemResult(Guid? BookingId, Guid ResourceId, DateTime StartTime, bool Success, string? Reason);
 public record ReserveEquipmentDto(Guid EquipmentItemId, decimal Quantity);
+/// <summary>One entry of a booking's timeline (GET api/bookings/{id}/history).</summary>
+public sealed record BookingEventResponse(
+    Guid Id,
+    string Type,
+    string? From,
+    string? To,
+    Guid? ActorUserId,
+    string? ActorName,
+    string? ActorRole,
+    string? Reason,
+    DateTime At);

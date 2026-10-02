@@ -1,4 +1,4 @@
-using SmeBackend.Services;
+﻿using SmeBackend.Services;
 
 namespace SmeBackend.Middleware;
 
@@ -11,7 +11,7 @@ public class TenantResolutionMiddleware
         _next = next;
     }
     
-    public async Task InvokeAsync(HttpContext context, ITenantContext tenantContext)
+    public async Task InvokeAsync(HttpContext context, ITenantContext tenantContext, ICurrentActor currentActor)
     {
         if (context.User.Identity?.IsAuthenticated == true)
         {
@@ -27,6 +27,10 @@ public class TenantResolutionMiddleware
             
             if (!string.IsNullOrEmpty(roleClaim))
                 context.Items["UserRole"] = roleClaim;
+
+            // Who to attribute booking history to (Data/BookingHistoryRecorder).
+            var userIdClaim = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            currentActor.Set(Guid.TryParse(userIdClaim, out var userId) ? userId : null, roleClaim);
                 
             if (!string.IsNullOrEmpty(branchIdClaim) && Guid.TryParse(branchIdClaim, out var branchId))
                 context.Items["BranchId"] = branchId;
