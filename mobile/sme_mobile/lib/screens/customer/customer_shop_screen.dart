@@ -1,13 +1,17 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../inventory/authenticated_api_client.dart';
+import '../../providers/auth_provider.dart';
+import '../../models/public_tenant_model.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/ui/ui.dart';
+import 'book_business_list_screen.dart';
 
-class CustomerShopScreen extends StatefulWidget {
+class CustomerShopScreen extends ConsumerStatefulWidget {
   CustomerShopScreen({
     super.key,
     AuthenticatedApiClient? client,
@@ -20,10 +24,10 @@ class CustomerShopScreen extends StatefulWidget {
   final String? tenantId;
 
   @override
-  State<CustomerShopScreen> createState() => _CustomerShopScreenState();
+  ConsumerState<CustomerShopScreen> createState() => _CustomerShopScreenState();
 }
 
-class _CustomerShopScreenState extends State<CustomerShopScreen> {
+class _CustomerShopScreenState extends ConsumerState<CustomerShopScreen> {
   final _addressController = TextEditingController();
   final _notesController = TextEditingController();
   List<Map<String, dynamic>> _branches = [];
@@ -74,11 +78,13 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     try {
       var branchesResponse =
           await widget.client.get('/customer-orders/branches');
+      final currentTenantId =
+          ref.read(authProvider).user?.tenantId ?? widget.tenantId;
       if (branchesResponse.statusCode == 404 &&
-          widget.tenantId != null &&
-          widget.tenantId!.isNotEmpty) {
-        branchesResponse = await widget.client
-            .get('/branches?tenantId=${Uri.encodeQueryComponent(widget.tenantId!)}');
+          currentTenantId != null &&
+          currentTenantId.isNotEmpty) {
+        branchesResponse = await widget.client.get(
+            '/branches?tenantId=${Uri.encodeQueryComponent(currentTenantId)}');
       }
       final ordersResponse = await widget.client.get('/customer-orders');
       if (branchesResponse.statusCode < 200 ||
@@ -163,6 +169,26 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _findBusiness() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => BookBusinessListScreen(
+          onBusinessSelected: _connectToBusiness,
+        ),
+      ),
+    );
+    if (mounted) await _load();
+  }
+
+  Future<bool> _connectToBusiness(PublicTenant tenant) async {
+    final connected =
+        await ref.read(authProvider.notifier).joinBusiness(tenant.id);
+    if (!connected || !mounted) return false;
+
+    Navigator.of(context).pop();
+    return true;
   }
 
   List<String> get _categories => [
@@ -790,10 +816,21 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                 else if (_loading)
                   const AppLoader()
                 else if (_branches.isEmpty)
-                  const EmptyState(
-                      icon: Icons.storefront_outlined,
-                      message:
-                          'This business has not set up a shopping location yet.')
+                  Column(
+                    children: [
+                      const EmptyState(
+                        icon: Icons.storefront_outlined,
+                        message:
+                            'Your account is not connected to a store yet, or this business has not added a shopping location.',
+                      ),
+                      const SizedBox(height: 14),
+                      NeonButton(
+                        label: 'Find a business',
+                        icon: Icons.search_rounded,
+                        onPressed: _findBusiness,
+                      ),
+                    ],
+                  )
                 else ...[
                   _StoreSelector(
                     branches: _branches,

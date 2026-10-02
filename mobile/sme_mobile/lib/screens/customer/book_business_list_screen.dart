@@ -9,7 +9,12 @@ import '../../widgets/ui/ui.dart';
 import 'business_detail_screen.dart';
 
 class BookBusinessListScreen extends ConsumerStatefulWidget {
-  const BookBusinessListScreen({super.key});
+  const BookBusinessListScreen({
+    super.key,
+    this.onBusinessSelected,
+  });
+
+  final Future<bool> Function(PublicTenant tenant)? onBusinessSelected;
 
   @override
   ConsumerState<BookBusinessListScreen> createState() =>
@@ -120,9 +125,25 @@ class _BookBusinessListScreenState
               ),
               const SizedBox(height: 22),
               NeonButton(
-                label: 'Explore business',
-                onPressed: () {
+                label: widget.onBusinessSelected == null
+                    ? 'Explore business'
+                    : 'Shop this business',
+                onPressed: () async {
                   Navigator.pop(sheetContext);
+                  final onBusinessSelected = widget.onBusinessSelected;
+                  if (onBusinessSelected != null) {
+                    final selected = await onBusinessSelected(tenant);
+                    if (!selected && mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Could not connect to this business. Please try again.',
+                          ),
+                        ),
+                      );
+                    }
+                    return;
+                  }
                   Navigator.of(context).push(
                     slideFadeRoute(BusinessDetailScreen(tenant: tenant)),
                   );

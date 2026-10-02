@@ -3,8 +3,10 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sme_mobile/inventory/authenticated_api_client.dart';
+import 'package:sme_mobile/providers/public_tenant_provider.dart';
 import 'package:sme_mobile/screens/customer/customer_shop_screen.dart';
 import 'package:sme_mobile/services/push_notification_service.dart';
 
@@ -23,12 +25,14 @@ void main() {
     final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api'))
       ..httpClientAdapter = adapter;
     await tester.pumpWidget(
-      MaterialApp(
-        navigatorKey: PushNotificationService.navigatorKey,
-        home: CustomerShopScreen(
-          client: AuthenticatedApiClient(dio: dio),
-          initialBranchId: branchId,
-          tenantId: 'tenant-main',
+      ProviderScope(
+        child: MaterialApp(
+          navigatorKey: PushNotificationService.navigatorKey,
+          home: CustomerShopScreen(
+            client: AuthenticatedApiClient(dio: dio),
+            initialBranchId: branchId,
+            tenantId: 'tenant-main',
+          ),
         ),
       ),
     );
@@ -64,9 +68,42 @@ void main() {
     expect(tester.takeException(), isNull);
     dio.close();
   });
+
+  testWidgets('empty locations offer a way to find and join a business',
+      (tester) async {
+    final adapter = _CustomerShopApiAdapter(emptyBranches: true);
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api'))
+      ..httpClientAdapter = adapter;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          publicTenantsProvider.overrideWith((ref) async => []),
+        ],
+        child: MaterialApp(
+          navigatorKey: PushNotificationService.navigatorKey,
+          home: CustomerShopScreen(
+            client: AuthenticatedApiClient(dio: dio),
+            tenantId: 'customer-pool',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Your account is not connected to a store yet'),
+        findsOneWidget);
+    await tester.tap(find.text('Find a business'));
+    await tester.pumpAndSettle();
+    expect(find.text('Find a Business'), findsOneWidget);
+
+    dio.close();
+  });
 }
 
 class _CustomerShopApiAdapter implements HttpClientAdapter {
+  _CustomerShopApiAdapter({this.emptyBranches = false});
+
+  final bool emptyBranches;
   Map<String, dynamic>? createdOrder;
   List<Map<String, dynamic>> orders = [];
   final List<String> requests = [];
@@ -85,9 +122,13 @@ class _CustomerShopApiAdapter implements HttpClientAdapter {
       statusCode = 404;
       response = {'message': 'Not found'};
     } else if (path.endsWith('/branches')) {
-      response = [
-        {'id': 'branch-main', 'name': 'Main store', 'address': 'Town'}
-      ];
+      response = emptyBranches
+          ? []
+          : [
+              {'id': 'branch-main', 'name': 'Main store', 'address': 'Town'}
+            ];
+    } else if (path.endsWith('/tenant/public')) {
+      response = [];
     } else if (path.endsWith('/customer-orders/products')) {
       response = [
         {
