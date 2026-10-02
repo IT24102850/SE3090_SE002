@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../models/booking_event_model.dart';
 import '../models/booking_model.dart';
 import '../models/booking_type_model.dart';
 import '../models/branch_model.dart';
@@ -29,6 +30,13 @@ class OwnerRepository {
   /// The booking desk's own window. `pageSize` is deliberately generous:
   /// the manager screen derives its KPIs, its day filter and its "next up"
   /// list from one window so they cannot disagree with each other.
+  /// A booking's audit trail, oldest first — the mobile twin of the web
+  /// app's BookingHistoryTimeline.
+  Future<List<BookingEvent>> bookingHistory(String bookingId) async {
+    final response = await _dio.get('/bookings/$bookingId/history');
+    return _list(response.data, BookingEvent.fromJson);
+  }
+
   Future<List<Booking>> bookings({
     required String tenantId,
     String? branchId,

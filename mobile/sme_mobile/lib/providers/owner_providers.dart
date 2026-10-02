@@ -5,12 +5,15 @@ import '../models/agent_workflow_model.dart';
 import '../models/billing_models.dart';
 import '../models/booking_model.dart';
 import '../models/booking_type_model.dart';
+import '../models/booking_event_model.dart';
 import '../models/branch_model.dart';
+import '../models/disruption_models.dart';
 import '../models/inventory_models.dart';
 import '../models/owner_models.dart';
 import '../models/resource_model.dart';
 import '../services/admin_billing_repository.dart';
 import '../services/agent_repository.dart';
+import '../services/disruption_repository.dart';
 import '../services/inventory_repository.dart';
 import '../services/owner_repository.dart';
 import 'api_service_provider.dart';
@@ -265,4 +268,27 @@ final agentWorkflowsProvider =
   final tenantId = ref.watch(ownerTenantIdProvider);
   if (tenantId.isEmpty) return const [];
   return ref.watch(agentRepositoryProvider).workflows(tenantId: tenantId);
+});
+
+/// One booking's audit trail. Keyed by booking id so two sheets open at once
+/// never show each other's history.
+final bookingHistoryProvider =
+    FutureProvider.autoDispose.family<List<BookingEvent>, String>((ref, bookingId) async {
+  if (bookingId.isEmpty) return const [];
+  return ref.watch(ownerRepositoryProvider).bookingHistory(bookingId);
+});
+
+// ── Disruption Recovery Copilot ─────────────────────────────────────────
+
+final disruptionRepositoryProvider = Provider<DisruptionRepository>(
+    (ref) => DisruptionRepository(ref.watch(apiServiceProvider)));
+
+/// Every recovery plan this tenant has run, newest first. The screen
+/// invalidates it after a plan, an approval or a rejection, so the list and
+/// the "waiting" count can never disagree with what the server holds.
+final disruptionWorkflowsProvider =
+    FutureProvider.autoDispose<List<DisruptionWorkflow>>((ref) async {
+  final tenantId = ref.watch(ownerTenantIdProvider);
+  if (tenantId.isEmpty) return const [];
+  return ref.watch(disruptionRepositoryProvider).list();
 });
