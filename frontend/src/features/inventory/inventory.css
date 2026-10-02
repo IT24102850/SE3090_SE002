@@ -908,6 +908,8 @@ body:has(.inventory-scope) .app-shell::after,
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem;
   margin-top: 0;
 }
+.inventory-scope .stocksense-hero.is-staff .stocksense-hero-modes { grid-template-columns: minmax(0, 1fr); }
+.inventory-scope .stocksense-staff-branch-help { position: relative; z-index: 1; grid-column: 1 / -1; margin: 0; padding: .7rem .9rem; color: #fff4d6; background: rgba(126, 73, 13, .28); border: 1px solid rgba(255, 211, 128, .34); border-radius: .7rem; font-size: .82rem; line-height: 1.45; }
 .inventory-scope .stocksense-hero-orbit {
   position: absolute; z-index: 0; top: 18%; right: 7%;
   width: 18rem; height: 18rem; pointer-events: none;
@@ -2030,6 +2032,10 @@ body:has(.inventory-scope) .app-shell::after,
 
 /* Inventory workflows added to the web shell. */
 .inventory-scope .sales-page { display: grid; gap: 1rem; }
+.inventory-scope .sales-staff-tip { display: flex; gap: .85rem; align-items: flex-start; margin: -.35rem 0 0; padding: .95rem 1.1rem; color: var(--color-text); background: linear-gradient(110deg, color-mix(in srgb, #0e9f91 11%, var(--color-surface)), color-mix(in srgb, #4e72df 7%, var(--color-surface))); border: 1px solid color-mix(in srgb, #0e9f91 28%, var(--color-border)); border-left: 4px solid #0e9f91; border-radius: .85rem; box-shadow: var(--shadow-sm); }
+.inventory-scope .sales-staff-tip-icon { display: grid; width: 38px; height: 38px; flex: none; place-items: center; color: #087e73; background: color-mix(in srgb, #0e9f91 14%, var(--color-surface)); border: 1px solid color-mix(in srgb, #0e9f91 24%, var(--color-border)); border-radius: 12px; }
+.inventory-scope .sales-staff-tip h2 { margin: 0 0 .2rem; color: var(--color-text); font-size: .9rem; font-weight: 800; }
+.inventory-scope .sales-staff-tip p { margin: 0; color: var(--color-text-secondary); font-size: .84rem; line-height: 1.5; }
 .inventory-scope .sales-hero { display: flex; gap: 1.25rem; align-items: center; justify-content: space-between; min-height: 218px; padding: 1.5rem 1.7rem; color: #f2fbff; background: linear-gradient(120deg, #122039, #203b5e 68%, #17675e); border: 1px solid rgba(64, 185, 170, .25); border-radius: 1rem; box-shadow: 0 18px 40px rgba(14,25,55,.18); }
 .inventory-scope .sales-hero h1 { margin: .25rem 0 .4rem; color: #fff; font-size: 1.8rem; line-height: 1.15; letter-spacing: -.025em; }
 .inventory-scope .sales-hero .workflow-hero-copy > p:last-child { max-width: 42rem; margin: 0; color: #d5e4ef; font-size: .98rem; line-height: 1.55; }

@@ -374,7 +374,7 @@ public sealed class ReportsController(
 
     private Guid? ResolveBranchScope(Guid? requestedBranchId)
     {
-        if (User.IsInRole(UserRole.Admin.ToString()) || requestedBranchId.HasValue)
+        if (User.IsInRole(UserRole.Admin.ToString()))
         {
             return requestedBranchId;
         }

@@ -50,6 +50,7 @@ function renderPage(userOverrides: { role?: 'Admin' | 'Manager' | 'Staff'; branc
           fullName: 'Test Manager',
           role: userOverrides.role ?? 'Manager' as const,
           tenantId: 'tenant-1',
+          branchId: 'branch-1',
           ...userOverrides,
         },
         token: 'test-token',
@@ -81,6 +82,45 @@ describe('SalesPage', () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     localStorage.clear();
+  });
+
+  it('shows staff a friendly note explaining where sale prices come from', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/inventory/branches')) return branchesResponse();
+      if (url.includes('/api/inventory?page=')) {
+        return new Response(JSON.stringify({ items: [], totalPages: 1 }), { status: 200 });
+      }
+      if (url.includes('/api/reports/sales-activity?')) {
+        return new Response(JSON.stringify({
+          salesCount: 0,
+          totalRevenue: 0,
+          averageSale: 0,
+          costOfGoodsSold: 0,
+          grossProfit: 0,
+          recentSales: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
+    }));
+
+    renderPage({ role: 'Staff', branchId: 'branch-1' });
+
+    const pricingTip = await screen.findByRole('complementary', { name: 'Quick pricing tip' });
+    expect(pricingTip).toHaveTextContent('Sale price and cost are filled in from the item catalog');
+    expect(pricingTip).toHaveTextContent('you don’t need to enter them');
+    expect(pricingTip).toHaveTextContent('let your manager know');
+  });
+
+  it('fails closed when Staff has no assigned branch', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPage({ role: 'Staff', branchId: undefined });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('no assigned branch');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Review sale' })).toBeDisabled();
   });
 
   it('locks catalog prices and submits the exact expected values after confirmation', async () => {

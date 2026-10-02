@@ -66,26 +66,51 @@ function categoryPresentation(category?: string) {
 export function BranchOverviewPage() {
   const { notify } = useToast();
   const token = getStoredToken();
-  const tenantId = useSelector((state: RootState) => state.auth.user?.tenantId ?? '');
-  const { data: databaseBranches = [] } = useGetBranchesQuery({ tenantId }, { skip: !tenantId });
+  const user = useSelector((state: RootState) => state.auth.user);
+  const tenantId = user?.tenantId ?? '';
+  const isAdmin = user?.role === 'Admin';
+  const assignedBranchId = isAdmin ? undefined : user?.branchId;
+  const { data: databaseBranches = [] } = useGetBranchesQuery(
+    { tenantId },
+    { skip: !tenantId || !isAdmin },
+  );
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [assignedBranch, setAssignedBranch] = useState<{ id: string; name: string } | null>(null);
   const [categoryNames, setCategoryNames] = useState<Record<string, string>>({});
   const [categoryWarning, setCategoryWarning] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [itemQuery, setItemQuery] = useState('');
-  const [itemBranch, setItemBranch] = useState('All branches');
+  const [itemBranch, setItemBranch] = useState(isAdmin ? 'All branches' : assignedBranchId ?? '');
   const [itemHealth, setItemHealth] = useState<StockHealthFilter>('All stock health');
 
   const loadInventory = useCallback(async (showMessage = false) => {
     setLoading(true);
     try {
+      if (!isAdmin && !assignedBranchId) {
+        throw new Error('Your account has no assigned branch. Inventory is unavailable until one is assigned.');
+      }
+      let branchScope = '';
+      if (!isAdmin && assignedBranchId) {
+        const branchResponse = await fetch('/api/inventory/branches', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (!branchResponse.ok) throw new Error(`Branch request failed (${branchResponse.status})`);
+        const branchData = await branchResponse.json() as Array<{ id?: string; name?: string }>;
+        const branch = branchData.find((entry) => entry.id === assignedBranchId);
+        if (!branch) throw new Error('Your assigned branch could not be loaded.');
+        branchScope = branch.name ?? 'Assigned branch';
+        setAssignedBranch({ id: assignedBranchId, name: branchScope });
+        setItemBranch(branchScope);
+      }
       const rows: InventoryItem[] = [];
       let page = 1;
       let totalPages = 1;
       do {
-        const response = await fetch(`/api/inventory?page=${page}&pageSize=100`, {
+        const params = new URLSearchParams({ page: String(page), pageSize: '100' });
+        if (assignedBranchId) params.set('branchId', assignedBranchId);
+        const response = await fetch(`/api/inventory?${params}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
         if (!response.ok) throw new Error(`Inventory request failed (${response.status})`);
@@ -94,7 +119,9 @@ export function BranchOverviewPage() {
         totalPages = Number(data.totalPages ?? 1);
         page += 1;
       } while (page <= totalPages);
-      setInventory(rows);
+      setInventory(isAdmin
+        ? rows
+        : rows.filter((item) => item.branchId === assignedBranchId));
       try {
         const categoryResponse = await fetch('/api/inventory/categories', {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -123,7 +150,7 @@ export function BranchOverviewPage() {
     } finally {
       setLoading(false);
     }
-  }, [notify, token]);
+  }, [assignedBranchId, isAdmin, notify, token]);
 
   useEffect(() => { void loadInventory(); }, [loadInventory]);
 
@@ -133,7 +160,10 @@ export function BranchOverviewPage() {
       const key = item.branchId ?? 'unassigned';
       grouped.set(key, [...(grouped.get(key) ?? []), item]);
     });
-    const summaries = databaseBranches.map((branch) => {
+    const sourceBranches = isAdmin
+      ? databaseBranches
+      : assignedBranch ? [assignedBranch] : [];
+    const summaries = sourceBranches.map((branch) => {
       const items = grouped.get(branch.id) ?? [];
       return {
         id: branch.id,
@@ -156,7 +186,7 @@ export function BranchOverviewPage() {
       });
     }
     return summaries;
-  }, [databaseBranches, inventory]);
+  }, [assignedBranch, databaseBranches, inventory, isAdmin]);
 
   const summary = useMemo(() => ({
     branches: branches.length,
@@ -172,15 +202,19 @@ export function BranchOverviewPage() {
   const comparisonItems = useMemo(() => {
     const term = itemQuery.trim().toLowerCase();
     return inventory.filter((item) => {
-      const matchesBranch = itemBranch === 'All branches' || (item.branch ?? 'Unassigned') === itemBranch;
+      const matchesBranch = isAdmin
+        ? itemBranch === 'All branches' || (item.branch ?? 'Unassigned') === itemBranch
+        : Boolean(assignedBranchId) && item.branchId === assignedBranchId;
       const category = categoryPresentation(categoryNameFor(item, categoryNames)).label;
       const matchesText = !term || [item.name, item.sku, item.branch ?? 'Unassigned', category].some((field) => field.toLowerCase().includes(term));
       const health = item.quantity <= 0 ? 'Out of stock' : item.quantity <= item.reorderLevel ? 'Low stock' : 'In stock';
       const matchesHealth = itemHealth === 'All stock health' || itemHealth === health;
       return matchesBranch && matchesText && matchesHealth;
     });
-  }, [categoryNames, inventory, itemBranch, itemHealth, itemQuery]);
-  const comparisonBranches = ['All branches', ...Array.from(new Set(inventory.map((item) => item.branch ?? 'Unassigned'))).sort((a, b) => a.localeCompare(b))];
+  }, [assignedBranchId, categoryNames, inventory, isAdmin, itemBranch, itemHealth, itemQuery]);
+  const comparisonBranches = isAdmin
+    ? ['All branches', ...Array.from(new Set(inventory.map((item) => item.branch ?? 'Unassigned'))).sort((a, b) => a.localeCompare(b))]
+    : [assignedBranch?.name ?? 'Assigned branch'];
   const comparisonSummary = useMemo(() => ({
     units: comparisonItems.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0),
     atRisk: new Set(
@@ -259,11 +293,13 @@ export function BranchOverviewPage() {
         </div>
         <div className="toolbar toolbar-wrap branch-comparison-toolbar">
           <div className="search-field"><span className="search-icon" aria-hidden="true">⌕</span><input type="search" aria-label="Search branch inventory" placeholder="Search item, SKU, category or branch" value={itemQuery} onChange={(event) => setItemQuery(event.target.value)} /></div>
-          <select className="filter-select" aria-label="Filter by branch" value={itemBranch} onChange={(event) => setItemBranch(event.target.value)}>{comparisonBranches.map((entry) => <option key={entry}>{entry}</option>)}</select>
+          {isAdmin
+            ? <select className="filter-select" aria-label="Filter by branch" value={itemBranch} onChange={(event) => setItemBranch(event.target.value)}>{comparisonBranches.map((entry) => <option key={entry}>{entry}</option>)}</select>
+            : <span className="filter-select" aria-label="Assigned branch">{comparisonBranches[0]}</span>}
           <select className="filter-select" aria-label="Filter by stock health" value={itemHealth} onChange={(event) => setItemHealth(event.target.value as StockHealthFilter)}>
             <option>All stock health</option><option>In stock</option><option>Low stock</option><option>Out of stock</option>
           </select>
-          {(itemQuery || itemBranch !== 'All branches' || itemHealth !== 'All stock health') && <button type="button" className="btn btn-ghost inventory-clear-filters" onClick={() => { setItemQuery(''); setItemBranch('All branches'); setItemHealth('All stock health'); }}>Clear filters</button>}
+          {(itemQuery || (isAdmin && itemBranch !== 'All branches') || itemHealth !== 'All stock health') && <button type="button" className="btn btn-ghost inventory-clear-filters" onClick={() => { setItemQuery(''); setItemBranch(isAdmin ? 'All branches' : assignedBranch?.name ?? ''); setItemHealth('All stock health'); }}>Clear filters</button>}
         </div>
         {categoryWarning && <p className="branch-category-warning" role="status">{categoryWarning} Items without a saved category or matching legacy category text are grouped as “Uncategorised”.</p>}
         <div className="branch-directory-pulse" aria-label="Filtered inventory summary">

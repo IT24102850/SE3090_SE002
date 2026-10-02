@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { Badge } from '../ui/Badge';
 import { Icon } from '../ui/Icon';
 import { useToast } from '../ui/ToastContext';
 import { getStoredToken } from '../authToken';
 import { scrollToId } from '../../marketing/scroll/useSmoothScroll';
 import Modal from '../../../shared/components/Modal';
+import type { RootState } from '../../../store/store';
 
 type BranchOption = { id: string; name: string };
 
@@ -42,6 +44,8 @@ function insightIcon(category: string) {
 export function LowStockAlertsPage() {
   const { notify } = useToast();
   const token = getStoredToken();
+  const { user } = useSelector((state: RootState) => state.auth);
+  const isStaff = user?.role === 'Staff';
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
   const [analysisScope, setAnalysisScope] = useState<'business' | 'branch'>('business');
@@ -92,11 +96,15 @@ export function LowStockAlertsPage() {
     setPlanning(true);
     setPlanError('');
     try {
-      const activeScope = directScope ?? analysisScope;
-      const targetBranchId = overrideBranchId ?? selectedBranchId;
+      const activeScope = isStaff ? 'branch' : directScope ?? analysisScope;
+      const targetBranchId = isStaff
+        ? user?.branchId ?? ''
+        : overrideBranchId ?? selectedBranchId;
       const selectedBranch = branches.find((option) => option.id === targetBranchId);
       if (activeScope === 'branch' && !selectedBranch) {
-        throw new Error('Choose a branch before starting branch-specific analysis.');
+        throw new Error(isStaff
+          ? 'Your account needs an assigned branch before StockSense can review its stock. Ask your manager for help.'
+          : 'Choose a branch before starting branch-specific analysis.');
       }
       const scopeLabel = activeScope === 'business' ? 'Full business' : selectedBranch?.name ?? 'Selected branch';
       setReportScope(scopeLabel);
@@ -105,7 +113,9 @@ export function LowStockAlertsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({
-          objective: 'Review overall inventory health, not only low stock. Identify stock coverage risks from recorded issue/sale/consumption, summarize items without recorded outflow and recent waste movements, and explain uncertainty. Do not infer demand from missing history.',
+          objective: isStaff
+            ? 'Help the branch staff prioritize today’s stock work. Clearly list out-of-stock and below-reorder items first, explain the reason for each recommendation in plain language, highlight missing usage or price information that should be checked with a manager, and suggest practical next steps. Do not make changes or place orders.'
+            : 'Review overall inventory health, not only low stock. Identify stock coverage risks from recorded issue/sale/consumption, summarize items without recorded outflow and recent waste movements, and explain uncertainty. Do not infer demand from missing history.',
           branchId: activeScope === 'business' ? undefined : selectedBranch?.id,
         }),
       });
@@ -217,8 +227,8 @@ export function LowStockAlertsPage() {
   };
 
   return (
-    <div className="page stocksense-page">
-      <header className="page-head stocksense-hero">
+    <div className={`page stocksense-page${isStaff ? ' is-staff' : ''}`}>
+      <header className={`page-head stocksense-hero${isStaff ? ' is-staff' : ''}`}>
         <span className="inventory-hero-sheen" aria-hidden="true" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="stocksense-hero-copy">
@@ -227,19 +237,31 @@ export function LowStockAlertsPage() {
           </div>
           <div>
             <div className="stocksense-hero-eyebrow-row">
-              <p className="eyebrow">INTELLIGENT INVENTORY OPERATIONS</p>
+              <p className="eyebrow">{isStaff ? 'YOUR BRANCH STOCK ASSISTANT' : 'INTELLIGENT INVENTORY OPERATIONS'}</p>
               <span className="stocksense-model-pill">
                 <span className="stocksense-status-pulse" aria-hidden="true" />
-                Gemini Agent Online
+                {isStaff ? 'Ready to help' : 'Gemini Agent Online'}
               </span>
             </div>
             <h1>StockSense AI</h1>
-            <p className="page-sub">AI-powered insights into stock movement, coverage risks, and replenishment decisions.</p>
+            <p className="page-sub">{isStaff
+              ? 'Get a clear picture of what needs attention at your branch and what to check next.'
+              : 'AI-powered insights into stock movement, coverage risks, and replenishment decisions.'}</p>
             <div className="stocksense-capabilities">
-              <span>Stock coverage</span>
-              <span>Movement insights</span>
-              <span>Reorder guidance</span>
-              <span>Safety buffer check</span>
+              {isStaff ? (
+                <>
+                  <span>What needs attention</span>
+                  <span>Why it matters</span>
+                  <span>What to do next</span>
+                </>
+              ) : (
+                <>
+                  <span>Stock coverage</span>
+                  <span>Movement insights</span>
+                  <span>Reorder guidance</span>
+                  <span>Safety buffer check</span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -254,11 +276,17 @@ export function LowStockAlertsPage() {
             <button
               className="btn btn-primary stocksense-analyze-button"
               type="button"
-              onClick={() => setScopeDialogOpen(true)}
-              disabled={planning}
+              onClick={() => {
+                if (isStaff) {
+                  void analyzeInventory('branch', user?.branchId);
+                } else {
+                  setScopeDialogOpen(true);
+                }
+              }}
+              disabled={planning || (isStaff && (loading || !user?.branchId))}
             >
               <span className="stocksense-button-spark" aria-hidden="true">✦</span>
-              <span>{planning ? 'Analyzing inventory…' : 'Analyze inventory'}</span>
+              <span>{planning ? (isStaff ? 'Checking your branch…' : 'Analyzing inventory…') : isStaff ? 'Check my branch stock' : 'Analyze inventory'}</span>
               <span className="stocksense-button-arrow" aria-hidden="true">→</span>
             </button>
             <button
@@ -273,11 +301,12 @@ export function LowStockAlertsPage() {
             </button>
           </div>
           <span className="stocksense-cta-hint">
-            <span className="hint-bullet" aria-hidden="true">✦</span> Get a clear stock health report
+            <span className="hint-bullet" aria-hidden="true">✦</span>
+            {isStaff ? 'Your branch only · No changes are made' : 'Get a clear stock health report'}
           </span>
         </div>
         <div className="stocksense-hero-modes" aria-label="Inventory analysis options">
-          <button
+          {!isStaff && <button
             type="button"
             className="stocksense-hero-mode stocksense-hero-mode-clickable"
             onClick={() => {
@@ -294,78 +323,115 @@ export function LowStockAlertsPage() {
               <span>Review stock health across all branches together.</span>
             </div>
             <span className="stocksense-mode-arrow-icon" aria-hidden="true">→</span>
-          </button>
+          </button>}
           <button
             type="button"
             className="stocksense-hero-mode stocksense-hero-mode-clickable"
             onClick={() => {
-              setAnalysisScope('branch');
-              setScopeDialogOpen(true);
+              if (isStaff) {
+                void analyzeInventory('branch', user?.branchId);
+              } else {
+                setAnalysisScope('branch');
+                setScopeDialogOpen(true);
+              }
             }}
+            disabled={isStaff && (loading || !user?.branchId || planning)}
           >
             <span className="stocksense-hero-mode-icon" aria-hidden="true"><Icon name="branches" size={20} /></span>
             <div className="stocksense-mode-body">
               <div className="stocksense-mode-headline">
-                <strong>Branch-specific analysis</strong>
-                <span className="stocksense-mode-badge">{branches.length} available</span>
+                <strong>{isStaff ? 'Your branch' : 'Branch-specific analysis'}</strong>
+                <span className="stocksense-mode-badge">{isStaff ? branches.find((branch) => branch.id === user?.branchId)?.name ?? (loading ? 'Loading…' : 'Branch needed') : `${branches.length} available`}</span>
               </div>
-              <span>{loading ? 'Loading available branches…' : branches.length > 0 ? `Focus on any of your ${branches.length} available ${branches.length === 1 ? 'branch' : 'branches'}.` : 'Analyze stock health for an individual branch.'}</span>
+              <span>{isStaff
+                ? 'Review stock levels and next steps for the branch you work at.'
+                : loading ? 'Loading available branches…' : branches.length > 0 ? `Focus on any of your ${branches.length} available ${branches.length === 1 ? 'branch' : 'branches'}.` : 'Analyze stock health for an individual branch.'}</span>
             </div>
             <span className="stocksense-mode-arrow-icon" aria-hidden="true">→</span>
           </button>
         </div>
+        {isStaff && !user?.branchId && (
+          <p className="stocksense-staff-branch-help" role="status">
+            Your account doesn’t have a branch assigned yet. Ask your manager to update your access.
+          </p>
+        )}
         <div className="stocksense-hero-orbit" aria-hidden="true"><span /><i /></div>
       </header>
 
       {/* High-tech AI Intelligence Telemetry Bar when idle */}
       {!plan && !planning && (
-        <section className="stocksense-ready-hud" aria-label="AI Launch Pad">
+        <section className="stocksense-ready-hud" aria-label={isStaff ? 'Your branch stock check' : 'AI Launch Pad'}>
           <div className="stocksense-hud-glow" aria-hidden="true" />
           <div className="stocksense-hud-content">
             <div className="stocksense-hud-left">
               <div className="stocksense-hud-badge">
                 <span className="stocksense-hud-dot" />
-                <span>INTELLIGENCE ENGINE READY</span>
+                <span>{isStaff ? 'READY FOR YOUR BRANCH' : 'INTELLIGENCE ENGINE READY'}</span>
               </div>
-              <h3>Autonomous Depletion & Coverage Guard</h3>
+              <h3>{isStaff ? 'A helpful heads-up for your shift' : 'Autonomous Depletion & Coverage Guard'}</h3>
               <p>
-                StockSense audits your stock on-hand, recent retail sales velocity, kitchen/clinic consumption, and waste logs.
-                It produces human-in-the-loop purchase orders with deterministic safety buffers — avoiding stockouts before they hit your business.
+                {isStaff
+                  ? 'See which items may need attention, understand why they were flagged, and share anything unusual with your manager. StockSense only gives guidance—it never changes stock or places an order.'
+                  : <>
+                    StockSense audits your stock on-hand, recent retail sales velocity, kitchen/clinic consumption, and waste logs.
+                    It produces human-in-the-loop purchase orders with deterministic safety buffers — avoiding stockouts before they hit your business.
+                  </>}
               </p>
               <div className="stocksense-hud-telemetry">
                 <div className="stocksense-hud-item">
-                  <span className="hud-metric-label">CONNECTED SCOPE</span>
-                  <strong>{branches.length > 0 ? `${branches.length} Authorized Locations` : 'Synchronizing…'}</strong>
+                  <span className="hud-metric-label">{isStaff ? 'YOUR BRANCH' : 'CONNECTED SCOPE'}</span>
+                  <strong>{isStaff
+                    ? branches.find((branch) => branch.id === user?.branchId)?.name ?? (loading ? 'Loading branch…' : 'Not assigned')
+                    : branches.length > 0 ? `${branches.length} Authorized Locations` : 'Synchronizing…'}</strong>
                 </div>
                 <div className="stocksense-hud-divider" />
                 <div className="stocksense-hud-item">
                   <span className="hud-metric-label">AI MODEL</span>
-                  <strong>StockSense AI Agent</strong>
+                  <strong>{isStaff ? 'Plain-language guidance' : 'StockSense AI Agent'}</strong>
                 </div>
                 <div className="stocksense-hud-divider" />
                 <div className="stocksense-hud-item">
-                  <span className="hud-metric-label">GUARDRAIL</span>
-                  <strong>Deterministic Safety Check</strong>
+                  <span className="hud-metric-label">{isStaff ? 'YOUR CONTROL' : 'GUARDRAIL'}</span>
+                  <strong>{isStaff ? 'You decide what to do' : 'Deterministic Safety Check'}</strong>
                 </div>
               </div>
             </div>
             <div className="stocksense-hud-right">
               <div className="stocksense-hud-card">
-                <span className="hud-card-kicker">ENGINE VERIFICATION</span>
-                <h4>Continuous Safety Parameters</h4>
+                <span className="hud-card-kicker">{isStaff ? 'HELPFUL TO KNOW' : 'ENGINE VERIFICATION'}</span>
+                <h4>{isStaff ? 'A few things to keep in mind' : 'Continuous Safety Parameters'}</h4>
                 <div className="stocksense-hud-safety-list">
-                  <div className="hud-safety-item">
-                    <span className="hud-check">✓</span>
-                    <span>Zero blind inferences — strictly evidence-led</span>
-                  </div>
-                  <div className="hud-safety-item">
-                    <span className="hud-check">✓</span>
-                    <span>Safety bounds check prevents over-ordering</span>
-                  </div>
-                  <div className="hud-safety-item">
-                    <span className="hud-check">✓</span>
-                    <span>Read-only: never modifies database or places orders</span>
-                  </div>
+                  {isStaff ? (
+                    <>
+                      <div className="hud-safety-item">
+                        <span className="hud-check">✓</span>
+                        <span>Each suggestion includes a reason to help you review it.</span>
+                      </div>
+                      <div className="hud-safety-item">
+                        <span className="hud-check">✓</span>
+                        <span>Check unclear stock or pricing details with your manager.</span>
+                      </div>
+                      <div className="hud-safety-item">
+                        <span className="hud-check">✓</span>
+                        <span>Suggestions never change stock or place an order.</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="hud-safety-item">
+                        <span className="hud-check">✓</span>
+                        <span>Zero blind inferences — strictly evidence-led</span>
+                      </div>
+                      <div className="hud-safety-item">
+                        <span className="hud-check">✓</span>
+                        <span>Safety bounds check prevents over-ordering</span>
+                      </div>
+                      <div className="hud-safety-item">
+                        <span className="hud-check">✓</span>
+                        <span>Read-only: never modifies database or places orders</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -373,7 +439,7 @@ export function LowStockAlertsPage() {
         </section>
       )}
 
-      <section className="stocksense-guide" aria-labelledby="stocksense-guide-title">
+      {!isStaff && <section className="stocksense-guide" aria-labelledby="stocksense-guide-title">
         <div className="stocksense-guide-heading">
           <div>
             <p className="eyebrow">A SMARTER WAY TO MANAGE STOCK</p>
@@ -415,7 +481,7 @@ export function LowStockAlertsPage() {
           <span><strong>Simple workflow</strong> Refresh stock <i aria-hidden="true">→</i> Analyze inventory <i aria-hidden="true">→</i> Review suggestions</span>
           <span className="stocksense-readonly-note"><Icon name="info" size={15} /> Read-only: StockSense never changes stock or creates orders.</span>
         </div>
-      </section>
+      </section>}
 
       {inventoryError && <p className="page-notice stocksense-sync-notice" role="alert">{inventoryError} The timestamp above shows the last successful snapshot.</p>}
 
@@ -852,7 +918,7 @@ export function LowStockAlertsPage() {
 
       <p className="ai-disclaimer">Coverage and movement insights use the returned inventory snapshot and recent movement sample. Recommendations use explicit outflow history when available; where history is missing, reorder quantities fall back to reorder levels. Review supplier, lead time and budget before ordering.</p>
 
-      {scopeDialogOpen && (
+      {scopeDialogOpen && !isStaff && (
         <Modal
           title="Choose AI analysis scope"
           onClose={() => setScopeDialogOpen(false)}

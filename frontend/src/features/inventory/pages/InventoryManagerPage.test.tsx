@@ -10,7 +10,7 @@ import { InventoryManagerPage } from './InventoryManagerPage';
 
 const itemId = '6aa6b7bd-32d6-44be-9382-fb2e790375f2';
 
-function renderPage() {
+function renderPage(userOverrides: { role?: 'Admin' | 'Manager' | 'Staff'; branchId?: string } = {}) {
   const store = configureStore({
     reducer: { auth: authReducer },
     preloadedState: {
@@ -19,8 +19,10 @@ function renderPage() {
           id: 'user-1',
           email: 'manager@example.test',
           fullName: 'Test Manager',
-          role: 'Manager' as const,
+          role: userOverrides.role ?? 'Manager' as const,
           tenantId: 'tenant-1',
+          branchId: 'branch-1',
+          ...userOverrides,
         },
         token: 'test-token',
         isAuthenticated: true,
@@ -138,7 +140,7 @@ describe('InventoryManagerPage price editing', () => {
       return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
     }));
 
-    renderPage();
+    renderPage({ role: 'Admin' });
     await screen.findByRole('button', { name: /Add item/ });
     fireEvent.click(screen.getByRole('button', { name: /Add item/ }));
     fireEvent.change(screen.getByLabelText('Item name'), { target: { value: 'Wireless Mouse' } });
@@ -157,6 +159,46 @@ describe('InventoryManagerPage price editing', () => {
       ]);
       expect(createBody?.branchId).toBeNull();
     });
+  });
+
+  it('locks Staff to their assigned branch and hides catalogue management controls', async () => {
+    const items = [
+      {
+        id: itemId, name: 'Main tea', sku: 'TEA-001', category: 'Tea',
+        branchId: 'branch-1', branch: 'Main branch', quantity: 12,
+        reorderLevel: 2, unitCost: 50, sellingPrice: 75,
+      },
+      {
+        id: 'other-branch-item', name: 'North tea', sku: 'TEA-002', category: 'Tea',
+        branchId: 'branch-2', branch: 'Kandy branch', quantity: 9,
+        reorderLevel: 2, unitCost: 50, sellingPrice: 75,
+      },
+    ];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/inventory/categories') return new Response(JSON.stringify([]), { status: 200 });
+      if (url === '/api/inventory/branches') {
+        return new Response(JSON.stringify([
+          { id: 'branch-1', name: 'Main branch' },
+          { id: 'branch-2', name: 'Kandy branch' },
+        ]), { status: 200 });
+      }
+      if (url === '/api/suppliers') return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      if (url.startsWith('/api/inventory?')) {
+        return new Response(JSON.stringify({ items, totalPages: 1 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
+    }));
+
+    renderPage({ role: 'Staff', branchId: 'branch-1' });
+
+    expect(await screen.findByText('Main tea')).toBeInTheDocument();
+    expect(screen.queryByText('North tea')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Assigned branch')).toHaveTextContent('Main branch');
+    expect(screen.queryByRole('button', { name: 'Add item' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Import CSV' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit Main tea across branches' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Suppliers' })).not.toBeInTheDocument();
   });
 
   it('updates selected branch stock and adds another branch while leaving other branches untouched', async () => {
@@ -220,7 +262,7 @@ describe('InventoryManagerPage price editing', () => {
       return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
     }));
 
-    renderPage();
+    renderPage({ role: 'Admin' });
     await screen.findAllByText('Wireless Mouse');
     expect(screen.getAllByRole('row')).toHaveLength(2);
     expect(screen.getAllByText('Main branch')).toHaveLength(2);

@@ -154,7 +154,8 @@ export function SalesPage() {
   const [confirming, setConfirming] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptView | null>(null);
 
-  const branchSelectionLocked = Boolean(user?.branchId && user.role !== 'Admin');
+  const isAdmin = user?.role === 'Admin';
+  const assignedBranchMissing = !isAdmin && !user?.branchId;
   const selectedItem = items.find((item) => item.id === selectedId) ?? null;
   const selectedBranchName = branches.find((branch) => branch.id === selectedBranchId)?.name;
   const saleQuantity = Number(amount);
@@ -180,20 +181,31 @@ export function SalesPage() {
     const loadingStartedAt = Date.now();
     setLoading(true);
     try {
+      if (!isAdmin && !user?.branchId) {
+        setItems([]);
+        setBranches([]);
+        setSelectedId('');
+        setReport(null);
+        throw new Error('Your account has no assigned branch. Sales are unavailable until one is assigned.');
+      }
+      const effectiveBranchId = isAdmin ? selectedBranchId : user?.branchId ?? '';
       const branchResponse = await authorizedFetch('/inventory/branches', token);
       const branchData: unknown = await branchResponse.json();
       if (requestSequence !== loadRequestSequence.current) return;
       if (!Array.isArray(branchData) || !branchData.every(isBranchOption)) {
         throw new Error('Branch response did not contain a valid branch list.');
       }
-      setBranches(branchData);
+      const scopedBranches = isAdmin
+        ? branchData
+        : branchData.filter((branch) => branch.id === user?.branchId);
+      setBranches(scopedBranches);
 
       const inventory: InventoryItem[] = [];
       let page = 1;
       let totalPages = 1;
       while (page <= totalPages) {
         const inventoryParams = new URLSearchParams({ page: String(page), pageSize: String(API_PAGE_SIZE) });
-        if (selectedBranchId) inventoryParams.set('branchId', selectedBranchId);
+        if (effectiveBranchId) inventoryParams.set('branchId', effectiveBranchId);
         const response = await authorizedFetch(`/inventory?${inventoryParams.toString()}`, token);
         const payload = await response.json() as InventoryListResponse;
         if (!Array.isArray(payload.items)) throw new Error('Inventory response did not contain an item list.');
@@ -204,14 +216,17 @@ export function SalesPage() {
       }
       const range = dateWindow(7);
       const params = new URLSearchParams({ from: range.from, to: range.to, page: '1', pageSize: '10' });
-      if (selectedBranchId) params.set('branchId', selectedBranchId);
+      if (effectiveBranchId) params.set('branchId', effectiveBranchId);
       const reportResponse = await authorizedFetch(`/reports/sales-activity?${params}`, token);
       const nextReport = await reportResponse.json() as SalesReport;
       if (requestSequence !== loadRequestSequence.current) return;
-      setItems(inventory);
-      setSelectedId((current) => inventory.some((item) =>
+      const scopedInventory = isAdmin
+        ? inventory
+        : inventory.filter((item) => item.branchId === effectiveBranchId);
+      setItems(scopedInventory);
+      setSelectedId((current) => scopedInventory.some((item) =>
         item.id === current && item.quantity > 0 &&
-        (!selectedBranchId || item.branchId === selectedBranchId),
+        (!effectiveBranchId || item.branchId === effectiveBranchId),
       ) ? current : '');
       setReport(nextReport);
       if (showFeedback) notify('Sales and inventory refreshed.', 'success');
@@ -230,11 +245,12 @@ export function SalesPage() {
         if (requestSequence === loadRequestSequence.current) setLoading(false);
       }
     }
-  }, [notify, selectedBranchId, token]);
+  }, [isAdmin, notify, selectedBranchId, token, user?.branchId]);
 
   useEffect(() => { void loadData(); }, [loadData]);
 
   function changeBranch(branchId: string) {
+    if (!isAdmin) return;
     pendingBranchChange.current = true;
     setSelectedBranchId(branchId);
     setSelectedId('');
@@ -359,8 +375,18 @@ export function SalesPage() {
         </article>
       </section>
 
-      {user?.role !== 'Admin' && user?.role !== 'Manager' && (
-        <p className="page-banner">Sale price and cost are taken from the item catalog. Ask a manager to update catalog prices if they are incorrect.</p>
+      {user?.role === 'Staff' && (
+        <aside className="sales-staff-tip" aria-labelledby="sales-staff-tip-title">
+          <span className="sales-staff-tip-icon" aria-hidden="true"><Icon name="info" size={19} /></span>
+          <div>
+            <h2 id="sales-staff-tip-title">Quick pricing tip</h2>
+            <p>
+              Sale price and cost are filled in from the item catalog, so you
+              don’t need to enter them. If a price looks off, let your manager
+              know and they can update it for you.
+            </p>
+          </div>
+        </aside>
       )}
 
       <section className="panel sales-record-panel">
@@ -378,15 +404,19 @@ export function SalesPage() {
           )}
           <label className="form-field sales-branch-picker">
             Sale branch
-            <select aria-label="Sale branch" value={selectedBranchId} onChange={(event) => changeBranch(event.target.value)} disabled={saving || branchSelectionLocked}>
-              {!branchSelectionLocked && <option value="">All branches</option>}
-              {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-            </select>
-            <small>{loading
-              ? 'Refreshing branch-specific stock and recent sales.'
-              : selectedBranchId
-                ? 'Only stock held at this branch can be selected.'
-                : 'Choose a branch to limit the sale to its stock.'}</small>
+            {isAdmin
+              ? <select aria-label="Sale branch" value={selectedBranchId} onChange={(event) => changeBranch(event.target.value)} disabled={saving}>
+                  <option value="">All branches</option>
+                  {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                </select>
+              : <input aria-label="Sale branch" value={branches.find((branch) => branch.id === user?.branchId)?.name ?? (user?.branchId ? 'Assigned branch' : 'No assigned branch')} readOnly />}
+            <small>{assignedBranchMissing
+              ? 'Ask an administrator to assign your account to a branch before recording sales.'
+              : loading
+                ? 'Refreshing branch-specific stock and recent sales.'
+                : isAdmin && !selectedBranchId
+                  ? 'Administrator view includes all tenant branches.'
+                  : 'Only stock held at your assigned branch can be selected.'}</small>
           </label>
           <div
             className="form-field sales-item-picker"

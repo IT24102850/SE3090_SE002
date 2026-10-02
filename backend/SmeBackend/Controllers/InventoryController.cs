@@ -35,6 +35,11 @@ public sealed class InventoryController(
         }
 
         var branchScope = ResolveBranchScope(null);
+        if (User.IsInRole(UserRole.Staff.ToString()) && !branchScope.HasValue)
+        {
+            return Forbid();
+        }
+
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
                 InventoryAuthorizationPolicies.InventoryRead,
@@ -70,7 +75,23 @@ public sealed class InventoryController(
         if (string.IsNullOrWhiteSpace(request.Objective))
             return BadRequest(new { message = "Describe what you want the inventory assistant to check." });
 
-        var branchId = ResolveBranchScope(request.BranchId);
+        Guid? branchId;
+        if (User.IsInRole(UserRole.Staff.ToString()))
+        {
+            if (!Guid.TryParse(
+                    User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value,
+                    out var staffBranchId))
+            {
+                return Forbid();
+            }
+
+            branchId = staffBranchId;
+        }
+        else
+        {
+            branchId = ResolveBranchScope(request.BranchId);
+        }
+
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService, InventoryAuthorizationPolicies.InventoryRead, tenantId, branchId))
             return Forbid();
@@ -172,7 +193,7 @@ public sealed class InventoryController(
         var branchId = ResolveBranchScope(null);
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
-                InventoryAuthorizationPolicies.InventoryRead,
+                InventoryAuthorizationPolicies.InventoryMetadataRead,
                 tenantId,
                 branchId))
             return Forbid();
@@ -350,6 +371,10 @@ public sealed class InventoryController(
         if (!TryGetTenantId(out var tenantId))
         {
             return Unauthorized();
+        }
+        if (User.IsInRole(UserRole.Staff.ToString()))
+        {
+            return Forbid();
         }
 
         var item = await LoadItemAsync(id, cancellationToken);
@@ -625,6 +650,10 @@ public sealed class InventoryController(
         if (!TryGetTenantId(out var tenantId))
         {
             return Unauthorized();
+        }
+        if (User.IsInRole(UserRole.Staff.ToString()))
+        {
+            return Forbid();
         }
 
         var item = await LoadItemAsync(id, cancellationToken);
@@ -1338,6 +1367,10 @@ public sealed class InventoryController(
         {
             return Unauthorized();
         }
+        if (User.IsInRole(UserRole.Staff.ToString()))
+        {
+            return Forbid();
+        }
 
         var name = request.Name?.Trim();
         var sku = request.Sku?.Trim();
@@ -1669,7 +1702,7 @@ public sealed class InventoryController(
 
     private Guid? ResolveBranchScope(Guid? requestedBranchId)
     {
-        if (User.IsInRole(UserRole.Admin.ToString()) || requestedBranchId.HasValue)
+        if (User.IsInRole(UserRole.Admin.ToString()))
         {
             return requestedBranchId;
         }

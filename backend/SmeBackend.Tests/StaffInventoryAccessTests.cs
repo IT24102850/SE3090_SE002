@@ -40,9 +40,14 @@ public class StaffInventoryAccessTests
         return new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth", "sub", ClaimTypes.Role));
     }
 
-    private static async Task<bool> Authorize(ClaimsPrincipal user, string component, Guid tenantId, Guid? branchId)
+    private static async Task<bool> Authorize(
+        ClaimsPrincipal user,
+        string component,
+        Guid tenantId,
+        Guid? branchId,
+        bool allowsBranchlessMetadata = false)
     {
-        var requirement = new InventoryAccessRequirement(component);
+        var requirement = new InventoryAccessRequirement(component, allowsBranchlessMetadata);
         var context = new AuthorizationHandlerContext(
             new[] { requirement }, user, new InventoryAccessResource(tenantId, branchId));
         await new InventoryAccessHandler().HandleAsync(context);
@@ -94,8 +99,8 @@ public class StaffInventoryAccessTests
     }
 
     [Theory]
-    [InlineData("inventory.read", true)]
-    [InlineData("inventory.write", true)]
+    [InlineData("inventory.read", false)]
+    [InlineData("inventory.write", false)]
     [InlineData("purchase-orders.read", false)]
     [InlineData("purchase-orders.write", false)]
     public async Task StaffToken_IsAuthorizedByInventoryAccessHandler(string component, bool expected)
@@ -105,6 +110,52 @@ public class StaffInventoryAccessTests
 
         // Purchase-order operations require a branch-scoped resource.
         Assert.Equal(expected, await Authorize(principal, component, user.TenantId, null));
+    }
+
+    [Theory]
+    [InlineData("inventory.read", true)]
+    [InlineData("inventory.write", true)]
+    [InlineData("purchase-orders.read", true)]
+    [InlineData("purchase-orders.write", true)]
+    public async Task StaffToken_IsAuthorizedForGrantedOperationsOnlyOnAssignedBranch(string component, bool expected)
+    {
+        var assignedBranchId = Guid.NewGuid();
+        var user = NewUser(UserRole.Staff, assignedBranchId);
+        var principal = PrincipalFromToken(new JwtService(Config).GenerateAccessToken(user));
+
+        Assert.Equal(expected, await Authorize(principal, component, user.TenantId, assignedBranchId));
+        Assert.False(await Authorize(principal, component, user.TenantId, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task ManagerToken_IsAuthorizedOnlyForAssignedInventoryBranch()
+    {
+        var branchId = Guid.NewGuid();
+        var user = NewUser(UserRole.Manager, branchId);
+        var principal = PrincipalFromToken(new JwtService(Config).GenerateAccessToken(user));
+
+        Assert.True(await Authorize(principal, "inventory.read", user.TenantId, branchId));
+        Assert.False(await Authorize(principal, "inventory.read", user.TenantId, Guid.NewGuid()));
+        Assert.False(await Authorize(principal, "inventory.read", user.TenantId, null));
+    }
+
+    [Fact]
+    public async Task BranchlessMetadataAccess_IsExplicitAndStillRequiresAssignedBranch()
+    {
+        var branchId = Guid.NewGuid();
+        var manager = NewUser(UserRole.Manager, branchId);
+        var managerPrincipal = PrincipalFromToken(new JwtService(Config).GenerateAccessToken(manager));
+        var staff = NewUser(UserRole.Staff, branchId);
+        var staffPrincipal = PrincipalFromToken(new JwtService(Config).GenerateAccessToken(staff));
+
+        Assert.True(await Authorize(managerPrincipal, "inventory.read", manager.TenantId, null, true));
+        Assert.True(await Authorize(managerPrincipal, "inventory.write", manager.TenantId, null, true));
+        Assert.True(await Authorize(staffPrincipal, "inventory.read", staff.TenantId, null, true));
+        Assert.False(await Authorize(staffPrincipal, "inventory.write", staff.TenantId, null, true));
+
+        var unassignedManager = NewUser(UserRole.Manager);
+        var unassignedPrincipal = PrincipalFromToken(new JwtService(Config).GenerateAccessToken(unassignedManager));
+        Assert.False(await Authorize(unassignedPrincipal, "inventory.read", unassignedManager.TenantId, null, true));
     }
 
     [Theory]

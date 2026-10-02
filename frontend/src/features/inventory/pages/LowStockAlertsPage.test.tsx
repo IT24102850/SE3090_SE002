@@ -1,6 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { configureStore } from '@reduxjs/toolkit';
+import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import authReducer from '../../../store/authSlice';
 import { ToastProvider as AppToastProvider } from '../../../shared/components/Toast';
 import { ToastProvider } from '../ui/ToastContext';
 import { LowStockAlertsPage } from './LowStockAlertsPage';
@@ -8,6 +11,30 @@ import { LowStockAlertsPage } from './LowStockAlertsPage';
 const scrollIntoView = vi.fn();
 const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
 const authorizedBranches = [{ id: 'branch-1', name: 'Main branch' }];
+
+function render(ui: React.ReactElement, role: 'Admin' | 'Manager' | 'Staff' = 'Manager', branchId?: string) {
+  const store = configureStore({
+    reducer: { auth: authReducer },
+    preloadedState: {
+      auth: {
+        user: {
+          id: 'user-1',
+          email: 'staff@example.test',
+          fullName: 'Test User',
+          role,
+          tenantId: 'tenant-1',
+          branchId,
+        },
+        token: 'test-token',
+        isAuthenticated: true,
+        loading: false,
+        error: null,
+      },
+    },
+  });
+
+  return rtlRender(<Provider store={store}>{ui}</Provider>);
+}
 
 describe('LowStockAlertsPage inventory scope', () => {
   beforeEach(() => {
@@ -63,6 +90,55 @@ describe('LowStockAlertsPage inventory scope', () => {
     expect(await screen.findByText('AI MODEL')).toBeInTheDocument();
     expect(screen.getByText('StockSense AI Agent')).toBeInTheDocument();
     expect(screen.queryByText('Gemini 2.5 Flash Agent')).not.toBeInTheDocument();
+  });
+
+  it('gives staff simple, branch-only stock guidance without a scope picker', async () => {
+    let planRequest: Record<string, unknown> | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/inventory/branches') {
+        return new Response(JSON.stringify(authorizedBranches), { status: 200 });
+      }
+      if (String(input) === '/api/inventory/agent/plan') {
+        planRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          workflow_id: 'workflow-staff',
+          status: 'NeedsReview',
+          planner_summary: 'Check low stock at your branch.',
+          data_sources: [],
+          recommendations: [],
+          insights: [],
+          warnings: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        items: [],
+        totalPages: 1,
+        totalCount: 0,
+      }), { status: 200 });
+    }));
+
+    render(
+      <AppToastProvider>
+        <ToastProvider>
+          <MemoryRouter>
+            <LowStockAlertsPage />
+          </MemoryRouter>
+        </ToastProvider>
+      </AppToastProvider>,
+      'Staff',
+      'branch-1',
+    );
+
+    expect(await screen.findByText('YOUR BRANCH STOCK ASSISTANT')).toBeInTheDocument();
+    expect(screen.getByText('Your branch')).toBeInTheDocument();
+    expect(screen.queryByText('Business-wide analysis')).not.toBeInTheDocument();
+    expect(screen.queryByText('Gemini Agent Online')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Check my branch stock' }));
+
+    expect(await screen.findByText('STOCKSENSE AI REPORT · MAIN BRANCH')).toBeInTheDocument();
+    expect(planRequest?.branchId).toBe('branch-1');
+    expect(planRequest?.objective).toContain('prioritize today’s stock work');
+    expect(screen.queryByRole('dialog', { name: 'Choose AI analysis scope' })).not.toBeInTheDocument();
   });
 
   it('keeps catalogue details in Inventory Manager instead of repeating them', async () => {

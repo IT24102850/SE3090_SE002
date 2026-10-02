@@ -949,7 +949,7 @@ public sealed class PurchaseOrdersController(
 
         return Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var branchId)
             ? branchId
-            : requestedBranchId;
+            : null;
     }
 
     private async Task<IReadOnlyList<PurchaseOrderResponse>> ToResponsesAsync(

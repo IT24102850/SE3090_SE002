@@ -24,23 +24,48 @@ public sealed class SuppliersController(
             return Unauthorized();
         }
 
+        var isStaff = User.IsInRole(UserRole.Staff.ToString());
+        Guid? assignedBranchId = null;
+        if (!User.IsInRole(UserRole.Admin.ToString()))
+        {
+            if (!Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var parsedBranchId))
+            {
+                return Forbid();
+            }
+
+            assignedBranchId = parsedBranchId;
+        }
+
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
-                InventoryAuthorizationPolicies.InventoryRead,
+                InventoryAuthorizationPolicies.InventoryMetadataRead,
                 tenantId,
                 branchId: null))
         {
             return Forbid();
         }
 
-        var suppliers = await db.Suppliers
-            .AsNoTracking()
-            .OrderBy(supplier => supplier.Name)
-            .ToListAsync(cancellationToken);
+        var purchaseOrderQuery = db.PurchaseOrders.AsNoTracking();
+        if (assignedBranchId.HasValue)
+        {
+            purchaseOrderQuery = purchaseOrderQuery.Where(order => order.BranchId == assignedBranchId.Value);
+        }
 
-        var purchaseOrders = await db.PurchaseOrders
-            .AsNoTracking()
+        var purchaseOrders = await purchaseOrderQuery
             .Select(order => new SupplierOrderRow(order.Id, order.SupplierId, order.Status, order.CreatedAt))
+            .ToListAsync(cancellationToken);
+        var supplierIds = purchaseOrders.Select(order => order.SupplierId).Distinct().ToList();
+
+        var supplierQuery = db.Suppliers
+            .AsNoTracking()
+            .AsQueryable();
+        if (isStaff && assignedBranchId.HasValue)
+        {
+            supplierQuery = supplierQuery.Where(supplier => supplierIds.Contains(supplier.Id));
+        }
+
+        var suppliers = await supplierQuery
+            .OrderBy(supplier => supplier.Name)
             .ToListAsync(cancellationToken);
         var orderTotals = await db.PurchaseOrderItems
             .AsNoTracking()
@@ -96,9 +121,14 @@ public sealed class SuppliersController(
             return Unauthorized();
         }
 
+        if (User.IsInRole(UserRole.Staff.ToString()))
+        {
+            return Forbid();
+        }
+
         if (!await this.IsInventoryOperationAuthorizedAsync(
                 authorizationService,
-                InventoryAuthorizationPolicies.InventoryWrite,
+                InventoryAuthorizationPolicies.InventoryMetadataWrite,
                 tenantId,
                 branchId: null))
         {
@@ -152,8 +182,9 @@ public sealed class SuppliersController(
         CancellationToken cancellationToken)
     {
         if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+        if (User.IsInRole(UserRole.Staff.ToString())) return Forbid();
         if (!await this.IsInventoryOperationAuthorizedAsync(
-                authorizationService, InventoryAuthorizationPolicies.InventoryWrite, tenantId, branchId: null))
+                authorizationService, InventoryAuthorizationPolicies.InventoryMetadataWrite, tenantId, branchId: null))
             return Forbid();
 
         var supplier = await db.Suppliers.SingleOrDefaultAsync(value => value.Id == id, cancellationToken);
@@ -194,8 +225,9 @@ public sealed class SuppliersController(
     public async Task<IActionResult> DeleteSupplier(Guid id, CancellationToken cancellationToken)
     {
         if (!TryGetTenantId(out var tenantId)) return Unauthorized();
+        if (User.IsInRole(UserRole.Staff.ToString())) return Forbid();
         if (!await this.IsInventoryOperationAuthorizedAsync(
-                authorizationService, InventoryAuthorizationPolicies.InventoryWrite, tenantId, branchId: null))
+                authorizationService, InventoryAuthorizationPolicies.InventoryMetadataWrite, tenantId, branchId: null))
             return Forbid();
 
         var supplier = await db.Suppliers.SingleOrDefaultAsync(value => value.Id == id, cancellationToken);

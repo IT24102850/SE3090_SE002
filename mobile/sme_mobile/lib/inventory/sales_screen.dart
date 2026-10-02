@@ -15,9 +15,16 @@ import 'sale_receipt.dart';
 enum _SalesFeedbackTone { info, success, error }
 
 class SalesScreen extends StatefulWidget {
-  const SalesScreen({super.key, required this.client});
+  const SalesScreen({
+    super.key,
+    required this.client,
+    this.assignedBranchId,
+    this.requiresAssignedBranch = false,
+  });
 
   final AuthenticatedApiClient client;
+  final String? assignedBranchId;
+  final bool requiresAssignedBranch;
 
   @override
   State<SalesScreen> createState() => _SalesScreenState();
@@ -320,6 +327,12 @@ class _SalesScreenState extends State<SalesScreen> {
       _loadError = null;
     });
     try {
+      if (widget.requiresAssignedBranch &&
+          (widget.assignedBranchId == null ||
+              widget.assignedBranchId!.trim().isEmpty)) {
+        throw StateError(
+            'Your account has no assigned branch. Sales are unavailable until one is assigned.');
+      }
       final branchesResponse =
           await widget.client.get('/api/inventory/branches');
       if (branchesResponse.statusCode != 200) {
@@ -329,10 +342,18 @@ class _SalesScreenState extends State<SalesScreen> {
       if (branchData is! List) {
         throw const FormatException('Branch response has no branch list.');
       }
-      final branches = branchData
+      final allBranches = branchData
           .whereType<Map<String, dynamic>>()
           .map(_SalesBranch.fromJson)
           .toList();
+      final branches = widget.requiresAssignedBranch
+          ? allBranches
+              .where((branch) => branch.id == widget.assignedBranchId)
+              .toList()
+          : allBranches;
+      if (widget.requiresAssignedBranch && branches.isEmpty) {
+        throw StateError('Your assigned branch could not be loaded.');
+      }
       if (!mounted || generation != _loadGeneration) return;
       final selectedBranchId = branches.any(
         (branch) => branch.id == _selectedBranchId,
@@ -445,6 +466,7 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _changeBranch(String? branchId) {
+    if (widget.requiresAssignedBranch) return;
     if (branchId == null || branchId == _selectedBranchId) return;
     setState(() {
       _selectedBranchId = branchId;

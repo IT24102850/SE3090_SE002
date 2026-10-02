@@ -8,7 +8,7 @@ import { ToastProvider as AppToastProvider } from '../../../shared/components/To
 import { ToastProvider } from '../ui/ToastContext';
 import { StockMovementLogPage } from './StockMovementLogPage';
 
-function renderPage() {
+function renderPage(userOverrides: { role?: 'Admin' | 'Manager' | 'Staff'; branchId?: string } = {}) {
   const store = configureStore({
     reducer: { auth: authReducer },
     preloadedState: {
@@ -17,8 +17,10 @@ function renderPage() {
           id: 'user-1',
           email: 'manager@example.test',
           fullName: 'Test Manager',
-          role: 'Manager' as const,
+          role: userOverrides.role ?? 'Manager' as const,
           tenantId: 'tenant-1',
+          branchId: 'branch-1',
+          ...userOverrides,
         },
         token: 'test-token',
         isAuthenticated: true,
@@ -338,7 +340,7 @@ describe('StockMovementLogPage', () => {
       }), { status: 200 });
     }));
 
-    renderPage();
+    renderPage({ role: 'Admin' });
 
     const table = screen.getByRole('table');
     expect(await within(table).findByText('North stock')).toBeInTheDocument();

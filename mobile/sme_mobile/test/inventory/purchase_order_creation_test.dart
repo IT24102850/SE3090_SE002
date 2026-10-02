@@ -126,6 +126,8 @@ void main() {
           canApprove: false,
           canCreate: true,
           canReceive: false,
+          assignedBranchId: mainBranchId,
+          requiresAssignedBranch: true,
         ),
       ),
     );
@@ -134,6 +136,9 @@ void main() {
     await tester.tap(find.text('New PO'));
     await tester.pumpAndSettle();
     expect(find.text('North Branch'), findsNothing);
+    expect(find.byKey(const Key('po-select-all-branches')), findsNothing);
+    expect(find.byKey(const Key('po-branch-checkbox-$mainBranchId')),
+        findsOneWidget);
     await tester.ensureVisible(find.text('Create Purchase Order').last);
     await tester.tap(find.text('Create Purchase Order').last);
     await tester.pumpAndSettle();

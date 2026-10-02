@@ -55,6 +55,7 @@ export default function CustomerHomePage() {
               </div>
             </div>
             <div className="cust-hero-actions">
+              <Link className="btn btn-secondary" to="/shop">🛍️ Shop items</Link>
               <Link className="btn btn-primary" to="/book">+ New booking</Link>
               <Link className="btn btn-secondary" to="/my-bookings">My bookings</Link>
             </div>
@@ -71,6 +72,7 @@ export default function CustomerHomePage() {
       <div className="cust-quick">
         <Link to="/book"><span className="cust-quick-icon" aria-hidden="true">📅</span><span><strong>Book a service</strong><span>Pick a service, a time and confirm</span></span></Link>
         <Link to="/my-bookings"><span className="cust-quick-icon" aria-hidden="true">🎟️</span><span><strong>My bookings</strong><span>Check-in codes, reschedule, cancel</span></span></Link>
+        <Link to="/shop"><span className="cust-quick-icon" aria-hidden="true">🛍️</span><span><strong>Shop items</strong><span>Browse products and view your orders</span></span></Link>
         <Link to="/ai-planner"><span className="cust-quick-icon" aria-hidden="true">🤖</span><span><strong>AI planner</strong><span>“Find me the earliest slot this week”</span></span></Link>
         <Link to="/business"><span className="cust-quick-icon" aria-hidden="true">🏪</span><span><strong>{tenant?.name ?? 'The business'}</strong><span>Hours, contact, gallery</span></span></Link>
       </div>

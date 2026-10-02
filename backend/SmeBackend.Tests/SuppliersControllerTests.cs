@@ -13,6 +13,94 @@ namespace SmeBackend.Tests;
 public sealed class SuppliersControllerTests
 {
     [Fact]
+    public async Task GetSuppliers_StaffSeesOnlySuppliersAndOrdersForAssignedBranch()
+    {
+        var tenantId = Guid.NewGuid();
+        var assignedBranchId = Guid.NewGuid();
+        var otherBranchId = Guid.NewGuid();
+        await using var db = TestHelpers.NewInMemoryDb(tenantId);
+        var assignedSupplier = new Supplier { TenantId = tenantId, Name = "Assigned Supplier" };
+        var otherSupplier = new Supplier { TenantId = tenantId, Name = "Other Supplier" };
+        db.Suppliers.AddRange(assignedSupplier, otherSupplier);
+        db.PurchaseOrders.AddRange(
+            new PurchaseOrder
+            {
+                TenantId = tenantId,
+                BranchId = assignedBranchId,
+                SupplierId = assignedSupplier.Id,
+                Number = "PO-ASSIGNED",
+                Status = "Placed",
+            },
+            new PurchaseOrder
+            {
+                TenantId = tenantId,
+                BranchId = otherBranchId,
+                SupplierId = assignedSupplier.Id,
+                Number = "PO-OTHER-SAME-SUPPLIER",
+                Status = "Placed",
+            },
+            new PurchaseOrder
+            {
+                TenantId = tenantId,
+                BranchId = otherBranchId,
+                SupplierId = otherSupplier.Id,
+                Number = "PO-OTHER",
+                Status = "Placed",
+            });
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db, tenantId, UserRole.Staff, assignedBranchId);
+
+        var result = await controller.GetSuppliers(CancellationToken.None);
+
+        var response = Assert.IsType<SuppliersListResponse>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        var supplier = Assert.Single(response.Items);
+        Assert.Equal(assignedSupplier.Id, supplier.Id);
+        Assert.Equal(1, supplier.OrderCount);
+        Assert.Equal(1, supplier.ActiveOrderCount);
+    }
+
+    [Fact]
+    public async Task GetSuppliers_StaffWithoutAssignedBranchIsForbidden()
+    {
+        var tenantId = Guid.NewGuid();
+        await using var db = TestHelpers.NewInMemoryDb(tenantId);
+
+        var controller = CreateController(db, tenantId, UserRole.Staff);
+
+        var result = await controller.GetSuppliers(CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task StaffCannotCreateUpdateOrDeleteSuppliers()
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        await using var db = TestHelpers.NewInMemoryDb(tenantId);
+        var supplier = new Supplier { TenantId = tenantId, Name = "Existing Supplier" };
+        db.Suppliers.Add(supplier);
+        await db.SaveChangesAsync();
+
+        var controller = CreateController(db, tenantId, UserRole.Staff, branchId);
+        var create = await controller.CreateSupplier(
+            new CreateSupplierRequest("New Supplier"),
+            CancellationToken.None);
+        var update = await controller.UpdateSupplier(
+            supplier.Id,
+            new UpdateSupplierRequest("Renamed Supplier"),
+            CancellationToken.None);
+        var delete = await controller.DeleteSupplier(supplier.Id, CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(create.Result);
+        Assert.IsType<ForbidResult>(update.Result);
+        Assert.IsType<ForbidResult>(delete);
+        Assert.Equal("Existing Supplier", (await db.Suppliers.SingleAsync()).Name);
+    }
+
+    [Fact]
     public async Task DeleteSupplier_DeletesSupplierWithoutPurchaseOrderHistory()
     {
         var tenantId = Guid.NewGuid();
@@ -93,7 +181,11 @@ public sealed class SuppliersControllerTests
         Assert.Equal("Net 14", (await db.Suppliers.SingleAsync(value => value.Id == supplier.Id)).PaymentTerms);
     }
 
-    private static SuppliersController CreateController(SmeBackend.Data.AppDbContext db, Guid tenantId)
+    private static SuppliersController CreateController(
+        SmeBackend.Data.AppDbContext db,
+        Guid tenantId,
+        UserRole role = UserRole.Admin,
+        Guid? branchId = null)
     {
         var authorizationService = new Mock<IAuthorizationService>();
         authorizationService
@@ -104,7 +196,12 @@ public sealed class SuppliersControllerTests
             .ReturnsAsync(AuthorizationResult.Success());
 
         var controller = new SuppliersController(db, authorizationService.Object);
-        TestHelpers.SetUser(controller, Guid.NewGuid(), tenantId, "Admin");
+        TestHelpers.SetUser(controller, Guid.NewGuid(), tenantId, role.ToString());
+        if (branchId.HasValue)
+        {
+            ((ClaimsIdentity)controller.User.Identity!).AddClaim(
+                new Claim(InventoryAccessHandler.BranchIdClaimType, branchId.Value.ToString()));
+        }
         return controller;
     }
 }

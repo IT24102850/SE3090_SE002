@@ -98,7 +98,7 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
 export const bookingApi = createApi({
   reducerPath: 'bookingApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification', 'Departure', 'Sighting', 'Weather', 'Safety', 'RestaurantInventory'],
+  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification', 'Departure', 'Sighting', 'Weather', 'Safety', 'RestaurantInventory', 'CustomerOrder'],
   endpoints: (builder) => ({
     // ── Branches ──────────────────────────────────────────
     getBranches: builder.query<Branch[], { tenantId: string }>({
@@ -760,8 +760,75 @@ export const bookingApi = createApi({
     askWorkspaceAssistant: builder.mutation<{ answer: string; answeredAt: string }, { message: string }>({
       query: (body) => ({ url: '/workspace-assistant/chat', method: 'POST', body }),
     }),
+    getCustomerOrderBranches: builder.query<CustomerOrderBranch[], void>({
+      query: () => '/customer-orders/branches',
+    }),
+    getCustomerProducts: builder.query<CustomerOrderProduct[], { branchId: string }>({
+      query: ({ branchId }) => ({ url: '/customer-orders/products', params: { branchId } }),
+      providesTags: (_result, _error, { branchId }) => [{ type: 'CustomerOrder', id: `PRODUCTS-${branchId}` }],
+    }),
+    getMyCustomerOrders: builder.query<CustomerOrder[], void>({
+      query: () => '/customer-orders',
+      providesTags: [{ type: 'CustomerOrder', id: 'LIST' }],
+    }),
+    placeCustomerOrder: builder.mutation<CustomerOrder, PlaceCustomerOrderRequest>({
+      query: (body) => ({ url: '/customer-orders', method: 'POST', body }),
+      invalidatesTags: (_result, _error, { branchId }) => [
+        { type: 'CustomerOrder', id: 'LIST' },
+        { type: 'CustomerOrder', id: `PRODUCTS-${branchId}` },
+      ],
+    }),
   }),
 });
+
+export interface CustomerOrderBranch {
+  id: string;
+  name: string;
+  address?: string | null;
+}
+
+export interface CustomerOrderProduct {
+  id: string;
+  name: string;
+  description?: string | null;
+  sku: string;
+  category: string;
+  unit?: string | null;
+  quantityAvailable: number;
+  price: number;
+}
+
+export interface CustomerOrderLine {
+  inventoryItemId: string;
+  itemName: string;
+  sku: string;
+  unit?: string | null;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export interface CustomerOrder {
+  id: string;
+  branchId: string;
+  number: string;
+  status: string;
+  paymentStatus: string;
+  fulfillmentMethod: string;
+  deliveryAddress?: string | null;
+  notes?: string | null;
+  total: number;
+  createdAt: string;
+  items: CustomerOrderLine[];
+}
+
+export interface PlaceCustomerOrderRequest {
+  branchId: string;
+  fulfillmentMethod: 'Pickup' | 'Delivery';
+  deliveryAddress?: string;
+  notes?: string;
+  items: Array<{ inventoryItemId: string; quantity: number }>;
+}
 
 export const {
   useGetBranchesQuery,
@@ -874,4 +941,8 @@ export const {
   useRejectWorkflowMutation,
   useApplyWorkflowMutation,
   useAskWorkspaceAssistantMutation,
+  useGetCustomerOrderBranchesQuery,
+  useGetCustomerProductsQuery,
+  useGetMyCustomerOrdersQuery,
+  usePlaceCustomerOrderMutation,
 } = bookingApi;

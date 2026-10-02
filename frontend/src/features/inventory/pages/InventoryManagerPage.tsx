@@ -376,6 +376,9 @@ export function InventoryManagerPage() {
   const { notify } = useToast();
   const token = getStoredToken();
   const { user } = useSelector((state: RootState) => state.auth);
+  const isAdmin = user?.role === 'Admin';
+  const canManageCatalog = isAdmin || user?.role === 'Manager';
+  const assignedBranchId = isAdmin ? undefined : user?.branchId;
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState<StockRow[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -387,7 +390,7 @@ export function InventoryManagerPage() {
   const [query, setQuery] = useState(() => searchParams.get('search') ?? '');
   const [category, setCategory] = useState(categories[0]);
   const [status, setStatus] = useState<StatusFilter>(statusFilters[0]);
-  const [branchFilter, setBranchFilter] = useState('All branches');
+  const [branchFilter, setBranchFilter] = useState(isAdmin ? 'All branches' : assignedBranchId ?? '');
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; id: string } | null>(null);
   const [qrItem, setQrItem] = useState<StockRow | null>(null);
@@ -416,10 +419,12 @@ export function InventoryManagerPage() {
         row.unit.toLowerCase().includes(queryLower);
       const matchesCategory = category === 'All categories' || row.category === category;
       const matchesStatus = status === 'All statuses' || rowStatus === status;
-      const matchesBranch = branchFilter === 'All branches' || row.branchId === branchFilter;
+      const matchesBranch = isAdmin
+        ? branchFilter === 'All branches' || row.branchId === branchFilter
+        : Boolean(assignedBranchId) && row.branchId === assignedBranchId;
       return matchesQuery && matchesCategory && matchesStatus && matchesBranch;
     });
-  }, [branchFilter, category, items, query, status]);
+  }, [assignedBranchId, branchFilter, category, isAdmin, items, query, status]);
 
   const groupedFiltered = useMemo(() => {
     const groups = new Map<string, StockRow[]>();
@@ -481,8 +486,13 @@ export function InventoryManagerPage() {
     setLoading(true);
     setLoadError('');
     try {
+      if (!isAdmin && !assignedBranchId) {
+        throw new Error('Your account has no assigned branch. Inventory is unavailable until one is assigned.');
+      }
       const headers = { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' };
-      const firstResponse = await fetch('/api/inventory?page=1&pageSize=100', { headers });
+      const params = new URLSearchParams({ page: '1', pageSize: '100' });
+      if (assignedBranchId) params.set('branchId', assignedBranchId);
+      const firstResponse = await fetch(`/api/inventory?${params}`, { headers });
       if (!firstResponse.ok) {
         const errorBody = await firstResponse.json().catch(() => null);
         throw new Error(errorBody?.message || errorBody?.title || `Inventory request failed (${firstResponse.status})`);
@@ -491,13 +501,18 @@ export function InventoryManagerPage() {
       const totalPages = Math.max(1, Number(firstPage.totalPages) || 1);
       const remainingPages = await Promise.all(
         Array.from({ length: totalPages - 1 }, async (_, index) => {
-          const response = await fetch(`/api/inventory?page=${index + 2}&pageSize=100`, { headers });
+          const pageParams = new URLSearchParams({ page: String(index + 2), pageSize: '100' });
+          if (assignedBranchId) pageParams.set('branchId', assignedBranchId);
+          const response = await fetch(`/api/inventory?${pageParams}`, { headers });
           if (!response.ok) throw new Error(`Inventory page ${index + 2} failed (${response.status})`);
           return response.json();
         }),
       );
       const allRows = [firstPage, ...remainingPages].flatMap((pageData) => pageData.items ?? []);
-      setItems(allRows.map((item: any): StockRow => ({
+      const scopedRows = isAdmin
+        ? allRows
+        : allRows.filter((item: any) => item.branchId === assignedBranchId);
+      setItems(scopedRows.map((item: any): StockRow => ({
         id: item.id,
         sku: item.sku,
         item: item.name,
@@ -549,6 +564,7 @@ export function InventoryManagerPage() {
   async function handleCsvImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!canManageCatalog || (!isAdmin && !assignedBranchId)) return;
     setImporting(true);
     try {
       const text = await file.text();
@@ -632,7 +648,7 @@ export function InventoryManagerPage() {
     }
     void loadCategoriesAndInventory();
     return () => { active = false; };
-  }, [token]);
+  }, [token, assignedBranchId, isAdmin]);
 
   useEffect(() => {
     let active = true;
@@ -666,7 +682,7 @@ export function InventoryManagerPage() {
       .then((result) => { if (active) setSuppliers(Array.isArray(result.items) ? result.items : []); })
       .catch((error) => { console.error(error); });
     return () => { active = false; };
-  }, [token]);
+  }, [token, assignedBranchId, isAdmin]);
 
   async function handleRefresh() {
     if (await loadInventory()) {
@@ -785,10 +801,10 @@ export function InventoryManagerPage() {
             onChange={handleCsvImport}
           />
           <button className="btn btn-secondary inventory-manager-refresh" type="button" onClick={() => void handleRefresh()} disabled={loading}><span aria-hidden="true">↻</span> {loading ? 'Refreshing…' : 'Refresh data'}</button>
-          <button className="btn btn-secondary" type="button" onClick={() => fileInputRef.current?.click()} disabled={importing || loading} title="Import items from CSV file"><span aria-hidden="true">⇧</span> {importing ? 'Importing…' : 'Import CSV'}</button>
+          {canManageCatalog && <button className="btn btn-secondary" type="button" onClick={() => fileInputRef.current?.click()} disabled={importing || loading} title="Import items from CSV file"><span aria-hidden="true">⇧</span> {importing ? 'Importing…' : 'Import CSV'}</button>}
           <button className="btn btn-secondary" type="button" onClick={exportInventoryCsv} title="Export inventory catalogue as CSV"><span aria-hidden="true">⇩</span> Export CSV</button>
-          <Link className="btn btn-secondary inventory-manager-suppliers-link" to="/suppliers"><span aria-hidden="true">♧</span> Suppliers</Link>
-          <button className="btn btn-primary inventory-manager-add" type="button" onClick={() => setModal({ mode: 'add' })}><span aria-hidden="true">＋</span> Add item</button>
+          {canManageCatalog && <Link className="btn btn-secondary inventory-manager-suppliers-link" to="/suppliers"><span aria-hidden="true">♧</span> Suppliers</Link>}
+          {canManageCatalog && <button className="btn btn-primary inventory-manager-add" type="button" onClick={() => setModal({ mode: 'add' })}><span aria-hidden="true">＋</span> Add item</button>}
         </div>
       </header>
       {loadError && <p className="page-notice">{loadError}</p>}
@@ -826,7 +842,7 @@ export function InventoryManagerPage() {
               {statusFilters.map((option) => <option key={option}>{option}</option>)}
             </select>
             {branches.length > 1 && (
-              <select
+              isAdmin ? <select
                 className="filter-select"
                 value={branchFilter}
                 onChange={(event) => setBranchFilter(event.target.value)}
@@ -834,7 +850,9 @@ export function InventoryManagerPage() {
               >
                 <option>All branches</option>
                 {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-              </select>
+              </select> : <span className="filter-select" aria-label="Assigned branch">
+                {branches.find((branch) => branch.id === assignedBranchId)?.name ?? (assignedBranchId ? 'Assigned branch' : 'No assigned branch')}
+              </span>
             )}
             {hasActiveFilters && (
               <button
@@ -910,13 +928,13 @@ export function InventoryManagerPage() {
                                 <span className="inventory-product-branch-name">{branchRow.owner}</span>
                                 <span className="inventory-product-branch-quantity">{branchRow.qty} {branchRow.unit}</span>
                                 <Badge tone={statusTone[branchStatus]}>{branchStatus}</Badge>
-                                <button
+                                {canManageCatalog && <button
                                   type="button"
                                   className="row-action row-action-danger inventory-product-branch-delete"
                                   aria-label={`Remove ${branchRow.item} from ${branchRow.owner}`}
                                   title={`Remove from ${branchRow.owner}`}
                                   onClick={() => branchRow.id && setDeleteItemId(branchRow.id)}
-                                >🗑</button>
+                                >🗑</button>}
                               </div>
                             );
                           })}
@@ -928,14 +946,14 @@ export function InventoryManagerPage() {
                       <td>
                         <div className="row-actions">
                           <button type="button" className="row-action" aria-label={`Show QR for ${primary.item}`} title="Show item QR" onClick={() => setQrItem(primary)}><QRCodeSVG value={primary.sku} size={18} level="M" bgColor="#fff" fgColor="#111" /></button>
-                          <button type="button" className="row-action" aria-label={`Edit ${primary.item} across branches`} onClick={() => primary.id && setModal({ mode: 'edit', id: primary.id })}>✎</button>
+                          {canManageCatalog && <button type="button" className="row-action" aria-label={`Edit ${primary.item} across branches`} onClick={() => primary.id && setModal({ mode: 'edit', id: primary.id })}>✎</button>}
                         </div>
                       </td>
                     </tr>
                   );
                 })}
                 {paged.length === 0 && (
-                  <tr><td colSpan={7} className="empty-state"><div className="inventory-manager-empty"><strong>{items.length === 0 ? 'Your catalogue is ready for its first item' : 'No items match these filters'}</strong><span>{items.length === 0 ? 'Add an item to start tracking quantity, reorder levels, and stock value.' : 'Try another search or clear the active filters.'}</span>{items.length === 0 ? <button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'add' })}>Add first item</button> : hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); setBranchFilter('All branches'); }}>Clear filters</button> : null}</div></td></tr>
+                  <tr><td colSpan={7} className="empty-state"><div className="inventory-manager-empty"><strong>{items.length === 0 ? 'Your catalogue is ready for its first item' : 'No items match these filters'}</strong><span>{items.length === 0 ? 'Add an item to start tracking quantity, reorder levels, and stock value.' : 'Try another search or clear the active filters.'}</span>{items.length === 0 && canManageCatalog ? <button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'add' })}>Add first item</button> : hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setQuery(''); setCategory(categories[0]); setStatus(statusFilters[0]); setBranchFilter(isAdmin ? 'All branches' : assignedBranchId ?? ''); }}>Clear filters</button> : null}</div></td></tr>
                 )}
               </tbody>
             </table>
@@ -1012,8 +1030,8 @@ export function InventoryManagerPage() {
           saving={saving}
           suppliers={suppliers}
           categories={inventoryCategories}
-          branches={branches}
-          defaultBranchId={user?.branchId ?? branches[0]?.id}
+          branches={isAdmin ? branches : branches.filter((branch) => branch.id === assignedBranchId)}
+          defaultBranchId={assignedBranchId ?? branches[0]?.id}
         />
       )}
 

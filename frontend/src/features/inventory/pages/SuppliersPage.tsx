@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../../store/store';
 import { getStoredToken } from '../authToken';
 import { useToast } from '../ui/ToastContext';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
@@ -65,6 +67,9 @@ function supplierOrderValue(orders: SupplierOrder[]): number {
 export function SuppliersPage() {
   const token = getStoredToken();
   const { notify } = useToast();
+  const { user } = useSelector((state: RootState) => state.auth);
+  const canManageSuppliers = user?.role === 'Admin';
+  const isStaff = user?.role === 'Staff';
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [query, setQuery] = useState('');
   const [directoryFilter, setDirectoryFilter] = useState<SupplierFilter>('all');
@@ -337,7 +342,9 @@ export function SuppliersPage() {
           <button type="button" className="btn suppliers-refresh" onClick={() => { void loadSuppliers().then((ok) => { if (ok) notify('Supplier list refreshed.', 'success'); }); }} disabled={loading}>
             <span aria-hidden="true">↻</span> {loading ? 'Refreshing…' : 'Refresh'}
           </button>
-          <button type="button" className="btn suppliers-add" onClick={() => { if (showForm) resetSupplierForm(); else { resetSupplierForm(); setShowForm(true); } }}>{showForm ? 'Close form' : '＋ Add supplier'}</button>
+          {canManageSuppliers && (
+            <button type="button" className="btn suppliers-add" onClick={() => { if (showForm) resetSupplierForm(); else { resetSupplierForm(); setShowForm(true); } }}>{showForm ? 'Close form' : '＋ Add supplier'}</button>
+          )}
         </div>
         <div className="suppliers-hero-mark" aria-hidden="true"><span>♧</span><i /><i /><i /></div>
       </header>
@@ -402,7 +409,7 @@ export function SuppliersPage() {
         </article>
       </section>
 
-      {showForm && (
+      {canManageSuppliers && showForm && (
         <form className="suppliers-create-card" onSubmit={(event) => void createSupplier(event)}>
           <div className="suppliers-create-heading"><div><span className="suppliers-create-kicker">{editingSupplierId ? 'EDIT PARTNER' : 'NEW PARTNER'}</span><h2>{editingSupplierId ? 'Update supplier' : 'Add a supplier'}</h2><p>Record the supplier's usual delivery lead time from your order history.</p></div><span className="suppliers-create-symbol" aria-hidden="true">＋</span></div>
           <div className="suppliers-form-grid">
@@ -420,7 +427,7 @@ export function SuppliersPage() {
       )}
 
       <section className="panel suppliers-directory-panel">
-        <div className="suppliers-directory-head"><div><span className="suppliers-section-mark" aria-hidden="true">▤</span><div><h2>All suppliers</h2><p>Contact, delivery, and purchasing details for your inventory workspace.</p></div></div><label className="suppliers-search"><span aria-hidden="true">⌕</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search supplier details" aria-label="Search suppliers" /></label></div>
+        <div className="suppliers-directory-head"><div><span className="suppliers-section-mark" aria-hidden="true">▤</span><div><h2>{isStaff ? 'Suppliers at your branch' : 'All suppliers'}</h2><p>Contact, delivery, and purchasing details for your inventory workspace.</p></div></div><label className="suppliers-search"><span aria-hidden="true">⌕</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search supplier details" aria-label="Search suppliers" /></label></div>
         <div className="inventory-quick-filters" role="group" aria-label="Filter supplier directory">
           <button type="button" className={`inventory-chip${directoryFilter === 'all' ? ' is-active' : ''}`} aria-pressed={directoryFilter === 'all'} onClick={() => setDirectoryFilter('all')}>All suppliers <strong>({suppliers.length})</strong></button>
           <button type="button" className={`inventory-chip chip-amber${directoryFilter === 'missing-contact' ? ' is-active' : ''}`} aria-pressed={directoryFilter === 'missing-contact'} onClick={() => setDirectoryFilter('missing-contact')}>Missing contact <strong>({missingContactCount})</strong></button>
@@ -429,7 +436,7 @@ export function SuppliersPage() {
         </div>
         <div className="table-wrap">
           <table className="data-table suppliers-table">
-            <thead><tr><th>Supplier</th><th>Email</th><th>Phone</th><th>Lead time</th><th>Payment terms</th><th>Added</th><th>Orders</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Supplier</th><th>Email</th><th>Phone</th><th>Lead time</th><th>Payment terms</th><th>Added</th><th>Orders</th>{canManageSuppliers && <th>Actions</th>}</tr></thead>
             <tbody>
               {filtered.map((supplier) => (
                 <tr key={supplier.id}>
@@ -459,22 +466,24 @@ export function SuppliersPage() {
                       </button>
                     </div>
                   </td>
-                  <td>
-                    <div className="suppliers-row-actions">
-                      <button type="button" className="btn btn-secondary" onClick={() => editSupplier(supplier)}>Edit</button>
-                      <button
-                        type="button"
-                        className="btn btn-danger"
-                        disabled={supplier.orderCount > 0 || deletingSupplierId === supplier.id}
-                        title={supplier.orderCount > 0 ? 'Suppliers with purchase order history cannot be deleted.' : undefined}
-                        onClick={() => setConfirmDeleteSupplierId(supplier.id)}
-                      >{deletingSupplierId === supplier.id ? 'Deleting…' : 'Delete'}</button>
-                    </div>
-                  </td>
+                  {canManageSuppliers && (
+                    <td>
+                      <div className="suppliers-row-actions">
+                        <button type="button" className="btn btn-secondary" onClick={() => editSupplier(supplier)}>Edit</button>
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          disabled={supplier.orderCount > 0 || deletingSupplierId === supplier.id}
+                          title={supplier.orderCount > 0 ? 'Suppliers with purchase order history cannot be deleted.' : undefined}
+                          onClick={() => setConfirmDeleteSupplierId(supplier.id)}
+                        >{deletingSupplierId === supplier.id ? 'Deleting…' : 'Delete'}</button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
-              {!loading && filtered.length === 0 && <tr><td colSpan={8} className="empty-state">{suppliers.length ? 'No suppliers match your search.' : 'No suppliers yet. Add a supplier to start building your directory.'}</td></tr>}
-              {loading && suppliers.length === 0 && <tr><td colSpan={8} className="empty-state">Loading supplier directory…</td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={canManageSuppliers ? 8 : 7} className="empty-state">{suppliers.length ? 'No suppliers match your search.' : isStaff ? 'No suppliers are linked to your branch yet.' : 'No suppliers yet. Add a supplier to start building your directory.'}</td></tr>}
+              {loading && suppliers.length === 0 && <tr><td colSpan={canManageSuppliers ? 8 : 7} className="empty-state">Loading supplier directory…</td></tr>}
             </tbody>
           </table>
         </div>
@@ -601,7 +610,7 @@ export function SuppliersPage() {
           </div>
         );
       })()}
-      {supplierPendingDeletion && (
+      {canManageSuppliers && supplierPendingDeletion && (
         <ConfirmDialog
           title={`Delete ${supplierPendingDeletion.name}?`}
           message="This permanently removes the supplier from your directory and clears its supplier references from inventory. This cannot be undone."

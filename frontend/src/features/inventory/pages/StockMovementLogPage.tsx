@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../../store/store';
 import { Badge, type BadgeTone } from '../ui/Badge';
 import { getStoredToken } from '../authToken';
 import { useToast } from '../ui/ToastContext';
@@ -123,9 +125,12 @@ async function fetchAllPages(
 export function StockMovementLogPage() {
   const token = getStoredToken();
   const { notify } = useToast();
+  const user = useSelector((state: RootState) => state.auth.user);
+  const isAdmin = user?.role === 'Admin';
+  const assignedBranchId = isAdmin ? undefined : user?.branchId;
   const [activities, setActivities] = useState<MovementEntry[]>([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [selectedBranchId, setSelectedBranchId] = useState(isAdmin ? '' : assignedBranchId ?? '');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [query, setQuery] = useState('');
@@ -138,12 +143,19 @@ export function StockMovementLogPage() {
     setLoading(true);
     setLoadError('');
     try {
+      if (!isAdmin && !assignedBranchId) {
+        setActivities([]);
+        setBranches([]);
+        setLoadError('Your account has no assigned branch. Stock activity is unavailable until one is assigned.');
+        return false;
+      }
+      const effectiveBranchId = isAdmin ? selectedBranchId || undefined : assignedBranchId;
       const headers = { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' };
       const branchResponsePromise = fetch('/api/inventory/branches', { headers });
       const [branchResponse, movementRecords, countRecords] = await Promise.all([
         branchResponsePromise,
-        fetchAllPages('/api/inventory/movements', headers, 'Movement', activeCheck, selectedBranchId || undefined),
-        fetchAllPages('/api/inventory/physical-counts', headers, 'Physical count', activeCheck, selectedBranchId || undefined),
+        fetchAllPages('/api/inventory/movements', headers, 'Movement', activeCheck, effectiveBranchId),
+        fetchAllPages('/api/inventory/physical-counts', headers, 'Physical count', activeCheck, effectiveBranchId),
       ]);
       if (activeCheck && !activeCheck()) return false;
       if (!branchResponse.ok) throw new Error(`Branch request failed (${branchResponse.status})`);
@@ -158,7 +170,9 @@ export function StockMovementLogPage() {
         }
         return { id: branch.id, name: branch.name };
       });
-      setBranches(branchOptions);
+      setBranches(isAdmin
+        ? branchOptions
+        : branchOptions.filter((branch) => branch.id === assignedBranchId));
 
       const movementEntries = movementRecords.map((value): MovementEntry => {
         if (!value || typeof value !== 'object') throw new Error('Movement request returned an invalid record.');
@@ -232,7 +246,12 @@ export function StockMovementLogPage() {
         !movement.reference ||
         !appliedCountReferences.has(movement.reference),
       );
-      const allActivities = [...distinctMovements, ...physicalCounts]
+      const scopedActivities = isAdmin
+        ? [...distinctMovements, ...physicalCounts]
+        : [...distinctMovements, ...physicalCounts].filter(
+            (activity) => activity.branchId === assignedBranchId,
+          );
+      const allActivities = scopedActivities
         .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
 
       if (activeCheck && !activeCheck()) return false;
@@ -247,7 +266,7 @@ export function StockMovementLogPage() {
     } finally {
       if (!activeCheck || activeCheck()) setLoading(false);
     }
-  }, [selectedBranchId, token]);
+  }, [assignedBranchId, isAdmin, selectedBranchId, token]);
 
   useEffect(() => {
     let active = true;
@@ -351,7 +370,7 @@ export function StockMovementLogPage() {
   const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
   const physicalCountTotal = contextFiltered.filter((row) => row.isPhysicalCount).length;
-  const hasActiveFilters = query.trim() !== '' || type !== 'All types' || dateFrom !== '' || dateTo !== '' || selectedBranchId !== '';
+  const hasActiveFilters = query.trim() !== '' || type !== 'All types' || dateFrom !== '' || dateTo !== '' || (isAdmin && selectedBranchId !== '');
 
   async function handleRefresh() {
     const refreshed = await loadMovements();
@@ -407,10 +426,12 @@ export function StockMovementLogPage() {
               aria-label="Search movements"
             />
           </div>
-          <select className="filter-select" value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)} aria-label="Filter by branch">
+          {isAdmin ? <select className="filter-select" value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)} aria-label="Filter by branch">
             <option value="">All branches</option>
             {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-          </select>
+          </select> : <span className="filter-select" aria-label="Assigned branch">
+            {branches.find((branch) => branch.id === assignedBranchId)?.name ?? (assignedBranchId ? 'Assigned branch' : 'No assigned branch')}
+          </span>}
           <select className="filter-select" value={type} onChange={(event) => setType(event.target.value as MovementTypeFilter)} aria-label="Filter by activity type">
             <option>All types</option>
             <option value="Outbound">Outbound</option>
@@ -424,7 +445,7 @@ export function StockMovementLogPage() {
             <span>To</span>
             <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} aria-label="To date" />
           </label>
-          {hasActiveFilters && <button type="button" className="movement-clear-filters" onClick={() => { setQuery(''); setType('All types'); setDateFrom(''); setDateTo(''); setSelectedBranchId(''); }}>Clear filters</button>}
+          {hasActiveFilters && <button type="button" className="movement-clear-filters" onClick={() => { setQuery(''); setType('All types'); setDateFrom(''); setDateTo(''); if (isAdmin) setSelectedBranchId(''); }}>Clear filters</button>}
         </div>
 
         <div className="movement-type-summary" aria-label="Activity type counts">

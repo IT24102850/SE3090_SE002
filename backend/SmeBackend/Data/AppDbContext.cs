@@ -54,6 +54,8 @@ public class AppDbContext : DbContext
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; } = null!;
     public DbSet<PurchaseOrderReceipt> PurchaseOrderReceipts { get; set; } = null!;
     public DbSet<PurchaseOrderReceiptItem> PurchaseOrderReceiptItems { get; set; } = null!;
+    public DbSet<CustomerOrder> CustomerOrders { get; set; } = null!;
+    public DbSet<CustomerOrderItem> CustomerOrderItems { get; set; } = null!;
     public DbSet<StockMovement> StockMovements { get; set; } = null!;
     public DbSet<PhysicalStockCount> PhysicalStockCounts { get; set; } = null!;
     public DbSet<Sale> Sales { get; set; } = null!;
@@ -434,6 +436,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<PurchaseOrderItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
         modelBuilder.Entity<PurchaseOrderReceipt>().HasQueryFilter(receipt => receipt.TenantId == CurrentTenantId);
         modelBuilder.Entity<PurchaseOrderReceiptItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
+        modelBuilder.Entity<CustomerOrder>().HasQueryFilter(order => order.TenantId == CurrentTenantId);
+        modelBuilder.Entity<CustomerOrderItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
         modelBuilder.Entity<StockMovement>().HasQueryFilter(movement => movement.TenantId == CurrentTenantId);
         modelBuilder.Entity<PhysicalStockCount>().HasQueryFilter(count => count.TenantId == CurrentTenantId);
         modelBuilder.Entity<Sale>().HasQueryFilter(sale => sale.TenantId == CurrentTenantId);
@@ -444,6 +448,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<InventoryItem>().HasIndex(item => new { item.TenantId, item.BranchId, item.Sku }).IsUnique();
         modelBuilder.Entity<Supplier>().HasIndex(supplier => new { supplier.TenantId, supplier.Name }).IsUnique();
         modelBuilder.Entity<PurchaseOrder>().HasIndex(order => new { order.TenantId, order.Number }).IsUnique();
+        modelBuilder.Entity<CustomerOrder>().HasIndex(order => new { order.TenantId, order.Number }).IsUnique();
+        modelBuilder.Entity<CustomerOrder>().HasIndex(order => new { order.TenantId, order.CustomerId, order.CreatedAt });
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.TenantId, movement.BranchId });
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.InventoryItemId, movement.OccurredAt });
         modelBuilder.Entity<PhysicalStockCount>().HasIndex(count => new { count.TenantId, count.Reference }).IsUnique();
@@ -513,6 +519,28 @@ public class AppDbContext : DbContext
             entity.Property(sale => sale.Amount).HasPrecision(18, 2);
             entity.Property(sale => sale.Reference).HasMaxLength(100).IsRequired();
             entity.HasOne<Branch>().WithMany().HasForeignKey(sale => sale.BranchId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<CustomerOrder>(entity =>
+        {
+            entity.Property(order => order.Number).HasMaxLength(32).IsRequired();
+            entity.Property(order => order.Status).HasMaxLength(24).IsRequired();
+            entity.Property(order => order.PaymentStatus).HasMaxLength(24).IsRequired();
+            entity.Property(order => order.FulfillmentMethod).HasMaxLength(16).IsRequired();
+            entity.Property(order => order.DeliveryAddress).HasMaxLength(500);
+            entity.Property(order => order.Notes).HasMaxLength(1000);
+            entity.Property(order => order.Total).HasPrecision(18, 2);
+            entity.HasOne<User>().WithMany().HasForeignKey(order => order.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Branch>().WithMany().HasForeignKey(order => order.BranchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(order => order.Items).WithOne().HasForeignKey(item => item.CustomerOrderId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<CustomerOrderItem>(entity =>
+        {
+            entity.Property(item => item.ItemName).HasMaxLength(150).IsRequired();
+            entity.Property(item => item.Sku).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.UnitName).HasMaxLength(64);
+            entity.Property(item => item.Quantity).HasPrecision(18, 3);
+            entity.Property(item => item.UnitPrice).HasPrecision(18, 2);
+            entity.Property(item => item.LineTotal).HasPrecision(18, 2);
         });
         modelBuilder.Entity<Subscription>(entity =>
         {

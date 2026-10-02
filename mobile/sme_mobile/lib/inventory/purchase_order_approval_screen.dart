@@ -184,6 +184,8 @@ class PurchaseOrderApprovalScreen extends StatefulWidget {
     bool? canCreate,
     bool? canReceive,
     this.canCreateMultiBranch = false,
+    this.assignedBranchId,
+    this.requiresAssignedBranch = false,
   })  : canCreate = canCreate ?? canApprove,
         canReceive = canReceive ?? canApprove;
 
@@ -192,6 +194,8 @@ class PurchaseOrderApprovalScreen extends StatefulWidget {
   final bool canCreate;
   final bool canReceive;
   final bool canCreateMultiBranch;
+  final String? assignedBranchId;
+  final bool requiresAssignedBranch;
 
   @override
   State<PurchaseOrderApprovalScreen> createState() =>
@@ -505,6 +509,8 @@ class _PurchaseOrderApprovalScreenState
         client: widget.client,
         requiresReview: !widget.canApprove,
         canCreateMultiBranch: widget.canCreateMultiBranch,
+        assignedBranchId: widget.assignedBranchId,
+        requiresAssignedBranch: widget.requiresAssignedBranch,
         onCreated: () => _load(showSuccess: true),
       ),
     );
@@ -1773,12 +1779,16 @@ class _CreateOrderBottomSheet extends StatefulWidget {
     required this.client,
     required this.requiresReview,
     required this.canCreateMultiBranch,
+    required this.assignedBranchId,
+    required this.requiresAssignedBranch,
     required this.onCreated,
   });
 
   final AuthenticatedApiClient client;
   final bool requiresReview;
   final bool canCreateMultiBranch;
+  final String? assignedBranchId;
+  final bool requiresAssignedBranch;
   final VoidCallback onCreated;
 
   @override
@@ -1834,6 +1844,12 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
 
   Future<void> _fetchOptions() async {
     try {
+      if (widget.requiresAssignedBranch &&
+          (widget.assignedBranchId == null ||
+              widget.assignedBranchId!.trim().isEmpty)) {
+        throw StateError(
+            'Your account has no assigned branch. Purchase orders are unavailable until one is assigned.');
+      }
       final res = await widget.client.get('/api/purchase-orders/options');
       if (res.statusCode != 200) {
         throw StateError(
@@ -1841,15 +1857,28 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
         );
       }
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-      final branches = ((data['branches'] as List?) ?? const [])
+      final availableBranches = ((data['branches'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .toList();
+      final branches = widget.requiresAssignedBranch
+          ? availableBranches
+              .where((branch) => '${branch['id']}' == widget.assignedBranchId)
+              .toList()
+          : availableBranches;
+      if (widget.requiresAssignedBranch && branches.isEmpty) {
+        throw StateError('Your assigned branch could not be loaded.');
+      }
       final suppliers = ((data['suppliers'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .toList();
-      final items = ((data['items'] as List?) ?? const [])
+      final availableItems = ((data['items'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .toList();
+      final items = widget.requiresAssignedBranch
+          ? availableItems
+              .where((item) => '${item['branchId'] ?? ''}' == widget.assignedBranchId)
+              .toList()
+          : availableItems;
       if (mounted) {
         setState(() {
           _branches = branches;
@@ -1900,6 +1929,12 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
   }
 
   void _toggleBranch(String branchId, bool selected) {
+    if (!widget.canCreateMultiBranch &&
+        selected &&
+        _selectedBranchIds.isNotEmpty &&
+        !_selectedBranchIds.contains(branchId)) {
+      return;
+    }
     setState(() {
       if (selected) {
         if (!_selectedBranchIds.contains(branchId)) {
@@ -1919,6 +1954,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
   }
 
   void _selectAllBranches() {
+    if (!widget.canCreateMultiBranch) return;
     setState(() {
       _selectedBranchIds =
           _branches.map((branch) => '${branch['id']}').toList();
@@ -1968,6 +2004,21 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
     if (_selectedBranchIds.isEmpty) {
       showAppNotification(
         'Select at least one delivery branch.',
+        tone: AppNotificationTone.error,
+      );
+      return;
+    }
+    if (!widget.canCreateMultiBranch && _selectedBranchIds.length > 1) {
+      showAppNotification(
+        'Only administrators can create purchase orders for multiple branches.',
+        tone: AppNotificationTone.error,
+      );
+      return;
+    }
+    if (widget.requiresAssignedBranch &&
+        _selectedBranchIds.any((id) => id != widget.assignedBranchId)) {
+      showAppNotification(
+        'Purchase orders are limited to your assigned branch.',
         tone: AppNotificationTone.error,
       );
       return;
@@ -2174,7 +2225,11 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
                     child: CheckboxListTile(
                       key: Key('po-branch-checkbox-$branchId'),
                       value: _selectedBranchIds.contains(branchId),
-                      onChanged: _loading || _loadingOptions
+                      onChanged: _loading ||
+                              _loadingOptions ||
+                              (!widget.canCreateMultiBranch &&
+                                  !_selectedBranchIds.contains(branchId) &&
+                                  _selectedBranchIds.isNotEmpty)
                           ? null
                           : (selected) =>
                               _toggleBranch(branchId, selected ?? false),

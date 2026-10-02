@@ -42,12 +42,14 @@ class InventoryDashboard extends StatefulWidget {
     required this.canApprove,
     this.role,
     this.canReceive = false,
+    this.assignedBranchId,
   });
 
   final AuthenticatedApiClient client;
   final bool canApprove;
   final String? role;
   final bool canReceive;
+  final String? assignedBranchId;
 
   @override
   State<InventoryDashboard> createState() => _InventoryDashboardState();
@@ -837,6 +839,8 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                       canCreate: widget.canApprove || widget.role == 'Staff',
                       canCreateMultiBranch: widget.role == 'Admin',
                       canReceive: widget.canReceive,
+                      assignedBranchId: widget.assignedBranchId,
+                      requiresAssignedBranch: widget.role != 'Admin',
                     ),
                   ),
                 ),
@@ -914,6 +918,8 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                       canCreate: widget.canApprove || widget.role == 'Staff',
                       canCreateMultiBranch: widget.role == 'Admin',
                       canReceive: widget.canReceive,
+                      assignedBranchId: widget.assignedBranchId,
+                      requiresAssignedBranch: widget.role != 'Admin',
                     ),
                   ),
                 ),

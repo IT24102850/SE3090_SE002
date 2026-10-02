@@ -21,6 +21,7 @@ import 'business_profile_editor_screen.dart';
 import 'clinic/clinic_desk_screen.dart';
 import 'customer/ai_planner_screen.dart';
 import 'customer/book_business_list_screen.dart';
+import 'customer/customer_shop_screen.dart';
 import 'customer/my_bookings_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
@@ -121,6 +122,7 @@ class DashboardScreen extends ConsumerWidget {
                   ..._quickActionsFor(
                     context,
                     user.role,
+                    user.branchId,
                     role.color,
                     compact: compact,
                     tileSpacing: tileSpacing,
@@ -390,6 +392,20 @@ class _DashboardDrawer extends ConsumerWidget {
                   emphasized: true,
                   onTap: () => Navigator.pop(context),
                 ),
+                if (isCustomer)
+                  _DrawerItem(
+                    icon: Icons.shopping_bag_outlined,
+                    label: 'Shop & my orders',
+                    accent: AppColors.cyan,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        slideFadeRoute(
+                          CustomerShopScreen(initialBranchId: user.branchId),
+                        ),
+                      );
+                    },
+                  ),
                 if (!isCustomer)
                   const _DrawerSectionLabel(label: 'BUSINESS OPERATIONS'),
                 if (user.role == 'Admin' ||
@@ -443,6 +459,7 @@ class _DashboardDrawer extends ConsumerWidget {
                         InventoryDashboard(
                           client: AuthenticatedApiClient(),
                           role: user.role,
+                          assignedBranchId: user.branchId,
                           canApprove:
                               user.role == 'Admin' || user.role == 'Manager',
                           canReceive: user.role == 'Admin' ||
@@ -482,6 +499,8 @@ class _DashboardDrawer extends ConsumerWidget {
                           canCreate: true,
                           canCreateMultiBranch: user.role == 'Admin',
                           canReceive: true,
+                          assignedBranchId: user.branchId,
+                          requiresAssignedBranch: user.role != 'Admin',
                         ),
                       ));
                     },
@@ -770,6 +789,8 @@ const _quickActionImages = <String, String>{
       'https://images.unsplash.com/photo-1501139083538-0139583c060f?auto=format&fit=crop&w=400&q=60',
   'Ask AI to book for you':
       'https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=400&q=60',
+  'Shop & order items':
+      'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=400&q=60',
   'Business Profile':
       'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=400&q=60',
   'Manage all branches':
@@ -807,6 +828,7 @@ const _quickActionImages = <String, String>{
 List<_QuickActionGroup> _quickActionsFor(
   BuildContext context,
   String role,
+  String? assignedBranchId,
   Color color, {
   required bool compact,
   required double tileSpacing,
@@ -819,6 +841,20 @@ List<_QuickActionGroup> _quickActionsFor(
   }
 
   if (role == 'Customer') {
+    addAction(
+      'Shopping',
+      _QuickActionCard(
+        label: 'Shop & order items',
+        icon: Icons.shopping_bag_outlined,
+        color: AppColors.cyan,
+        imageUrl: _quickActionImages['Shop & order items'],
+        onTap: () => Navigator.of(context).push(
+          slideFadeRoute(
+            CustomerShopScreen(initialBranchId: assignedBranchId),
+          ),
+        ),
+      ),
+    );
     addAction(
       'Appointments',
       _QuickActionCard(
@@ -932,6 +968,7 @@ List<_QuickActionGroup> _quickActionsFor(
           InventoryDashboard(
             client: client,
             role: role,
+            assignedBranchId: assignedBranchId,
             canApprove: role == 'Admin' || role == 'Manager',
             canReceive: role == 'Admin' || role == 'Manager' || role == 'Staff',
           ),
@@ -945,7 +982,11 @@ List<_QuickActionGroup> _quickActionsFor(
         color: AppColors.violet,
         imageUrl: _quickActionImages['Inventory dashboard'],
         onTap: () => Navigator.of(context).push(
-          slideFadeRoute(SalesScreen(client: client)),
+          slideFadeRoute(SalesScreen(
+            client: client,
+            assignedBranchId: assignedBranchId,
+            requiresAssignedBranch: role != 'Admin',
+          )),
         ),
       ));
   addAction(
@@ -985,6 +1026,8 @@ List<_QuickActionGroup> _quickActionsFor(
               canCreate: true,
               canCreateMultiBranch: role == 'Admin',
               canReceive: true,
+              assignedBranchId: assignedBranchId,
+              requiresAssignedBranch: role != 'Admin',
             ),
           )),
         ));
@@ -1027,6 +1070,7 @@ List<_QuickActionGroup> _buildActionGroupSections(
 }) {
   const order = [
     'Appointments',
+    'Shopping',
     'Daily operations',
     'Business',
     'Inventory',
@@ -1044,6 +1088,11 @@ List<_QuickActionGroup> _buildActionGroupSections(
       'Appointments' => (
           Icons.calendar_month_outlined,
           'Plan and manage appointments',
+          AppColors.cyan
+        ),
+      'Shopping' => (
+          Icons.shopping_bag_outlined,
+          'Browse items and follow your orders',
           AppColors.cyan
         ),
       'Daily operations' => (

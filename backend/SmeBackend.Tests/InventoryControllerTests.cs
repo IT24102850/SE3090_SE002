@@ -246,6 +246,38 @@ public class InventoryControllerTests
     }
 
     [Fact]
+    public async Task CreateInventory_StaffCannotManageCatalog()
+    {
+        var tenantId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, UserRole.Staff, branchId: branchId),
+                },
+            },
+        };
+
+        var result = await controller.CreateInventory(
+            new CreateInventoryRequest("Unauthorized item", "UNAUTHORIZED-001", null, null, null, null),
+            CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        Assert.Empty(db.InventoryItems);
+    }
+
+    [Fact]
     public async Task CreateInventory_WithMultipleBranches_CreatesSeparateStockRecords()
     {
         var tenantId = Guid.NewGuid();
@@ -464,6 +496,63 @@ public class InventoryControllerTests
         var result = await controller.GetInventory(null, false, null, 1, 20);
 
         Assert.IsType<UnauthorizedResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetInventory_StaffCannotOverrideJwtBranchWithQueryBranch()
+    {
+        var tenantId = Guid.NewGuid();
+        var assignedBranchId = Guid.NewGuid();
+        var requestedBranchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        db.InventoryItems.AddRange(
+            new InventoryItem
+            {
+                TenantId = tenantId,
+                BranchId = assignedBranchId,
+                Name = "Assigned branch item",
+                Sku = "ASSIGNED-001",
+                IsActive = true,
+            },
+            new InventoryItem
+            {
+                TenantId = tenantId,
+                BranchId = requestedBranchId,
+                Name = "Requested branch item",
+                Sku = "OTHER-001",
+                IsActive = true,
+            });
+        await db.SaveChangesAsync();
+
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, UserRole.Staff, branchId: assignedBranchId),
+                },
+            },
+        };
+
+        var result = await controller.GetInventory(
+            category: null,
+            lowStock: false,
+            branchId: requestedBranchId,
+            page: 1,
+            pageSize: 20);
+
+        var response = Assert.IsType<OkObjectResult>(result.Result).Value as InventoryListResponse;
+        Assert.NotNull(response);
+        var item = Assert.Single(response.Items);
+        Assert.Equal("Assigned branch item", item.Name);
+        Assert.Equal(assignedBranchId, item.BranchId);
     }
 
     [Fact]
@@ -1250,8 +1339,9 @@ public class InventoryControllerTests
             new RecordInventorySaleRequest(0m),
             CancellationToken.None);
 
-        var problem = Assert.IsType<ObjectResult>(result.Result);
-        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
+        var problemResult = Assert.IsType<ObjectResult>(result.Result);
+        var problem = Assert.IsType<ValidationProblemDetails>(problemResult.Value);
+        Assert.Contains("quantity", problem.Errors.Keys);
         Assert.Empty(db.Sales);
         Assert.Equal(5m, item.Quantity);
     }
@@ -1481,6 +1571,90 @@ public class InventoryControllerTests
         staleCopy.UpdatedAt = staleCopy.UpdatedAt.AddMilliseconds(2);
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
             () => secondDb.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task PlanInventory_StaffCannotOverrideAssignedBranch()
+    {
+        var tenantId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var assignedBranchId = Guid.NewGuid();
+        var requestedBranchId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        db.Tenants.Add(new Tenant { Id = tenantId, Name = "Test Business", BusinessType = "Retail" });
+        var user = new User
+        {
+            Id = userId,
+            TenantId = tenantId,
+            BranchId = assignedBranchId,
+            Role = UserRole.Staff,
+            FullName = "Branch Staff",
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        InventoryAgentRequest? sentRequest = null;
+        var agent = new Mock<IInventoryAgentService>();
+        agent.Setup(service => service.PlanAsync(
+                It.IsAny<InventoryAgentRequest>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<InventoryAgentRequest, CancellationToken>((request, _) => sentRequest = request)
+            .ReturnsAsync(new InventoryAgentResponse(200, "{}", "application/json"));
+        var jwt = new Mock<IJwtService>();
+        jwt.Setup(service => service.GenerateAccessToken(user)).Returns("test-token");
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            agent.Object,
+            jwt.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, UserRole.Staff, userId, assignedBranchId),
+                },
+            },
+        };
+
+        var result = await controller.PlanInventory(
+            new InventoryAgentPlanRequest("Check branch stock", requestedBranchId),
+            CancellationToken.None);
+
+        Assert.IsType<ContentResult>(result);
+        Assert.NotNull(sentRequest);
+        Assert.Equal(assignedBranchId, sentRequest.BranchId);
+    }
+
+    [Fact]
+    public async Task PlanInventory_StaffWithoutAssignedBranchIsForbidden()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenantId(tenantId);
+        await using var db = CreateDbContext(tenantContext);
+        var controller = new InventoryController(
+            db,
+            CreateAuthorizationService().Object,
+            Mock.Of<IInventoryAgentService>(),
+            Mock.Of<IJwtService>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser(tenantId, UserRole.Staff, Guid.NewGuid()),
+                },
+            },
+        };
+
+        var result = await controller.PlanInventory(
+            new InventoryAgentPlanRequest("Check branch stock", Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(result);
     }
 
     private static Mock<IAuthorizationService> CreateAuthorizationService()
