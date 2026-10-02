@@ -125,6 +125,8 @@ class DashboardScreen extends ConsumerWidget {
                     user.branchId,
                     user.tenantId,
                     role.color,
+                    onJoinBusiness: (tenantId) =>
+                        ref.read(authProvider.notifier).joinBusiness(tenantId),
                     compact: compact,
                     tileSpacing: tileSpacing,
                     clinic: isClinicDesk,
@@ -405,6 +407,9 @@ class _DashboardDrawer extends ConsumerWidget {
                           CustomerShopScreen(
                             initialBranchId: user.branchId,
                             tenantId: user.tenantId,
+                            onJoinBusiness: (tenantId) => ref
+                                .read(authProvider.notifier)
+                                .joinBusiness(tenantId),
                           ),
                         ),
                       );
@@ -835,6 +840,7 @@ List<_QuickActionGroup> _quickActionsFor(
   String? assignedBranchId,
   String tenantId,
   Color color, {
+  required Future<bool> Function(String tenantId) onJoinBusiness,
   required bool compact,
   required double tileSpacing,
   bool clinic = false,
@@ -858,6 +864,7 @@ List<_QuickActionGroup> _quickActionsFor(
             CustomerShopScreen(
               initialBranchId: assignedBranchId,
               tenantId: tenantId,
+              onJoinBusiness: onJoinBusiness,
             ),
           ),
         ),

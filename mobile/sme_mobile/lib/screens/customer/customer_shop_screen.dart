@@ -1,33 +1,33 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../inventory/authenticated_api_client.dart';
-import '../../providers/auth_provider.dart';
 import '../../models/public_tenant_model.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/ui/ui.dart';
 import 'book_business_list_screen.dart';
 
-class CustomerShopScreen extends ConsumerStatefulWidget {
+class CustomerShopScreen extends StatefulWidget {
   CustomerShopScreen({
     super.key,
     AuthenticatedApiClient? client,
     this.initialBranchId,
     this.tenantId,
+    this.onJoinBusiness,
   }) : client = client ?? AuthenticatedApiClient();
 
   final AuthenticatedApiClient client;
   final String? initialBranchId;
   final String? tenantId;
+  final Future<bool> Function(String tenantId)? onJoinBusiness;
 
   @override
-  ConsumerState<CustomerShopScreen> createState() => _CustomerShopScreenState();
+  State<CustomerShopScreen> createState() => _CustomerShopScreenState();
 }
 
-class _CustomerShopScreenState extends ConsumerState<CustomerShopScreen> {
+class _CustomerShopScreenState extends State<CustomerShopScreen> {
   final _addressController = TextEditingController();
   final _notesController = TextEditingController();
   List<Map<String, dynamic>> _branches = [];
@@ -35,6 +35,7 @@ class _CustomerShopScreenState extends ConsumerState<CustomerShopScreen> {
   List<Map<String, dynamic>> _orders = [];
   final Map<String, double> _cart = {};
   String? _branchId;
+  String? _activeTenantId;
   String? _error;
   String? _cartError;
   String _category = 'All items';
@@ -78,8 +79,7 @@ class _CustomerShopScreenState extends ConsumerState<CustomerShopScreen> {
     try {
       var branchesResponse =
           await widget.client.get('/customer-orders/branches');
-      final currentTenantId =
-          ref.read(authProvider).user?.tenantId ?? widget.tenantId;
+      final currentTenantId = _activeTenantId ?? widget.tenantId;
       if (branchesResponse.statusCode == 404 &&
           currentTenantId != null &&
           currentTenantId.isNotEmpty) {
@@ -183,10 +183,17 @@ class _CustomerShopScreenState extends ConsumerState<CustomerShopScreen> {
   }
 
   Future<bool> _connectToBusiness(PublicTenant tenant) async {
-    final connected =
-        await ref.read(authProvider.notifier).joinBusiness(tenant.id);
-    if (!connected || !mounted) return false;
-
+    final joinBusiness = widget.onJoinBusiness;
+    if (joinBusiness == null || !await joinBusiness(tenant.id) || !mounted) {
+      return false;
+    }
+    setState(() {
+      _activeTenantId = tenant.id;
+      _branchId = null;
+      _branches = [];
+      _products = [];
+      _cart.clear();
+    });
     Navigator.of(context).pop();
     return true;
   }
