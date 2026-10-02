@@ -164,8 +164,8 @@ describe('DisruptionRecoveryPage', () => {
     renderPage();
     await screen.findByRole('article', { name: /Dr Silva is off sick/ });
 
-    fireEvent.change(screen.getByLabelText('Unavailable resource'), { target: { value: 'r1' } });
-    fireEvent.change(screen.getByLabelText('What happened'), { target: { value: 'Dr Silva is off sick' } });
+    fireEvent.change(screen.getByLabelText('Which resource is unavailable?'), { target: { value: 'r1' } });
+    fireEvent.change(screen.getByLabelText(/What happened, and how would you rather recover/), { target: { value: 'Dr Silva is off sick' } });
     fireEvent.click(screen.getByRole('button', { name: 'Plan recovery' }));
 
     await waitFor(() => expect(api.plan).toHaveBeenCalledWith(expect.objectContaining({

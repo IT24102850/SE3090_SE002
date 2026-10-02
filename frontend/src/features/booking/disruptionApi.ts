@@ -107,6 +107,15 @@ export function parseTrace(workflow: DisruptionWorkflow): DisruptionTrace | null
 }
 
 export function errorMessage(error: unknown, fallback: string): string {
-  const data = (error as { response?: { data?: { message?: string; title?: string } } })?.response?.data;
-  return data?.message ?? data?.title ?? fallback;
+  const response = (error as { response?: { status?: number; data?: { message?: string; title?: string } } })?.response;
+  // A 404 here means the route does not exist on the API this build talks to -
+  // almost always a backend that has not been deployed with the feature yet.
+  // Saying so beats echoing a bare "Not Found".
+  if (response?.status === 404) {
+    return 'The deployed API does not have the Disruption Recovery endpoints yet. Deploy the backend and reload.';
+  }
+  if (response?.status === 402) {
+    return 'Disruption Recovery is part of the AI features. Upgrade the plan to use it.';
+  }
+  return response?.data?.message ?? response?.data?.title ?? fallback;
 }

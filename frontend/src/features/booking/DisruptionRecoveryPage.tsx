@@ -116,6 +116,16 @@ export default function DisruptionRecoveryPage() {
 
   const pending = useMemo(() => workflows.filter((w) => w.status === 'AwaitingApproval'), [workflows]);
 
+  // The most recent plan knows what this business calls its resources, so the
+  // form can speak the same language as the results below it.
+  const latestNoun = useMemo(() => {
+    for (const workflow of workflows) {
+      const noun = parseTrace(workflow)?.impact?.resource_noun;
+      if (noun) return noun;
+    }
+    return 'resource';
+  }, [workflows]);
+
   return (
     <div className="page">
       <header className="page-head">
@@ -136,40 +146,51 @@ export default function DisruptionRecoveryPage() {
         <div className="panel-head">
           <div><h2>Report an outage</h2><p className="hint">The agents only read and propose.</p></div>
         </div>
-        <form className="toolbar toolbar-wrap" onSubmit={startRecovery} aria-label="Report an outage" noValidate>
-          <label>
-            Unavailable{' '}
+        <form className="disruption-form" onSubmit={startRecovery} aria-label="Report an outage" noValidate>
+          <div className="disruption-field">
+            <label htmlFor="disruption-resource">Which resource is unavailable?</label>
             <select
-              className="filter-select"
+              id="disruption-resource"
               value={form.resourceId}
-              aria-label="Unavailable resource"
               onChange={(e) => setForm({ ...form, resourceId: e.target.value })}
             >
               <option value="">Choose a resource…</option>
               {resourceOptions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
-          </label>
-          <label>
-            From{' '}
-            <input type="date" aria-label="From" value={form.dateFrom}
-              onChange={(e) => setForm({ ...form, dateFrom: e.target.value })} />
-          </label>
-          <label>
-            To{' '}
-            <input type="date" aria-label="To" value={form.dateTo}
-              onChange={(e) => setForm({ ...form, dateTo: e.target.value })} />
-          </label>
-          <input
-            type="text"
-            aria-label="What happened"
-            placeholder="What happened, and how would you rather recover?"
-            value={form.objective}
-            maxLength={500}
-            onChange={(e) => setForm({ ...form, objective: e.target.value })}
-          />
-          <button className="btn btn-primary" type="submit" disabled={planning}>
-            {planning ? 'Planning the recovery…' : 'Plan recovery'}
-          </button>
+          </div>
+
+          <div className="disruption-field disruption-field-dates">
+            <label htmlFor="disruption-from">Out of service</label>
+            <div className="disruption-date-range">
+              <input id="disruption-from" type="date" value={form.dateFrom}
+                onChange={(e) => setForm({ ...form, dateFrom: e.target.value })} />
+              <span aria-hidden="true">→</span>
+              <input id="disruption-to" type="date" aria-label="To" value={form.dateTo}
+                onChange={(e) => setForm({ ...form, dateTo: e.target.value })} />
+            </div>
+          </div>
+
+          <div className="disruption-field disruption-field-wide">
+            <label htmlFor="disruption-objective">What happened, and how would you rather recover?</label>
+            <input
+              id="disruption-objective"
+              type="text"
+              placeholder="Engine fault on Jetliner II — keep guests on the same day if you can"
+              value={form.objective}
+              maxLength={500}
+              onChange={(e) => setForm({ ...form, objective: e.target.value })}
+            />
+            <p className="disruption-hint">
+              Say whether you would rather keep the time and change the {' '}
+              {latestNoun} or keep the {latestNoun} and move the time.
+            </p>
+          </div>
+
+          <div className="disruption-actions">
+            <button className="btn btn-primary" type="submit" disabled={planning}>
+              {planning ? 'Planning the recovery…' : 'Plan recovery'}
+            </button>
+          </div>
         </form>
       </section>
 
