@@ -4,13 +4,12 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { RootState } from '../../store/store';
 import { logout } from '../../store/authSlice';
 import NotificationBell from './NotificationBell';
-import { bookingApi, useGetTenantProfileQuery, useGetTenantQuery } from '../../api/bookingApi';
+import { bookingApi } from '../../api/bookingApi';
 import { resetSubtypeCache } from '../../features/dashboard/subtype';
 import { useSubtypeConfig } from '../../features/dashboard/useSubtypeConfig';
 import { useToast } from './Toast';
 import WorkspaceAssistant from './WorkspaceAssistant';
 import UserAvatar from './UserAvatar';
-import BusinessAvatar from './BusinessAvatar';
 import { Icon as InventoryIcon } from '../../features/inventory/ui/Icon';
 
 interface NavItem {
@@ -147,12 +146,6 @@ function inventoryIconClass(item: NavItem) {
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user } = useSelector((state: RootState) => state.auth);
-  // The top-bar chip carries the business's identity - its logo from
-  // Settings -> Business Profile - rather than the person's photo, which
-  // stays on the sidebar profile link. Skipped until someone is signed in.
-  const chipTenantId = user?.tenantId ?? '';
-  const { data: chipTenant } = useGetTenantQuery({ tenantId: chipTenantId }, { skip: !chipTenantId });
-  const { data: chipProfile } = useGetTenantProfileQuery({ tenantId: chipTenantId }, { skip: !chipTenantId });
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -417,8 +410,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </div>}
             </label>
             <span className="app-clock" aria-label="Current time">◷ {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <NavLink to="/profile" className="app-user-chip" title={chipTenant?.name ? `${chipTenant.name} · ${user.fullName || user.email}` : undefined}>
-              <BusinessAvatar name={chipTenant?.name} src={chipProfile?.logoUrl} size={27} className="app-user-avatar" />
+            <NavLink to="/profile" className="app-user-chip" title={`${user.fullName || user.email} profile`}>
+              <UserAvatar name={user.fullName} email={user.email} src={user.profilePictureUrl} size={27} className="app-user-avatar" />
               <strong>{user.fullName || user.email}</strong>
               <span className="app-role-chip">{user.role}</span>
             </NavLink>

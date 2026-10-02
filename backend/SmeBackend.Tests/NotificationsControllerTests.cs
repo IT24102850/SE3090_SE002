@@ -30,7 +30,7 @@ public class NotificationsControllerTests
     }
 
     [Fact]
-    public async Task GetMine_CustomerReceivesTenantWideAndOwnNotifications()
+    public async Task GetMine_CustomerReceivesOnlyOwnNotifications()
     {
         var tenantId = Guid.NewGuid();
         var userId = Guid.NewGuid();
@@ -47,11 +47,11 @@ public class NotificationsControllerTests
         var items = Assert.IsAssignableFrom<IEnumerable<object>>(
             result.Value!.GetType().GetProperty("items")!.GetValue(result.Value));
 
-        Assert.Equal(2, items.Count());
+        Assert.Single(items);
     }
 
     [Fact]
-    public async Task GetUnreadCount_CustomerIncludesTenantWideNotifications()
+    public async Task GetUnreadCount_CustomerIncludesOnlyOwnNotifications()
     {
         var tenantId = Guid.NewGuid();
         var userId = Guid.NewGuid();
@@ -68,11 +68,11 @@ public class NotificationsControllerTests
         var result = Assert.IsType<OkObjectResult>(await controller.GetUnreadCount());
         var count = (int)result.Value!.GetType().GetProperty("count")!.GetValue(result.Value)!;
 
-        Assert.Equal(2, count);
+        Assert.Equal(1, count);
     }
 
     [Fact]
-    public async Task MarkRead_CustomerCanMarkTenantWideNotificationRead()
+    public async Task MarkRead_CustomerCannotMarkTenantWideNotificationRead()
     {
         var tenantId = Guid.NewGuid();
         var userId = Guid.NewGuid();
@@ -86,8 +86,8 @@ public class NotificationsControllerTests
 
         var result = await controller.MarkRead(notification.Id);
 
-        Assert.IsType<NoContentResult>(result);
-        Assert.True((await db.Notifications.FindAsync(notification.Id))!.IsRead);
+        Assert.IsType<ForbidResult>(result);
+        Assert.False((await db.Notifications.FindAsync(notification.Id))!.IsRead);
     }
 
     [Fact]

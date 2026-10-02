@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSelector } from 'react-redux';
 import {
   useGetNotificationsQuery,
   useGetUnreadNotificationCountQuery,
   useMarkNotificationReadMutation,
 } from '../../api/bookingApi';
 import { useToast } from './Toast';
+import type { RootState } from '../../store/store';
 
 const NOTIFICATION_POLL_INTERVAL = 15000;
 
@@ -29,6 +31,8 @@ function notificationIcon(type: string) {
 }
 
 export default function NotificationBell() {
+  const { user } = useSelector((state: RootState) => state.auth);
+  const isCustomer = user?.role === 'Customer';
   const [open, setOpen] = useState(false);
   const [freshIds, setFreshIds] = useState<Set<string>>(() => new Set());
   const seenIds = useRef<Set<string> | null>(null);
@@ -108,7 +112,7 @@ export default function NotificationBell() {
           <section className="notification-panel" aria-label="Notifications">
             <header className="notification-panel-header">
               <div>
-                <span>WORKSPACE PULSE</span>
+                <span>{isCustomer ? 'YOUR UPDATES' : 'WORKSPACE PULSE'}</span>
                 <h2>Notifications</h2>
               </div>
               <div className="notification-panel-header-actions">
@@ -135,7 +139,7 @@ export default function NotificationBell() {
               <div className="notification-empty">
                 <i>✓</i>
                 <strong>You’re all caught up.</strong>
-                <span>New workspace updates will appear here automatically.</span>
+                <span>{isCustomer ? 'Booking and order updates for you will appear here.' : 'New workspace updates will appear here automatically.'}</span>
               </div>
             ) : (
               <div className="notification-list">

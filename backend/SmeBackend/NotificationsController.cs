@@ -6,8 +6,8 @@ using SmeBackend.Models;
 
 namespace SmeBackend.Controllers;
 
-// FR-C11 / FR-AS21: in-app notification center. "Mine" = addressed to me
-// personally, plus tenant-wide ones (UserId == null) for tenant users.
+// FR-C11 / FR-AS21: in-app notification center. Customers only see updates
+// addressed to them; tenant-wide operational updates are for tenant staff.
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -81,7 +81,7 @@ public class NotificationsController : ControllerBase
 
         var userId = Guid.TryParse(userIdClaim, out var uid) ? (Guid?)uid : null;
         var tenantId = Guid.TryParse(tenantIdClaim, out var tid) ? (Guid?)tid : null;
-        var canViewTenantNotifications = role is "Admin" or "Manager" or "Staff" or "Customer";
+        var canViewTenantNotifications = role is "Admin" or "Manager" or "Staff";
 
         return (userId, tenantId, canViewTenantNotifications);
     }
