@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+﻿import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { Suspense, lazy, useEffect } from 'react';
 import { store } from './store/store';
@@ -36,6 +36,7 @@ const BookingManagerPage = lazy(() => import('./features/booking/BookingManagerP
 const ResourceManagerPage = lazy(() => import('./features/booking/ResourceManagerPage'));
 const MultiBranchSchedulePage = lazy(() => import('./features/booking/MultiBranchSchedulePage'));
 const CalendarDashboardPage = lazy(() => import('./features/booking/CalendarDashboardPage'));
+const DisruptionRecoveryPage = lazy(() => import('./features/booking/DisruptionRecoveryPage'));
 const AvailabilitySlotsPage = lazy(() => import('./features/booking/AvailabilitySlotsPage'));
 const RecurringSeriesPage = lazy(() => import('./features/booking/RecurringSeriesPage'));
 const ReportsPage = lazy(() => import('./features/booking/ReportsPage'));
@@ -208,6 +209,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
                     <Shell><ResourceManagerPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/disruption-recovery"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><DisruptionRecoveryPage /></Shell>
                   </ProtectedRoute>
                 }
               />

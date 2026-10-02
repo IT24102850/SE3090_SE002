@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -24,6 +24,9 @@ public interface IPlannerAgentService
 
     /// Schedule Copilot: the staff-facing Planner/Coordinator workflow.
     Task<ScheduleCopilotResult> PlanScheduleAsync(ScheduleCopilotRequest request, CancellationToken ct = default);
+
+    /// Disruption Recovery Copilot: a resource is out of service, re-place its bookings.
+    Task<ScheduleCopilotResult> PlanDisruptionAsync(DisruptionCopilotRequest request, CancellationToken ct = default);
 }
 
 /// Calls the internal agentic-ai-service's POST /plan, which runs the full
@@ -158,6 +161,54 @@ public partial class PlannerAgentService
         }
     }
 
+    /// <summary>
+    /// Runs the Disruption Recovery Copilot. Identical contract to the
+    /// Schedule Copilot: every outcome of a run - awaiting approval,
+    /// rejected by the gate, nothing to do, or a safe failure - comes back
+    /// 200 with a full trace, which the caller persists.
+    /// </summary>
+    public async Task<ScheduleCopilotResult> PlanDisruptionAsync(DisruptionCopilotRequest request, CancellationToken ct = default)
+    {
+        var token = _config["AgentService:InternalToken"];
+        if (string.IsNullOrEmpty(token))
+            return ScheduleCopilotResult.Failed("AgentService:InternalToken is not configured.");
+
+        var (response, sendError) = await SendWithWakeRetryAsync(
+            () =>
+            {
+                var message = new HttpRequestMessage(HttpMethod.Post, "/disruption/plan")
+                {
+                    Content = JsonContent.Create(request, options: JsonOptions),
+                };
+                message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                return message;
+            },
+            ct);
+
+        if (response == null)
+            return ScheduleCopilotResult.Failed(
+                $"Could not reach the deployed Disruption Copilot at {_http.BaseAddress}. " +
+                $"Verify the agent service is running and retry. {sendError}");
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (response.StatusCode != HttpStatusCode.OK)
+            return ScheduleCopilotResult.Failed(
+                DescribeUpstreamFailure("Disruption Copilot", response.StatusCode, body));
+
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() : null;
+            if (string.IsNullOrEmpty(status))
+                return ScheduleCopilotResult.Failed("Disruption Copilot returned a trace with no status.");
+            return ScheduleCopilotResult.Ok(body, status);
+        }
+        catch (JsonException ex)
+        {
+            return ScheduleCopilotResult.Failed($"Disruption Copilot returned an unreadable response: {ex.Message}");
+        }
+    }
+
     // The free hosting tier stops the agent service after ~15 minutes of no
     // traffic and needs about 25 seconds to boot it again. Requests that land
     // during that boot are answered by the host's edge rather than by the
@@ -257,6 +308,24 @@ public record ScheduleConstraintsDto(
 /// resources[], priorityRules[] }, tenantId }. AuthToken is the calling
 /// manager's own JWT, forwarded so every read the agents make carries that
 /// manager's real identity; the agent service never echoes it back.
+/// What the agent service's POST /disruption/plan expects. Serialized with
+/// the snake_case policy, so these names reach Python as date_from, etc.
+public record DisruptionCopilotRequest(
+    string Objective,
+    string TenantId,
+    string BusinessType,
+    string ResourceId,
+    DisruptionWindowDto Window,
+    string Reason,
+    string? BranchId,
+    string AuthToken);
+
+public record DisruptionWindowDto(
+    string DateFrom,
+    string DateTo,
+    string? StartsAt = null,
+    string? EndsAt = null);
+
 public record ScheduleCopilotRequest(
     string Objective,
     string TenantId,
