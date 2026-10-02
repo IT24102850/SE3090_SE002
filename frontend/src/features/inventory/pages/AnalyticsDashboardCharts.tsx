@@ -58,6 +58,18 @@ type SalesActivityReport = {
   totalPages: number;
   recentSales: SalesActivityItem[];
 };
+type BranchCommerceReport = {
+  salesCount: number;
+  salesRevenue: number;
+  customerOrderCount: number;
+  pendingOrders: number;
+  confirmedOrders: number;
+  preparingOrders: number;
+  readyForPickupOrders: number;
+  outForDeliveryOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+};
 type InventoryItem = {
   id: string;
   name: string;
@@ -372,6 +384,7 @@ export function AnalyticsDashboardPage() {
   const [usage, setUsage] = useState<Slot<InventoryUsageReport>>(loading);
   const [inventory, setInventory] = useState<Slot<InventoryListResponse>>(loading);
   const [sales, setSales] = useState<Slot<SalesActivityReport>>(loading);
+  const [commerce, setCommerce] = useState<Slot<BranchCommerceReport>>(loading);
   const [receiptSale, setReceiptSale] = useState<SalesActivityItem | null>(null);
   const [salesPageLoading, setSalesPageLoading] = useState(false);
   const [salesPageError, setSalesPageError] = useState<string | null>(null);
@@ -383,27 +396,32 @@ export function AnalyticsDashboardPage() {
     setUsage(loading);
     setInventory(loading);
     setSales(loading);
+    setCommerce(loading);
     setSalesPageLoading(false);
     setSalesPage(1);
     setSalesPageError(null);
     const dateParams = buildDateParams(range);
-    const [movementResult, inventoryResult, salesResult] = await Promise.allSettled([
+    const [movementResult, inventoryResult, salesResult, commerceResult] = await Promise.allSettled([
       apiGet<InventoryUsageReport>(`/api/reports/inventory-usage?${dateParams}`, token),
       apiGetAllInventory(token),
       apiGet<SalesActivityReport>(`/api/reports/sales-activity?${dateParams}&page=1&pageSize=${SALES_PAGE_SIZE}`, token),
+      apiGet<BranchCommerceReport>(`/api/reports/branch-commerce?${dateParams}`, token),
     ]);
     const movementSlot = settle(movementResult);
     const inventorySlot = settle(inventoryResult);
     const salesSlot = settle(salesResult);
+    const commerceSlot = settle(commerceResult);
     if (requestId !== salesRequestId.current) return;
     setUsage(movementSlot);
     setInventory(inventorySlot);
     setSales(salesSlot);
+    setCommerce(commerceSlot);
     if (showMsg) {
       if (
         movementSlot.status === 'ready' &&
         inventorySlot.status === 'ready' &&
-        salesSlot.status === 'ready'
+        salesSlot.status === 'ready' &&
+        commerceSlot.status === 'ready'
       ) {
         notify(`Analytics refreshed — ${dateRangeLabel(range)}.`, 'success');
       } else {
@@ -438,8 +456,8 @@ export function AnalyticsDashboardPage() {
   useEffect(() => { void load(); }, [load]);
 
   /* derived */
-  const anyLoading = usage.status === 'loading' || inventory.status === 'loading' || sales.status === 'loading';
-  const failedCount = [usage, inventory, sales].filter(s => s.status === 'failed').length;
+  const anyLoading = usage.status === 'loading' || inventory.status === 'loading' || sales.status === 'loading' || commerce.status === 'loading';
+  const failedCount = [usage, inventory, sales, commerce].filter(s => s.status === 'failed').length;
 
   const allRows = useMemo(() =>
     usage.status === 'ready' ? buildTableRows(usage.value) : [], [usage]);
@@ -756,6 +774,65 @@ export function AnalyticsDashboardPage() {
             icon="inventory"
           />
         </div>
+        <section className="inventory-analytics-order-summary" aria-label={`Customer orders for ${dateRangeLabel(range)}`}>
+          <div className="inventory-analytics-section-heading">
+            <div>
+              <p className="eyebrow">CUSTOMER ORDERS</p>
+              <h2>Order pipeline</h2>
+            </div>
+            <span>Orders placed in this period · current status</span>
+          </div>
+          {commerce.status === 'failed' ? (
+            <PanelError error={commerce.error} onRetry={() => void load()} />
+          ) : commerce.status === 'loading' ? (
+            <PanelSkeleton rows={2} />
+          ) : (
+            <div className="inventory-analytics-order-metrics">
+              <Metric
+                label="Orders placed"
+                value={compact(commerce.value.customerOrderCount)}
+                detail="All statuses in this period"
+                tone="blue"
+                icon="workflow"
+              />
+              <Metric
+                label="Awaiting review"
+                value={compact(commerce.value.pendingOrders)}
+                detail="Pending confirmation"
+                tone="amber"
+                icon="alert"
+              />
+              <Metric
+                label="In preparation"
+                value={compact(commerce.value.confirmedOrders + commerce.value.preparingOrders)}
+                detail="Confirmed or preparing"
+                tone="violet"
+                icon="inventory"
+              />
+              <Metric
+                label="Ready / delivering"
+                value={compact(commerce.value.readyForPickupOrders + commerce.value.outForDeliveryOrders)}
+                detail="Awaiting customer handoff"
+                tone="teal"
+                icon="workflow"
+              />
+              <Metric
+                label="Completed"
+                value={compact(commerce.value.completedOrders)}
+                detail="Included in sales revenue"
+                tone="green"
+                icon="chart"
+              />
+              <Metric
+                label="Cancelled"
+                value={compact(commerce.value.cancelledOrders)}
+                detail="Reserved stock returned"
+                tone="amber"
+                icon="alert"
+              />
+            </div>
+          )}
+        </section>
         <article className="panel inventory-analytics-panel inventory-sales-activity-panel">
           <div className="inventory-analytics-panel-head">
             <div>

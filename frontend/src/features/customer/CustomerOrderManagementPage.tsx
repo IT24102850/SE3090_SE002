@@ -33,10 +33,13 @@ function errorMessage(error: unknown) {
 }
 
 export default function CustomerOrderManagementPage() {
-  const { data: orders = [], isLoading, isError, refetch } = useGetManagedCustomerOrdersQuery(undefined, { pollingInterval: 30000 });
+  const { data: orders = [], isLoading, isFetching, isError, refetch } = useGetManagedCustomerOrdersQuery(undefined, { pollingInterval: 30000 });
   const [updateStatus, { isLoading: isUpdating }] = useUpdateCustomerOrderStatusMutation();
   const [error, setError] = useState('');
   const [updatingId, setUpdatingId] = useState('');
+  const activeCount = orders.filter(({ order }) => !['Completed', 'Cancelled'].includes(order.status)).length;
+  const readyCount = orders.filter(({ order }) => ['ReadyForPickup', 'OutForDelivery'].includes(order.status)).length;
+  const completedCount = orders.filter(({ order }) => order.status === 'Completed').length;
 
   async function changeStatus(order: CustomerOrder, status: string) {
     if (status === 'Cancelled' && !window.confirm(`Cancel ${order.number} and release its reserved stock?`)) return;
@@ -54,16 +57,63 @@ export default function CustomerOrderManagementPage() {
   return (
     <main className="cust-page cust-order-ops">
       <header className="cust-order-ops-hero">
-        <div><span className="cust-shop-kicker">A smoother handoff starts here</span><h1>Customer orders</h1><p>Confirm, prepare and keep customers in the loop as each order moves forward.</p></div>
-        <span className="cust-order-ops-icon" aria-hidden="true">📦</span>
+        <span className="cust-order-ops-sheen" aria-hidden="true" />
+        <span className="cust-order-ops-glow-orb" aria-hidden="true" />
+        <div className="cust-order-ops-heading">
+          <div className="cust-order-ops-kicker-row">
+            <span className="cust-shop-kicker"><i aria-hidden="true" /> ORDER DESK</span>
+            <span className="cust-order-ops-chip">⚡ Live Operations</span>
+          </div>
+          <h1>Customer orders</h1>
+          <p>Every order, from confirmation to handoff, in one place.</p>
+        </div>
+        <div className="cust-order-ops-hero-actions">
+          <span className="cust-order-ops-live"><i aria-hidden="true" /> Live updates</span>
+          <button className="cust-order-ops-refresh" type="button" onClick={() => void refetch()} disabled={isFetching} aria-label="Refresh customer orders">
+            <span aria-hidden="true" className={isFetching ? 'is-refreshing' : ''}>↻</span>
+            {isFetching ? 'Updating…' : 'Refresh'}
+          </button>
+          <div className="cust-order-ops-icon-box" aria-hidden="true">
+            <span className="cust-order-ops-icon">📦</span>
+            <span className="cust-order-ops-icon-sparkle">✦</span>
+          </div>
+        </div>
       </header>
+      <section className="cust-order-ops-summary" aria-label="Order overview">
+        <article className="cust-order-ops-stat">
+          <span className="cust-order-ops-stat-icon active" aria-hidden="true">↗</span>
+          <div><span>In progress</span><strong>{activeCount}</strong></div>
+        </article>
+        <article className="cust-order-ops-stat">
+          <span className="cust-order-ops-stat-icon ready" aria-hidden="true">✓</span>
+          <div><span>Ready to hand off</span><strong>{readyCount}</strong></div>
+        </article>
+        <article className="cust-order-ops-stat">
+          <span className="cust-order-ops-stat-icon completed" aria-hidden="true">✦</span>
+          <div><span>Completed</span><strong>{completedCount}</strong></div>
+        </article>
+      </section>
       {error && <p className="cust-shop-error" role="alert">{error}</p>}
       {isLoading ? (
-        <div className="card cust-shop-message" aria-busy="true">Loading customer orders…</div>
+        <div className="card cust-order-ops-loading" aria-busy="true">
+          <span className="cust-order-ops-loading-icon" aria-hidden="true">📦</span>
+          <strong>Loading your order desk</strong>
+          <span>Getting the latest orders and status updates…</span>
+          <span className="cust-order-ops-loading-bar" aria-hidden="true" />
+        </div>
       ) : isError ? (
-        <div className="card cust-shop-message" role="alert">Orders could not be loaded. <button className="btn btn-secondary" type="button" onClick={() => refetch()}>Try again</button></div>
+        <div className="card cust-order-ops-message" role="alert">
+          <span className="cust-order-ops-message-icon" aria-hidden="true">!</span>
+          <strong>Orders could not be loaded</strong>
+          <span>Check your connection and try again.</span>
+          <button className="btn btn-secondary" type="button" onClick={() => void refetch()}>Try again</button>
+        </div>
       ) : orders.length === 0 ? (
-        <div className="card cust-shop-message"><strong>All quiet for now</strong><span>New customer orders will appear here.</span></div>
+        <div className="card cust-order-ops-message">
+          <span className="cust-order-ops-message-icon is-empty" aria-hidden="true">✓</span>
+          <strong>All caught up</strong>
+          <span>New customer orders will appear here as soon as they come in.</span>
+        </div>
       ) : (
         <section className="cust-order-ops-list" aria-live="polite">
           {orders.map(({ order, customerName, branchName }) => {

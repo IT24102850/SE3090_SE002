@@ -10,6 +10,7 @@ using SmeBackend.Models;
 using SmeBackend.Services;
 using SmeBackend.Services.Billing;
 using SmeBackend.DTOs;
+using Moq;
 
 namespace SmeBackend.Tests;
 
@@ -278,6 +279,134 @@ public class CustomerOrdersControllerTests
         Assert.IsType<ConflictObjectResult>(secondUpdate);
         Assert.Equal(10m, (await db.InventoryItems.SingleAsync()).Quantity);
         Assert.Single(messenger.SentEmails);
+    }
+
+    [Fact]
+    public async Task CompleteOrder_RecordsSalesWithoutDeductingReservedStockAgain()
+    {
+        var tenantId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var branchId = Guid.NewGuid();
+        var item = Product(tenantId, branchId, "Tea", 8m, 75m);
+        item.UnitCost = 30m;
+        await using var db = CreateDbContext(tenantId);
+        db.Branches.Add(new Branch { TenantId = tenantId, Id = branchId, Name = "Main" });
+        db.InventoryItems.Add(item);
+        db.Users.Add(new User
+        {
+            Id = customerId,
+            TenantId = tenantId,
+            Email = "customer@example.test",
+            FullName = "Test Customer",
+            Role = UserRole.Customer,
+        });
+        var order = new CustomerOrder
+        {
+            TenantId = tenantId,
+            CustomerId = customerId,
+            BranchId = branchId,
+            Number = "ORD-FULFILLED",
+            Status = "ReadyForPickup",
+            FulfillmentMethod = "Pickup",
+            Total = 150m,
+        };
+        order.Items.Add(new CustomerOrderItem
+        {
+            TenantId = tenantId,
+            CustomerOrderId = order.Id,
+            InventoryItemId = item.Id,
+            ItemName = item.Name,
+            Sku = item.Sku,
+            Quantity = 2m,
+            UnitPrice = 75m,
+            LineTotal = 150m,
+        });
+        db.CustomerOrders.Add(order);
+        db.StockMovements.Add(new StockMovement
+        {
+            TenantId = tenantId,
+            BranchId = branchId,
+            InventoryItemId = item.Id,
+            MovementType = "CustomerOrder",
+            Quantity = -2m,
+            UnitCost = item.UnitCost,
+            Reference = order.Number,
+        });
+        await db.SaveChangesAsync();
+        var controller = CreateManagerController(db, tenantId);
+
+        var result = await controller.UpdateStatus(
+            order.Id,
+            new UpdateCustomerOrderStatusRequest("Completed", null),
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        var sale = Assert.Single(await db.Sales.ToListAsync());
+        Assert.Equal(branchId, sale.BranchId);
+        Assert.Equal(150m, sale.Amount);
+        Assert.Equal(order.Number, sale.Reference);
+        Assert.Equal(8m, (await db.InventoryItems.SingleAsync()).Quantity);
+        var movement = Assert.Single(await db.StockMovements.ToListAsync());
+        Assert.Equal("CustomerOrder", movement.MovementType);
+        Assert.Equal(-2m, movement.Quantity);
+
+        var authorizationService = new Mock<IAuthorizationService>();
+        authorizationService
+            .Setup(service => service.AuthorizeAsync(
+                It.IsAny<ClaimsPrincipal>(),
+                It.IsAny<object>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(AuthorizationResult.Success());
+        var reportController = new ReportsController(db, authorizationService.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [
+                        new Claim("tenantId", tenantId.ToString()),
+                        new Claim(ClaimTypes.Role, UserRole.Admin.ToString()),
+                    ], "Tests")),
+                },
+            },
+        };
+        var reportResult = await reportController.GetSalesActivity(
+            DateTime.UtcNow.AddDays(-1),
+            DateTime.UtcNow.AddDays(1),
+            null,
+            1,
+            10,
+            CancellationToken.None);
+        var report = Assert.IsType<SalesActivityReportResponse>(
+            Assert.IsType<OkObjectResult>(reportResult.Result).Value);
+        Assert.Equal(1, report.SalesCount);
+        Assert.Equal(150m, report.TotalRevenue);
+        Assert.Equal(60m, report.CostOfGoodsSold);
+        Assert.Equal(90m, report.GrossProfit);
+        var reportedSale = Assert.Single(report.RecentSales);
+        Assert.Equal(order.Number, reportedSale.Reference);
+        Assert.Equal(2m, reportedSale.Quantity);
+        Assert.Equal("Tea", Assert.Single(reportedSale.Items));
+        var branchCommerceResult = await reportController.GetBranchCommerce(
+            DateTime.UtcNow.AddDays(-1),
+            DateTime.UtcNow.AddDays(1),
+            null,
+            CancellationToken.None);
+        var branchCommerce = Assert.IsType<BranchCommerceReportResponse>(
+            Assert.IsType<OkObjectResult>(branchCommerceResult.Result).Value);
+        Assert.Equal(150m, branchCommerce.SalesRevenue);
+        Assert.Equal(1, branchCommerce.CustomerOrderCount);
+        Assert.Equal(1, branchCommerce.CompletedOrders);
+        Assert.Equal(150m, Assert.Single(branchCommerce.Branches).SalesRevenue);
+
+        var duplicateResult = await controller.UpdateStatus(
+            order.Id,
+            new UpdateCustomerOrderStatusRequest("Completed", null),
+            CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(duplicateResult);
+        Assert.Single(await db.Sales.ToListAsync());
     }
 
     [Fact]

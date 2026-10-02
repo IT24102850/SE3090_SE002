@@ -6,6 +6,19 @@ import { ToastProvider } from '../ui/ToastContext';
 import { MemoryRouter } from 'react-router-dom';
 
 describe('inventory sales activity', () => {
+  const commerceReport = {
+    salesCount: 2,
+    salesRevenue: 12500,
+    customerOrderCount: 4,
+    pendingOrders: 1,
+    confirmedOrders: 0,
+    preparingOrders: 1,
+    readyForPickupOrders: 1,
+    outForDeliveryOrders: 0,
+    completedOrders: 1,
+    cancelledOrders: 0,
+  };
+
   beforeEach(() => {
     localStorage.clear();
   });
@@ -41,7 +54,9 @@ describe('inventory sales activity', () => {
               },
             ],
           }
-        : path.startsWith('/api/reports/inventory-usage')
+        : path.startsWith('/api/reports/branch-commerce')
+          ? commerceReport
+          : path.startsWith('/api/reports/inventory-usage')
           ? {
               totalReceivedQuantity: 0,
               totalIssuedQuantity: 0,
@@ -97,6 +112,9 @@ describe('inventory sales activity', () => {
     expect(screen.getByText('SALE-20260929-001').closest('.inventory-sales-reference')).toBeInTheDocument();
     expect(screen.getByText('SALE REF')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('Orders placed').closest('article')).toHaveTextContent('4');
+    expect(screen.getByText('Awaiting review').closest('article')).toHaveTextContent('1');
+    expect(screen.getByText('Completed').closest('article')).toHaveTextContent('1');
     expect(screen.getAllByText('Gross profit')).toHaveLength(2);
     const revenueMetric = screen.getByText('Sales revenue').closest('article');
     expect(revenueMetric).toHaveClass('inventory-analytics-metric');
@@ -114,7 +132,9 @@ describe('inventory sales activity', () => {
       const path = String(input);
       const body = path.startsWith('/api/reports/sales-activity')
         ? { salesCount: 0, totalRevenue: 0, averageSale: 0, costOfGoodsSold: 0, grossProfit: 0, page: 1, pageSize: 5, totalPages: 0, recentSales: [] }
-        : path.startsWith('/api/reports/inventory-usage')
+        : path.startsWith('/api/reports/branch-commerce')
+          ? commerceReport
+          : path.startsWith('/api/reports/inventory-usage')
           ? { totalReceivedQuantity: 0, totalIssuedQuantity: 0, netQuantity: 0, items: [] }
           : { items: [], totalCount: 0, totalPages: 0 };
       return { ok: true, json: async () => body } as Response;
@@ -170,7 +190,9 @@ describe('inventory sales activity', () => {
               },
             ],
           }
-        : path.startsWith('/api/reports/inventory-usage')
+        : path.startsWith('/api/reports/branch-commerce')
+          ? commerceReport
+          : path.startsWith('/api/reports/inventory-usage')
           ? {
               totalReceivedQuantity: 0,
               totalIssuedQuantity: 0,
@@ -252,6 +274,9 @@ describe('inventory sales activity', () => {
             }),
           }),
         } as Response;
+      }
+      if (path.startsWith('/api/reports/branch-commerce')) {
+        return { ok: true, json: async () => commerceReport } as Response;
       }
 
       const body = path.startsWith('/api/reports/inventory-usage')

@@ -209,9 +209,12 @@ public sealed class ReportsController(
             .AsNoTracking()
             .Where(movement =>
                 movement.TenantId == tenantId &&
-                movement.MovementType == "Sale" &&
-                movement.OccurredAt >= range.Value.From &&
-                movement.OccurredAt < range.Value.ToExclusive);
+                ((movement.MovementType == "Sale" &&
+                  movement.OccurredAt >= range.Value.From &&
+                  movement.OccurredAt < range.Value.ToExclusive) ||
+                 (movement.MovementType == "CustomerOrder" &&
+                  movement.Reference != null &&
+                  salesQuery.Select(sale => sale.Reference).Contains(movement.Reference))));
         if (branchId.HasValue)
         {
             saleMovementQuery = saleMovementQuery.Where(movement => movement.BranchId == branchId.Value);
@@ -257,7 +260,7 @@ public sealed class ReportsController(
             join item in db.InventoryItems.AsNoTracking()
                 on movement.InventoryItemId equals item.Id
             where movement.TenantId == tenantId &&
-                  movement.MovementType == "Sale" &&
+                  (movement.MovementType == "Sale" || movement.MovementType == "CustomerOrder") &&
                   movement.Reference != null &&
                   (!branchId.HasValue || movement.BranchId == branchId.Value) &&
                   references.Contains(movement.Reference)
@@ -303,6 +306,118 @@ public sealed class ReportsController(
             pageSize,
             totalPages,
             recent));
+    }
+
+    [HttpGet("branch-commerce")]
+    public async Task<ActionResult<BranchCommerceReportResponse>> GetBranchCommerce(
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] Guid? branchId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetTenantId(out var tenantId))
+        {
+            return Unauthorized();
+        }
+        branchId = ResolveBranchScope(branchId);
+
+        if (!await this.IsInventoryOperationAuthorizedAsync(
+                authorizationService,
+                InventoryAuthorizationPolicies.InventoryRead,
+                tenantId,
+                branchId))
+        {
+            return Forbid();
+        }
+
+        var range = NormalizeRange(from, to);
+        if (range is null)
+        {
+            AddDateRangeValidationError();
+            return ValidationProblem(ModelState);
+        }
+
+        var salesQuery = db.Sales
+            .AsNoTracking()
+            .Where(sale =>
+                sale.TenantId == tenantId &&
+                sale.OccurredAt >= range.Value.From &&
+                sale.OccurredAt < range.Value.ToExclusive);
+        var ordersQuery = db.CustomerOrders
+            .AsNoTracking()
+            .Where(order =>
+                order.TenantId == tenantId &&
+                order.CreatedAt >= range.Value.From &&
+                order.CreatedAt < range.Value.ToExclusive);
+        var branchesQuery = db.Branches
+            .AsNoTracking()
+            .Where(candidate => candidate.TenantId == tenantId);
+        if (branchId.HasValue)
+        {
+            salesQuery = salesQuery.Where(sale => sale.BranchId == branchId.Value);
+            ordersQuery = ordersQuery.Where(order => order.BranchId == branchId.Value);
+            branchesQuery = branchesQuery.Where(candidate => candidate.Id == branchId.Value);
+        }
+
+        var salesByBranch = await salesQuery
+            .GroupBy(sale => sale.BranchId)
+            .Select(group => new
+            {
+                BranchId = group.Key,
+                Count = group.Count(),
+                Revenue = group.Sum(sale => sale.Amount),
+            })
+            .ToDictionaryAsync(row => row.BranchId, cancellationToken);
+        var ordersByBranchAndStatus = await ordersQuery
+            .GroupBy(order => new { order.BranchId, order.Status })
+            .Select(group => new
+            {
+                group.Key.BranchId,
+                group.Key.Status,
+                Count = group.Count(),
+            })
+            .ToListAsync(cancellationToken);
+        var branches = await branchesQuery
+            .OrderBy(candidate => candidate.Name)
+            .Select(candidate => new { candidate.Id, candidate.Name })
+            .ToListAsync(cancellationToken);
+
+        var items = branches.Select(branch =>
+        {
+            var sales = salesByBranch.GetValueOrDefault(branch.Id);
+            var statuses = ordersByBranchAndStatus
+                .Where(row => row.BranchId == branch.Id)
+                .ToDictionary(row => row.Status, row => row.Count);
+            return new BranchCommerceSummaryItem(
+                branch.Id,
+                branch.Name,
+                sales?.Count ?? 0,
+                sales?.Revenue ?? 0m,
+                statuses.Values.Sum(),
+                statuses.GetValueOrDefault("Pending"),
+                statuses.GetValueOrDefault("Confirmed"),
+                statuses.GetValueOrDefault("Preparing"),
+                statuses.GetValueOrDefault("ReadyForPickup"),
+                statuses.GetValueOrDefault("OutForDelivery"),
+                statuses.GetValueOrDefault("Completed"),
+                statuses.GetValueOrDefault("Cancelled"));
+        }).ToList();
+
+        return Ok(new BranchCommerceReportResponse(
+            range.Value.From,
+            range.Value.ToInclusive,
+            branchId,
+            items.Sum(item => item.SalesCount),
+            items.Sum(item => item.SalesRevenue),
+            items.Sum(item => item.CustomerOrderCount),
+            items.Sum(item => item.PendingOrders),
+            items.Sum(item => item.ConfirmedOrders),
+            items.Sum(item => item.PreparingOrders),
+            items.Sum(item => item.ReadyForPickupOrders),
+            items.Sum(item => item.OutForDeliveryOrders),
+            items.Sum(item => item.CompletedOrders),
+            items.Sum(item => item.CancelledOrders),
+            items));
     }
 
     [HttpGet("patient-count")]
@@ -484,6 +599,36 @@ public sealed record SalesActivityItemResponse(
     IReadOnlyList<string> Items,
     decimal? CostOfGoodsSold,
     decimal? GrossProfit);
+
+public sealed record BranchCommerceReportResponse(
+    DateTime From,
+    DateTime To,
+    Guid? BranchId,
+    int SalesCount,
+    decimal SalesRevenue,
+    int CustomerOrderCount,
+    int PendingOrders,
+    int ConfirmedOrders,
+    int PreparingOrders,
+    int ReadyForPickupOrders,
+    int OutForDeliveryOrders,
+    int CompletedOrders,
+    int CancelledOrders,
+    IReadOnlyList<BranchCommerceSummaryItem> Branches);
+
+public sealed record BranchCommerceSummaryItem(
+    Guid BranchId,
+    string BranchName,
+    int SalesCount,
+    decimal SalesRevenue,
+    int CustomerOrderCount,
+    int PendingOrders,
+    int ConfirmedOrders,
+    int PreparingOrders,
+    int ReadyForPickupOrders,
+    int OutForDeliveryOrders,
+    int CompletedOrders,
+    int CancelledOrders);
 
 
 public sealed record PatientCountReportResponse(

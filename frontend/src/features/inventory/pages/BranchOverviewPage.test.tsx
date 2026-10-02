@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import authReducer from '../../../store/authSlice';
 import { ToastProvider as AppToastProvider } from '../../../shared/components/Toast';
@@ -55,6 +56,36 @@ describe('BranchOverviewPage product stock directory', () => {
       if (url === '/api/inventory/categories') {
         return new Response(JSON.stringify([]), { status: 200 });
       }
+      if (url.startsWith('/api/reports/branch-commerce?')) {
+        return new Response(JSON.stringify({
+          salesCount: 3,
+          salesRevenue: 10000,
+          customerOrderCount: 4,
+          pendingOrders: 1,
+          confirmedOrders: 0,
+          preparingOrders: 1,
+          readyForPickupOrders: 1,
+          outForDeliveryOrders: 0,
+          completedOrders: 1,
+          cancelledOrders: 0,
+          branches: [
+            {
+              branchId: 'branch-1', branchName: 'Main branch',
+              salesCount: 2, salesRevenue: 7000, customerOrderCount: 3,
+              pendingOrders: 1, confirmedOrders: 0, preparingOrders: 1,
+              readyForPickupOrders: 1, outForDeliveryOrders: 0,
+              completedOrders: 0, cancelledOrders: 0,
+            },
+            {
+              branchId: 'branch-2', branchName: 'Kandy branch',
+              salesCount: 1, salesRevenue: 3000, customerOrderCount: 1,
+              pendingOrders: 0, confirmedOrders: 0, preparingOrders: 0,
+              readyForPickupOrders: 0, outForDeliveryOrders: 0,
+              completedOrders: 1, cancelledOrders: 0,
+            },
+          ],
+        }), { status: 200 });
+      }
       return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
     }));
   });
@@ -85,13 +116,15 @@ describe('BranchOverviewPage product stock directory', () => {
     });
 
     render(
-      <Provider store={store}>
-        <AppToastProvider>
-          <ToastProvider>
-            <BranchOverviewPage />
-          </ToastProvider>
-        </AppToastProvider>
-      </Provider>,
+      <MemoryRouter>
+        <Provider store={store}>
+          <AppToastProvider>
+            <ToastProvider>
+              <BranchOverviewPage />
+            </ToastProvider>
+          </AppToastProvider>
+        </Provider>
+      </MemoryRouter>,
     );
 
     await screen.findByText('Kandy branch');
@@ -107,6 +140,10 @@ describe('BranchOverviewPage product stock directory', () => {
     expect(within(rows[1]).getByText('12 piece')).toBeInTheDocument();
     expect(within(rows[1]).getByText('LKR 600')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('1 of 1 products · 2 branch stocks · 1 categories')).toBeInTheDocument());
+    expect(await screen.findByRole('heading', { name: 'Sales & customer orders' })).toBeInTheDocument();
+    expect(screen.getByText('LKR 10,000')).toBeInTheDocument();
+    expect(screen.getByLabelText('Main branch sales and order activity')).toHaveTextContent('LKR 7,000');
+    expect(screen.getByLabelText('Kandy branch sales and order activity')).toHaveTextContent('0 pending');
   });
 
   it('limits a Manager to their assigned branch', async () => {
@@ -138,6 +175,21 @@ describe('BranchOverviewPage product stock directory', () => {
         }), { status: 200 });
       }
       if (url === '/api/inventory/categories') return new Response(JSON.stringify([]), { status: 200 });
+      if (url.startsWith('/api/reports/branch-commerce?')) {
+        return new Response(JSON.stringify({
+          salesCount: 0, salesRevenue: 0, customerOrderCount: 0,
+          pendingOrders: 0, confirmedOrders: 0, preparingOrders: 0,
+          readyForPickupOrders: 0, outForDeliveryOrders: 0,
+          completedOrders: 0, cancelledOrders: 0,
+          branches: [{
+            branchId: 'branch-1', branchName: 'Main branch',
+            salesCount: 0, salesRevenue: 0, customerOrderCount: 0,
+            pendingOrders: 0, confirmedOrders: 0, preparingOrders: 0,
+            readyForPickupOrders: 0, outForDeliveryOrders: 0,
+            completedOrders: 0, cancelledOrders: 0,
+          }],
+        }), { status: 200 });
+      }
       return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
     }));
 
@@ -162,11 +214,13 @@ describe('BranchOverviewPage product stock directory', () => {
     });
 
     render(
-      <Provider store={store}>
-        <AppToastProvider>
-          <ToastProvider><BranchOverviewPage /></ToastProvider>
-        </AppToastProvider>
-      </Provider>,
+      <MemoryRouter>
+        <Provider store={store}>
+          <AppToastProvider>
+            <ToastProvider><BranchOverviewPage /></ToastProvider>
+          </AppToastProvider>
+        </Provider>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText('Main item')).toBeInTheDocument();

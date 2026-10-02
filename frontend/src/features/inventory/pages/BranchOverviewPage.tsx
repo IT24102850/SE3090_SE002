@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
+import { Link } from 'react-router-dom';
 import { useGetBranchesQuery } from '../../../api/bookingApi';
 import type { RootState } from '../../../store/store';
 import { Badge, type BadgeTone } from '../ui/Badge';
@@ -21,6 +22,33 @@ type InventoryItem = {
   unitCost?: number;
 };
 type BranchSummary = { id: string; name: string; items: number; value: number; attention: number; health: 'Healthy' | 'Needs attention' | 'Critical' };
+type BranchCommerceSummary = {
+  branchId: string;
+  branchName: string;
+  salesCount: number;
+  salesRevenue: number;
+  customerOrderCount: number;
+  pendingOrders: number;
+  confirmedOrders: number;
+  preparingOrders: number;
+  readyForPickupOrders: number;
+  outForDeliveryOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+};
+type BranchCommerceReport = {
+  salesCount: number;
+  salesRevenue: number;
+  customerOrderCount: number;
+  pendingOrders: number;
+  confirmedOrders: number;
+  preparingOrders: number;
+  readyForPickupOrders: number;
+  outForDeliveryOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+  branches: BranchCommerceSummary[];
+};
 type StockHealthFilter = 'All stock health' | 'In stock' | 'Low stock' | 'Out of stock';
 
 const healthTone: Record<BranchSummary['health'], BadgeTone> = { Healthy: 'green', 'Needs attention': 'amber', Critical: 'red' };
@@ -78,6 +106,9 @@ export function BranchOverviewPage() {
   const [assignedBranch, setAssignedBranch] = useState<{ id: string; name: string } | null>(null);
   const [categoryNames, setCategoryNames] = useState<Record<string, string>>({});
   const [categoryWarning, setCategoryWarning] = useState('');
+  const [commerce, setCommerce] = useState<BranchCommerceReport | null>(null);
+  const [commerceError, setCommerceError] = useState('');
+  const [commerceLoading, setCommerceLoading] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -152,7 +183,43 @@ export function BranchOverviewPage() {
     }
   }, [assignedBranchId, isAdmin, notify, token]);
 
+  const loadCommerce = useCallback(async () => {
+    if (!isAdmin && !assignedBranchId) {
+      setCommerceLoading(false);
+      return false;
+    }
+    setCommerceLoading(true);
+    try {
+      const to = new Date();
+      const from = new Date();
+      from.setDate(from.getDate() - 29);
+      const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+      if (assignedBranchId) params.set('branchId', assignedBranchId);
+      const response = await fetch(`/api/reports/branch-commerce?${params}`, {
+        headers: token ? { Authorization: ['Bearer', token].join(' ') } : undefined,
+      });
+      if (!response.ok) throw new Error(`Sales and order summary request failed (${response.status}).`);
+      const report = await response.json() as BranchCommerceReport;
+      setCommerce(report);
+      setCommerceError('');
+      return true;
+    } catch (loadError) {
+      const message = loadError instanceof Error
+        ? loadError.message
+        : 'Unable to load branch sales and customer-order activity.';
+      setCommerceError(message);
+      return false;
+    } finally {
+      setCommerceLoading(false);
+    }
+  }, [assignedBranchId, isAdmin, token]);
+
   useEffect(() => { void loadInventory(); }, [loadInventory]);
+  useEffect(() => { void loadCommerce(); }, [loadCommerce]);
+  useEffect(() => {
+    const timer = window.setInterval(() => { void loadCommerce(); }, 30000);
+    return () => window.clearInterval(timer);
+  }, [loadCommerce]);
 
   const branches = useMemo<BranchSummary[]>(() => {
     const grouped = new Map<string, InventoryItem[]>();
@@ -198,6 +265,14 @@ export function BranchOverviewPage() {
     () => new Set(inventory.map((item) => item.sku.trim().toLowerCase() || item.name.trim().toLowerCase())).size,
     [inventory],
   );
+  const commerceByBranch = useMemo(
+    () => new Map((commerce?.branches ?? []).map((branch) => [branch.branchId, branch])),
+    [commerce],
+  );
+  const activeOrderCount = commerce
+    ? commerce.pendingOrders + commerce.confirmedOrders + commerce.preparingOrders +
+      commerce.readyForPickupOrders + commerce.outForDeliveryOrders
+    : 0;
 
   const comparisonItems = useMemo(() => {
     const term = itemQuery.trim().toLowerCase();
@@ -257,20 +332,33 @@ export function BranchOverviewPage() {
         <span className="inventory-hero-sheen" aria-hidden="true" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="branch-overview-hero-copy">
-          <p className="branch-overview-eyebrow"><span aria-hidden="true">✣</span> INVENTORY / NETWORK</p>
+          <p className="branch-overview-eyebrow"><span aria-hidden="true">◈</span> INVENTORY / NETWORK</p>
           <h1>Branch overview</h1>
           <p>Compare stock health, inventory value, and replenishment needs across your locations.</p>
           <div className="branch-overview-live"><span className={loading ? 'is-loading' : error ? 'is-error' : ''} />{loading ? 'Syncing branch inventory…' : error ? 'Branch inventory sync needs attention' : `${summary.branches} locations · ${productCount} products tracked`}{lastUpdated && !loading && <small>Updated {lastUpdated.toLocaleTimeString('en-LK', { hour: '2-digit', minute: '2-digit' })}</small>}</div>
         </div>
         <div className="branch-overview-art" aria-hidden="true"><span className="branch-overview-orbit" /><span className="branch-overview-art-icon">⌖</span><i /><i /><i /></div>
-        <button type="button" className="btn branch-overview-refresh" onClick={() => void loadInventory(true)} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh data'}</button>
+        <button type="button" className="btn branch-overview-refresh" onClick={() => { void loadInventory(true); void loadCommerce(); }} disabled={loading || commerceLoading}><span aria-hidden="true">↻</span>{loading || commerceLoading ? 'Refreshing…' : 'Refresh data'}</button>
       </header>
       {error && <p className="page-notice" role="alert">{error}</p>}
       <section className="branch-overview-metrics" aria-label="Network inventory summary">
         <article className="branch-overview-metric branch-overview-metric-locations"><span className="branch-overview-metric-icon">⌖</span><span className="branch-overview-metric-label">NETWORK</span><strong>{summary.branches}</strong><small>Locations in view</small></article>
         <article className="branch-overview-metric branch-overview-metric-items"><span className="branch-overview-metric-icon">▦</span><span className="branch-overview-metric-label">STOCK COVERAGE</span><strong>{productCount}</strong><small>Products across branches</small></article>
-        <article className="branch-overview-metric branch-overview-metric-health"><span className="branch-overview-metric-icon">✓</span><span className="branch-overview-metric-label">HEALTHY LOCATIONS</span><strong>{summary.healthy}</strong><small>Meeting reorder levels</small></article>
+        <article className="branch-overview-metric branch-overview-metric-health"><span className="branch-overview-metric-icon">◉</span><span className="branch-overview-metric-label">HEALTHY LOCATIONS</span><strong>{summary.healthy}</strong><small>Meeting reorder levels</small></article>
         <article className="branch-overview-metric branch-overview-metric-value"><span className="branch-overview-metric-icon">LKR</span><span className="branch-overview-metric-label">INVENTORY VALUE</span><strong>{money(summary.value)}</strong><small>{summary.attention} items need review</small></article>
+      </section>
+      <section className="branch-commerce-overview" aria-label="Sales and customer orders for the last 30 days">
+        <div className="branch-commerce-heading">
+          <div><p className="eyebrow">LAST 30 DAYS</p><h2>Sales &amp; customer orders</h2><p>Completed customer orders are included in sales. Stock is reserved when each order is placed.</p></div>
+          <div className="branch-commerce-links"><Link to="/inventory-analytics">View analytics</Link><Link to="/customer-orders">Manage orders</Link></div>
+        </div>
+        {commerceError && <p className="branch-commerce-error" role="alert">{commerceError}</p>}
+        <div className="branch-commerce-metrics">
+          <article><span>Sales revenue</span><strong>{commerceLoading && !commerce ? '…' : money(commerce?.salesRevenue ?? 0)}</strong><small>{commerce?.salesCount ?? 0} completed sales</small></article>
+          <article><span>Customer orders</span><strong>{commerceLoading && !commerce ? '…' : commerce?.customerOrderCount ?? 0}</strong><small>Placed in this period</small></article>
+          <article><span>Open orders</span><strong>{commerceLoading && !commerce ? '…' : activeOrderCount}</strong><small>{commerce?.pendingOrders ?? 0} awaiting confirmation</small></article>
+          <article><span>Completed orders</span><strong>{commerceLoading && !commerce ? '…' : commerce?.completedOrders ?? 0}</strong><small>Included in sales revenue</small></article>
+        </div>
       </section>
       <section className="branch-summary-grid" aria-label="Branch stock summary">
         {branches.map((branch) => (
@@ -281,6 +369,16 @@ export function BranchOverviewPage() {
               <Badge tone={healthTone[branch.health]}>{branch.health}</Badge>
             </div>
             <div className="branch-card-value"><strong>{money(branch.value)}</strong><span>Inventory value</span></div>
+            <div className="branch-card-commerce" aria-label={`${branch.name} sales and order activity`}>
+              <div><span>30-day sales</span><strong>{money(commerceByBranch.get(branch.id)?.salesRevenue ?? 0)}</strong></div>
+              <div><span>Customer orders</span><strong>{commerceByBranch.get(branch.id)?.customerOrderCount ?? 0}</strong></div>
+              <small>
+                {commerceByBranch.get(branch.id)?.pendingOrders ?? 0} pending ·{' '}
+                {commerceByBranch.get(branch.id)?.preparingOrders ?? 0} preparing ·{' '}
+                {commerceByBranch.get(branch.id)?.readyForPickupOrders ?? 0} ready ·{' '}
+                {commerceByBranch.get(branch.id)?.outForDeliveryOrders ?? 0} delivering
+              </small>
+            </div>
             <div className="branch-card-foot"><span>{branch.attention ? `${branch.attention} items need attention` : 'Stock levels look healthy'}</span><span className="branch-health-pulse" aria-hidden="true" /></div>
           </article>
         ))}
@@ -304,8 +402,8 @@ export function BranchOverviewPage() {
         {categoryWarning && <p className="branch-category-warning" role="status">{categoryWarning} Items without a saved category or matching legacy category text are grouped as “Uncategorised”.</p>}
         <div className="branch-directory-pulse" aria-label="Filtered inventory summary">
           <div><span className="branch-directory-pulse-icon">▦</span><span><small>PRODUCTS IN VIEW</small><strong>{categoryGroups.reduce((sum, group) => sum + group.items.length, 0)}</strong></span></div>
-          <div><span className="branch-directory-pulse-icon branch-directory-pulse-units">↕</span><span><small>UNITS ON HAND</small><strong>{comparisonSummary.units.toLocaleString('en-LK')}</strong></span></div>
-          <div className={comparisonSummary.atRisk ? 'has-risk' : ''}><span className="branch-directory-pulse-icon branch-directory-pulse-risk">!</span><span><small>NEEDING ATTENTION</small><strong>{comparisonSummary.atRisk}</strong></span></div>
+          <div><span className="branch-directory-pulse-icon branch-directory-pulse-units">◧</span><span><small>UNITS ON HAND</small><strong>{comparisonSummary.units.toLocaleString('en-LK')}</strong></span></div>
+          <div className={comparisonSummary.atRisk ? 'has-risk' : ''}><span className="branch-directory-pulse-icon branch-directory-pulse-risk">⚠</span><span><small>NEEDING ATTENTION</small><strong>{comparisonSummary.atRisk}</strong></span></div>
           <div><span className="branch-directory-pulse-icon branch-directory-pulse-value">LKR</span><span><small>FILTERED STOCK VALUE</small><strong>{money(comparisonSummary.value)}</strong></span></div>
         </div>
         {loading && !inventory.length ? <div className="branch-overview-loading"><span className="branch-loading-spinner" />Loading branch stock…</div> : comparisonItems.length ? (

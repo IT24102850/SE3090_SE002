@@ -822,7 +822,7 @@ export function InventoryManagerPage() {
         <span className="inventory-hero-sheen" aria-hidden="true" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="inventory-manager-hero-copy">
-          <p className="inventory-manager-eyebrow"><span aria-hidden="true">◆</span> INVENTORY CONTROL CENTER</p>
+          <p className="inventory-manager-eyebrow"><span aria-hidden="true">▦</span> INVENTORY CONTROL CENTER</p>
           <h1>Inventory manager</h1>
           <p>One clear view of your stock, item health, and inventory value.</p>
           <div className="inventory-manager-health" aria-live="polite">
@@ -847,9 +847,9 @@ export function InventoryManagerPage() {
             onChange={handleCsvImport}
           />
           <button className="btn btn-secondary inventory-manager-refresh" type="button" onClick={() => void handleRefresh()} disabled={loading}><span aria-hidden="true">↻</span> {loading ? 'Refreshing…' : 'Refresh data'}</button>
-          {canManageCatalog && <button className="btn btn-secondary" type="button" onClick={() => fileInputRef.current?.click()} disabled={importing || loading} title="Import items from CSV file"><span aria-hidden="true">⇧</span> {importing ? 'Importing…' : 'Import CSV'}</button>}
-          <button className="btn btn-secondary" type="button" onClick={exportInventoryCsv} title="Export inventory catalogue as CSV"><span aria-hidden="true">⇩</span> Export CSV</button>
-          {canManageCatalog && <Link className="btn btn-secondary inventory-manager-suppliers-link" to="/suppliers"><span aria-hidden="true">♧</span> Suppliers</Link>}
+          {canManageCatalog && <button className="btn btn-secondary" type="button" onClick={() => fileInputRef.current?.click()} disabled={importing || loading} title="Import items from CSV file"><span aria-hidden="true">⊞</span> {importing ? 'Importing…' : 'Import CSV'}</button>}
+          <button className="btn btn-secondary" type="button" onClick={exportInventoryCsv} title="Export inventory catalogue as CSV"><span aria-hidden="true">⊟</span> Export CSV</button>
+          {canManageCatalog && <Link className="btn btn-secondary inventory-manager-suppliers-link" to="/suppliers"><span aria-hidden="true">◈</span> Suppliers</Link>}
           {canManageCatalog && <button className="btn btn-primary inventory-manager-add" type="button" onClick={() => setModal({ mode: 'add' })}><span aria-hidden="true">＋</span> Add item</button>}
         </div>
       </header>

@@ -346,7 +346,7 @@ export function SuppliersPage() {
             <button type="button" className="btn suppliers-add" onClick={() => { if (showForm) resetSupplierForm(); else { resetSupplierForm(); setShowForm(true); } }}>{showForm ? 'Close form' : '＋ Add supplier'}</button>
           )}
         </div>
-        <div className="suppliers-hero-mark" aria-hidden="true"><span>♧</span><i /><i /><i /></div>
+        <div className="suppliers-hero-mark" aria-hidden="true"><span>◈</span><i /><i /><i /></div>
       </header>
 
       {loadError && <div className="page-notice" role="alert">{loadError}</div>}
@@ -354,7 +354,7 @@ export function SuppliersPage() {
       <section className="suppliers-summary" aria-label="Supplier summary">
         <article className="suppliers-summary-card suppliers-summary-directory">
           <div className="suppliers-summary-main">
-            <span className="suppliers-summary-icon suppliers-icon-teal" aria-hidden="true">♧</span>
+            <span className="suppliers-summary-icon suppliers-icon-teal" aria-hidden="true">◈</span>
             <div className="suppliers-summary-copy">
               <span className="suppliers-summary-kicker">PARTNER DIRECTORY</span>
               <strong>{suppliers.length}</strong>
@@ -389,7 +389,7 @@ export function SuppliersPage() {
         </article>
         <article className="suppliers-summary-card suppliers-summary-lead-time">
           <div className="suppliers-summary-main">
-            <span className="suppliers-summary-icon suppliers-icon-violet" aria-hidden="true">▤</span>
+            <span className="suppliers-summary-icon suppliers-icon-violet" aria-hidden="true">◷</span>
             <div className="suppliers-summary-copy">
               <span className="suppliers-summary-kicker">DELIVERY READINESS</span>
               <strong>{leadTimeCount}</strong>
@@ -427,7 +427,7 @@ export function SuppliersPage() {
       )}
 
       <section className="panel suppliers-directory-panel">
-        <div className="suppliers-directory-head"><div><span className="suppliers-section-mark" aria-hidden="true">▤</span><div><h2>{isStaff ? 'Suppliers at your branch' : 'All suppliers'}</h2><p>Contact, delivery, and purchasing details for your inventory workspace.</p></div></div><label className="suppliers-search"><span aria-hidden="true">⌕</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search supplier details" aria-label="Search suppliers" /></label></div>
+        <div className="suppliers-directory-head"><div><span className="suppliers-section-mark" aria-hidden="true">◈</span><div><h2>{isStaff ? 'Suppliers at your branch' : 'All suppliers'}</h2><p>Contact, delivery, and purchasing details for your inventory workspace.</p></div></div><label className="suppliers-search"><span aria-hidden="true">⌕</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search supplier details" aria-label="Search suppliers" /></label></div>
         <div className="inventory-quick-filters" role="group" aria-label="Filter supplier directory">
           <button type="button" className={`inventory-chip${directoryFilter === 'all' ? ' is-active' : ''}`} aria-pressed={directoryFilter === 'all'} onClick={() => setDirectoryFilter('all')}>All suppliers <strong>({suppliers.length})</strong></button>
           <button type="button" className={`inventory-chip chip-amber${directoryFilter === 'missing-contact' ? ' is-active' : ''}`} aria-pressed={directoryFilter === 'missing-contact'} onClick={() => setDirectoryFilter('missing-contact')}>Missing contact <strong>({missingContactCount})</strong></button>
@@ -462,7 +462,7 @@ export function SuppliersPage() {
                         aria-controls={`supplier-details-${supplier.id}`}
                         onClick={() => void toggleSupplierDetails(supplier)}
                       >
-                          <span className="suppliers-order-history-icon" aria-hidden="true">▤</span> Order history &amp; details <span aria-hidden="true">→</span>
+                          <span className="suppliers-order-history-icon" aria-hidden="true">◷</span> Order history &amp; details <span aria-hidden="true">→</span>
                       </button>
                     </div>
                   </td>
@@ -517,7 +517,7 @@ export function SuppliersPage() {
               <div className="modal-body suppliers-modal-body">
                 <section className="suppliers-profile-metrics" aria-label={`${supplier.name} order summary`}>
                   <article className="supplier-metric-card supplier-metric-orders">
-                    <span className="supplier-metric-icon" aria-hidden="true">▤</span>
+                    <span className="supplier-metric-icon" aria-hidden="true">◈</span>
                     <span className="supplier-metric-label">All orders</span>
                     <strong>{history?.loading ? '…' : selectedHistorySummary?.orderCount ?? supplier.orderCount}</strong>
                     <small>{lastOrderAt
@@ -525,7 +525,7 @@ export function SuppliersPage() {
                       : 'No order history yet'}</small>
                   </article>
                   <article className="supplier-metric-card supplier-metric-active">
-                    <span className="supplier-metric-icon" aria-hidden="true">↗</span>
+                    <span className="supplier-metric-icon" aria-hidden="true">⟳</span>
                     <span className="supplier-metric-label">Non-cancelled orders</span>
                     <strong>{history?.loading ? '…' : selectedHistorySummary?.activeOrderCount ?? supplier.activeOrderCount}</strong>
                     <small>Included in the PO value total</small>

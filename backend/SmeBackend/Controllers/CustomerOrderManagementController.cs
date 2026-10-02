@@ -117,6 +117,18 @@ public sealed class CustomerOrderManagementController(AppDbContext db, IBillingM
             order.UpdatedAt = DateTime.UtcNow;
         }
 
+        if (nextStatus == "Completed")
+        {
+            db.Sales.Add(new Sale
+            {
+                TenantId = tenantId,
+                BranchId = order.BranchId,
+                OccurredAt = DateTime.UtcNow,
+                Amount = order.Total,
+                Reference = order.Number,
+            });
+        }
+
         if (nextStatus == "Cancelled")
         {
             foreach (var line in order.Items)

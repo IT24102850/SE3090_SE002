@@ -1478,12 +1478,12 @@ export function PurchaseOrderManagerPage() {
         <span className="inventory-hero-sheen" aria-hidden="true" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="purchase-orders-hero-copy">
-          <p className="purchase-orders-eyebrow"><span aria-hidden="true">↗</span> INVENTORY / PROCUREMENT</p>
+          <p className="purchase-orders-eyebrow"><span aria-hidden="true">◈</span> INVENTORY / PROCUREMENT</p>
           <h1>Purchase orders</h1>
           <p>Coordinate suppliers, branches, and incoming stock from one order workspace.</p>
           <div className="purchase-orders-live"><span className={loading ? 'is-loading' : ''} aria-hidden="true" />{loading ? 'Syncing purchase orders…' : `${stats.open} open orders · ${stats.received} received`}</div>
         </div>
-        <div className="purchase-orders-hero-art" aria-hidden="true"><span className="purchase-orders-art-ring" /><span className="purchase-orders-art-icon">▤</span><i /><i /><i /></div>
+        <div className="purchase-orders-hero-art" aria-hidden="true"><span className="purchase-orders-art-ring" /><span className="purchase-orders-art-icon">◈</span><i /><i /><i /></div>
         <div className="purchase-orders-hero-actions">
           <button className="btn purchase-orders-refresh" type="button" onClick={() => { void loadOrders().then((ok) => { if (ok) notify('Purchase order data refreshed.', 'success'); }); }} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh data'}</button>
           {canCreatePurchaseOrders && <button className="btn purchase-orders-create" type="button" onClick={() => setShowCreate(true)} disabled={!options.branches.length || !options.suppliers.length}>＋ Create order</button>}
@@ -1497,13 +1497,13 @@ export function PurchaseOrderManagerPage() {
       <section className="stat-strip purchase-orders-stat-strip" aria-label="Purchase order summary">
         <article className="stat metric-card purchase-order-metric purchase-order-metric-total"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">▤</span><div><span className="purchase-order-kicker">ORDER BOOK</span><strong>{stats.total}</strong><small>Total purchase orders</small></div></div><div className="purchase-order-metric-detail">{stats.received} completed and received</div></article>
         <article className="stat metric-card purchase-order-metric purchase-order-metric-open"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">◷</span><div><span className="purchase-order-kicker">IN PROGRESS</span><strong>{stats.open}</strong><small>Open orders</small></div></div><div className="purchase-order-metric-detail">Draft through in transit</div></article>
-        <article className="stat metric-card purchase-order-metric purchase-order-metric-transit"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">⇢</span><div><span className="purchase-order-kicker">ON THE WAY</span><strong>{stats.inTransit}</strong><small>In transit</small></div></div><div className="purchase-order-metric-detail">Awaiting branch receipt</div></article>
+        <article className="stat metric-card purchase-order-metric purchase-order-metric-transit"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">→</span><div><span className="purchase-order-kicker">ON THE WAY</span><strong>{stats.inTransit}</strong><small>In transit</small></div></div><div className="purchase-order-metric-detail">Awaiting branch receipt</div></article>
         <article className="stat metric-card purchase-order-metric purchase-order-metric-value"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">LKR</span><div><span className="purchase-order-kicker">OPEN COMMITMENT</span><strong className="purchase-order-value">{formatPrice(stats.value)}</strong><small>Open order value</small></div></div><div className="purchase-order-metric-detail">Excludes received and cancelled orders</div></article>
       </section>
 
       <div className="po-layout purchase-orders-layout">
         <section className="panel po-list-panel">
-          <div className="purchase-orders-panel-head"><div><span className="purchase-orders-panel-icon" aria-hidden="true">▤</span><div><h2>Order register</h2><p>Search orders, filter status, and select one to see its details.</p></div></div><span className="purchase-orders-count">{filtered.length} shown</span></div>
+          <div className="purchase-orders-panel-head"><div><span className="purchase-orders-panel-icon" aria-hidden="true">◈</span><div><h2>Order register</h2><p>Search orders, filter status, and select one to see its details.</p></div></div><span className="purchase-orders-count">{filtered.length} shown</span></div>
           <div className="toolbar toolbar-wrap">
             <div className="search-field">
               <span className="search-icon" aria-hidden="true">⌕</span>
