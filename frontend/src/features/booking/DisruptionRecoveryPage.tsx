@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '../../store/store';
 import { useGetResourcesQuery } from '../../api/bookingApi';
 import { formatDateTime } from '../../shared/dateUtils';
+import './schedule.css';
 import {
   disruptionApi,
   errorMessage,
@@ -31,8 +32,10 @@ function kindLabel(kind: RecoveryProposal['kind']): string {
 
 export default function DisruptionRecoveryPage() {
   const user = useSelector((state: RootState) => state.auth.user);
+  // pageSize 100 (the API's maximum): the default of 20 is a page, and a
+  // resource missing from this list looks like a resource that cannot break.
   const { data: resources } = useGetResourcesQuery(
-    { tenantId: user?.tenantId ?? '' },
+    { tenantId: user?.tenantId ?? '', pageSize: 100 },
     { skip: !user?.tenantId },
   );
 
@@ -50,8 +53,16 @@ export default function DisruptionRecoveryPage() {
     [resources],
   );
 
-  const today = new Date().toISOString().slice(0, 10);
-  const [form, setForm] = useState({ resourceId: '', dateFrom: today, dateTo: today, objective: '', reason: '' });
+  // An outage is almost never one day wide, and a same-day default silently
+  // excludes tomorrow's bookings - which is most of what is worth recovering.
+  // Default to the week ahead; narrowing it is one click, noticing it is not.
+  const today = new Date();
+  const isoDay = (offsetDays: number) =>
+    new Date(today.getFullYear(), today.getMonth(), today.getDate() + offsetDays)
+      .toLocaleDateString('en-CA');
+  const [form, setForm] = useState({
+    resourceId: '', dateFrom: isoDay(0), dateTo: isoDay(7), objective: '', reason: '',
+  });
   const [planning, setPlanning] = useState(false);
 
   const load = useCallback(async () => {
@@ -219,7 +230,7 @@ export default function DisruptionRecoveryPage() {
             {trace && <RecoveryEvidence trace={trace} />}
 
             {workflow.status === 'AwaitingApproval' && (
-              <div className="toolbar toolbar-wrap">
+              <div className="disruption-decision">
                 <input
                   type="text"
                   aria-label={`Reason for rejecting ${workflow.objective}`}

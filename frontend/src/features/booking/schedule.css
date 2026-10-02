@@ -147,8 +147,8 @@
 /* ── Disruption Recovery (DisruptionRecoveryPage.tsx) ──────────────── */
 .disruption-form {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
-  gap: 16px 20px;
+  grid-template-columns: minmax(240px, 1.1fr) minmax(260px, 1fr);
+  gap: 18px 20px;
   align-items: end;
 }
 .disruption-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -163,14 +163,42 @@
 .disruption-form input[type='text'],
 .disruption-form input[type='date'] {
   width: 100%;
-  padding: 0.6rem 0.75rem;
+  min-width: 0;
+  padding: 0.65rem 0.8rem;
   border: 1px solid var(--color-border, #3f3f46);
   border-radius: 10px;
   background: var(--color-surface-muted, #18181b);
   color: var(--color-text, #fafafa);
   font: inherit;
+  line-height: 1.3;
+  /* Makes the browser's own date picker and dropdown list follow the dark
+     surface instead of rendering a white panel over it. */
+  color-scheme: dark;
   transition: border-color .15s ease, box-shadow .15s ease;
 }
+.disruption-form select:hover,
+.disruption-form input[type='text']:hover,
+.disruption-form input[type='date']:hover {
+  border-color: var(--color-border-strong, #52525b);
+}
+/* The native select arrow is drawn in the OS theme and stays light on a dark
+   control, so it is replaced with one that inherits the text colour. */
+.disruption-form select {
+  appearance: none;
+  padding-right: 2.2rem;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 1.05rem) 55%, calc(100% - 0.75rem) 55%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+.disruption-form input[type='date']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity .15s ease;
+}
+.disruption-form input[type='date']:hover::-webkit-calendar-picker-indicator { opacity: 1; }
 .disruption-form select:focus-visible,
 .disruption-form input:focus-visible {
   outline: none;
@@ -186,10 +214,53 @@
 }
 .disruption-date-range span { color: var(--color-text-muted, #71717a); }
 .disruption-hint { margin: 2px 0 0; font-size: 0.8rem; color: var(--color-text-muted, #71717a); }
-.disruption-actions { display: flex; align-items: end; }
-.disruption-actions .btn { white-space: nowrap; }
+.disruption-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border, #3f3f46);
+  margin-top: 4px;
+}
+.disruption-actions .btn { white-space: nowrap; min-width: 180px; }
+
+/* The approve / reject row. The reason box leads because it is the input the
+   destructive button depends on, and it stretches so a long reason stays
+   readable while the two buttons keep a stable size. */
+.disruption-decision {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border, #3f3f46);
+}
+.disruption-decision input[type='text'] {
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--color-border, #3f3f46);
+  border-radius: 10px;
+  background: var(--color-surface-muted, #18181b);
+  color: var(--color-text, #fafafa);
+  font: inherit;
+  line-height: 1.3;
+  color-scheme: dark;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.disruption-decision input[type='text']::placeholder { color: var(--color-text-muted, #71717a); }
+.disruption-decision input[type='text']:hover { border-color: var(--color-border-strong, #52525b); }
+.disruption-decision input[type='text']:focus-visible {
+  outline: none;
+  border-color: var(--color-primary, #7c6cff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary, #7c6cff) 28%, transparent);
+}
+.disruption-decision .btn { flex: 0 0 auto; white-space: nowrap; min-width: 150px; }
 
 @media (max-width: 760px) {
   .disruption-form { grid-template-columns: 1fr; }
-  .disruption-actions .btn { width: 100%; }
+  .disruption-actions .btn { width: 100%; min-width: 0; }
+  .disruption-decision { flex-direction: column; align-items: stretch; }
+  .disruption-decision .btn { width: 100%; min-width: 0; }
 }
