@@ -106,37 +106,61 @@ FROM _seed_ctx ctx, _seed_boats b,
 -- different mix of deposit, party size and lead time, which is exactly what
 -- the Impact agent ranks on - so the demo shows a non-obvious ordering.
 --
--- OccupiesResourceExclusively is FALSE on purpose: a vessel sells seats
--- against a licensed capacity, so these bookings legitimately overlap. The
--- booking overlap exclusion constraint (migration AddBookingOverlapExclusion)
--- only covers bookings that take a resource whole, and would otherwise refuse
--- the second guest on the same sailing.
-INSERT INTO "bookings"
-  ("Id","TenantId","ResourceId","BookingTypeId","BookedBy","Title","Notes",
-   "StartTime","EndTime","Status","Priority","AttendeeCount","Source",
-   "DepositAmount","TotalCost","OccupiesResourceExclusively",
-   "ReminderSent","CreatedAt","UpdatedAt","Version")
-SELECT gen_random_uuid(), ctx.tenant_id, b.dawn_id, b.tour_type_id, u."Id",
-       v.title, v.notes,
-       ((current_date + 1) + time '06:30') AT TIME ZONE 'Asia/Colombo',
-       ((current_date + 1) + time '10:30') AT TIME ZONE 'Asia/Colombo',
-       'Confirmed', 'Normal', v.guests, 'DisruptionDemo',
-       v.deposit, v.total, false,
-       false, now() - interval '6 days', now(), 1
-FROM _seed_ctx ctx
-CROSS JOIN _seed_boats b
-JOIN (VALUES
-  -- email,                          title,                        guests, deposit, total,  notes
-  ('fernando@disruption-demo.test', 'Fernando family - 6 guests',       6,  22500,  41000,
-   'Deposit paid. Travelling from Colombo, grandparents in the party.'),
-  ('okafor@disruption-demo.test',   'Okafor - honeymoon couple',        2,   7500,  15000,
-   'Deposit paid. Flying out the following evening.'),
-  ('tanaka@disruption-demo.test',   'Tanaka - solo photographer',       1,      0,   7500,
-   'Wants the dawn light; happy to move days if the light is right.'),
-  ('muller@disruption-demo.test',   'Müller - solo traveller',          1,      0,   7500,
-   'Flexible.')
-) AS v(email, title, guests, deposit, total, notes) ON TRUE
-JOIN "Users" u ON u."Email" = v.email AND u."TenantId" = ctx.tenant_id;
+-- Why this is dynamic SQL: OccupiesResourceExclusively arrives with migration
+-- AddBookingOverlapExclusion, and this script has to run on a database that
+-- has it and on one that does not yet. Where the column exists it is set to
+-- false here, at insert time rather than afterwards - a vessel sells seats
+-- against a licensed capacity, so these four bookings legitimately overlap,
+-- and the exclusion constraint would refuse the second guest on the sailing
+-- before any later UPDATE could fix it.
+DO $outer$
+DECLARE
+    has_exclusivity_flag boolean;
+    extra_column text := '';
+    extra_value  text := '';
+BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name   = 'bookings'
+           AND column_name  = 'OccupiesResourceExclusively'
+    ) INTO has_exclusivity_flag;
+
+    IF has_exclusivity_flag THEN
+        extra_column := ', "OccupiesResourceExclusively"';
+        extra_value  := ', false';
+    ELSE
+        RAISE NOTICE 'bookings.OccupiesResourceExclusively is not present yet; '
+                     'this database predates migration AddBookingOverlapExclusion. '
+                     'The demo data is still created correctly.';
+    END IF;
+
+    EXECUTE format($q$
+        INSERT INTO "bookings"
+          ("Id","TenantId","ResourceId","BookingTypeId","BookedBy","Title","Notes",
+           "StartTime","EndTime","Status","Priority","AttendeeCount","Source",
+           "DepositAmount","TotalCost","ReminderSent","CreatedAt","UpdatedAt","Version"%s)
+        SELECT gen_random_uuid(), ctx.tenant_id, b.dawn_id, b.tour_type_id, u."Id",
+               v.title, v.notes,
+               ((current_date + 1) + time '06:30') AT TIME ZONE 'Asia/Colombo',
+               ((current_date + 1) + time '10:30') AT TIME ZONE 'Asia/Colombo',
+               'Confirmed', 'Normal', v.guests, 'DisruptionDemo',
+               v.deposit, v.total, false, now() - interval '6 days', now(), 1%s
+        FROM _seed_ctx ctx
+        CROSS JOIN _seed_boats b
+        JOIN (VALUES
+          ('fernando@disruption-demo.test', 'Fernando family - 6 guests', 6, 22500, 41000,
+           'Deposit paid. Travelling from Colombo, grandparents in the party.'),
+          ('okafor@disruption-demo.test',   'Okafor - honeymoon couple',  2,  7500, 15000,
+           'Deposit paid. Flying out the following evening.'),
+          ('tanaka@disruption-demo.test',   'Tanaka - solo photographer', 1,     0,  7500,
+           'Wants the dawn light; happy to move days if the light is right.'),
+          ('muller@disruption-demo.test',   'Muller - solo traveller',    1,     0,  7500,
+           'Flexible.')
+        ) AS v(email, title, guests, deposit, total, notes) ON TRUE
+        JOIN "Users" u ON u."Email" = v.email AND u."TenantId" = ctx.tenant_id
+    $q$, extra_column, extra_value);
+END $outer$;
 
 -- ── Make sure there is somewhere for them to go ────────────────────────────
 -- The Morning Cruise sails at 10:00 the same day. Nothing else is seeded onto
@@ -146,26 +170,37 @@ JOIN "Users" u ON u."Email" = v.email AND u."TenantId" = ctx.tenant_id;
 
 -- ── Repair the exclusivity flag for this whole tenant ───────────────────────
 -- Any booking on a vessel with a licensed capacity above one sells seats, so
--- it must be exempt from the overlap constraint. Older seed scripts predate
--- that column and default it to true, which would make a second passenger on
--- the same sailing impossible. This is idempotent and safe to re-run.
-UPDATE "bookings" b
-   SET "OccupiesResourceExclusively" = false
-  FROM _seed_ctx ctx
- WHERE b."TenantId" = ctx.tenant_id
-   AND b."OccupiesResourceExclusively"
-   AND COALESCE(
-         (SELECT d."LicensedCapacity" FROM "departures" d
-           WHERE d."Id" = b."DepartureId" AND d."LicensedCapacity" > 0),
-         (SELECT CASE
-                   WHEN jsonb_typeof(r."CustomAttributes" -> 'capacity') = 'number'
-                     THEN (r."CustomAttributes" ->> 'capacity')::int
-                 END
-            FROM "resources" r WHERE r."Id" = b."ResourceId"),
-         (SELECT NULLIF(r."Capacity", 0) FROM "resources" r WHERE r."Id" = b."ResourceId"),
-         (SELECT NULLIF(t."MaxParticipants", 0) FROM "booking_types" t
-           WHERE t."Id" = b."BookingTypeId"),
-         1) > 1;
+-- it must stay exempt from the overlap constraint. Older seed scripts predate
+-- the column and leave it at its default of true, which would make a second
+-- passenger on the same sailing impossible. Skipped entirely on a database
+-- that has not run the migration yet. Idempotent.
+DO $repair$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name   = 'bookings'
+           AND column_name  = 'OccupiesResourceExclusively'
+    ) THEN
+        UPDATE "bookings" b
+           SET "OccupiesResourceExclusively" = false
+          FROM _seed_ctx ctx
+         WHERE b."TenantId" = ctx.tenant_id
+           AND b."OccupiesResourceExclusively"
+           AND COALESCE(
+                 (SELECT d."LicensedCapacity" FROM "departures" d
+                   WHERE d."Id" = b."DepartureId" AND d."LicensedCapacity" > 0),
+                 (SELECT CASE
+                           WHEN jsonb_typeof(r."CustomAttributes" -> 'capacity') = 'number'
+                             THEN (r."CustomAttributes" ->> 'capacity')::int
+                         END
+                    FROM "resources" r WHERE r."Id" = b."ResourceId"),
+                 (SELECT NULLIF(r."Capacity", 0) FROM "resources" r WHERE r."Id" = b."ResourceId"),
+                 (SELECT NULLIF(t."MaxParticipants", 0) FROM "booking_types" t
+                   WHERE t."Id" = b."BookingTypeId"),
+                 1) > 1;
+    END IF;
+END $repair$;
 
 COMMIT;
 
