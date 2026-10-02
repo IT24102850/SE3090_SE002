@@ -192,6 +192,7 @@ describe('CustomerShopPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search', exact: true }));
     fireEvent.click(await screen.findByRole('button', { name: /colombo, sri lanka/i }));
     expect(screen.getByText(/Pin set · 6\.92710, 79\.86120/)).toBeTruthy();
+    expect(document.querySelector('.leaflet-marker-draggable')).toBeTruthy();
     expect(screen.getByRole('link', { name: /open in google maps/i }))
       .toHaveAttribute('href', 'https://www.google.com/maps/search/?api=1&query=6.9271,79.8612');
     fireEvent.click(screen.getByRole('button', { name: /place my order/i }));

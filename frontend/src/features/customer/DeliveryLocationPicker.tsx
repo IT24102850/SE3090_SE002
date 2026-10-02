@@ -43,6 +43,30 @@ function ClickToPlacePin({ onChange }: { onChange: (pin: DeliveryPin) => void })
   return null;
 }
 
+function DraggablePin({
+  value,
+  onChange,
+}: {
+  value: DeliveryPin;
+  onChange: (pin: DeliveryPin) => void;
+}) {
+  return (
+    <Marker
+      position={[value.latitude, value.longitude]}
+      icon={deliveryPinIcon}
+      draggable
+      keyboard
+      title="Delivery pin; drag to adjust or tap the map to move it"
+      eventHandlers={{
+        dragend(event) {
+          const position = event.target.getLatLng();
+          onChange({ latitude: position.lat, longitude: position.lng });
+        },
+      }}
+    />
+  );
+}
+
 export default function DeliveryLocationPicker({ value, onChange }: DeliveryLocationPickerProps) {
   const [search, setSearch] = useState('');
   const [center, setCenter] = useState<LatLngExpression>(value
@@ -217,14 +241,9 @@ export default function DeliveryLocationPicker({ value, onChange }: DeliveryLoca
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          {value && <Marker
-            position={[value.latitude, value.longitude]}
-            icon={deliveryPinIcon}
-            keyboard
-            title="Delivery pin; tap the map to move it"
-          />}
+          {value && <DraggablePin value={value} onChange={onChange} />}
         </MapContainer>
-        <div className="cust-delivery-map-hint"><span aria-hidden="true">⌖</span> Tap the map to drop or move your pin</div>
+        <div className="cust-delivery-map-hint"><span aria-hidden="true">⌖</span> Drag your pin or tap the map to adjust its position</div>
       </div>
       <div className="cust-delivery-map-footer">
         <button type="button" className="btn btn-secondary" onClick={useCurrentLocation} disabled={locating}>
