@@ -12,10 +12,12 @@ class CustomerShopScreen extends StatefulWidget {
     super.key,
     AuthenticatedApiClient? client,
     this.initialBranchId,
+    this.tenantId,
   }) : client = client ?? AuthenticatedApiClient();
 
   final AuthenticatedApiClient client;
   final String? initialBranchId;
+  final String? tenantId;
 
   @override
   State<CustomerShopScreen> createState() => _CustomerShopScreenState();
@@ -70,8 +72,14 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
       _error = null;
     });
     try {
-      final branchesResponse =
+      var branchesResponse =
           await widget.client.get('/customer-orders/branches');
+      if (branchesResponse.statusCode == 404 &&
+          widget.tenantId != null &&
+          widget.tenantId!.isNotEmpty) {
+        branchesResponse = await widget.client
+            .get('/branches?tenantId=${Uri.encodeQueryComponent(widget.tenantId!)}');
+      }
       final ordersResponse = await widget.client.get('/customer-orders');
       if (branchesResponse.statusCode < 200 ||
           branchesResponse.statusCode >= 300) {

@@ -28,6 +28,7 @@ void main() {
         home: CustomerShopScreen(
           client: AuthenticatedApiClient(dio: dio),
           initialBranchId: branchId,
+          tenantId: 'tenant-main',
         ),
       ),
     );
@@ -35,6 +36,7 @@ void main() {
 
     expect(find.text('Fresh tea leaves'), findsOneWidget,
         reason: 'Observed API requests: ${adapter.requests}');
+    expect(adapter.requests, contains('GET /branches?tenantId=tenant-main'));
     expect(find.byTooltip('Cart, 0 items'), findsOneWidget);
     await tester.tap(find.byTooltip('Cart, 0 items'));
     await tester.pumpAndSettle();
@@ -80,6 +82,9 @@ class _CustomerShopApiAdapter implements HttpClientAdapter {
     Object response;
     var statusCode = 200;
     if (path.endsWith('/customer-orders/branches')) {
+      statusCode = 404;
+      response = {'message': 'Not found'};
+    } else if (path.endsWith('/branches')) {
       response = [
         {'id': 'branch-main', 'name': 'Main store', 'address': 'Town'}
       ];

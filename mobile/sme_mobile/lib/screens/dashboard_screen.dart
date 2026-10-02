@@ -123,6 +123,7 @@ class DashboardScreen extends ConsumerWidget {
                     context,
                     user.role,
                     user.branchId,
+                    user.tenantId,
                     role.color,
                     compact: compact,
                     tileSpacing: tileSpacing,
@@ -401,7 +402,10 @@ class _DashboardDrawer extends ConsumerWidget {
                       Navigator.pop(context);
                       Navigator.of(context).push(
                         slideFadeRoute(
-                          CustomerShopScreen(initialBranchId: user.branchId),
+                          CustomerShopScreen(
+                            initialBranchId: user.branchId,
+                            tenantId: user.tenantId,
+                          ),
                         ),
                       );
                     },
@@ -829,6 +833,7 @@ List<_QuickActionGroup> _quickActionsFor(
   BuildContext context,
   String role,
   String? assignedBranchId,
+  String tenantId,
   Color color, {
   required bool compact,
   required double tileSpacing,
@@ -850,7 +855,10 @@ List<_QuickActionGroup> _quickActionsFor(
         imageUrl: _quickActionImages['Shop & order items'],
         onTap: () => Navigator.of(context).push(
           slideFadeRoute(
-            CustomerShopScreen(initialBranchId: assignedBranchId),
+            CustomerShopScreen(
+              initialBranchId: assignedBranchId,
+              tenantId: tenantId,
+            ),
           ),
         ),
       ),
