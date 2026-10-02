@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'inventory_scaffold.dart';
+import 'inventory_panel.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -156,7 +158,7 @@ class _StockActivityHistoryScreenState
   @override
   Widget build(BuildContext context) {
     final visible = _visibleMovements;
-    return AppBackgroundScaffold(
+    return InventoryScaffold(
       showParticles: false,
       appBar: GlassAppBar(
         title: 'Stock Activity',
@@ -464,118 +466,101 @@ class _StockActivityHistoryScreenState
             : Icons.sync_alt_rounded;
     final quantityPrefix = movement.quantity > 0 ? '+' : '';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF141E30),
-            Color.lerp(const Color(0xFF0F1829), color, 0.05)!,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: color.withValues(alpha: 0.22),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    colors: [
-                      color.withValues(alpha: 0.22),
-                      color.withValues(alpha: 0.06),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InventoryPanel(
+        padding: const EdgeInsets.all(16),
+        borderColor: color.withValues(alpha: .3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      colors: [
+                        color.withValues(alpha: 0.22),
+                        color.withValues(alpha: 0.06),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: color.withValues(alpha: 0.3)),
+                  ),
+                  child: Icon(icon, color: color, size: 21),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        movement.item,
+                        style: AppTextStyles.body.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14.5,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${_movementLabel(movement.type)} · ${movement.sku}',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: color.withValues(alpha: 0.3)),
                 ),
-                child: Icon(icon, color: color, size: 21),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      movement.item,
-                      style: AppTextStyles.body.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14.5,
-                      ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: color.withValues(alpha: 0.25)),
+                  ),
+                  child: Text(
+                    '$quantityPrefix${_formatQuantity(movement.quantity)}',
+                    style: AppTextStyles.body.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${_movementLabel(movement.type)} · ${movement.sku}',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: color.withValues(alpha: 0.25)),
-                ),
-                child: Text(
-                  '$quantityPrefix${_formatQuantity(movement.quantity)}',
-                  style: AppTextStyles.body.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 11),
+            Wrap(
+              spacing: 12,
+              runSpacing: 5,
+              children: [
+                _detail(
+                    Icons.schedule_rounded, _formatDate(movement.occurredAt)),
+                if (movement.reference != null)
+                  _detail(Icons.tag_rounded, movement.reference!),
+                if (movement.supplier != null)
+                  _detail(Icons.local_shipping_outlined, movement.supplier!),
+                if (movement.performedBy != null)
+                  _detail(Icons.person_outline_rounded, movement.performedBy!),
+              ],
+            ),
+            if (movement.notes != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                movement.notes!,
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textMuted, height: 1.35),
               ),
             ],
-          ),
-          const SizedBox(height: 11),
-          Wrap(
-            spacing: 12,
-            runSpacing: 5,
-            children: [
-              _detail(Icons.schedule_rounded, _formatDate(movement.occurredAt)),
-              if (movement.reference != null)
-                _detail(Icons.tag_rounded, movement.reference!),
-              if (movement.supplier != null)
-                _detail(Icons.local_shipping_outlined, movement.supplier!),
-              if (movement.performedBy != null)
-                _detail(Icons.person_outline_rounded, movement.performedBy!),
-            ],
-          ),
-          if (movement.notes != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              movement.notes!,
-              style: AppTextStyles.caption
-                  .copyWith(color: AppColors.textMuted, height: 1.35),
-            ),
           ],
-        ],
+        ),
       ),
     );
   }

@@ -81,6 +81,9 @@ void main() {
         find.byKey(const Key('stock-count-branch-selector')), findsOneWidget);
     expect(find.byKey(const Key('count-preview-empty')), findsOneWidget);
 
+    await tester
+        .ensureVisible(find.byKey(const Key('stock-count-branch-selector')));
+    await tester.pump(const Duration(milliseconds: 250));
     await tester.tap(find.byKey(const Key('stock-count-branch-selector')));
     await tester.pump();
     await tester.tap(find.text('North branch · 7 units').last);

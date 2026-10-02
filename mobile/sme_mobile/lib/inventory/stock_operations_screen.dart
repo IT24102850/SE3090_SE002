@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'inventory_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -446,7 +447,7 @@ class _StockOperationsScreenState extends State<StockOperationsScreen> {
   Widget build(BuildContext context) {
     final matches = _matches;
     final item = _selectedItem;
-    return AppBackgroundScaffold(
+    return InventoryScaffold(
       showParticles: false,
       appBar: GlassAppBar(
         title: 'Stock In / Out',

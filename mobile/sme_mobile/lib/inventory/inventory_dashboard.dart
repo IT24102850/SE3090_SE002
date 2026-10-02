@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'inventory_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -94,7 +95,6 @@ class _InventoryDashboardState extends State<InventoryDashboard>
     _enterAnim.dispose();
     super.dispose();
   }
-
 
   Future<void> _load({bool showSuccess = false}) async {
     if (_requestInFlight) return;
@@ -216,7 +216,8 @@ class _InventoryDashboardState extends State<InventoryDashboard>
       final group = _allItems
           .where((candidate) => _stockGroupKey(candidate) == key)
           .toList()
-        ..sort((a, b) => a.branch.toLowerCase().compareTo(b.branch.toLowerCase()));
+        ..sort(
+            (a, b) => a.branch.toLowerCase().compareTo(b.branch.toLowerCase()));
       groups.add(group);
     }
     return groups;
@@ -476,7 +477,7 @@ class _InventoryDashboardState extends State<InventoryDashboard>
 
   @override
   Widget build(BuildContext context) {
-    return AppBackgroundScaffold(
+    return InventoryScaffold(
       showParticles: false,
       appBar: GlassAppBar(
         title: 'Inventory Operations',
@@ -548,7 +549,8 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                           FadeTransition(
                             opacity: CurvedAnimation(
                               parent: _enterCtrl,
-                              curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+                              curve: const Interval(0.0, 0.6,
+                                  curve: Curves.easeOut),
                             ),
                             child: SlideTransition(
                               position: Tween<Offset>(
@@ -556,7 +558,8 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                                 end: Offset.zero,
                               ).animate(CurvedAnimation(
                                 parent: _enterCtrl,
-                                curve: const Interval(0.0, 0.6, curve: Curves.easeOutCubic),
+                                curve: const Interval(0.0, 0.6,
+                                    curve: Curves.easeOutCubic),
                               )),
                               child: _buildHeroBanner(),
                             ),
@@ -573,7 +576,8 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                             FadeTransition(
                               opacity: CurvedAnimation(
                                 parent: _enterCtrl,
-                                curve: const Interval(0.2, 0.75, curve: Curves.easeOut),
+                                curve: const Interval(0.2, 0.75,
+                                    curve: Curves.easeOut),
                               ),
                               child: SlideTransition(
                                 position: Tween<Offset>(
@@ -581,7 +585,8 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                                   end: Offset.zero,
                                 ).animate(CurvedAnimation(
                                   parent: _enterCtrl,
-                                  curve: const Interval(0.2, 0.75, curve: Curves.easeOutCubic),
+                                  curve: const Interval(0.2, 0.75,
+                                      curve: Curves.easeOutCubic),
                                 )),
                                 child: _buildMetricCards(_summary!),
                               ),
@@ -600,7 +605,8 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                           FadeTransition(
                             opacity: CurvedAnimation(
                               parent: _enterCtrl,
-                              curve: const Interval(0.4, 0.85, curve: Curves.easeOut),
+                              curve: const Interval(0.4, 0.85,
+                                  curve: Curves.easeOut),
                             ),
                             child: SlideTransition(
                               position: Tween<Offset>(
@@ -608,7 +614,8 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                                 end: Offset.zero,
                               ).animate(CurvedAnimation(
                                 parent: _enterCtrl,
-                                curve: const Interval(0.4, 0.85, curve: Curves.easeOutCubic),
+                                curve: const Interval(0.4, 0.85,
+                                    curve: Curves.easeOutCubic),
                               )),
                               child: _buildQuickActionGrid(),
                             ),
@@ -739,7 +746,7 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                 label: 'TOTAL VALUATION',
                 value: _compactLkr(summary.totalValue),
                 icon: Icons.account_balance_wallet_rounded,
-                accentColor: const Color(0xFF7C8CFF),
+                accentColor: const Color(0xFF8AE8C7),
                 subLabel: 'Tap to review all inventory',
                 onTap: () => _selectDashboardFilter('All'),
               ),
@@ -864,9 +871,9 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                     ? 'Review & place'
                     : widget.role == 'Staff'
                         ? 'Create a branch request'
-                    : widget.canReceive
-                        ? 'View & receive'
-                        : 'View queue',
+                        : widget.canReceive
+                            ? 'View & receive'
+                            : 'View queue',
                 color: const Color(0xFF10B981),
                 onTap: () => Navigator.push(
                   context,
@@ -1190,9 +1197,8 @@ class _InventoryDashboardState extends State<InventoryDashboard>
     final item = items.first;
     final outOfStockBranches =
         items.where((stock) => stock.quantity <= 0).length;
-    final lowStockBranches = items
-        .where((stock) => stock.quantity > 0 && stock.isLowStock)
-        .length;
+    final lowStockBranches =
+        items.where((stock) => stock.quantity > 0 && stock.isLowStock).length;
     final totalQuantity =
         items.fold<double>(0, (total, stock) => total + stock.quantity);
     final totalReorderLevel =
@@ -1375,8 +1381,8 @@ class _InventoryDashboardState extends State<InventoryDashboard>
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
             padding: EdgeInsets.zero,
-            icon: const Icon(Icons.tune_rounded,
-                color: AppColors.cyan, size: 17),
+            icon:
+                const Icon(Icons.tune_rounded, color: AppColors.cyan, size: 17),
           ),
           IconButton(
             tooltip: 'Item label for ${item.branch}',
@@ -1634,19 +1640,21 @@ class _CyberStatCardState extends State<_CyberStatCard>
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    const Color(0xFF131D30),
-                    Color.lerp(const Color(0xFF0F1829),
-                        widget.accentColor, 0.06)!,
+                    const Color(0xFF1A3540),
+                    Color.lerp(
+                        const Color(0xFF122630), widget.accentColor, 0.09)!,
                   ],
                 ),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: widget.accentColor.withValues(alpha: 0.2 + 0.15 * pulse),
+                  color:
+                      widget.accentColor.withValues(alpha: 0.2 + 0.15 * pulse),
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: widget.accentColor.withValues(alpha: 0.08 + 0.1 * pulse),
+                    color: widget.accentColor
+                        .withValues(alpha: 0.08 + 0.1 * pulse),
                     blurRadius: 16 + 10 * pulse,
                     spreadRadius: pulse,
                     offset: const Offset(0, 4),
@@ -1688,15 +1696,18 @@ class _CyberStatCardState extends State<_CyberStatCard>
                         height: 36,
                         decoration: BoxDecoration(
                           gradient: RadialGradient(colors: [
-                            widget.accentColor.withValues(alpha: 0.22 + 0.1 * pulse),
+                            widget.accentColor
+                                .withValues(alpha: 0.22 + 0.1 * pulse),
                             widget.accentColor.withValues(alpha: 0.06),
                           ]),
                           borderRadius: BorderRadius.circular(11),
                           border: Border.all(
-                            color: widget.accentColor.withValues(alpha: 0.25 + 0.1 * pulse),
+                            color: widget.accentColor
+                                .withValues(alpha: 0.25 + 0.1 * pulse),
                           ),
                         ),
-                        child: Icon(widget.icon, size: 18, color: widget.accentColor),
+                        child: Icon(widget.icon,
+                            size: 18, color: widget.accentColor),
                       ),
                       const Spacer(),
                       if (widget.onTap != null)
@@ -1797,8 +1808,8 @@ class _ActionTileState extends State<_ActionTile> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                const Color(0xFF131D30),
-                Color.lerp(const Color(0xFF0F1829), widget.color, 0.07)!,
+                const Color(0xFF1A3540),
+                Color.lerp(const Color(0xFF122630), widget.color, 0.1)!,
               ],
             ),
             borderRadius: BorderRadius.circular(18),
@@ -2067,15 +2078,17 @@ class _AnimatedHeroBannerState extends State<_AnimatedHeroBanner>
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
               color: Color.lerp(
-                const Color(0xFF3B527E),
-                const Color(0xFF6366F1),
+                const Color(0xFF47776D),
+                const Color(0xFF8AE8C7),
                 pulse,
-              )!.withValues(alpha: 0.6 + 0.3 * pulse),
+              )!
+                  .withValues(alpha: 0.6 + 0.3 * pulse),
               width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF4F46E5).withValues(alpha: 0.15 + 0.12 * pulse),
+                color: const Color(0xFF4F46E5)
+                    .withValues(alpha: 0.15 + 0.12 * pulse),
                 blurRadius: 28 + 12 * pulse,
                 spreadRadius: 2 * pulse,
                 offset: const Offset(0, 8),
@@ -2095,9 +2108,11 @@ class _AnimatedHeroBannerState extends State<_AnimatedHeroBanner>
                   begin: Alignment(-1.0 + 0.4 * pulse, -1.0),
                   end: Alignment(1.0, 1.0 - 0.4 * pulse),
                   colors: [
-                    Color.lerp(const Color(0xFF162344), const Color(0xFF1E1B4B), pulse)!,
-                    Color.lerp(const Color(0xFF142036), const Color(0xFF281E54), pulse)!,
-                    const Color(0xFF111E30),
+                    Color.lerp(const Color(0xFF174B4D), const Color(0xFF244B44),
+                        pulse)!,
+                    Color.lerp(const Color(0xFF17343E), const Color(0xFF203C45),
+                        pulse)!,
+                    const Color(0xFF122A35),
                   ],
                 ),
               ),
@@ -2114,7 +2129,8 @@ class _AnimatedHeroBannerState extends State<_AnimatedHeroBanner>
                         shape: BoxShape.circle,
                         gradient: RadialGradient(
                           colors: [
-                            const Color(0xFF7C3AED).withValues(alpha: 0.22 + 0.12 * pulse),
+                            const Color(0xFF7C3AED)
+                                .withValues(alpha: 0.22 + 0.12 * pulse),
                             const Color(0xFF06B6D4).withValues(alpha: 0.08),
                             Colors.transparent,
                           ],
@@ -2134,7 +2150,8 @@ class _AnimatedHeroBannerState extends State<_AnimatedHeroBanner>
                         shape: BoxShape.circle,
                         gradient: RadialGradient(
                           colors: [
-                            const Color(0xFF00E5FF).withValues(alpha: 0.12 + 0.08 * pulse),
+                            const Color(0xFF00E5FF)
+                                .withValues(alpha: 0.12 + 0.08 * pulse),
                             Colors.transparent,
                           ],
                         ),
@@ -2194,8 +2211,8 @@ class _AnimatedHeroBannerState extends State<_AnimatedHeroBanner>
                                   ),
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
-                                    color: const Color(0xFF6366F1).withValues(
-                                        alpha: 0.4 + 0.3 * pulse),
+                                    color: const Color(0xFF6366F1)
+                                        .withValues(alpha: 0.4 + 0.3 * pulse),
                                     width: 1.4,
                                   ),
                                   boxShadow: [

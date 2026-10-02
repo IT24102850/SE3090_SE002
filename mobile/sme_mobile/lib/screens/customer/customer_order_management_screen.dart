@@ -3,9 +3,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../inventory/authenticated_api_client.dart';
+import '../../inventory/inventory_panel.dart';
+import '../../inventory/inventory_scaffold.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/ui/ui.dart';
+import '../../widgets/ui/workflow_loading_state.dart';
 
 enum _OrderView { active, all, completed }
 
@@ -25,7 +28,7 @@ class CustomerOrderManagementScreen extends StatefulWidget {
 class _CustomerOrderManagementScreenState
     extends State<CustomerOrderManagementScreen> {
   List<Map<String, dynamic>> _orders = [];
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
   String? _updatingOrderId;
   _OrderView _view = _OrderView.active;
@@ -37,6 +40,7 @@ class _CustomerOrderManagementScreenState
   }
 
   Future<void> _loadOrders() async {
+    if (!mounted || _loading) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -84,6 +88,11 @@ class _CustomerOrderManagementScreenState
     }).toList();
   }
 
+  Future<void> _refreshOrders() async {
+    if (_updatingOrderId != null) return;
+    await _loadOrders();
+  }
+
   int _countFor(_OrderView view) {
     return _orders.where((managed) {
       final status = _order(managed)['status']?.toString().toLowerCase();
@@ -97,6 +106,7 @@ class _CustomerOrderManagementScreenState
 
   Future<void> _updateStatus(
       Map<String, dynamic> managed, String nextStatus) async {
+    if (!mounted || _loading || _updatingOrderId != null) return;
     final order = _order(managed);
     final orderNumber = order['number']?.toString() ?? 'this order';
     if (nextStatus == 'Cancelled') {
@@ -142,6 +152,16 @@ class _CustomerOrderManagementScreenState
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw _responseMessage(response.body, 'Could not update this order.');
       }
+      if (!mounted) return;
+      // The write succeeded. Keep its confirmed status even if reloading fails.
+      setState(() {
+        _orders = _orders.map((entry) {
+          final current = _order(entry);
+          if (current['id']?.toString() != orderId) return entry;
+          final updated = {...current, 'status': nextStatus};
+          return entry['order'] is Map ? {...entry, 'order': updated} : updated;
+        }).toList();
+      });
       await _loadOrders();
       if (mounted) {
         AppSnackBar.success(
@@ -163,13 +183,14 @@ class _CustomerOrderManagementScreenState
   Widget build(BuildContext context) {
     final activeCount = _countFor(_OrderView.active);
     final completedCount = _countFor(_OrderView.completed);
-    return AppBackgroundScaffold(
+    return InventoryScaffold(
       appBar: GlassAppBar(
         title: 'Customer orders',
         actions: [
           IconButton(
             tooltip: 'Refresh customer orders',
-            onPressed: _loading ? null : _loadOrders,
+            onPressed:
+                _loading || _updatingOrderId != null ? null : _refreshOrders,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -177,8 +198,9 @@ class _CustomerOrderManagementScreenState
       child: SafeArea(
         child: RefreshIndicator(
           color: AppColors.cyan,
-          onRefresh: _loadOrders,
+          onRefresh: _refreshOrders,
           child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
             children: [
               _OrdersSummary(
@@ -193,10 +215,20 @@ class _CustomerOrderManagementScreenState
                 onChanged: (view) => setState(() => _view = view),
               ),
               const SizedBox(height: 14),
+              if (_loading && _orders.isNotEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: WorkflowLoadingState(
+                      message: 'Refreshing orders', compact: true),
+                ),
               if (_loading && _orders.isEmpty)
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 80),
-                  child: AppLoader(message: 'Loading customer orders…'),
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: WorkflowLoadingState(
+                    message: 'Gathering your orders',
+                    detail:
+                        'Preparing customer details and the latest order updates',
+                  ),
                 )
               else if (_error != null && _orders.isEmpty)
                 ErrorState(message: _error!, onRetry: _loadOrders)
@@ -205,8 +237,10 @@ class _CustomerOrderManagementScreenState
                     message: _error!,
                     onDismiss: () {
                       setState(() => _error = null);
-                    })
-              else if (_visibleOrders.isEmpty)
+                    }),
+              if (!_loading &&
+                  !(_error != null && _orders.isEmpty) &&
+                  _visibleOrders.isEmpty)
                 EmptyState(
                   icon: _view == _OrderView.completed
                       ? Icons.task_alt_rounded
@@ -220,7 +254,7 @@ class _CustomerOrderManagementScreenState
                       ? 'New orders will appear here when customers check out.'
                       : 'Orders placed by customers will appear here.',
                 )
-              else
+              else if (_orders.isNotEmpty)
                 ..._visibleOrders.map(_buildOrderCard),
             ],
           ),
@@ -243,27 +277,26 @@ class _CustomerOrderManagementScreenState
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: GlassCard(
+      child: InventoryPanel(
+        borderColor: AppColors.cyan.withValues(alpha: .2),
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(order['number']?.toString() ?? 'Customer order',
-                          style: AppTextStyles.subtitle),
-                      if (createdAt != null)
-                        Text(_formatDate(createdAt),
-                            style: AppTextStyles.caption),
-                    ],
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(order['number']?.toString() ?? 'Customer order',
+                        style: AppTextStyles.subtitle),
+                    if (createdAt != null)
+                      Text(_formatDate(createdAt),
+                          style: AppTextStyles.caption),
+                  ],
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(height: 8),
                 _OrderStatusBadge(status: status),
               ],
             ),
@@ -312,14 +345,14 @@ class _CustomerOrderManagementScreenState
               }),
             ],
             const Divider(color: AppColors.hairline, height: 20),
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    'Payment ${order['paymentStatus'] ?? 'DueOnFulfillment'}',
-                    style: AppTextStyles.caption,
-                  ),
+                Text(
+                  'Payment: ${_paymentLabel(order['paymentStatus'])}',
+                  style: AppTextStyles.caption,
                 ),
+                const SizedBox(height: 6),
                 Text(
                   _money(order['total']),
                   style: AppTextStyles.subtitle.copyWith(color: AppColors.cyan),
@@ -334,8 +367,9 @@ class _CustomerOrderManagementScreenState
                 children: actions.map((nextStatus) {
                   final cancel = nextStatus == 'Cancelled';
                   return OutlinedButton.icon(
-                    onPressed:
-                        busy ? null : () => _updateStatus(managed, nextStatus),
+                    onPressed: _updatingOrderId != null || _loading
+                        ? null
+                        : () => _updateStatus(managed, nextStatus),
                     icon: busy
                         ? const SizedBox.square(
                             dimension: 15,
@@ -349,6 +383,13 @@ class _CustomerOrderManagementScreenState
                           ),
                     label: Text(busy ? 'Saving…' : _statusLabel(nextStatus)),
                     style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 14),
+                      backgroundColor:
+                          (cancel ? AppColors.error : AppColors.cyan)
+                              .withValues(alpha: .08),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
                       foregroundColor:
                           cancel ? AppColors.error : AppColors.cyan,
                       side: BorderSide(
@@ -419,6 +460,15 @@ String _money(Object? value) {
   return 'LKR ${amount.toStringAsFixed(2)}';
 }
 
+String _paymentLabel(Object? value) => switch (value?.toString()) {
+      'DueOnFulfillment' => 'Due on fulfillment',
+      'Paid' => 'Paid',
+      'Pending' => 'Pending',
+      'Refunded' => 'Refunded',
+      null => 'Due on fulfillment',
+      final String label => label,
+    };
+
 String _formatDate(DateTime date) {
   final local = date.toLocal();
   return '${local.day}/${local.month}/${local.year} · '
@@ -452,21 +502,36 @@ class _OrdersSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
+    return InventoryPanel(
+      padding: const EdgeInsets.all(22),
+      fill: const Color(0xFF1B4C49),
+      borderColor: const Color(0xFF74DCC0).withValues(alpha: .4),
       child: Row(
         children: [
-          const Icon(Icons.receipt_long_rounded,
-              color: AppColors.cyan, size: 30),
+          Container(
+            padding: const EdgeInsets.all(13),
+            decoration: BoxDecoration(
+              color: const Color(0xFF9EF2D5).withValues(alpha: .14),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Icon(Icons.receipt_long_rounded,
+                color: Color(0xFF9EF2D5), size: 28),
+          ),
           const SizedBox(width: 13),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Order desk', style: AppTextStyles.subtitle),
+                Text('Order desk',
+                    style: AppTextStyles.title
+                        .copyWith(fontSize: 24, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 3),
                 Text('$total total · $active open · $completed completed',
                     style: AppTextStyles.caption),
+                const SizedBox(height: 8),
+                Text('From checkout to a happy customer.',
+                    style: AppTextStyles.caption
+                        .copyWith(color: const Color(0xFFAFE1D3))),
               ],
             ),
           ),
@@ -495,30 +560,28 @@ class _OrderViewFilters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final (view, label) in _options) ...[
-            if (view != _options.first.$1) const SizedBox(width: 8),
-            ChoiceChip(
-              label: Text('$label · ${countFor(view)}'),
-              selected: selected == view,
-              onSelected: (_) => onChanged(view),
-              selectedColor: AppColors.cyan.withValues(alpha: 0.15),
-              backgroundColor: AppColors.glassFill,
-              side: BorderSide(
-                color: selected == view
-                    ? AppColors.cyan.withValues(alpha: 0.5)
-                    : AppColors.glassBorder,
-              ),
-              labelStyle: AppTextStyles.caption.copyWith(
-                color: selected == view ? AppColors.cyan : AppColors.textBody,
-              ),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final (view, label) in _options) ...[
+          ChoiceChip(
+            label: Text('$label · ${countFor(view)}'),
+            selected: selected == view,
+            onSelected: (_) => onChanged(view),
+            selectedColor: AppColors.cyan.withValues(alpha: 0.15),
+            backgroundColor: AppColors.glassFill,
+            side: BorderSide(
+              color: selected == view
+                  ? AppColors.cyan.withValues(alpha: 0.5)
+                  : AppColors.glassBorder,
             ),
-          ],
+            labelStyle: AppTextStyles.caption.copyWith(
+              color: selected == view ? AppColors.cyan : AppColors.textBody,
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
 }
@@ -556,7 +619,6 @@ class _OrderStatusBadge extends StatelessWidget {
       _ => AppColors.cyan,
     };
     return Container(
-      constraints: const BoxConstraints(maxWidth: 145),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
@@ -565,8 +627,6 @@ class _OrderStatusBadge extends StatelessWidget {
       ),
       child: Text(
         _statusLabel(status),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
         style: AppTextStyles.caption.copyWith(
           color: color,
           fontWeight: FontWeight.w700,

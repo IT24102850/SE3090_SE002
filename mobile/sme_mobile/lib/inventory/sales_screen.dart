@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'inventory_scaffold.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
@@ -883,7 +884,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AppBackgroundScaffold(
+    return InventoryScaffold(
       showParticles: false,
       appBar: GlassAppBar(
         title: 'Sales',
@@ -1601,7 +1602,6 @@ class _SalesScreenState extends State<SalesScreen> {
     final minute = local.minute.toString().padLeft(2, '0');
     return '$day/$month/${local.year} $hour:$minute';
   }
-
 }
 
 class _SalesBranch {

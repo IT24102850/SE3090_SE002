@@ -9,6 +9,75 @@ import 'package:sme_mobile/services/push_notification_service.dart';
 import 'package:sme_mobile/screens/customer/customer_order_management_screen.dart';
 
 void main() {
+  testWidgets('successful status survives a failed reload', (tester) async {
+    final adapter = _ManagedOrdersAdapter()..failAfterUpdate = true;
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api'))
+      ..httpClientAdapter = adapter;
+    addTearDown(dio.close);
+    await tester.pumpWidget(MaterialApp(
+      navigatorKey: PushNotificationService.navigatorKey,
+      scaffoldMessengerKey: PushNotificationService.messengerKey,
+      home: CustomerOrderManagementScreen(
+          client: AuthenticatedApiClient(dio: dio)),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirmed'));
+    await tester.pumpAndSettle();
+    expect(adapter.updatedStatus, 'Confirmed');
+    expect(find.text('Preparing'), findsOneWidget);
+    expect(find.text('Service unavailable'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(seconds: 6));
+  });
+
+  testWidgets('orders remain visible when refreshing fails', (tester) async {
+    final adapter = _ManagedOrdersAdapter();
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api'))
+      ..httpClientAdapter = adapter;
+    addTearDown(dio.close);
+    await tester.pumpWidget(MaterialApp(
+      home: CustomerOrderManagementScreen(
+          client: AuthenticatedApiClient(dio: dio)),
+    ));
+    await tester.pumpAndSettle();
+    adapter.failRefresh = true;
+    await tester.tap(find.byTooltip('Refresh customer orders'));
+    await tester.pumpAndSettle();
+    expect(find.text('ORD-1001'), findsOneWidget);
+    expect(find.text('Service unavailable'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('small screens support large text and long order labels',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final adapter = _ManagedOrdersAdapter()
+      ..updatedStatus = 'ReadyForPickup'
+      ..longLabels = true;
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api'))
+      ..httpClientAdapter = adapter;
+    addTearDown(dio.close);
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: const TextScaler.linear(1.8)),
+        child: child!,
+      ),
+      home: CustomerOrderManagementScreen(
+          client: AuthenticatedApiClient(dio: dio)),
+    ));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+        find.text('Payment: Due on fulfillment'), 180,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Ready for pickup'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('admin can progress an order and refreshes status counts',
       (tester) async {
     final adapter = _ManagedOrdersAdapter();
@@ -82,6 +151,9 @@ void main() {
 }
 
 class _ManagedOrdersAdapter implements HttpClientAdapter {
+  bool failRefresh = false;
+  bool failAfterUpdate = false;
+  bool longLabels = false;
   final List<String> requests = [];
   String updatedStatus = 'Pending';
   String? lastUpdatedStatus;
@@ -97,7 +169,9 @@ class _ManagedOrdersAdapter implements HttpClientAdapter {
     Object response;
     var statusCode = 200;
     if (path == '/customer-orders/manage' && options.method == 'GET') {
-      response = [_managedOrder()];
+      statusCode = failRefresh ? 503 : 200;
+      response =
+          failRefresh ? {'message': 'Service unavailable'} : [_managedOrder()];
     } else if (path == '/customer-orders/manage/order-1/status' &&
         options.method == 'PUT') {
       final requestBody = options.data is String
@@ -105,6 +179,7 @@ class _ManagedOrdersAdapter implements HttpClientAdapter {
           : options.data as Map;
       lastUpdatedStatus = requestBody['status']?.toString();
       updatedStatus = lastUpdatedStatus ?? updatedStatus;
+      if (failAfterUpdate) failRefresh = true;
       response = {
         'orderId': 'order-1',
         'number': 'ORD-1001',
@@ -126,7 +201,9 @@ class _ManagedOrdersAdapter implements HttpClientAdapter {
   }
 
   Map<String, dynamic> _managedOrder() => {
-        'customerName': 'Alice Customer',
+        'customerName': longLabels
+            ? 'Alice Customer with a very long display name'
+            : 'Alice Customer',
         'branchName': 'Central branch',
         'order': {
           'id': 'order-1',

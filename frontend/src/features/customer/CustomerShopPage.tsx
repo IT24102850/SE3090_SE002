@@ -142,6 +142,11 @@ export default function CustomerShopPage() {
   return (
     <div className="cust-page cust-shop-page">
       <section className="cust-shop-hero">
+        <div className="cust-shop-hero-aurora" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
         <div className="cust-shop-orbit" aria-hidden="true">✦</div>
         <div className="cust-shop-hero-showcase" aria-hidden="true">
           <span className="cust-shop-hero-item cust-shop-hero-item-primary">🍃</span>
@@ -154,6 +159,11 @@ export default function CustomerShopPage() {
           <span className="cust-shop-kicker">A little something for you</span>
           <h1>Shop {tenant?.name ?? 'the store'}</h1>
           <p>Find something you love, then choose pickup or delivery. Pay when your order arrives.</p>
+          <div className="cust-shop-hero-benefits" aria-label="Shopping benefits">
+            <span><i aria-hidden="true">✓</i> Live availability</span>
+            <span><i aria-hidden="true">✓</i> Pickup or delivery</span>
+            <span><i aria-hidden="true">✓</i> Pay on arrival</span>
+          </div>
         </div>
         <div className="cust-shop-hero-icon" aria-hidden="true">🛍️</div>
       </section>
@@ -222,7 +232,7 @@ export default function CustomerShopPage() {
               ) : (
                 <div className="cust-shop-products">
                   {visibleProducts.map((product, index) => (
-                    <article key={product.id} className="cust-shop-product" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
+                    <article key={product.id} className={`cust-shop-product ${cart[product.id] ? 'is-in-cart' : ''}`} style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
                       <div className="cust-shop-product-art">
                         <span aria-hidden="true">✦</span>
                         {product.imageUrl && <img src={product.imageUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} />}

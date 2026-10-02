@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'inventory_scaffold.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_colors.dart';
@@ -605,7 +606,7 @@ class _PurchaseOrderApprovalScreenState
 
   @override
   Widget build(BuildContext context) {
-    return AppBackgroundScaffold(
+    return InventoryScaffold(
       showParticles: false,
       floatingActionButton: widget.canCreate
           ? Container(
@@ -1129,7 +1130,8 @@ class _PurchaseOrderApprovalScreenState
                   : highlight
                       ? color.withValues(alpha: 0.14)
                       : const Color(0xFF121A2C),
-              Color.lerp(const Color(0xFF0F1524), color, isActive ? 0.15 : 0.04)!,
+              Color.lerp(
+                  const Color(0xFF0F1524), color, isActive ? 0.15 : 0.04)!,
             ],
           ),
           borderRadius: BorderRadius.circular(13),
@@ -1184,7 +1186,7 @@ class _PurchaseOrderApprovalScreenState
             const SizedBox(height: 5),
             Text(
               value,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w900,
                 color: Colors.white,
@@ -2042,7 +2044,8 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
           .toList();
       final items = widget.requiresAssignedBranch
           ? availableItems
-              .where((item) => '${item['branchId'] ?? ''}' == widget.assignedBranchId)
+              .where((item) =>
+                  '${item['branchId'] ?? ''}' == widget.assignedBranchId)
               .toList()
           : availableItems;
       if (mounted) {

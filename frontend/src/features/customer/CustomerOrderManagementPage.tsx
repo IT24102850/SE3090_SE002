@@ -4,6 +4,8 @@ import {
   useUpdateCustomerOrderStatusMutation,
   type CustomerOrder,
 } from '../../api/bookingApi';
+import { useConfirmation } from '../../shared/components/ConfirmationProvider';
+import { useToast } from '../../shared/components/Toast';
 import './customer.css';
 
 function nextStatuses(order: CustomerOrder) {
@@ -33,6 +35,8 @@ function errorMessage(error: unknown) {
 }
 
 export default function CustomerOrderManagementPage() {
+  const confirm = useConfirmation();
+  const { show } = useToast();
   const { data: orders = [], isLoading, isFetching, isError, refetch } = useGetManagedCustomerOrdersQuery(undefined, { pollingInterval: 30000 });
   const [updateStatus, { isLoading: isUpdating }] = useUpdateCustomerOrderStatusMutation();
   const [error, setError] = useState('');
@@ -41,12 +45,38 @@ export default function CustomerOrderManagementPage() {
   const readyCount = orders.filter(({ order }) => ['ReadyForPickup', 'OutForDelivery'].includes(order.status)).length;
   const completedCount = orders.filter(({ order }) => order.status === 'Completed').length;
 
+  async function refreshOrders() {
+    setError('');
+    try {
+      await refetch().unwrap();
+      show('Customer orders refreshed successfully.', 'success');
+    } catch {
+      setError('We could not refresh customer orders. Please try again.');
+    }
+  }
+
   async function changeStatus(order: CustomerOrder, status: string) {
-    if (status === 'Cancelled' && !window.confirm(`Cancel ${order.number} and release its reserved stock?`)) return;
+    const isCancellation = status === 'Cancelled';
+    const nextStatus = statusLabel(status);
+    if (!await confirm({
+      title: isCancellation ? `Cancel order ${order.number}?` : `Update order ${order.number}?`,
+      message: isCancellation
+        ? 'This will cancel the order and release its reserved stock.'
+        : `This will change the order status from ${statusLabel(order.status)} to ${nextStatus}.`,
+      confirmLabel: isCancellation ? 'Cancel order' : `Mark as ${nextStatus}`,
+      tone: isCancellation ? 'danger' : 'primary',
+    })) return;
+
     setError('');
     setUpdatingId(order.id);
     try {
       await updateStatus({ orderId: order.id, status }).unwrap();
+      show(
+        isCancellation
+          ? `Order ${order.number} cancelled successfully.`
+          : `Order ${order.number} updated to ${nextStatus} successfully.`,
+        'success',
+      );
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
@@ -69,7 +99,7 @@ export default function CustomerOrderManagementPage() {
         </div>
         <div className="cust-order-ops-hero-actions">
           <span className="cust-order-ops-live"><i aria-hidden="true" /> Live updates</span>
-          <button className="cust-order-ops-refresh" type="button" onClick={() => void refetch()} disabled={isFetching} aria-label="Refresh customer orders">
+          <button className="cust-order-ops-refresh" type="button" onClick={() => void refreshOrders()} disabled={isFetching} aria-label="Refresh customer orders">
             <span aria-hidden="true" className={isFetching ? 'is-refreshing' : ''}>↻</span>
             {isFetching ? 'Updating…' : 'Refresh'}
           </button>

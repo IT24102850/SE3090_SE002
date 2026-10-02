@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../inventory/app_notifications.dart';
 import '../../models/booking_model.dart';
 import '../../providers/api_service_provider.dart';
 import '../../providers/booking_providers.dart';
@@ -31,33 +32,44 @@ class MyScheduleScreen extends ConsumerWidget {
         ),
         child: SafeArea(
           child: scheduleAsync.when(
-          loading: () => const AppLoader(),
-          error: (err, stack) => ErrorState(
-            message: 'Could not load your schedule.',
-            onRetry: () => ref.invalidate(myScheduleProvider),
-          ),
-          data: (bookings) {
-            final now = DateTime.now();
-            final today = bookings.where((b) => _isSameDay(b.startLocal, now)).toList()
-              ..sort((a, b) => a.startTime.compareTo(b.startTime));
-            final upcoming = bookings.where((b) => b.startLocal.isAfter(now) && !_isSameDay(b.startLocal, now)).toList()
-              ..sort((a, b) => a.startTime.compareTo(b.startTime));
+            loading: () => const AppLoader(),
+            error: (err, stack) => ErrorState(
+              message: 'Could not load your schedule.',
+              onRetry: () => ref.invalidate(myScheduleProvider),
+            ),
+            data: (bookings) {
+              final now = DateTime.now();
+              final today = bookings
+                  .where((b) => _isSameDay(b.startLocal, now))
+                  .toList()
+                ..sort((a, b) => a.startTime.compareTo(b.startTime));
+              final upcoming = bookings
+                  .where((b) =>
+                      b.startLocal.isAfter(now) &&
+                      !_isSameDay(b.startLocal, now))
+                  .toList()
+                ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
-            return TabBarView(
-              children: [
-                _ScheduleList(bookings: today, emptyMessage: 'Nothing scheduled today.'),
-                _ScheduleList(bookings: upcoming, emptyMessage: 'Nothing else coming up.'),
-              ],
-            );
-          },
-        ),
+              return TabBarView(
+                children: [
+                  _ScheduleList(
+                      bookings: today,
+                      emptyMessage: 'Nothing scheduled today.'),
+                  _ScheduleList(
+                      bookings: upcoming,
+                      emptyMessage: 'Nothing else coming up.'),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 }
 
-bool _isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
 
 class _ScheduleList extends ConsumerWidget {
   final List<Booking> bookings;
@@ -68,7 +80,8 @@ class _ScheduleList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (bookings.isEmpty) {
-      return EmptyState(icon: Icons.event_available_outlined, message: emptyMessage);
+      return EmptyState(
+          icon: Icons.event_available_outlined, message: emptyMessage);
     }
 
     return RefreshIndicator(
@@ -89,9 +102,26 @@ class _ScheduleCard extends ConsumerWidget {
   final Booking booking;
   const _ScheduleCard({required this.booking});
 
-  Future<void> _setStatus(BuildContext context, WidgetRef ref, String status) async {
+  Future<void> _setStatus(
+      BuildContext context, WidgetRef ref, String status) async {
+    if (status == 'NoShow') {
+      final confirmed = await showAppConfirmation(
+        context: context,
+        title: 'Mark appointment as no-show?',
+        message:
+            'This records that the customer did not attend the appointment.',
+        confirmLabel: 'Mark no-show',
+        cancelLabel: 'Keep appointment',
+        icon: Icons.person_off_outlined,
+        accent: AppColors.danger,
+        isDestructive: true,
+      );
+      if (!confirmed || !context.mounted) return;
+    }
+
     try {
-      await updateBookingStatus(ref.read(apiServiceProvider), booking.id, status);
+      await updateBookingStatus(
+          ref.read(apiServiceProvider), booking.id, status);
       ref.invalidate(myScheduleProvider);
       if (context.mounted) {
         AppSnackBar.success(context, 'Marked as $status.');
@@ -117,11 +147,13 @@ class _ScheduleCard extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text('Cancel', style: AppTextStyles.body.copyWith(color: AppColors.textMuted)),
+            child: Text('Cancel',
+                style: AppTextStyles.body.copyWith(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: Text('Save', style: AppTextStyles.subtitle.copyWith(color: AppColors.cyan)),
+            child: Text('Save',
+                style: AppTextStyles.subtitle.copyWith(color: AppColors.cyan)),
           ),
         ],
       ),
@@ -129,7 +161,8 @@ class _ScheduleCard extends ConsumerWidget {
     if (newNotes == null || !context.mounted) return;
 
     try {
-      await updateBookingNotes(ref.read(apiServiceProvider), booking.id, newNotes);
+      await updateBookingNotes(
+          ref.read(apiServiceProvider), booking.id, newNotes);
       ref.invalidate(myScheduleProvider);
       if (context.mounted) {
         AppSnackBar.success(context, 'Notes saved.');
@@ -153,22 +186,31 @@ class _ScheduleCard extends ConsumerWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(width: 6, height: 48, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
+            Container(
+                width: 6,
+                height: 48,
+                decoration: BoxDecoration(
+                    color: color, borderRadius: BorderRadius.circular(3))),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    booking.title?.isNotEmpty == true ? booking.title! : '${booking.resourceName} · ${booking.bookingTypeName}',
+                    booking.title?.isNotEmpty == true
+                        ? booking.title!
+                        : '${booking.resourceName} · ${booking.bookingTypeName}',
                     style: AppTextStyles.subtitle.copyWith(fontSize: 14.5),
                   ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.access_time_rounded, size: 13, color: AppColors.iconDisabled),
+                      const Icon(Icons.access_time_rounded,
+                          size: 13, color: AppColors.iconDisabled),
                       const SizedBox(width: 4),
-                      Text('${formatTimeOfDay(booking.startLocal)} – ${formatTimeOfDay(booking.endLocal)}', style: AppTextStyles.caption),
+                      Text(
+                          '${formatTimeOfDay(booking.startLocal)} – ${formatTimeOfDay(booking.endLocal)}',
+                          style: AppTextStyles.caption),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -179,7 +221,8 @@ class _ScheduleCard extends ConsumerWidget {
                       booking.notes!,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.caption.copyWith(fontStyle: FontStyle.italic),
+                      style: AppTextStyles.caption
+                          .copyWith(fontStyle: FontStyle.italic),
                     ),
                   ],
                 ],
@@ -187,13 +230,19 @@ class _ScheduleCard extends ConsumerWidget {
             ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
-              onSelected: (value) => value == 'notes' ? _editNotes(context, ref) : _setStatus(context, ref, value),
+              onSelected: (value) => value == 'notes'
+                  ? _editNotes(context, ref)
+                  : _setStatus(context, ref, value),
               itemBuilder: (context) => [
-                const PopupMenuItem(value: 'InProgress', child: Text('Mark In progress')),
-                const PopupMenuItem(value: 'Completed', child: Text('Mark Completed')),
-                const PopupMenuItem(value: 'NoShow', child: Text('Mark No-show')),
+                const PopupMenuItem(
+                    value: 'InProgress', child: Text('Mark In progress')),
+                const PopupMenuItem(
+                    value: 'Completed', child: Text('Mark Completed')),
+                const PopupMenuItem(
+                    value: 'NoShow', child: Text('Mark No-show')),
                 const PopupMenuDivider(),
-                const PopupMenuItem(value: 'notes', child: Text('Add/edit notes')),
+                const PopupMenuItem(
+                    value: 'notes', child: Text('Add/edit notes')),
               ],
             ),
           ],

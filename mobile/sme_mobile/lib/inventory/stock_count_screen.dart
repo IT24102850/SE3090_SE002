@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'inventory_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -81,6 +82,7 @@ class _StockCountScreenState extends State<StockCountScreen>
 
   late final AnimationController _scanLineController;
   late final AnimationController _scanSuccessController;
+  late final AnimationController _pageIntroController;
 
   Future<void> _captureLocation() async {
     if (_capturingLocation) return;
@@ -156,6 +158,10 @@ class _StockCountScreenState extends State<StockCountScreen>
       lowerBound: 0.94,
       upperBound: 1,
     );
+    _pageIntroController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..forward();
     try {
       _connectionChanges =
           _connectivity.onConnectivityChanged.listen((results) {
@@ -192,6 +198,7 @@ class _StockCountScreenState extends State<StockCountScreen>
     _scanner.dispose();
     _scanLineController.dispose();
     _scanSuccessController.dispose();
+    _pageIntroController.dispose();
     _sku.dispose();
     _quantity.dispose();
     _reasonNotes.dispose();
@@ -228,7 +235,7 @@ class _StockCountScreenState extends State<StockCountScreen>
             .map(_CatalogItem.fromJson));
         page++;
       }
-      await _store.save(catalog, _pending);
+      if (!await _store.save(catalog, _pending)) return false;
       if (mounted) setState(() => _catalog = catalog);
       await _refreshBranchLocations();
       return true;
@@ -536,11 +543,17 @@ class _StockCountScreenState extends State<StockCountScreen>
           _pending.where((count) => !queuedIds.contains(count.id)).toList();
       final pendingAfterSync = [...newCounts, ...remaining];
       await _refreshCatalog();
-      await _store.save(_catalog, pendingAfterSync);
+      final persisted = await _store.save(_catalog, pendingAfterSync);
       if (mounted) setState(() => _pending = pendingAfterSync);
+      if (!persisted && mounted) {
+        showAppNotification(
+          'Counts synced, but the offline queue could not be updated on this device. Keep this screen open and try again before closing the app.',
+          tone: AppNotificationTone.error,
+        );
+      }
       await _loadApprovalQueue();
 
-      if (!silent && mounted) {
+      if (!silent && mounted && persisted) {
         final recountCount =
             pendingAfterSync.where((count) => count.requiresReview).length;
         final syncedSummary = [
@@ -602,11 +615,22 @@ class _StockCountScreenState extends State<StockCountScreen>
     }).toList();
   }
 
+  void _clearItemDraft() {
+    _quantity.clear();
+    _reason = null;
+    _reasonNotes.clear();
+    _selectedPhotos = [];
+    _latitude = null;
+    _longitude = null;
+    _locationBranchId = null;
+  }
+
   void _onDetect(BarcodeCapture capture) {
     final code = capture.barcodes.firstOrNull?.rawValue?.trim();
     if (code == null || code.isEmpty || code == _scannedCode) return;
     HapticFeedback.mediumImpact();
     setState(() {
+      _clearItemDraft();
       _scannedCode = code;
       _scanSucceeded = true;
       _sku.text = code;
@@ -649,7 +673,10 @@ class _StockCountScreenState extends State<StockCountScreen>
     if (_savingCount) return;
     final code = _sku.text.trim();
     final quantity = double.tryParse(_quantity.text.trim());
-    if (code.isEmpty || quantity == null || quantity < 0) {
+    if (code.isEmpty ||
+        quantity == null ||
+        !quantity.isFinite ||
+        quantity < 0) {
       showAppNotification(
           'Scan or enter SKU and specify a quantity of zero or more.',
           tone: AppNotificationTone.warning);
@@ -767,7 +794,11 @@ class _StockCountScreenState extends State<StockCountScreen>
         }),
         entry,
       ];
-      await _store.save(_catalog, pending);
+      if (!await _store.save(_catalog, pending)) {
+        throw StateError(
+          'The count could not be saved on this device. Free some storage and try again.',
+        );
+      }
       if (!mounted) return;
       HapticFeedback.mediumImpact();
       setState(() {
@@ -964,7 +995,7 @@ class _StockCountScreenState extends State<StockCountScreen>
 
   @override
   Widget build(BuildContext context) {
-    return AppBackgroundScaffold(
+    return InventoryScaffold(
       showParticles: false,
       appBar: GlassAppBar(
         title: 'Stock Audit',
@@ -1042,137 +1073,329 @@ class _StockCountScreenState extends State<StockCountScreen>
                       );
                     }
                   },
-                  child: ListView(
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                    children: [
-                      // Offline / Online Status Header
-                      _buildStatusBanner(),
-                      const SizedBox(height: 18),
-
-                      // Metrics Strip
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _AuditStatCard(
-                              label: 'CACHED SKUS',
-                              value: '${_catalog.length}',
-                              icon: Icons.dataset_rounded,
-                              accentColor: AppColors.cyan,
-                              subLabel: 'Available offline',
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _AuditStatCard(
-                              label: 'PENDING QUEUE',
-                              value: '${_pending.length}',
-                              icon: Icons.cloud_upload_rounded,
-                              accentColor: _pending.isNotEmpty
-                                  ? const Color(0xFFF59E0B)
-                                  : const Color(0xFF10B981),
-                              subLabel: _pending.isNotEmpty
-                                  ? 'Pending server sync'
-                                  : 'Fully synchronized',
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Scanner Viewport
-                      _buildScannerBox(),
-                      const SizedBox(height: 18),
-
-                      // Quick Catalog Chips
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 320),
-                        curve: Curves.easeOutCubic,
-                        child: _catalog.isEmpty
-                            ? const SizedBox.shrink()
-                            : Column(
-                                children: [
-                                  SectionHeader(
-                                    'CACHED ITEMS',
-                                    trailing: Text('Tap to select',
-                                        style: AppTextStyles.caption
-                                            .copyWith(color: AppColors.cyan)),
-                                  ),
-                                  _buildCatalogChipCarousel(),
-                                  const SizedBox(height: 18),
-                                ],
-                              ),
-                      ),
-
-                      // Physical Count Form
-                      _buildCountInputCard(),
-                      const SizedBox(height: 22),
-
-                      if (_approvalLoading || _approvalQueue.isNotEmpty) ...[
-                        SectionHeader(
-                          'LARGE DISCREPANCIES',
-                          trailing: Text(
-                              '${_approvalQueue.length} awaiting review',
-                              style: AppTextStyles.caption
-                                  .copyWith(color: AppColors.warning)),
-                        ),
-                        if (_approvalLoading)
-                          const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                  color: AppColors.cyan),
-                            ),
-                          )
-                        else
-                          ..._approvalQueue.map(_buildApprovalCard),
+                    child: Column(
+                      children: [
+                        _entrance(0, _buildAuditHero()),
                         const SizedBox(height: 14),
-                      ],
 
-                      // Pending Queue List
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 350),
-                        curve: Curves.easeOutCubic,
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 260),
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeInCubic,
-                          transitionBuilder: (child, animation) =>
-                              FadeTransition(
-                            opacity: animation,
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0, .04),
-                                end: Offset.zero,
-                              ).animate(animation),
-                              child: child,
-                            ),
-                          ),
-                          child: _pending.isEmpty
-                              ? const SizedBox.shrink(
-                                  key: ValueKey('stock-count-queue-empty'),
-                                )
-                              : Column(
-                                  key: ValueKey(_pending
-                                      .map((count) => count.id)
-                                      .join('|')),
-                                  children: [
-                                    SectionHeader(
-                                      'SAVED AUDIT QUEUE',
-                                      trailing: Text(
-                                          '${_pending.length} unsynced',
-                                          style: AppTextStyles.caption.copyWith(
-                                              color: const Color(0xFFF59E0B))),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    ..._pending.map(_buildPendingCard),
-                                  ],
+                        // Offline / Online Status Header
+                        _entrance(1, _buildStatusBanner()),
+                        const SizedBox(height: 18),
+
+                        // Metrics Strip
+                        _entrance(
+                            2,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _AuditStatCard(
+                                    label: 'CACHED SKUS',
+                                    value: '${_catalog.length}',
+                                    icon: Icons.dataset_rounded,
+                                    accentColor: AppColors.cyan,
+                                    subLabel: 'Available offline',
+                                  ),
                                 ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _AuditStatCard(
+                                    label: 'PENDING QUEUE',
+                                    value: '${_pending.length}',
+                                    icon: Icons.cloud_upload_rounded,
+                                    accentColor: _pending.isNotEmpty
+                                        ? const Color(0xFFF59E0B)
+                                        : const Color(0xFF10B981),
+                                    subLabel: _pending.isNotEmpty
+                                        ? 'Pending server sync'
+                                        : 'Fully synchronized',
+                                  ),
+                                ),
+                              ],
+                            )),
+                        const SizedBox(height: 20),
+
+                        if (_approvalLoading || _approvalQueue.isNotEmpty) ...[
+                          SectionHeader(
+                            'LARGE DISCREPANCIES',
+                            trailing: Text(
+                                '${_approvalQueue.length} awaiting review',
+                                style: AppTextStyles.caption
+                                    .copyWith(color: AppColors.warning)),
+                          ),
+                          if (_approvalLoading)
+                            const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                    color: AppColors.cyan),
+                              ),
+                            )
+                          else
+                            ..._approvalQueue.map(_buildApprovalCard),
+                          const SizedBox(height: 18),
+                        ],
+
+                        // Scanner Viewport
+                        _entrance(3, _buildScannerBox()),
+                        const SizedBox(height: 18),
+
+                        // Quick Catalog Chips
+                        _entrance(
+                            4,
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 320),
+                              curve: Curves.easeOutCubic,
+                              child: _catalog.isEmpty
+                                  ? const SizedBox.shrink()
+                                  : Column(
+                                      children: [
+                                        SectionHeader(
+                                          'CACHED ITEMS',
+                                          trailing: Text('Tap to select',
+                                              style: AppTextStyles.caption
+                                                  .copyWith(
+                                                      color: AppColors.cyan)),
+                                        ),
+                                        _buildCatalogChipCarousel(),
+                                        const SizedBox(height: 18),
+                                      ],
+                                    ),
+                            )),
+
+                        // Physical Count Form
+                        _entrance(5, _buildCountInputCard()),
+                        const SizedBox(height: 22),
+
+                        // Pending Queue List
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 350),
+                          curve: Curves.easeOutCubic,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 260),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) =>
+                                FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, .04),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            ),
+                            child: _pending.isEmpty
+                                ? const SizedBox.shrink(
+                                    key: ValueKey('stock-count-queue-empty'),
+                                  )
+                                : Column(
+                                    key: ValueKey(_pending
+                                        .map((count) => count.id)
+                                        .join('|')),
+                                    children: [
+                                      SectionHeader(
+                                        'SAVED AUDIT QUEUE',
+                                        trailing: Text(
+                                            '${_pending.length} unsynced',
+                                            style: AppTextStyles.caption
+                                                .copyWith(
+                                                    color: const Color(
+                                                        0xFFF59E0B))),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ..._pending.map(_buildPendingCard),
+                                    ],
+                                  ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
         ),
+      ),
+    );
+  }
+
+  Widget _entrance(int index, Widget child) {
+    final start = (index * .08).clamp(0.0, .55);
+    final animation = CurvedAnimation(
+      parent: _pageIntroController,
+      curve: Interval(start, 1, curve: Curves.easeOutCubic),
+    );
+    return FadeTransition(
+      opacity: animation,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: Offset(0, .08 + (index * .008)),
+          end: Offset.zero,
+        ).animate(animation),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildAuditHero() {
+    final completedSteps = <bool>[
+      _selectedCatalogItem != null,
+      double.tryParse(_quantity.text.trim()) != null,
+      _pending.isNotEmpty || _selectedPhotos.isNotEmpty,
+    ].where((complete) => complete).length;
+    final progress = completedSteps / 3;
+
+    return AnimatedBuilder(
+      animation: _scanLineController,
+      builder: (context, child) {
+        final glow = .12 + (_scanLineController.value * .08);
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF102B43), Color(0xFF111B31)],
+            ),
+            border: Border.all(
+              color: AppColors.cyan.withValues(alpha: .32),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.cyan.withValues(alpha: glow),
+                blurRadius: 26,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppColors.cyan, Color(0xFF4F7CFF)],
+                  ),
+                  borderRadius: BorderRadius.circular(17),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.cyan.withValues(alpha: .3),
+                      blurRadius: 18,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.inventory_2_rounded,
+                  color: Colors.white,
+                  size: 27,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PHYSICAL INVENTORY',
+                      style: AppTextStyles.label.copyWith(
+                        color: AppColors.cyan,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Count with confidence',
+                      style: AppTextStyles.title.copyWith(
+                        color: Colors.white,
+                        fontSize: 21,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Scan, verify and reconcile stock—even when offline.',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: (_isOnline ? AppColors.success : AppColors.warning)
+                      .withValues(alpha: .14),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _isOnline ? 'LIVE' : 'OFFLINE',
+                  style: AppTextStyles.label.copyWith(
+                    color: _isOnline ? AppColors.success : AppColors.warning,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(end: progress),
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) => LinearProgressIndicator(
+                value: value,
+                minHeight: 5,
+                backgroundColor: Colors.white.withValues(alpha: .08),
+                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.cyan),
+              ),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  completedSteps == 0
+                      ? 'Start by scanning or selecting an item'
+                      : '$completedSteps of 3 audit steps ready',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '${(progress * 100).round()}%',
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.cyan,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1546,6 +1769,7 @@ class _StockCountScreenState extends State<StockCountScreen>
             onTap: () {
               HapticFeedback.selectionClick();
               setState(() {
+                _clearItemDraft();
                 _sku.text = item.sku;
                 _scannedCode = item.sku;
                 _scanSucceeded = false;
@@ -1614,11 +1838,14 @@ class _StockCountScreenState extends State<StockCountScreen>
             controller: _sku,
             style: AppTextStyles.body
                 .copyWith(color: Colors.white, fontWeight: FontWeight.w600),
-            onChanged: (val) => setState(() {
-              _scannedCode = val.isEmpty ? null : val;
-              _scanSucceeded = false;
-              _selectedCatalogItemId = null;
-            }),
+            onChanged: (val) {
+              setState(() {
+                _clearItemDraft();
+                _scannedCode = val.isEmpty ? null : val;
+                _scanSucceeded = false;
+                _selectedCatalogItemId = null;
+              });
+            },
             decoration: InputDecoration(
               labelText: 'Item SKU / Barcode',
               labelStyle:
@@ -1665,8 +1892,13 @@ class _StockCountScreenState extends State<StockCountScreen>
                         ),
                       ))
                   .toList(),
-              onChanged: (value) =>
-                  setState(() => _selectedCatalogItemId = value),
+              onChanged: (value) {
+                if (value == _selectedCatalogItemId) return;
+                setState(() {
+                  _clearItemDraft();
+                  _selectedCatalogItemId = value;
+                });
+              },
             ),
             const SizedBox(height: 14),
           ],
@@ -2202,7 +2434,16 @@ class _StockCountScreenState extends State<StockCountScreen>
                 if (!confirmed || !mounted) return;
                 final pending =
                     _pending.where((c) => c.id != entry.id).toList();
-                await _store.save(_catalog, pending);
+                final saved = await _store.save(_catalog, pending);
+                if (!saved) {
+                  if (mounted) {
+                    showAppNotification(
+                      'The saved count could not be removed from device storage.',
+                      tone: AppNotificationTone.error,
+                    );
+                  }
+                  return;
+                }
                 if (mounted) {
                   setState(() => _pending = pending);
                   showAppNotification(
@@ -2317,19 +2558,29 @@ class _CountStore {
       final catRaw = prefs.getString(_catalogKey);
       final penRaw = prefs.getString(_pendingKey);
 
-      final catalog = catRaw == null
-          ? <_CatalogItem>[]
-          : (jsonDecode(catRaw) as List)
-              .whereType<Map<String, dynamic>>()
-              .map(_CatalogItem.fromJson)
-              .toList();
+      final catalog = <_CatalogItem>[];
+      final catalogRows = catRaw == null ? null : jsonDecode(catRaw);
+      if (catalogRows is List) {
+        for (final row in catalogRows.whereType<Map<String, dynamic>>()) {
+          try {
+            catalog.add(_CatalogItem.fromJson(row));
+          } catch (_) {
+            // Preserve every valid cached row when one entry is malformed.
+          }
+        }
+      }
 
-      final pending = penRaw == null
-          ? <_PendingCount>[]
-          : (jsonDecode(penRaw) as List)
-              .whereType<Map<String, dynamic>>()
-              .map(_PendingCount.fromJson)
-              .toList();
+      final pending = <_PendingCount>[];
+      final pendingRows = penRaw == null ? null : jsonDecode(penRaw);
+      if (pendingRows is List) {
+        for (final row in pendingRows.whereType<Map<String, dynamic>>()) {
+          try {
+            pending.add(_PendingCount.fromJson(row));
+          } catch (_) {
+            // Preserve every recoverable offline count.
+          }
+        }
+      }
 
       return (catalog: catalog, pending: pending);
     } catch (_) {
@@ -2337,15 +2588,18 @@ class _CountStore {
     }
   }
 
-  Future<void> save(
+  Future<bool> save(
       List<_CatalogItem> catalog, List<_PendingCount> pending) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-          _catalogKey, jsonEncode(catalog.map((i) => i.toJson()).toList()));
-      await prefs.setString(
+      final pendingSaved = await prefs.setString(
           _pendingKey, jsonEncode(pending.map((p) => p.toJson()).toList()));
-    } catch (_) {}
+      final catalogSaved = await prefs.setString(
+          _catalogKey, jsonEncode(catalog.map((i) => i.toJson()).toList()));
+      return catalogSaved && pendingSaved;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<Map<String, _BranchLocation>> loadBranchLocations() async {

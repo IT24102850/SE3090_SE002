@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'inventory_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -293,6 +294,20 @@ class _EquipmentMaintenanceScreenState
                               );
                               return;
                             }
+                            final branchName = branches
+                                .where((branch) => branch.id == selectedBranchId)
+                                .map((branch) => branch.name)
+                                .firstOrNull;
+                            final confirmed = await showAppConfirmation(
+                              context: sheetContext,
+                              title: 'Add equipment?',
+                              message:
+                                  'Add "$name"${branchName == null ? '' : ' to $branchName'} and make it available for maintenance scheduling?',
+                              confirmLabel: 'Add Equipment',
+                              icon: Icons.precision_manufacturing_rounded,
+                              accent: AppColors.cyan,
+                            );
+                            if (!confirmed || !sheetContext.mounted) return;
                             setSheetState(() => submitting = true);
                             try {
                               final response = await widget.client
@@ -488,6 +503,21 @@ class _EquipmentMaintenanceScreenState
                                   tone: AppNotificationTone.warning);
                               return;
                             }
+                            final equipmentName = _equipment
+                                .where((item) =>
+                                    item.id == selectedEquipmentId)
+                                .map((item) => item.name)
+                                .firstOrNull;
+                            final confirmed = await showAppConfirmation(
+                              context: sheetContext,
+                              title: 'Schedule maintenance service?',
+                              message:
+                                  'Schedule service for ${equipmentName ?? 'this equipment'} on ${_formatDate(maintenanceDate)}, with the next service due ${_formatDate(nextDueDate)}?',
+                              confirmLabel: 'Schedule Service',
+                              icon: Icons.event_available_rounded,
+                              accent: AppColors.cyan,
+                            );
+                            if (!confirmed || !sheetContext.mounted) return;
                             setSheetState(() => isSubmitting = true);
                             try {
                               final response = await widget.client
@@ -684,6 +714,17 @@ class _EquipmentMaintenanceScreenState
         maxWidth: 900,
       );
       if (photo == null) return;
+      if (!mounted) return;
+      final confirmed = await showAppConfirmation(
+        context: context,
+        title: 'Attach photo evidence?',
+        message:
+            'Upload the selected photo and attach it to the maintenance record for "${task.name}"?',
+        confirmLabel: 'Attach Photo',
+        icon: Icons.add_a_photo_rounded,
+        accent: AppColors.cyan,
+      );
+      if (!confirmed || !mounted) return;
       final bytes = await photo.readAsBytes();
       final url = await widget.client.uploadMaintenancePhoto(bytes, photo.name);
       final photoUrls = [...task.photoUrls, url];
@@ -957,10 +998,12 @@ class _EquipmentMaintenanceScreenState
     final pendingCount = _tasks.where((t) => !t.completed).length;
     final completedCount = _tasks.where((t) => t.completed).length;
     final dueCount = _tasks
-        .where((t) => !t.completed && !t.nextDueDate.isAfter(DateTime.now()))
+        .where((t) =>
+            !t.completed &&
+            !_dateOnly(t.nextDueDate).isAfter(_dateOnly(DateTime.now())))
         .length;
 
-    return AppBackgroundScaffold(
+    return InventoryScaffold(
       showParticles: false,
       appBar: const GlassAppBar(
         title: 'Equipment Maintenance',
@@ -976,10 +1019,12 @@ class _EquipmentMaintenanceScreenState
                 backgroundColor: AppColors.overlaySurface,
                 onRefresh: () => _load(showSuccess: true),
                 child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   children: [
                     // Top Overview Card
-                    _buildOverviewHeader(dueCount, completedCount),
+                    _animateEntrance(
+                        _buildOverviewHeader(dueCount, completedCount)),
                     const SizedBox(height: 18),
 
                     if (_loadError != null) ...[
@@ -1060,7 +1105,11 @@ class _EquipmentMaintenanceScreenState
                                   : 'Completed service records will appear here.',
                             )
                     else
-                      ..._filteredTasks.map((task) => _buildTaskCard(task)),
+                      ..._filteredTasks.asMap().entries.map((entry) =>
+                          _animateEntrance(_buildTaskCard(entry.value),
+                              key:
+                                  ValueKey('${_selectedTab}_${entry.value.id}'),
+                              index: entry.key)),
                   ],
                 ),
               ),
@@ -1097,262 +1146,133 @@ class _EquipmentMaintenanceScreenState
         ),
       );
 
-  Widget _buildOverviewHeader(int pending, int completed) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: const Color(0xFF6366F1).withValues(alpha: 0.35),
-          width: 1.2,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x386366F1),
-            blurRadius: 24,
-            offset: Offset(0, 8),
-          ),
-          BoxShadow(
-            color: Color(0x50000000),
-            blurRadius: 16,
-            offset: Offset(0, 6),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Color(0xFF162344),
-                Color(0xFF1E1E4C),
-                Color(0xFF10192E),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: Stack(
-            children: [
-              // Ambient glow orb top right
-              Positioned(
-                right: -25,
-                top: -35,
-                child: Container(
-                  width: 160,
-                  height: 160,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        const Color(0xFF6366F1).withValues(alpha: 0.22),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 6,
-                                height: 6,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFFBBF24),
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Color(0xFFFBBF24),
-                                      blurRadius: 6,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'ASSET CARE & PREVENTIVE LOGS',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.label.copyWith(
-                                    color: const Color(0xFFFBBF24),
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 1.1,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 9, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.12),
-                            ),
-                          ),
-                          child: Text(
-                            '${_tasks.length} Tracked Tasks',
-                            style: AppTextStyles.caption.copyWith(
-                              color: const Color(0xFFE0E7FF),
-                              fontWeight: FontWeight.w800,
-                              fontSize: 10.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [
-                          Colors.white,
-                          Color(0xFFE0E7FF),
-                          Color(0xFFC7D2FE),
-                        ],
-                      ).createShader(bounds),
-                      child: Text(
-                        'Machinery & Equipment Service',
-                        style: AppTextStyles.title.copyWith(
-                          fontSize: 21,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.5,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Keep appliances, espresso machines, refrigeration & POS hardware in peak condition.',
-                      style: AppTextStyles.caption.copyWith(
-                        color: const Color(0xFF94A3B8),
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 11, horizontal: 12),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  const Color(0xFFF59E0B)
-                                      .withValues(alpha: 0.18),
-                                  const Color(0xFFF59E0B)
-                                      .withValues(alpha: 0.06),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: const Color(0xFFF59E0B)
-                                    .withValues(alpha: 0.4),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFF59E0B)
-                                      .withValues(alpha: 0.1),
-                                  blurRadius: 8,
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.pending_actions_rounded,
-                                    size: 19, color: Color(0xFFFBBF24)),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    '$pending Due Now',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTextStyles.subtitle.copyWith(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFFFBBF24),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 11, horizontal: 12),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  const Color(0xFF10B981)
-                                      .withValues(alpha: 0.18),
-                                  const Color(0xFF10B981)
-                                      .withValues(alpha: 0.06),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: const Color(0xFF10B981)
-                                    .withValues(alpha: 0.4),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF10B981)
-                                      .withValues(alpha: 0.1),
-                                  blurRadius: 8,
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.check_circle_rounded,
-                                    size: 19, color: Color(0xFF10B981)),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    '$completed Completed',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTextStyles.subtitle.copyWith(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w800,
-                                      color: const Color(0xFF10B981),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+  Widget _animateEntrance(Widget child, {Key? key, int index = 0}) {
+    final reducedMotion = MediaQuery.of(context).disableAnimations;
+    return TweenAnimationBuilder<double>(
+      key: key,
+      tween: Tween(begin: reducedMotion ? 1 : 0, end: 1),
+      duration: Duration(
+          milliseconds: reducedMotion ? 0 : 420 + (index.clamp(0, 6) * 60)),
+      curve: Curves.easeOutCubic,
+      child: child,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+            offset: Offset(0, 20 * (1 - value)), child: child),
       ),
     );
   }
+
+  Widget _buildOverviewHeader(int due, int completed) {
+    final progress = _tasks.isEmpty ? 0.0 : completed / _tasks.length;
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF21574F), Color(0xFF183C43), Color(0xFF172C38)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(color: AppColors.cyan.withValues(alpha: 0.25)),
+        boxShadow: [
+          BoxShadow(
+              color: AppColors.cyan.withValues(alpha: 0.08),
+              blurRadius: 28,
+              offset: const Offset(0, 10))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                  color: AppColors.cyan.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14)),
+              child: const Icon(Icons.handyman_rounded,
+                  color: AppColors.cyan, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Text('EQUIPMENT CARE',
+                    style: AppTextStyles.label
+                        .copyWith(color: AppColors.cyan, letterSpacing: 1.8))),
+          ]),
+          const SizedBox(height: 20),
+          Text('Keep your business\nrunning smoothly.',
+              style: AppTextStyles.title.copyWith(
+                  fontSize: 27,
+                  height: 1.15,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: -0.7)),
+          const SizedBox(height: 10),
+          Text(
+              'Plan services, track repairs and give every asset the care it needs.',
+              style: AppTextStyles.caption
+                  .copyWith(color: const Color(0xFFB8C8DC), height: 1.6)),
+          const SizedBox(height: 22),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            _overviewMetric(Icons.inventory_2_outlined, _equipment.length,
+                'Equipment', AppColors.cyan),
+            _overviewMetric(Icons.schedule_rounded, due, 'Due now',
+                const Color(0xFFFBBF24)),
+            _overviewMetric(Icons.task_alt_rounded, completed, 'Completed',
+                const Color(0xFF34D399)),
+          ]),
+          const SizedBox(height: 22),
+          Row(children: [
+            Expanded(
+                child: Text('Service completion',
+                    style: AppTextStyles.caption
+                        .copyWith(color: const Color(0xFFB8C8DC)))),
+            Text('${(progress * 100).round()}%',
+                style: AppTextStyles.caption.copyWith(
+                    color: Colors.white, fontWeight: FontWeight.w800)),
+          ]),
+          const SizedBox(height: 10),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: progress),
+            duration: Duration(
+                milliseconds:
+                    MediaQuery.of(context).disableAnimations ? 0 : 750),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, _) => ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                  value: value,
+                  minHeight: 7,
+                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                  color: AppColors.cyan),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _overviewMetric(IconData icon, int count, String label, Color color) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 17, color: color),
+          const SizedBox(width: 8),
+          Text('$count',
+              style: AppTextStyles.subtitle
+                  .copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+          const SizedBox(width: 6),
+          Text(label,
+              style: AppTextStyles.caption
+                  .copyWith(color: const Color(0xFFB8C8DC))),
+        ]),
+      );
 
   Widget _buildTabSwitcher(int pending, int completed) {
     return Container(
@@ -1381,8 +1301,11 @@ class _EquipmentMaintenanceScreenState
           HapticFeedback.selectionClick();
           setState(() => _selectedTab = label);
         },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+        child: AnimatedContainer(
+          duration: Duration(
+              milliseconds: MediaQuery.of(context).disableAnimations ? 0 : 220),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: isSelected
                 ? AppColors.cyan.withValues(alpha: 0.22)
@@ -1395,13 +1318,16 @@ class _EquipmentMaintenanceScreenState
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
+              Flexible(
+                  child: Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.caption.copyWith(
                   color: isSelected ? Colors.white : AppColors.textSecondary,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 ),
-              ),
+              )),
               const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
@@ -1428,9 +1354,13 @@ class _EquipmentMaintenanceScreenState
   }
 
   Widget _buildTaskCard(_MaintenanceTask task) {
+    final due = !task.completed &&
+        !_dateOnly(task.nextDueDate).isAfter(_dateOnly(DateTime.now()));
     final statusColor = task.completed
-        ? const Color(0xFF10B981)
-        : const Color(0xFFF59E0B);
+        ? const Color(0xFF34D399)
+        : due
+            ? const Color(0xFFFB7185)
+            : AppColors.cyan;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1487,7 +1417,19 @@ class _EquipmentMaintenanceScreenState
                           : AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
+                  Text(
+                      task.completed
+                          ? 'COMPLETED'
+                          : due
+                              ? 'SERVICE DUE'
+                              : 'UPCOMING',
+                      style: AppTextStyles.caption.copyWith(
+                          color: statusColor,
+                          fontSize: 10,
+                          letterSpacing: 1,
+                          fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       Flexible(
