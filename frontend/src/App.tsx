@@ -54,6 +54,9 @@ const CustomerAiPlannerPage = lazy(() => import('./features/customer/CustomerAiP
 const BusinessInfoPage = lazy(() => import('./features/customer/BusinessInfoPage'));
 const InventoryManagerPage = lazy(() => import('./features/inventory/pages/InventoryManagerPage').then((m) => ({ default: m.InventoryManagerPage })));
 const SuppliersPage = lazy(() => import('./features/inventory/pages/SuppliersPage').then((m) => ({ default: m.SuppliersPage })));
+// Uses the inventory toast context, so it is mounted inside InventoryShell
+// like its siblings rather than the shared one.
+const ManageUsersPage = lazy(() => import('./pages/ManageUsersPage').then((m) => ({ default: m.ManageUsersPage })));
 const StockMovementLogPage = lazy(() => import('./features/inventory/pages/StockMovementLogPage').then((m) => ({ default: m.StockMovementLogPage })));
 const PurchaseOrderManagerPage = lazy(() => import('./features/inventory/pages/PurchaseOrderManagerPage').then((m) => ({ default: m.PurchaseOrderManagerPage })));
 const AgentWorkflowMonitorPage = lazy(() => import('./features/inventory/pages/AgentWorkflowMonitor').then((m) => ({ default: m.AgentWorkflowMonitorPage })));
@@ -309,6 +312,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
                     <Shell><BranchesPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin']}>
+                    <InventoryShell><ManageUsersPage /></InventoryShell>
                   </ProtectedRoute>
                 }
               />
