@@ -30,20 +30,27 @@ class InventoryPanel extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color.lerp(surface, Colors.white, .025)!,
-            Color.lerp(surface, Colors.black, .08)!,
+            Color.lerp(surface, Colors.white, .045)!,
+            Color.lerp(surface, Colors.black, .12)!,
           ],
         ),
         borderRadius: radius,
         border: Border.all(
-          color: borderColor ?? const Color(0xFF273449),
+          color: borderColor ?? const Color(0xFF2C3C56),
+          width: 1,
         ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 16,
-            offset: Offset(0, 7),
+        boxShadow: [
+          const BoxShadow(
+            color: Color(0x40000000),
+            blurRadius: 20,
+            offset: Offset(0, 8),
           ),
+          if (borderColor != null)
+            BoxShadow(
+              color: borderColor!.withValues(alpha: 0.16),
+              blurRadius: 14,
+              offset: const Offset(0, 2),
+            ),
         ],
       ),
       child: Material(

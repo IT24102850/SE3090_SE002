@@ -60,7 +60,12 @@ describe('BranchOverviewPage product stock directory', () => {
         return new Response(JSON.stringify({
           salesCount: 3,
           salesRevenue: 10000,
+          manualSalesCount: 2,
+          manualSalesRevenue: 7500,
+          customerOrderSalesCount: 1,
+          customerOrderSalesRevenue: 2500,
           customerOrderCount: 4,
+          customerOrderValue: 14000,
           pendingOrders: 1,
           confirmedOrders: 0,
           preparingOrders: 1,
@@ -71,14 +76,20 @@ describe('BranchOverviewPage product stock directory', () => {
           branches: [
             {
               branchId: 'branch-1', branchName: 'Main branch',
-              salesCount: 2, salesRevenue: 7000, customerOrderCount: 3,
+              salesCount: 2, salesRevenue: 7000,
+              manualSalesCount: 1, manualSalesRevenue: 4500,
+              customerOrderSalesCount: 1, customerOrderSalesRevenue: 2500,
+              customerOrderCount: 3, customerOrderValue: 8200,
               pendingOrders: 1, confirmedOrders: 0, preparingOrders: 1,
               readyForPickupOrders: 1, outForDeliveryOrders: 0,
               completedOrders: 0, cancelledOrders: 0,
             },
             {
               branchId: 'branch-2', branchName: 'Kandy branch',
-              salesCount: 1, salesRevenue: 3000, customerOrderCount: 1,
+              salesCount: 1, salesRevenue: 3000,
+              manualSalesCount: 1, manualSalesRevenue: 3000,
+              customerOrderSalesCount: 0, customerOrderSalesRevenue: 0,
+              customerOrderCount: 1, customerOrderValue: 5800,
               pendingOrders: 0, confirmedOrders: 0, preparingOrders: 0,
               readyForPickupOrders: 0, outForDeliveryOrders: 0,
               completedOrders: 1, cancelledOrders: 0,
@@ -142,7 +153,18 @@ describe('BranchOverviewPage product stock directory', () => {
     await waitFor(() => expect(screen.getByText('1 of 1 products · 2 branch stocks · 1 categories')).toBeInTheDocument());
     expect(await screen.findByRole('heading', { name: 'Sales & customer orders' })).toBeInTheDocument();
     expect(screen.getByText('LKR 10,000')).toBeInTheDocument();
+    const commerceSection = screen.getByLabelText('Sales and customer orders for the last 30 days');
+    expect(within(commerceSection).getByText('Manual sales')).toBeInTheDocument();
+    expect(within(commerceSection).getByText('Customer-order sales')).toBeInTheDocument();
+    expect(within(commerceSection).getByText('LKR 7,500')).toBeInTheDocument();
+    expect(within(commerceSection).getByText('LKR 2,500')).toBeInTheDocument();
+    const customerOrderMetric = within(commerceSection).getByText('Customer orders').closest('article');
+    expect(customerOrderMetric).not.toBeNull();
+    expect(within(customerOrderMetric!).getByText(/LKR 14,000/)).toBeInTheDocument();
+    expect(within(customerOrderMetric!).getByText(/order value · excludes cancelled/)).toBeInTheDocument();
     expect(screen.getByLabelText('Main branch sales and order activity')).toHaveTextContent('LKR 7,000');
+    expect(screen.getByLabelText('Main branch sales and order activity')).toHaveTextContent('LKR 4,500');
+    expect(screen.getByLabelText('Main branch sales and order activity')).toHaveTextContent('LKR 2,500');
     expect(screen.getByLabelText('Kandy branch sales and order activity')).toHaveTextContent('0 pending');
   });
 
@@ -178,12 +200,18 @@ describe('BranchOverviewPage product stock directory', () => {
       if (url.startsWith('/api/reports/branch-commerce?')) {
         return new Response(JSON.stringify({
           salesCount: 0, salesRevenue: 0, customerOrderCount: 0,
+          manualSalesCount: 0, manualSalesRevenue: 0,
+          customerOrderSalesCount: 0, customerOrderSalesRevenue: 0,
+          customerOrderValue: 0,
           pendingOrders: 0, confirmedOrders: 0, preparingOrders: 0,
           readyForPickupOrders: 0, outForDeliveryOrders: 0,
           completedOrders: 0, cancelledOrders: 0,
           branches: [{
             branchId: 'branch-1', branchName: 'Main branch',
             salesCount: 0, salesRevenue: 0, customerOrderCount: 0,
+            manualSalesCount: 0, manualSalesRevenue: 0,
+            customerOrderSalesCount: 0, customerOrderSalesRevenue: 0,
+            customerOrderValue: 0,
             pendingOrders: 0, confirmedOrders: 0, preparingOrders: 0,
             readyForPickupOrders: 0, outForDeliveryOrders: 0,
             completedOrders: 0, cancelledOrders: 0,

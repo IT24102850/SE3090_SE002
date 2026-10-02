@@ -1099,137 +1099,257 @@ class _EquipmentMaintenanceScreenState
 
   Widget _buildOverviewHeader(int pending, int completed) {
     return Container(
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        color: const Color(0xFF142235),
-        border: Border.all(color: const Color(0xFF2A4058)),
+        border: Border.all(
+          color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+          width: 1.2,
+        ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x26000000),
+            color: Color(0x386366F1),
+            blurRadius: 24,
+            offset: Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Color(0x50000000),
             blurRadius: 16,
-            offset: Offset(0, 7),
+            offset: Offset(0, 6),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color(0xFF162344),
+                Color(0xFF1E1E4C),
+                Color(0xFF10192E),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Stack(
             children: [
-              Flexible(
-                child: Text(
-                  'ASSET CARE & PREVENTIVE LOGS',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.label.copyWith(
-                    color: const Color(0xFFFBBF24),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1,
+              // Ambient glow orb top right
+              Positioned(
+                right: -25,
+                top: -35,
+                child: Container(
+                  width: 160,
+                  height: 160,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFF6366F1).withValues(alpha: 0.22),
+                        Colors.transparent,
+                      ],
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '${_tasks.length} Tracked Tasks',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                  ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFFBBF24),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Color(0xFFFBBF24),
+                                      blurRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'ASSET CARE & PREVENTIVE LOGS',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.label.copyWith(
+                                    color: const Color(0xFFFBBF24),
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
+                          ),
+                          child: Text(
+                            '${_tasks.length} Tracked Tasks',
+                            style: AppTextStyles.caption.copyWith(
+                              color: const Color(0xFFE0E7FF),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [
+                          Colors.white,
+                          Color(0xFFE0E7FF),
+                          Color(0xFFC7D2FE),
+                        ],
+                      ).createShader(bounds),
+                      child: Text(
+                        'Machinery & Equipment Service',
+                        style: AppTextStyles.title.copyWith(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Keep appliances, espresso machines, refrigeration & POS hardware in peak condition.',
+                      style: AppTextStyles.caption.copyWith(
+                        color: const Color(0xFF94A3B8),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 11, horizontal: 12),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  const Color(0xFFF59E0B)
+                                      .withValues(alpha: 0.18),
+                                  const Color(0xFFF59E0B)
+                                      .withValues(alpha: 0.06),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFFF59E0B)
+                                    .withValues(alpha: 0.4),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFF59E0B)
+                                      .withValues(alpha: 0.1),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.pending_actions_rounded,
+                                    size: 19, color: Color(0xFFFBBF24)),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    '$pending Due Now',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.subtitle.copyWith(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFFFBBF24),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 11, horizontal: 12),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  const Color(0xFF10B981)
+                                      .withValues(alpha: 0.18),
+                                  const Color(0xFF10B981)
+                                      .withValues(alpha: 0.06),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFF10B981)
+                                    .withValues(alpha: 0.4),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF10B981)
+                                      .withValues(alpha: 0.1),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle_rounded,
+                                    size: 19, color: Color(0xFF10B981)),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    '$completed Completed',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.subtitle.copyWith(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF10B981),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            'Machinery & Equipment Service',
-            style: AppTextStyles.title
-                .copyWith(fontSize: 20, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Keep appliances, espresso machines, refrigeration & POS hardware in peak condition.',
-            style: AppTextStyles.caption
-                .copyWith(color: AppColors.textSecondary, height: 1.35),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.pending_actions_rounded,
-                          size: 18, color: Color(0xFFFBBF24)),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          '$pending Due Now',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.subtitle.copyWith(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFFFBBF24),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.check_circle_rounded,
-                          size: 18, color: Color(0xFF10B981)),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          '$completed Completed',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.subtitle.copyWith(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF10B981),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1308,13 +1428,15 @@ class _EquipmentMaintenanceScreenState
   }
 
   Widget _buildTaskCard(_MaintenanceTask task) {
+    final statusColor = task.completed
+        ? const Color(0xFF10B981)
+        : const Color(0xFFF59E0B);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: InventoryPanel(
         padding: const EdgeInsets.all(16),
-        borderColor: task.completed
-            ? const Color(0xFF10B981).withValues(alpha: 0.3)
-            : const Color(0xFFF59E0B).withValues(alpha: 0.3),
+        borderColor: statusColor.withValues(alpha: 0.35),
         onTap: () => _showTask(task),
         child: Row(
           children: [
@@ -1322,25 +1444,28 @@ class _EquipmentMaintenanceScreenState
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: (task.completed
-                        ? const Color(0xFF10B981)
-                        : const Color(0xFFF59E0B))
-                    .withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: (task.completed
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFFF59E0B))
-                      .withValues(alpha: 0.35),
+                gradient: RadialGradient(
+                  colors: [
+                    statusColor.withValues(alpha: 0.24),
+                    statusColor.withValues(alpha: 0.06),
+                  ],
                 ),
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(
+                  color: statusColor.withValues(alpha: 0.4),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: statusColor.withValues(alpha: 0.15),
+                    blurRadius: 8,
+                  ),
+                ],
               ),
               child: Icon(
                 task.completed
                     ? Icons.check_circle_rounded
                     : Icons.build_rounded,
-                color: task.completed
-                    ? const Color(0xFF10B981)
-                    : const Color(0xFFF59E0B),
+                color: statusColor,
                 size: 22,
               ),
             ),

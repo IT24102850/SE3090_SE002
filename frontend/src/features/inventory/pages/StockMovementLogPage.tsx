@@ -388,21 +388,7 @@ export function StockMovementLogPage() {
           <p>Review branch-specific physical counts alongside receipts, sales, issues, and adjustments.</p>
           <div className="movement-hero-meta"><span className={`movement-live-dot${loading ? ' is-loading' : ''}`} aria-hidden="true" />{loading ? 'Syncing recent activity…' : `${activities.length} records loaded`}<span className="movement-meta-separator">·</span>Newest first</div>
         </div>
-        <div className="movement-hero-art inv-hero-buzzing-showcase" aria-hidden="true">
-          <span className="movement-art-ring movement-art-ring-one" />
-          <span className="movement-art-ring movement-art-ring-two" />
-          <div className="inv-hero-buzzing-item inv-hero-buzzing-primary">
-            <span className="inv-hero-buzzing-icon"><Icon name="movement" size={32} /></span>
-            <span className="inv-hero-buzzing-sparkle">✦</span>
-          </div>
-          <div className="inv-hero-buzzing-item inv-hero-buzzing-secondary">
-            <span className="inv-hero-buzzing-icon">📦</span>
-          </div>
-          <div className="inv-hero-buzzing-item inv-hero-buzzing-tertiary">
-            <span className="inv-hero-buzzing-icon">↔</span>
-          </div>
-          <span className="inv-hero-buzzing-badge">● Stock Flow</span>
-        </div>
+        <div className="movement-hero-art" aria-hidden="true"><span className="movement-art-ring movement-art-ring-one" /><span className="movement-art-ring movement-art-ring-two" /><span className="movement-art-icon"><Icon name="movement" size={42} /></span><span className="movement-art-point movement-art-point-one" /><span className="movement-art-point movement-art-point-two" /></div>
         <div className="movement-hero-actions"><button className="btn movement-refresh" type="button" onClick={() => void handleRefresh()} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh history'}</button></div>
       </header>
       {loadError && <p className="page-notice">{loadError}</p>}

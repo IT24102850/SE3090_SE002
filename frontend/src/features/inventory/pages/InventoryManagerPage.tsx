@@ -182,6 +182,14 @@ function ItemModal({
     ),
   );
 
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !confirmOpen && !saving) onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [confirmOpen, onClose, saving]);
+
   function update<K extends keyof StockForm>(key: K, value: StockForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -247,18 +255,29 @@ function ItemModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="presentation">
-      <div className="modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
-        <div className="modal-head">
-          <h2 id="item-modal-title">{title}</h2>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
+    <div
+      className="modal-overlay inventory-item-modal-overlay"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !saving) onClose();
+      }}
+      role="presentation"
+    >
+      <div className="modal inventory-item-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
+        <div className="modal-head inventory-item-modal-head">
+          <span className="inventory-item-modal-icon" aria-hidden="true">▦</span>
+          <div>
+            <span className="inventory-item-modal-kicker">{isEditing ? 'CATALOG UPDATE' : 'INVENTORY CATALOG'}</span>
+            <h2 id="item-modal-title">{title}</h2>
+            <p>{isEditing ? 'Update product details and branch-level stock.' : 'Add a product and set its starting stock by branch.'}</p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close item editor" disabled={saving}>×</button>
         </div>
-        <form className="modal-body" onSubmit={handleSubmit}>
+        <form className="modal-body inventory-item-modal-body" onSubmit={handleSubmit}>
           {error && <p className="modal-error" role="alert">{error}</p>}
           <div className="form-grid">
             <label className="form-field form-field-wide">
               Item name
-              <input value={form.item} onChange={(event) => update('item', event.target.value)} placeholder="e.g. Premium Coffee Beans" />
+              <input autoFocus value={form.item} onChange={(event) => update('item', event.target.value)} placeholder="e.g. Premium Coffee Beans" />
             </label>
             <label className="form-field form-field-wide">
               Picture link <span>(optional)</span>
@@ -396,7 +415,7 @@ function ItemModal({
               </p>
             )}
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save item'}</button>
           </div>
         </form>

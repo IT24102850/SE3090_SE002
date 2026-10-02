@@ -264,6 +264,10 @@ describe('SuppliersPage', () => {
     renderPage();
     await screen.findByText('Net 30');
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByRole('dialog', { name: 'Update supplier' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Update supplier' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     fireEvent.change(screen.getByLabelText('Payment terms'), { target: { value: 'Net 14' } });
     fireEvent.change(screen.getByLabelText('Business address'), { target: { value: '42 New Street' } });
     fireEvent.change(screen.getByLabelText('Supplier notes'), { target: { value: 'Updated delivery notes' } });

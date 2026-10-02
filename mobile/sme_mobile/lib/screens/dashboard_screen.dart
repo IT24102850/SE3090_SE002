@@ -21,6 +21,7 @@ import 'business_profile_editor_screen.dart';
 import 'clinic/clinic_desk_screen.dart';
 import 'customer/ai_planner_screen.dart';
 import 'customer/book_business_list_screen.dart';
+import 'customer/customer_order_management_screen.dart';
 import 'customer/customer_shop_screen.dart';
 import 'customer/my_bookings_screen.dart';
 import 'notifications_screen.dart';
@@ -474,6 +475,20 @@ class _DashboardDrawer extends ConsumerWidget {
                           canReceive: user.role == 'Admin' ||
                               user.role == 'Manager' ||
                               user.role == 'Staff',
+                        ),
+                      ));
+                    },
+                  ),
+                if (user.role == 'Admin')
+                  _DrawerItem(
+                    icon: Icons.shopping_bag_outlined,
+                    label: 'Customer orders',
+                    accent: AppColors.violet,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute(
+                        CustomerOrderManagementScreen(
+                          client: AuthenticatedApiClient(),
                         ),
                       ));
                     },
@@ -1004,6 +1019,22 @@ List<_QuickActionGroup> _quickActionsFor(
           )),
         ),
       ));
+  if (role == 'Admin') {
+    addAction(
+      'Inventory',
+      _QuickActionCard(
+        label: 'Customer orders',
+        icon: Icons.shopping_bag_outlined,
+        color: AppColors.violet,
+        imageUrl: _quickActionImages['Purchase orders'],
+        onTap: () => Navigator.of(context).push(
+          slideFadeRoute(
+            CustomerOrderManagementScreen(client: client),
+          ),
+        ),
+      ),
+    );
+  }
   addAction(
       'Inventory',
       _QuickActionCard(

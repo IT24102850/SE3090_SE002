@@ -120,6 +120,14 @@ export function SuppliersPage() {
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [expandedSupplierId]);
+  useEffect(() => {
+    if (!editingSupplierId) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !saving) resetSupplierForm();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [editingSupplierId, saving]);
 
   async function loadSupplierOrderHistory(supplier: Supplier) {
     const cached = supplierOrderHistories[supplier.id];
@@ -326,6 +334,32 @@ export function SuppliersPage() {
         .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] ?? null,
     }
     : null;
+  const supplierFormFields = (
+    <>
+      <div className="suppliers-create-heading">
+        <div>
+          <span className="suppliers-create-kicker">{editingSupplierId ? 'EDIT PARTNER' : 'NEW PARTNER'}</span>
+          <h2 id={editingSupplierId ? 'supplier-edit-title' : undefined}>{editingSupplierId ? 'Update supplier' : 'Add a supplier'}</h2>
+          <p>Record the supplier&apos;s usual delivery lead time from your order history.</p>
+        </div>
+        <span className="suppliers-create-symbol" aria-hidden="true">{editingSupplierId ? '✎' : '＋'}</span>
+      </div>
+      <div className="suppliers-form-grid">
+        <label>Supplier name <input autoFocus={Boolean(editingSupplierId)} value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} placeholder="e.g. Central Office Supplies" /></label>
+        <label>Contact person <input value={contactPerson} onChange={(event) => setContactPerson(event.target.value)} maxLength={160} placeholder="Primary contact name" /></label>
+        <label>Email address <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={256} placeholder="orders@example.com" /></label>
+        <label>Phone number <input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} maxLength={64} placeholder="+94 …" /></label>
+        <label>Usual lead time (days) <input type="number" min={1} max={90} step={1} value={leadTimeDays} onChange={(event) => setLeadTimeDays(event.target.value)} placeholder="Leave blank if unknown" /></label>
+        <label>Payment terms <input value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} maxLength={160} placeholder="e.g. Net 30 or payment on delivery" /></label>
+        <label>Business address <textarea value={address} onChange={(event) => setAddress(event.target.value)} maxLength={500} rows={2} placeholder="Supplier&apos;s billing or delivery address" /></label>
+        <label>Supplier notes <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={1000} rows={2} placeholder="Useful purchasing or delivery notes" /></label>
+      </div>
+      <div className="suppliers-form-actions">
+        <button className="btn btn-secondary" type="button" onClick={resetSupplierForm} disabled={saving}>Cancel</button>
+        <button className="btn btn-primary" type="submit" disabled={saving || !name.trim()}>{saving ? 'Saving…' : editingSupplierId ? 'Save changes' : 'Save supplier'}</button>
+      </div>
+    </>
+  );
 
   return (
     <div className="page suppliers-page">
@@ -410,20 +444,29 @@ export function SuppliersPage() {
       </section>
 
       {canManageSuppliers && showForm && (
-        <form className="suppliers-create-card" onSubmit={(event) => void createSupplier(event)}>
-          <div className="suppliers-create-heading"><div><span className="suppliers-create-kicker">{editingSupplierId ? 'EDIT PARTNER' : 'NEW PARTNER'}</span><h2>{editingSupplierId ? 'Update supplier' : 'Add a supplier'}</h2><p>Record the supplier's usual delivery lead time from your order history.</p></div><span className="suppliers-create-symbol" aria-hidden="true">＋</span></div>
-          <div className="suppliers-form-grid">
-            <label>Supplier name <input value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} placeholder="e.g. Central Office Supplies" /></label>
-            <label>Contact person <input value={contactPerson} onChange={(event) => setContactPerson(event.target.value)} maxLength={160} placeholder="Primary contact name" /></label>
-            <label>Email address <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={256} placeholder="orders@example.com" /></label>
-            <label>Phone number <input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} maxLength={64} placeholder="+94 …" /></label>
-            <label>Usual lead time (days) <input type="number" min={1} max={90} step={1} value={leadTimeDays} onChange={(event) => setLeadTimeDays(event.target.value)} placeholder="Leave blank if unknown" /></label>
-            <label>Payment terms <input value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} maxLength={160} placeholder="e.g. Net 30 or payment on delivery" /></label>
-            <label>Business address <textarea value={address} onChange={(event) => setAddress(event.target.value)} maxLength={500} rows={2} placeholder="Supplier's billing or delivery address" /></label>
-            <label>Supplier notes <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={1000} rows={2} placeholder="Useful purchasing or delivery notes" /></label>
+        editingSupplierId ? (
+          <div
+            className="suppliers-edit-overlay"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !saving) resetSupplierForm();
+            }}
+          >
+            <form
+              className="suppliers-create-card suppliers-edit-modal"
+              onSubmit={(event) => void createSupplier(event)}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="supplier-edit-title"
+            >
+              <button className="suppliers-edit-close" type="button" aria-label="Close edit supplier popup" onClick={resetSupplierForm} disabled={saving}>×</button>
+              {supplierFormFields}
+            </form>
           </div>
-          <div className="suppliers-form-actions"><button className="btn btn-secondary" type="button" onClick={resetSupplierForm}>Cancel</button><button className="btn btn-primary" type="submit" disabled={saving || !name.trim()}>{saving ? 'Saving…' : editingSupplierId ? 'Save changes' : 'Save supplier'}</button></div>
-        </form>
+        ) : (
+          <form className="suppliers-create-card" onSubmit={(event) => void createSupplier(event)}>
+            {supplierFormFields}
+          </form>
+        )
       )}
 
       <section className="panel suppliers-directory-panel">

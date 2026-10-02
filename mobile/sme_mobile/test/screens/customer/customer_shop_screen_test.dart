@@ -67,6 +67,17 @@ void main() {
     expect(adapter.createdOrder!['fulfillmentMethod'], 'Pickup');
     final items = adapter.createdOrder!['items'] as List<dynamic>;
     expect((items.single as Map)['inventoryItemId'], itemId);
+    expect(find.text('My orders'), findsOneWidget);
+    expect(find.text('Awaiting store confirmation · Step 1 of 5'),
+        findsOneWidget);
+    expect(find.text('All · 1'), findsOneWidget);
+    await tester.ensureVisible(find.text('Completed · 0'));
+    await tester.tap(find.text('Completed · 0'));
+    await tester.pumpAndSettle();
+    expect(find.text('No completed orders in your history.'), findsOneWidget);
+    await tester.ensureVisible(find.text('In progress · 1'));
+    await tester.tap(find.text('In progress · 1'));
+    await tester.pumpAndSettle();
     expect(find.text('ORD-261002-ABCD1234'), findsOneWidget);
     expect(tester.takeException(), isNull);
     dio.close();

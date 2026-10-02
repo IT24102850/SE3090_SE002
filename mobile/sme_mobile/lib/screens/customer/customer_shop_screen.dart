@@ -15,6 +15,8 @@ import '../../theme/app_text_styles.dart';
 import '../../widgets/ui/ui.dart';
 import 'book_business_list_screen.dart';
 
+enum _OrderFilter { all, active, completed, cancelled }
+
 class CustomerShopScreen extends StatefulWidget {
   CustomerShopScreen({
     super.key,
@@ -51,6 +53,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
   String _category = 'All items';
   String _search = '';
   bool _showOrders = false;
+  _OrderFilter _orderFilter = _OrderFilter.all;
   bool _delivery = false;
   bool _capturingDeliveryLocation = false;
   double? _deliveryLatitude;
@@ -179,6 +182,26 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     } finally {
       _refreshingOrders = false;
     }
+  }
+
+  List<Map<String, dynamic>> get _visibleOrders {
+    return _orders
+        .where((order) => _matchesOrderFilter(order, _orderFilter))
+        .toList();
+  }
+
+  int _orderCountFor(_OrderFilter filter) {
+    return _orders.where((order) => _matchesOrderFilter(order, filter)).length;
+  }
+
+  bool _matchesOrderFilter(Map<String, dynamic> order, _OrderFilter filter) {
+    final status = (order['status'] as String? ?? '').toLowerCase();
+    return switch (filter) {
+      _OrderFilter.all => true,
+      _OrderFilter.active => status != 'completed' && status != 'cancelled',
+      _OrderFilter.completed => status == 'completed',
+      _OrderFilter.cancelled => status == 'cancelled',
+    };
   }
 
   Future<List<Map<String, dynamic>>> _fetchProducts(String branchId) async {
@@ -1198,49 +1221,72 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
               _OrderStatusChip(status: order['status'] as String? ?? 'Pending'),
             ],
           ),
+          _OrderProgress(
+            status: order['status'] as String? ?? 'Pending',
+            isDelivery: isDelivery,
+          ),
           if (updates.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Text('Order journey', style: AppTextStyles.subtitle),
-            const SizedBox(height: 8),
-            ...updates.asMap().entries.map((entry) {
-              final update = entry.value;
-              final time =
-                  DateTime.tryParse(update['createdAt'] as String? ?? '');
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      entry.key == updates.length - 1
-                          ? Icons.radio_button_checked
-                          : Icons.check_circle,
-                      size: 18,
-                      color: entry.key == updates.length - 1
-                          ? AppColors.cyan
-                          : AppColors.success,
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(update['status'] as String? ?? 'Update',
-                              style: AppTextStyles.body),
-                          Text(update['message'] as String? ?? '',
-                              style: AppTextStyles.caption),
-                          if (time != null)
-                            Text(
-                              '${time.day}/${time.month}/${time.year} · ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
-                              style: AppTextStyles.caption,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
+            const Divider(color: AppColors.hairline, height: 18),
+            Theme(
+              data: Theme.of(context).copyWith(
+                dividerColor: Colors.transparent,
+                splashColor: AppColors.cyan.withValues(alpha: 0.08),
+                highlightColor: AppColors.cyan.withValues(alpha: 0.04),
+              ),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(top: 8, bottom: 2),
+                dense: true,
+                leading: const Icon(Icons.history_rounded,
+                    color: AppColors.cyan, size: 20),
+                title: Text('Order updates', style: AppTextStyles.body),
+                subtitle: Text(
+                  '${updates.length} ${updates.length == 1 ? 'update' : 'updates'}',
+                  style: AppTextStyles.caption,
                 ),
-              );
-            }),
+                children: updates.asMap().entries.map((entry) {
+                  final update = entry.value;
+                  final time =
+                      DateTime.tryParse(update['createdAt'] as String? ?? '');
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          entry.key == updates.length - 1
+                              ? Icons.radio_button_checked
+                              : Icons.check_circle,
+                          size: 18,
+                          color: entry.key == updates.length - 1
+                              ? AppColors.cyan
+                              : AppColors.success,
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(update['status'] as String? ?? 'Update',
+                                  style: AppTextStyles.body),
+                              if ((update['message'] as String? ?? '')
+                                  .isNotEmpty)
+                                Text(update['message'] as String,
+                                    style: AppTextStyles.caption),
+                              if (time != null)
+                                Text(
+                                  '${time.day}/${time.month}/${time.year} · ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+                                  style: AppTextStyles.caption,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
           ],
           const SizedBox(height: 12),
           ...items.map((item) => Padding(
@@ -1341,12 +1387,23 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
             children: [
-              _ShopHero(orderCount: _orders.length),
+              if (_showOrders)
+                _OrdersHeader(
+                  orderCount: _orders.length,
+                  activeCount: _orderCountFor(_OrderFilter.active),
+                  isRefreshing: _refreshingOrders,
+                  onRefresh: _refreshOrders,
+                )
+              else
+                _ShopHero(orderCount: _orders.length),
               const SizedBox(height: 16),
               _ShopTabs(
                 showOrders: _showOrders,
                 orderCount: _orders.length,
-                onChanged: (value) => setState(() => _showOrders = value),
+                onChanged: (value) => setState(() {
+                  _showOrders = value;
+                  _orderFilter = _OrderFilter.all;
+                }),
               ),
               if (_showOrders) ...[
                 const SizedBox(height: 16),
@@ -1364,6 +1421,18 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                             style: AppTextStyles.caption,
                           ),
                         ),
+                        IconButton(
+                          tooltip: 'Refresh orders',
+                          onPressed: _refreshingOrders ? null : _refreshOrders,
+                          icon: _refreshingOrders
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh_rounded),
+                        ),
                       ],
                     ),
                   ),
@@ -1372,12 +1441,26 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                 else if (_error != null)
                   ErrorState(message: _error!, onRetry: _load)
                 else if (_orders.isEmpty)
-                  const EmptyState(
-                      icon: Icons.inventory_2_outlined,
-                      message:
-                          'Your first order is waiting. Explore the shop to find something you love.')
-                else
-                  ..._orders.map(_orderCard),
+                  _NoOrdersState(
+                    onBrowse: () => setState(() => _showOrders = false),
+                  )
+                else ...[
+                  _OrderFilters(
+                    selected: _orderFilter,
+                    countFor: _orderCountFor,
+                    onChanged: (filter) =>
+                        setState(() => _orderFilter = filter),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_visibleOrders.isEmpty)
+                    _NoFilteredOrdersState(
+                      filter: _orderFilter,
+                      onShowAll: () =>
+                          setState(() => _orderFilter = _OrderFilter.all),
+                    )
+                  else
+                    ..._visibleOrders.map(_orderCard),
+                ],
               ] else ...[
                 const SizedBox(height: 14),
                 if (_error != null)
@@ -1786,6 +1869,336 @@ class _ShopTabs extends StatelessWidget {
   }
 }
 
+class _OrdersHeader extends StatelessWidget {
+  const _OrdersHeader({
+    required this.orderCount,
+    required this.activeCount,
+    required this.isRefreshing,
+    required this.onRefresh,
+  });
+
+  final int orderCount;
+  final int activeCount;
+  final bool isRefreshing;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: AppColors.cyan.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child:
+                const Icon(Icons.receipt_long_rounded, color: AppColors.cyan),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('My orders', style: AppTextStyles.subtitle),
+                const SizedBox(height: 3),
+                Text(
+                  '$orderCount ${orderCount == 1 ? 'order' : 'orders'} · $activeCount in progress',
+                  style: AppTextStyles.caption,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Refresh orders',
+            onPressed: isRefreshing ? null : onRefresh,
+            icon: isRefreshing
+                ? const SizedBox.square(
+                    dimension: 19,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OrderFilters extends StatelessWidget {
+  const _OrderFilters({
+    required this.selected,
+    required this.countFor,
+    required this.onChanged,
+  });
+
+  final _OrderFilter selected;
+  final int Function(_OrderFilter) countFor;
+  final ValueChanged<_OrderFilter> onChanged;
+
+  static const _filters = [
+    (_OrderFilter.all, 'All'),
+    (_OrderFilter.active, 'In progress'),
+    (_OrderFilter.completed, 'Completed'),
+    (_OrderFilter.cancelled, 'Cancelled'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final (filter, label) in _filters) ...[
+            if (filter != _OrderFilter.all) const SizedBox(width: 8),
+            _OrderFilterChip(
+              label: '$label · ${countFor(filter)}',
+              selected: selected == filter,
+              onTap: () => onChanged(filter),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _OrderFilterChip extends StatelessWidget {
+  const _OrderFilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected
+            ? AppColors.cyan.withValues(alpha: 0.13)
+            : AppColors.glassFill,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: selected
+                    ? AppColors.cyan.withValues(alpha: 0.55)
+                    : AppColors.glassBorder,
+              ),
+            ),
+            child: Text(
+              label,
+              style: AppTextStyles.caption.copyWith(
+                color: selected ? AppColors.cyan : AppColors.textSecondary,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoOrdersState extends StatelessWidget {
+  const _NoOrdersState({required this.onBrowse});
+
+  final VoidCallback onBrowse;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(22),
+      child: Column(
+        children: [
+          const Icon(Icons.shopping_bag_outlined,
+              color: AppColors.iconGhost, size: 38),
+          const SizedBox(height: 10),
+          Text('No orders yet', style: AppTextStyles.subtitle),
+          const SizedBox(height: 5),
+          Text(
+            'Your orders and their progress will appear here after checkout.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.caption,
+          ),
+          const SizedBox(height: 14),
+          NeonButton(
+            label: 'Browse products',
+            icon: Icons.storefront_outlined,
+            onPressed: onBrowse,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoFilteredOrdersState extends StatelessWidget {
+  const _NoFilteredOrdersState({
+    required this.filter,
+    required this.onShowAll,
+  });
+
+  final _OrderFilter filter;
+  final VoidCallback onShowAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (filter) {
+      _OrderFilter.all => 'orders',
+      _OrderFilter.active => 'orders in progress',
+      _OrderFilter.completed => 'completed orders',
+      _OrderFilter.cancelled => 'cancelled orders',
+    };
+    return GlassCard(
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        children: [
+          const Icon(Icons.filter_list_off_rounded,
+              color: AppColors.iconSecondary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text('No $label in your history.',
+                style: AppTextStyles.bodyMuted),
+          ),
+          TextButton(onPressed: onShowAll, child: const Text('Show all')),
+        ],
+      ),
+    );
+  }
+}
+
+class _OrderProgress extends StatelessWidget {
+  const _OrderProgress({
+    required this.status,
+    required this.isDelivery,
+  });
+
+  final String status;
+  final bool isDelivery;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = status.toLowerCase();
+    if (normalized == 'cancelled') {
+      return Container(
+        margin: const EdgeInsets.only(top: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+        decoration: BoxDecoration(
+          color: AppColors.error.withValues(alpha: 0.09),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline_rounded,
+                size: 17, color: AppColors.error),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'This order was cancelled. Contact the store if you need help.',
+                style: AppTextStyles.caption.copyWith(color: AppColors.error),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final steps = [
+      'Pending',
+      'Confirmed',
+      'Preparing',
+      isDelivery ? 'OutForDelivery' : 'ReadyForPickup',
+      'Completed',
+    ];
+    final index = steps.indexWhere((step) => step.toLowerCase() == normalized);
+    final currentIndex = index < 0 ? 0 : index;
+    final progress = currentIndex / (steps.length - 1);
+    final label = _orderStatusLabel(steps[currentIndex]);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.local_shipping_outlined,
+                  size: 16, color: AppColors.cyan),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  '$label · Step ${currentIndex + 1} of ${steps.length}',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textBody,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                isDelivery ? 'Delivery' : 'Pickup',
+                style: AppTextStyles.caption.copyWith(color: AppColors.cyan),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 5,
+              backgroundColor: AppColors.glassBorder,
+              valueColor: const AlwaysStoppedAnimation(AppColors.cyan),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _orderStatusLabel(String status) {
+  return switch (status) {
+    'Pending' => 'Awaiting store confirmation',
+    'Confirmed' => 'Order confirmed',
+    'Preparing' => 'Being prepared',
+    'ReadyForPickup' => 'Ready for pickup',
+    'OutForDelivery' => 'Out for delivery',
+    'Completed' => 'Completed',
+    'Cancelled' => 'Cancelled',
+    _ => status,
+  };
+}
+
+String _orderChipLabel(String status) {
+  return switch (status.toLowerCase()) {
+    'pending' => 'Pending',
+    'confirmed' => 'Confirmed',
+    'preparing' => 'Preparing',
+    'readyforpickup' => 'Ready for pickup',
+    'outfordelivery' => 'Out for delivery',
+    'completed' => 'Completed',
+    'cancelled' => 'Cancelled',
+    _ => status,
+  };
+}
+
 class _ShopTab extends StatelessWidget {
   const _ShopTab(
       {required this.label, required this.selected, required this.onTap});
@@ -1908,23 +2321,28 @@ class _OrderStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pending = status.toLowerCase() == 'pending';
+    final normalized = status.toLowerCase();
+    final color = switch (normalized) {
+      'pending' => AppColors.warning,
+      'cancelled' => AppColors.error,
+      'completed' => AppColors.success,
+      _ => AppColors.cyan,
+    };
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: (pending ? AppColors.warning : AppColors.success)
-            .withValues(alpha: 0.13),
+        color: color.withValues(alpha: 0.13),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-            color: (pending ? AppColors.warning : AppColors.success)
-                .withValues(alpha: 0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         child: Text(
-          status,
+          _orderChipLabel(status),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: AppTextStyles.caption.copyWith(
             fontSize: 10,
-            color: pending ? AppColors.warning : AppColors.success,
+            color: color,
             fontWeight: FontWeight.w700,
           ),
         ),

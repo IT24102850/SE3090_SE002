@@ -287,32 +287,95 @@ class _StockActivityHistoryScreenState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: AppColors.glassFill,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.glassBorder),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF1A2645),
+                Color(0xFF141F36),
+                Color(0xFF101B2E),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.history_rounded,
-                  color: AppColors.cyan, size: 26),
-              const SizedBox(width: 12),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4338CA), Color(0xFF312E81)],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFF818CF8).withValues(alpha: 0.4),
+                  ),
+                ),
+                child: const Icon(Icons.history_rounded,
+                    color: Color(0xFF67E8F9), size: 24),
+              ),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(0xFF22C55E),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Color(0xFF22C55E),
+                                blurRadius: 6,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'AUDIT TRAIL',
+                          style: AppTextStyles.label.copyWith(
+                            color: const Color(0xFF67E8F9),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
                     Text('Stock changes, recorded automatically',
                         style: AppTextStyles.body.copyWith(
                           color: Colors.white,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
                         )),
                     const SizedBox(height: 4),
                     Text(
-                      'Review activity from receiving, sales, issues, and adjustments.',
-                      style: AppTextStyles.caption
-                          .copyWith(color: AppColors.textSecondary),
+                      'All inbound shipments, customer sales, dispatches, and manual adjustments logged in real-time.',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.4,
+                      ),
                     ),
                   ],
                 ),
@@ -320,25 +383,49 @@ class _StockActivityHistoryScreenState
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          key: const Key('stock-activity-open-stock-operations'),
-          onPressed: () => Navigator.of(context).push<void>(
-            slideFadeRoute(StockOperationsScreen(client: widget.client)),
-          ),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.success,
-            foregroundColor: const Color(0xFF101521),
-            minimumSize: const Size.fromHeight(50),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+        const SizedBox(height: 14),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF059669), Color(0xFF10B981)],
             ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          icon: const Icon(Icons.swap_vert_rounded),
-          label: Text(
-            'Record Stock In / Out',
-            style: AppTextStyles.button.copyWith(
-              color: const Color(0xFF101521),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: const Key('stock-activity-open-stock-operations'),
+              onTap: () => Navigator.of(context).push<void>(
+                slideFadeRoute(StockOperationsScreen(client: widget.client)),
+              ),
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.swap_vert_rounded,
+                        color: Color(0xFF04121A), size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Record Stock In / Out',
+                      style: AppTextStyles.button.copyWith(
+                        color: const Color(0xFF04121A),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -366,9 +453,9 @@ class _StockActivityHistoryScreenState
 
   Widget _buildMovementCard(_StockMovement movement) {
     final color = movement.quantity > 0
-        ? AppColors.success
+        ? const Color(0xFF10B981)
         : movement.quantity < 0
-            ? AppColors.warning
+            ? const Color(0xFFF43F5E)
             : AppColors.textSecondary;
     final icon = movement.quantity > 0
         ? Icons.south_west_rounded
@@ -379,11 +466,28 @@ class _StockActivityHistoryScreenState
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: AppColors.glassFill,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: AppColors.glassBorder),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF141E30),
+            Color.lerp(const Color(0xFF0F1829), color, 0.05)!,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: color.withValues(alpha: 0.22),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,15 +496,21 @@ class _StockActivityHistoryScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
+                  gradient: RadialGradient(
+                    colors: [
+                      color.withValues(alpha: 0.22),
+                      color.withValues(alpha: 0.06),
+                    ],
+                  ),
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: color.withValues(alpha: 0.3)),
                 ),
                 child: Icon(icon, color: color, size: 21),
               ),
-              const SizedBox(width: 11),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,24 +519,36 @@ class _StockActivityHistoryScreenState
                       movement.item,
                       style: AppTextStyles.body.copyWith(
                         color: Colors.white,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14.5,
                       ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       '${_movementLabel(movement.type)} · ${movement.sku}',
-                      style: AppTextStyles.caption
-                          .copyWith(color: AppColors.textSecondary),
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                '$quantityPrefix${_formatQuantity(movement.quantity)}',
-                style: AppTextStyles.body.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w800,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: color.withValues(alpha: 0.25)),
+                ),
+                child: Text(
+                  '$quantityPrefix${_formatQuantity(movement.quantity)}',
+                  style: AppTextStyles.body.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ],

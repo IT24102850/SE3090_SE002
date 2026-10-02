@@ -143,6 +143,10 @@ describe('InventoryManagerPage price editing', () => {
     renderPage({ role: 'Admin' });
     await screen.findByRole('button', { name: /Add item/ });
     fireEvent.click(screen.getByRole('button', { name: /Add item/ }));
+    expect(screen.getByRole('dialog', { name: 'Add inventory item' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Add inventory item' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Add item/ }));
     fireEvent.change(screen.getByLabelText('Item name'), { target: { value: 'Wireless Mouse' } });
     fireEvent.change(screen.getByLabelText('Picture link'), {
       target: { value: 'https://images.example.test/mouse.jpg' },

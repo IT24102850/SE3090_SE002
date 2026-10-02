@@ -388,6 +388,15 @@ public class CustomerOrdersControllerTests
         Assert.Equal(order.Number, reportedSale.Reference);
         Assert.Equal(2m, reportedSale.Quantity);
         Assert.Equal("Tea", Assert.Single(reportedSale.Items));
+        db.Sales.Add(new Sale
+        {
+            TenantId = tenantId,
+            BranchId = branchId,
+            OccurredAt = DateTime.UtcNow,
+            Amount = 40m,
+            Reference = "MANUAL-001",
+        });
+        await db.SaveChangesAsync();
         var branchCommerceResult = await reportController.GetBranchCommerce(
             DateTime.UtcNow.AddDays(-1),
             DateTime.UtcNow.AddDays(1),
@@ -395,10 +404,20 @@ public class CustomerOrdersControllerTests
             CancellationToken.None);
         var branchCommerce = Assert.IsType<BranchCommerceReportResponse>(
             Assert.IsType<OkObjectResult>(branchCommerceResult.Result).Value);
-        Assert.Equal(150m, branchCommerce.SalesRevenue);
+        Assert.Equal(2, branchCommerce.SalesCount);
+        Assert.Equal(190m, branchCommerce.SalesRevenue);
+        Assert.Equal(1, branchCommerce.ManualSalesCount);
+        Assert.Equal(40m, branchCommerce.ManualSalesRevenue);
+        Assert.Equal(1, branchCommerce.CustomerOrderSalesCount);
+        Assert.Equal(150m, branchCommerce.CustomerOrderSalesRevenue);
         Assert.Equal(1, branchCommerce.CustomerOrderCount);
+        Assert.Equal(150m, branchCommerce.CustomerOrderValue);
         Assert.Equal(1, branchCommerce.CompletedOrders);
-        Assert.Equal(150m, Assert.Single(branchCommerce.Branches).SalesRevenue);
+        var branchSummary = Assert.Single(branchCommerce.Branches);
+        Assert.Equal(190m, branchSummary.SalesRevenue);
+        Assert.Equal(40m, branchSummary.ManualSalesRevenue);
+        Assert.Equal(150m, branchSummary.CustomerOrderSalesRevenue);
+        Assert.Equal(150m, branchSummary.CustomerOrderValue);
 
         var duplicateResult = await controller.UpdateStatus(
             order.Id,
@@ -406,7 +425,7 @@ public class CustomerOrdersControllerTests
             CancellationToken.None);
 
         Assert.IsType<ConflictObjectResult>(duplicateResult);
-        Assert.Single(await db.Sales.ToListAsync());
+        Assert.Equal(2, await db.Sales.CountAsync());
     }
 
     [Fact]

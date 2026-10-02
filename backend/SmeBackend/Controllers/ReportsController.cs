@@ -368,6 +368,20 @@ public sealed class ReportsController(
                 Revenue = group.Sum(sale => sale.Amount),
             })
             .ToDictionaryAsync(row => row.BranchId, cancellationToken);
+        var customerOrderSalesByBranch = await (
+                from sale in salesQuery
+                join order in db.CustomerOrders.AsNoTracking()
+                    on new { sale.TenantId, sale.BranchId, sale.Reference }
+                    equals new { order.TenantId, order.BranchId, Reference = order.Number }
+                select new { sale.BranchId, sale.Amount })
+            .GroupBy(sale => sale.BranchId)
+            .Select(group => new
+            {
+                BranchId = group.Key,
+                Count = group.Count(),
+                Revenue = group.Sum(sale => sale.Amount),
+            })
+            .ToDictionaryAsync(row => row.BranchId, cancellationToken);
         var ordersByBranchAndStatus = await ordersQuery
             .GroupBy(order => new { order.BranchId, order.Status })
             .Select(group => new
@@ -377,6 +391,15 @@ public sealed class ReportsController(
                 Count = group.Count(),
             })
             .ToListAsync(cancellationToken);
+        var orderValueByBranch = await ordersQuery
+            .Where(order => order.Status != "Cancelled")
+            .GroupBy(order => order.BranchId)
+            .Select(group => new
+            {
+                BranchId = group.Key,
+                Value = group.Sum(order => order.Total),
+            })
+            .ToDictionaryAsync(row => row.BranchId, cancellationToken);
         var branches = await branchesQuery
             .OrderBy(candidate => candidate.Name)
             .Select(candidate => new { candidate.Id, candidate.Name })
@@ -385,6 +408,7 @@ public sealed class ReportsController(
         var items = branches.Select(branch =>
         {
             var sales = salesByBranch.GetValueOrDefault(branch.Id);
+            var orderSales = customerOrderSalesByBranch.GetValueOrDefault(branch.Id);
             var statuses = ordersByBranchAndStatus
                 .Where(row => row.BranchId == branch.Id)
                 .ToDictionary(row => row.Status, row => row.Count);
@@ -393,7 +417,12 @@ public sealed class ReportsController(
                 branch.Name,
                 sales?.Count ?? 0,
                 sales?.Revenue ?? 0m,
+                (sales?.Count ?? 0) - (orderSales?.Count ?? 0),
+                (sales?.Revenue ?? 0m) - (orderSales?.Revenue ?? 0m),
+                orderSales?.Count ?? 0,
+                orderSales?.Revenue ?? 0m,
                 statuses.Values.Sum(),
+                orderValueByBranch.GetValueOrDefault(branch.Id)?.Value ?? 0m,
                 statuses.GetValueOrDefault("Pending"),
                 statuses.GetValueOrDefault("Confirmed"),
                 statuses.GetValueOrDefault("Preparing"),
@@ -409,7 +438,12 @@ public sealed class ReportsController(
             branchId,
             items.Sum(item => item.SalesCount),
             items.Sum(item => item.SalesRevenue),
+            items.Sum(item => item.ManualSalesCount),
+            items.Sum(item => item.ManualSalesRevenue),
+            items.Sum(item => item.CustomerOrderSalesCount),
+            items.Sum(item => item.CustomerOrderSalesRevenue),
             items.Sum(item => item.CustomerOrderCount),
+            items.Sum(item => item.CustomerOrderValue),
             items.Sum(item => item.PendingOrders),
             items.Sum(item => item.ConfirmedOrders),
             items.Sum(item => item.PreparingOrders),
@@ -606,7 +640,12 @@ public sealed record BranchCommerceReportResponse(
     Guid? BranchId,
     int SalesCount,
     decimal SalesRevenue,
+    int ManualSalesCount,
+    decimal ManualSalesRevenue,
+    int CustomerOrderSalesCount,
+    decimal CustomerOrderSalesRevenue,
     int CustomerOrderCount,
+    decimal CustomerOrderValue,
     int PendingOrders,
     int ConfirmedOrders,
     int PreparingOrders,
@@ -621,7 +660,12 @@ public sealed record BranchCommerceSummaryItem(
     string BranchName,
     int SalesCount,
     decimal SalesRevenue,
+    int ManualSalesCount,
+    decimal ManualSalesRevenue,
+    int CustomerOrderSalesCount,
+    decimal CustomerOrderSalesRevenue,
     int CustomerOrderCount,
+    decimal CustomerOrderValue,
     int PendingOrders,
     int ConfirmedOrders,
     int PreparingOrders,

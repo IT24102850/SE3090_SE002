@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { getStoredToken } from '../authToken';
 import { useChartTheme } from '../../../shared/useChartTheme';
+import { useToast } from '../ui/ToastContext';
 
 type DateRange = '7d' | '30d' | '90d';
 type Branch = { id: string; name: string };
@@ -30,7 +31,47 @@ type SalesReport = {
   costOfGoodsSold: number | null;
   grossProfit: number | null;
 };
+type BranchCommerceSummary = {
+  branchId: string;
+  manualSalesCount: number;
+  manualSalesRevenue: number;
+  customerOrderSalesCount: number;
+  customerOrderSalesRevenue: number;
+  customerOrderCount: number;
+  customerOrderValue: number;
+  pendingOrders: number;
+  confirmedOrders: number;
+  preparingOrders: number;
+  readyForPickupOrders: number;
+  outForDeliveryOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+};
+type BranchCommerceReport = {
+  manualSalesCount: number;
+  manualSalesRevenue: number;
+  customerOrderSalesCount: number;
+  customerOrderSalesRevenue: number;
+  customerOrderCount: number;
+  customerOrderValue: number;
+  pendingOrders: number;
+  confirmedOrders: number;
+  preparingOrders: number;
+  readyForPickupOrders: number;
+  outForDeliveryOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+  branches: BranchCommerceSummary[];
+};
 type BranchPerformance = Branch & SalesReport & {
+  manualSalesCount: number;
+  manualSalesRevenue: number;
+  customerOrderSalesCount: number;
+  customerOrderSalesRevenue: number;
+  customerOrderCount: number;
+  customerOrderValue: number;
+  openOrders: number;
+  completedOrders: number;
   itemCount: number;
   unitsOnHand: number;
   stockValue: number;
@@ -155,20 +196,24 @@ function Metric({
 export function BranchPerformancePage() {
   const token = getStoredToken();
   const chart = useChartTheme();
+  const { notify } = useToast();
   const [range, setRange] = useState<DateRange>('30d');
   const [data, setData] = useState<PerformanceState>(INITIAL_STATE);
   const requestId = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showSuccess = false) => {
     const currentRequest = ++requestId.current;
     setData({ status: 'loading' });
     try {
-      const [branches, inventory] = await Promise.all([
+      const params = dateParams(range);
+      const [branches, inventory, commerce] = await Promise.all([
         getJson<Branch[]>('/api/inventory/branches', token),
         getAllInventory(token),
+        getJson<BranchCommerceReport>(`/api/reports/branch-commerce?${params}`, token),
       ]);
       if (!Array.isArray(branches)) throw new Error('Branch response is invalid.');
-      const params = dateParams(range);
+      if (!Array.isArray(commerce.branches)) throw new Error('Branch commerce response is invalid.');
+      const commerceByBranch = new Map(commerce.branches.map((branch) => [branch.branchId, branch]));
       const performances = await Promise.all(branches.map(async (branch) => {
         const query = new URLSearchParams(params);
         query.set('branchId', branch.id);
@@ -184,9 +229,22 @@ export function BranchPerformancePage() {
           0,
         );
         const grossProfit = report.grossProfit;
+        const branchCommerce = commerceByBranch.get(branch.id);
         return {
           ...branch,
           ...report,
+          manualSalesCount: branchCommerce?.manualSalesCount ?? 0,
+          manualSalesRevenue: branchCommerce?.manualSalesRevenue ?? 0,
+          customerOrderSalesCount: branchCommerce?.customerOrderSalesCount ?? 0,
+          customerOrderSalesRevenue: branchCommerce?.customerOrderSalesRevenue ?? 0,
+          customerOrderCount: branchCommerce?.customerOrderCount ?? 0,
+          customerOrderValue: branchCommerce?.customerOrderValue ?? 0,
+          openOrders: (branchCommerce?.pendingOrders ?? 0) +
+            (branchCommerce?.confirmedOrders ?? 0) +
+            (branchCommerce?.preparingOrders ?? 0) +
+            (branchCommerce?.readyForPickupOrders ?? 0) +
+            (branchCommerce?.outForDeliveryOrders ?? 0),
+          completedOrders: branchCommerce?.completedOrders ?? 0,
           itemCount: stock.length,
           unitsOnHand: stock.reduce((total, item) => total + Number(item.quantity ?? 0), 0),
           stockValue,
@@ -198,7 +256,10 @@ export function BranchPerformancePage() {
             : grossProfit / report.totalRevenue * 100,
         };
       }));
-      if (currentRequest === requestId.current) setData({ status: 'ready', branches: performances });
+      if (currentRequest === requestId.current) {
+        setData({ status: 'ready', branches: performances });
+        if (showSuccess) notify('Branch performance refreshed successfully.', 'success');
+      }
     } catch (error) {
       if (currentRequest === requestId.current) {
         setData({
@@ -207,7 +268,7 @@ export function BranchPerformancePage() {
         });
       }
     }
-  }, [range, token]);
+  }, [notify, range, token]);
 
   useEffect(() => {
     void load();
@@ -236,6 +297,25 @@ export function BranchPerformancePage() {
     items: 0,
     attention: 0,
     profitDataComplete: rankedBranches.length > 0,
+  }), [rankedBranches]);
+  const commerceTotals = useMemo(() => rankedBranches.reduce((sum, branch) => ({
+    manualSalesCount: sum.manualSalesCount + branch.manualSalesCount,
+    manualSalesRevenue: sum.manualSalesRevenue + branch.manualSalesRevenue,
+    customerOrderSalesCount: sum.customerOrderSalesCount + branch.customerOrderSalesCount,
+    customerOrderSalesRevenue: sum.customerOrderSalesRevenue + branch.customerOrderSalesRevenue,
+    customerOrderCount: sum.customerOrderCount + branch.customerOrderCount,
+    customerOrderValue: sum.customerOrderValue + branch.customerOrderValue,
+    openOrders: sum.openOrders + branch.openOrders,
+    completedOrders: sum.completedOrders + branch.completedOrders,
+  }), {
+    manualSalesCount: 0,
+    manualSalesRevenue: 0,
+    customerOrderSalesCount: 0,
+    customerOrderSalesRevenue: 0,
+    customerOrderCount: 0,
+    customerOrderValue: 0,
+    openOrders: 0,
+    completedOrders: 0,
   }), [rankedBranches]);
 
   const chartData = useMemo(() => rankedBranches.map((branch) => ({
@@ -277,7 +357,7 @@ export function BranchPerformancePage() {
             <button
               type="button"
               className="btn inventory-analytics-refresh"
-              onClick={() => void load()}
+              onClick={() => void load(true)}
               disabled={data.status === 'loading'}
             >
               {data.status === 'loading' ? 'Updating…' : 'Refresh'}
@@ -319,6 +399,18 @@ export function BranchPerformancePage() {
             <Metric label="Sales revenue" value={money(totals.revenue)} detail="Revenue during selected period" tone="teal" icon="LKR" />
             <Metric label="Gross profit" value={totals.profitDataComplete ? money(totals.profit) : 'Partial data'} detail={totals.profitDataComplete ? 'Revenue less cost of sold stock' : 'One or more branches have incomplete cost data'} tone="green" icon="Σ" />
             <Metric label="Current stock value" value={money(totals.stockValue)} detail={`${count(totals.items)} branch item records`} tone="violet" icon="▦" />
+          </section>
+
+          <section className="panel branch-performance-commerce" aria-label={`${rangeLabel(range)} sales and customer orders`}>
+            <div className="inventory-analytics-panel-head">
+              <div><p className="eyebrow">SALES MIX / NETWORK</p><h2>Manual sales &amp; customer orders</h2><p>Completed customer orders are counted once in total sales. Order value excludes cancelled orders.</p></div>
+            </div>
+            <div className="branch-performance-commerce-metrics">
+              <Metric label="Manual sales" value={money(commerceTotals.manualSalesRevenue)} detail={`${count(commerceTotals.manualSalesCount)} recorded sales`} tone="blue" icon="M" />
+              <Metric label="Customer-order sales" value={money(commerceTotals.customerOrderSalesRevenue)} detail={`${count(commerceTotals.customerOrderSalesCount)} completed orders · included above`} tone="teal" icon="O" />
+              <Metric label="Customer orders" value={count(commerceTotals.customerOrderCount)} detail={`${money(commerceTotals.customerOrderValue)} order value`} tone="green" icon="#" />
+              <Metric label="Open / completed orders" value={`${count(commerceTotals.openOrders)} / ${count(commerceTotals.completedOrders)}`} detail={`${rangeLabel(range)} · all branches`} tone="violet" icon="✓" />
+            </div>
           </section>
 
           <section className="branch-performance-highlights" aria-label="Performance highlights">
@@ -380,13 +472,16 @@ export function BranchPerformancePage() {
             </div>
             <div className="table-wrap">
               <table className="data-table">
-                <thead><tr><th>Branch</th><th>Sales</th><th>Revenue</th><th>Avg. sale</th><th>Cost of goods</th><th>Gross profit</th><th>Margin</th><th>Stock value</th><th>Items at risk</th></tr></thead>
+                <thead><tr><th>Branch</th><th>Sales</th><th>Revenue</th><th>Manual sales</th><th>Customer-order sales</th><th>Orders</th><th>Avg. sale</th><th>Cost of goods</th><th>Gross profit</th><th>Margin</th><th>Stock value</th><th>Items at risk</th></tr></thead>
                 <tbody>
                   {rankedBranches.map((branch, index) => (
                     <tr key={branch.id}>
                       <td><strong>{branch.name}</strong><small className="branch-performance-rank">Revenue rank #{index + 1}</small></td>
                       <td>{count(branch.salesCount)}</td>
                       <td><strong>{money(branch.totalRevenue)}</strong></td>
+                      <td>{money(branch.manualSalesRevenue)}<small className="branch-performance-rank">{count(branch.manualSalesCount)} recorded</small></td>
+                      <td>{money(branch.customerOrderSalesRevenue)}<small className="branch-performance-rank">{count(branch.customerOrderSalesCount)} completed · in sales</small></td>
+                      <td>{count(branch.customerOrderCount)}<small className="branch-performance-rank">{money(branch.customerOrderValue)} order value · {count(branch.openOrders)} open</small></td>
                       <td>{money(branch.averageSale)}</td>
                       <td>{branch.costOfGoodsSold == null ? 'Incomplete data' : money(branch.costOfGoodsSold)}</td>
                       <td>{branch.grossProfit == null ? 'Incomplete data' : money(branch.grossProfit)}</td>

@@ -62,6 +62,7 @@ type BranchCommerceReport = {
   salesCount: number;
   salesRevenue: number;
   customerOrderCount: number;
+  customerOrderValue?: number;
   pendingOrders: number;
   confirmedOrders: number;
   preparingOrders: number;
@@ -109,7 +110,8 @@ function compact(value: number) {
   return new Intl.NumberFormat('en-LK', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }
 
-function lkr(value: number) {
+function lkr(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
   return new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR', maximumFractionDigits: 0 }).format(value);
 }
 
@@ -795,6 +797,15 @@ export function AnalyticsDashboardPage() {
                 tone="blue"
                 icon="workflow"
               />
+              <article className="inventory-analytics-order-value">
+                <span className="inventory-analytics-order-value-icon" aria-hidden="true"><Icon name="chart" size={20} /></span>
+                <div className="inventory-analytics-order-value-copy">
+                  <span>Total order value</span>
+                  <strong>{lkr(commerce.value.customerOrderValue)}</strong>
+                  <small>{Number.isFinite(commerce.value.customerOrderValue) ? 'Excludes cancelled orders' : 'Order value is unavailable'}</small>
+                </div>
+                <span className="inventory-analytics-order-value-period">{dateRangeLabel(range)}</span>
+              </article>
               <Metric
                 label="Awaiting review"
                 value={compact(commerce.value.pendingOrders)}

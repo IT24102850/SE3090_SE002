@@ -332,7 +332,34 @@ export function SalesPage() {
           <p className="eyebrow">OPERATIONS / INVENTORY</p>
           <h1>Sales</h1>
           <p>Record a sale against current catalog pricing and available branch stock.</p>
+          <div className="sales-hero-status">
+            <span className={loading ? 'is-loading' : 'is-ready'} aria-hidden="true" />
+            <span>{loading ? 'Syncing sales and inventory' : `${items.filter((item) => item.quantity > 0).length} in-stock items available`}</span>
+            <span className="sales-hero-status-divider" aria-hidden="true" />
+            <span>{selectedBranchName ?? (selectedBranchId ? 'Selected branch' : isAdmin ? 'All branches' : 'Assigned branch')}</span>
+          </div>
         </div>
+        <aside className="sales-hero-activity" aria-label="Latest sales activity">
+          <div className="sales-hero-activity-heading">
+            <span className="sales-hero-activity-icon" aria-hidden="true"><Icon name="chart" size={17} /></span>
+            <div><span>RECENT ACTIVITY</span><strong>Last 7 days</strong></div>
+            <span className="sales-hero-activity-live" aria-hidden="true" />
+          </div>
+          {report?.recentSales.length ? (
+            <ul>
+              {report.recentSales.slice(0, 3).map((sale) => (
+                <li key={sale.id}>
+                  <span><strong>{sale.reference}</strong><small>{receiptDate(sale.occurredAt)}</small></span>
+                  <b>{money(sale.amount)}</b>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="sales-hero-activity-empty">
+              {loading ? 'Loading recent transactions…' : 'No sales recorded in this period yet.'}
+            </p>
+          )}
+        </aside>
         <div className="page-actions">
           <button className="btn btn-secondary" type="button" onClick={() => void loadData(true)} disabled={loading}>
             {loading ? 'Refreshing…' : 'Refresh'}

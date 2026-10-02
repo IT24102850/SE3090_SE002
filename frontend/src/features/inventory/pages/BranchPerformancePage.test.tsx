@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { ToastProvider as AppToastProvider } from '../../../shared/components/Toast';
@@ -68,6 +68,60 @@ describe('branch performance report', () => {
           }),
         } as Response;
       }
+      if (path.startsWith('/api/reports/branch-commerce?')) {
+        return {
+          ok: true,
+          json: async () => ({
+            manualSalesCount: 5,
+            manualSalesRevenue: 11000,
+            customerOrderSalesCount: 3,
+            customerOrderSalesRevenue: 13000,
+            customerOrderCount: 6,
+            customerOrderValue: 18000,
+            pendingOrders: 2,
+            confirmedOrders: 1,
+            preparingOrders: 0,
+            readyForPickupOrders: 0,
+            outForDeliveryOrders: 0,
+            completedOrders: 3,
+            cancelledOrders: 0,
+            branches: [
+              {
+                branchId: 'branch-1',
+                manualSalesCount: 3,
+                manualSalesRevenue: 5000,
+                customerOrderSalesCount: 2,
+                customerOrderSalesRevenue: 10000,
+                customerOrderCount: 4,
+                customerOrderValue: 13000,
+                pendingOrders: 1,
+                confirmedOrders: 1,
+                preparingOrders: 0,
+                readyForPickupOrders: 0,
+                outForDeliveryOrders: 0,
+                completedOrders: 2,
+                cancelledOrders: 0,
+              },
+              {
+                branchId: 'branch-2',
+                manualSalesCount: 2,
+                manualSalesRevenue: 6000,
+                customerOrderSalesCount: 1,
+                customerOrderSalesRevenue: 3000,
+                customerOrderCount: 2,
+                customerOrderValue: 5000,
+                pendingOrders: 1,
+                confirmedOrders: 0,
+                preparingOrders: 0,
+                readyForPickupOrders: 0,
+                outForDeliveryOrders: 0,
+                completedOrders: 1,
+                cancelledOrders: 0,
+              },
+            ],
+          }),
+        } as Response;
+      }
       throw new Error(`Unexpected request: ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -83,14 +137,23 @@ describe('branch performance report', () => {
     const scorecard = await screen.findByRole('heading', { name: 'Detailed comparison' });
     expect(screen.getByRole('heading', { name: 'Revenue by branch' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Stock value by branch' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Manual sales & customer orders' })).toBeInTheDocument();
+    expect(screen.getByText('LKR 11,000')).toBeInTheDocument();
+    expect(screen.getByText('LKR 13,000')).toBeInTheDocument();
+    expect(screen.getByText('LKR 18,000 order value')).toBeInTheDocument();
     const table = scorecard.closest('section');
     expect(table).not.toBeNull();
     expect(within(table as HTMLElement).getByText('Main branch')).toBeInTheDocument();
     expect(within(table as HTMLElement).getByText('North branch')).toBeInTheDocument();
+    expect(within(table as HTMLElement).getByRole('columnheader', { name: 'Manual sales' })).toBeInTheDocument();
+    expect(within(table as HTMLElement).getByRole('columnheader', { name: 'Customer-order sales' })).toBeInTheDocument();
     expect(within(table as HTMLElement).getAllByText('40.0%')).toHaveLength(2);
     expect(screen.getByText('LKR 24,000')).toBeInTheDocument();
     expect(screen.getAllByText('LKR 2,200')).toHaveLength(2);
     expect(requestedBranchIds.sort()).toEqual(['branch-1', 'branch-2']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(await screen.findByText('Branch performance refreshed successfully.')).toBeInTheDocument();
   });
 
   it('shows an explicit error and offers retry when branch data cannot load', async () => {
@@ -107,6 +170,7 @@ describe('branch performance report', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('503 from /api/inventory/branches');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('Branch performance refreshed successfully.')).not.toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
   });
 });

@@ -10,6 +10,7 @@ describe('inventory sales activity', () => {
     salesCount: 2,
     salesRevenue: 12500,
     customerOrderCount: 4,
+    customerOrderValue: 28500,
     pendingOrders: 1,
     confirmedOrders: 0,
     preparingOrders: 1,
@@ -113,6 +114,10 @@ describe('inventory sales activity', () => {
     expect(screen.getByText('SALE REF')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('Orders placed').closest('article')).toHaveTextContent('4');
+    const orderValueCard = screen.getByText('Total order value').closest('.inventory-analytics-order-value');
+    expect(orderValueCard).toHaveTextContent('28,500');
+    expect(orderValueCard).toHaveTextContent('Excludes cancelled orders');
+    expect(orderValueCard).not.toHaveTextContent('NaN');
     expect(screen.getByText('Awaiting review').closest('article')).toHaveTextContent('1');
     expect(screen.getByText('Completed').closest('article')).toHaveTextContent('1');
     expect(screen.getAllByText('Gross profit')).toHaveLength(2);

@@ -561,3 +561,105 @@
   .cust-shop-business-modal,
   .cust-shop-business-list button { animation: none; transition: none; }
 }
+
+:root[data-theme="light"] .cust-order-ops-hero {
+  border-color: rgba(119, 164, 255, .72);
+  background:
+    radial-gradient(ellipse at 76% 8%, rgba(129, 160, 255, .34), transparent 36%),
+    radial-gradient(ellipse at 98% 100%, rgba(141, 95, 235, .28), transparent 38%),
+    linear-gradient(115deg, #14245F 0%, #203B91 34%, #2856B8 68%, #393C9B 100%);
+  box-shadow: 0 18px 42px rgba(35, 64, 137, .25), inset 0 1px rgba(255, 255, 255, .18);
+}
+:root[data-theme="light"] .cust-order-ops-heading .cust-shop-kicker { color: #BBD0FF; }
+:root[data-theme="light"] .cust-order-ops-chip {
+  border-color: rgba(220, 232, 255, .3);
+  background: rgba(255, 255, 255, .14);
+  color: #FFE6A3;
+}
+:root[data-theme="light"] .cust-order-ops-hero h1 { color: #FFFFFF; }
+:root[data-theme="light"] .cust-order-ops-hero p { color: rgba(244, 248, 255, .9); }
+:root[data-theme="light"] .cust-order-ops-live {
+  border-color: rgb(121 226 174 / 38%);
+  background: rgb(9 32 56 / 52%);
+  color: #E4FFE8;
+}
+:root[data-theme="light"] .cust-order-ops-refresh {
+  border-color: rgba(220, 232, 255, .4);
+  background: rgba(255, 255, 255, .13);
+  color: #FFFFFF;
+}
+:root[data-theme="light"] .cust-order-ops-icon {
+  border-color: rgba(210, 226, 255, .55);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .08));
+  box-shadow: 0 10px 24px rgba(7, 20, 62, .2), inset 0 1px rgba(255, 255, 255, .3);
+}
+
+:root[data-theme="dark"] .cust-order-ops-hero {
+  border-color: #263249;
+  background:
+    radial-gradient(ellipse at 66% 14%, rgba(99, 84, 178, .24), transparent 36%),
+    radial-gradient(ellipse at 86% 100%, rgba(42, 101, 166, .16), transparent 38%),
+    linear-gradient(118deg, #0E1524 0%, #121B2D 58%, #111827 100%);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .3), inset 0 1px rgba(255, 255, 255, .06);
+}
+:root[data-theme="dark"] .cust-order-ops-heading .cust-shop-kicker { color: #9BB5FF; }
+:root[data-theme="dark"] .cust-order-ops-chip {
+  border-color: rgba(145, 174, 255, .3);
+  background: rgba(145, 174, 255, .1);
+}
+:root[data-theme="dark"] .cust-order-ops-live { background: rgba(9, 32, 56, .56); }
+:root[data-theme="dark"] .cust-order-ops-icon {
+  border-color: rgba(145, 174, 255, .32);
+  background: linear-gradient(145deg, rgba(145, 174, 255, .18), rgba(145, 174, 255, .04));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .28), inset 0 1px rgba(255, 255, 255, .12);
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] .cust-order-ops-hero {
+    border-color: rgba(119, 164, 255, .72);
+    background:
+      radial-gradient(ellipse at 76% 8%, rgba(129, 160, 255, .34), transparent 36%),
+      radial-gradient(ellipse at 98% 100%, rgba(141, 95, 235, .28), transparent 38%),
+      linear-gradient(115deg, #14245F 0%, #203B91 34%, #2856B8 68%, #393C9B 100%);
+    box-shadow: 0 18px 42px rgba(35, 64, 137, .25), inset 0 1px rgba(255, 255, 255, .18);
+  }
+  :root[data-theme="system"] .cust-order-ops-heading .cust-shop-kicker { color: #BBD0FF; }
+  :root[data-theme="system"] .cust-order-ops-chip {
+    border-color: rgba(220, 232, 255, .3);
+    background: rgba(255, 255, 255, .14);
+    color: #FFE6A3;
+  }
+  :root[data-theme="system"] .cust-order-ops-hero h1 { color: #FFFFFF; }
+  :root[data-theme="system"] .cust-order-ops-hero p { color: rgba(244, 248, 255, .9); }
+  :root[data-theme="system"] .cust-order-ops-refresh {
+    border-color: rgba(220, 232, 255, .4);
+    background: rgba(255, 255, 255, .13);
+    color: #FFFFFF;
+  }
+  :root[data-theme="system"] .cust-order-ops-icon {
+    border-color: rgba(210, 226, 255, .55);
+    background: linear-gradient(145deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .08));
+    box-shadow: 0 10px 24px rgba(7, 20, 62, .2), inset 0 1px rgba(255, 255, 255, .3);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .cust-order-ops-hero {
+    border-color: #263249;
+    background:
+      radial-gradient(ellipse at 66% 14%, rgba(99, 84, 178, .24), transparent 36%),
+      radial-gradient(ellipse at 86% 100%, rgba(42, 101, 166, .16), transparent 38%),
+      linear-gradient(118deg, #0E1524 0%, #121B2D 58%, #111827 100%);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .3), inset 0 1px rgba(255, 255, 255, .06);
+  }
+  :root[data-theme="system"] .cust-order-ops-heading .cust-shop-kicker { color: #9BB5FF; }
+  :root[data-theme="system"] .cust-order-ops-chip {
+    border-color: rgba(145, 174, 255, .3);
+    background: rgba(145, 174, 255, .1);
+  }
+  :root[data-theme="system"] .cust-order-ops-icon {
+    border-color: rgba(145, 174, 255, .32);
+    background: linear-gradient(145deg, rgba(145, 174, 255, .18), rgba(145, 174, 255, .04));
+    box-shadow: 0 12px 28px rgba(0, 0, 0, .28), inset 0 1px rgba(255, 255, 255, .12);
+  }
+}

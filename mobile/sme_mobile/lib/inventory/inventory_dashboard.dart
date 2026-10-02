@@ -55,7 +55,8 @@ class InventoryDashboard extends StatefulWidget {
   State<InventoryDashboard> createState() => _InventoryDashboardState();
 }
 
-class _InventoryDashboardState extends State<InventoryDashboard> {
+class _InventoryDashboardState extends State<InventoryDashboard>
+    with SingleTickerProviderStateMixin {
   static const _previewLimit = 100;
   late final _repository = InventoryDashboardRepository(widget.client);
   DashboardSummary? _summary;
@@ -70,17 +71,30 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   String _selectedFilter = 'All';
   String _sortMode = 'Stock health';
 
+  late final AnimationController _enterCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+  late final CurvedAnimation _enterAnim = CurvedAnimation(
+    parent: _enterCtrl,
+    curve: Curves.easeOutCubic,
+  );
+
   @override
   void initState() {
     super.initState();
     _load();
+    _enterCtrl.forward();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _enterCtrl.dispose();
+    _enterAnim.dispose();
     super.dispose();
   }
+
 
   Future<void> _load({bool showSuccess = false}) async {
     if (_requestInFlight) return;
@@ -531,7 +545,22 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                               ),
                             ),
                           // High-tech Hero Banner
-                          _buildHeroBanner(),
+                          FadeTransition(
+                            opacity: CurvedAnimation(
+                              parent: _enterCtrl,
+                              curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+                            ),
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, .06),
+                                end: Offset.zero,
+                              ).animate(CurvedAnimation(
+                                parent: _enterCtrl,
+                                curve: const Interval(0.0, 0.6, curve: Curves.easeOutCubic),
+                              )),
+                              child: _buildHeroBanner(),
+                            ),
+                          ),
                           const SizedBox(height: 18),
 
                           if (_error != null) ...[
@@ -541,7 +570,22 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
 
                           // Inventory health at a glance.
                           if (_summary != null) ...[
-                            _buildMetricCards(_summary!),
+                            FadeTransition(
+                              opacity: CurvedAnimation(
+                                parent: _enterCtrl,
+                                curve: const Interval(0.2, 0.75, curve: Curves.easeOut),
+                              ),
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, .05),
+                                  end: Offset.zero,
+                                ).animate(CurvedAnimation(
+                                  parent: _enterCtrl,
+                                  curve: const Interval(0.2, 0.75, curve: Curves.easeOutCubic),
+                                )),
+                                child: _buildMetricCards(_summary!),
+                              ),
+                            ),
                             const SizedBox(height: 22),
                           ],
 
@@ -553,7 +597,22 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
                                     .copyWith(color: AppColors.cyan)),
                           ),
                           const SizedBox(height: 12),
-                          _buildQuickActionGrid(),
+                          FadeTransition(
+                            opacity: CurvedAnimation(
+                              parent: _enterCtrl,
+                              curve: const Interval(0.4, 0.85, curve: Curves.easeOut),
+                            ),
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, .04),
+                                end: Offset.zero,
+                              ).animate(CurvedAnimation(
+                                parent: _enterCtrl,
+                                curve: const Interval(0.4, 0.85, curve: Curves.easeOutCubic),
+                              )),
+                              child: _buildQuickActionGrid(),
+                            ),
+                          ),
                           const SizedBox(height: 24),
 
                           // Stock Health Overview & Search
@@ -661,111 +720,11 @@ class _InventoryDashboardState extends State<InventoryDashboard> {
   }
 
   Widget _buildHeroBanner() {
-    return InventoryPanel(
-      padding: EdgeInsets.zero,
-      borderColor: const Color(0xFF344A70),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF1C2B4A), Color(0xFF17233A), Color(0xFF142C3A)],
-            ),
-          ),
-          child: Stack(children: [
-            Positioned(
-              right: -45,
-              top: -68,
-              child: Container(
-                width: 190,
-                height: 190,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border:
-                      Border.all(color: Colors.white.withValues(alpha: .06)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.violet.withValues(alpha: .1),
-                      blurRadius: 45,
-                      spreadRadius: 24,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [
-                          AppColors.cyan.withValues(alpha: .24),
-                          AppColors.violet.withValues(alpha: .18),
-                        ]),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                            color: AppColors.cyan.withValues(alpha: .24)),
-                      ),
-                      child: const Icon(Icons.inventory_2_rounded,
-                          color: AppColors.cyan, size: 23),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('INVENTORY CONTROL CENTER',
-                              style: AppTextStyles.label.copyWith(
-                                color: const Color(0xFF9FE8F2),
-                                fontSize: 9,
-                                letterSpacing: 1.05,
-                              )),
-                          const SizedBox(height: 4),
-                          Text('Stock, made simple',
-                              style: AppTextStyles.title.copyWith(
-                                fontSize: 21,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -.3,
-                              )),
-                        ],
-                      ),
-                    ),
-                    if (widget.role case final role?)
-                      _RoleBadge(label: role.trim().toUpperCase()),
-                  ]),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Keep products, counts, orders and equipment moving from one clear workspace.',
-                    style: AppTextStyles.body.copyWith(
-                      color: AppColors.textSecondary,
-                      fontSize: 12.5,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Wrap(spacing: 8, runSpacing: 8, children: [
-                    _HeroPill(
-                      icon: Icons.inventory_2_outlined,
-                      label: '${_summary?.totalItems ?? _allItems.length} SKUs',
-                    ),
-                    _HeroPill(
-                      icon: Icons.schedule_rounded,
-                      label: _loading ? 'Updating stock' : 'Live stock view',
-                    ),
-                  ]),
-                ],
-              ),
-            ),
-          ]),
-        ),
-      ),
+    return _AnimatedHeroBanner(
+      summary: _summary,
+      allItemsLength: _allItems.length,
+      loading: _loading,
+      role: widget.role,
     );
   }
 
@@ -1615,7 +1574,7 @@ class _ItemInfoChip extends StatelessWidget {
       );
 }
 
-class _CyberStatCard extends StatelessWidget {
+class _CyberStatCard extends StatefulWidget {
   const _CyberStatCard({
     super.key,
     required this.label,
@@ -1634,82 +1593,165 @@ class _CyberStatCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
+  State<_CyberStatCard> createState() => _CyberStatCardState();
+}
+
+class _CyberStatCardState extends State<_CyberStatCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glowCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2200),
+  )..repeat(reverse: true);
+
+  bool _pressed = false;
+
+  @override
+  void dispose() {
+    _glowCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return InventoryPanel(
-      padding: const EdgeInsets.all(14),
-      borderColor: const Color(0xFF29394D),
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 3,
-            width: 38,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(3),
-              gradient: LinearGradient(colors: [
-                accentColor,
-                accentColor.withValues(alpha: .28),
-              ]),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.label.copyWith(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                    color: AppColors.textMuted,
+    return AnimatedBuilder(
+      animation: _glowCtrl,
+      builder: (context, _) {
+        final pulse = Curves.easeInOut.transform(_glowCtrl.value);
+        return GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) {
+            setState(() => _pressed = false);
+            widget.onTap?.call();
+          },
+          onTapCancel: () => setState(() => _pressed = false),
+          child: AnimatedScale(
+            scale: _pressed ? 0.96 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    const Color(0xFF131D30),
+                    Color.lerp(const Color(0xFF0F1829),
+                        widget.accentColor, 0.06)!,
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: widget.accentColor.withValues(alpha: 0.2 + 0.15 * pulse),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.accentColor.withValues(alpha: 0.08 + 0.1 * pulse),
+                    blurRadius: 16 + 10 * pulse,
+                    spreadRadius: pulse,
+                    offset: const Offset(0, 4),
                   ),
-                ),
+                  const BoxShadow(
+                    color: Color(0x30000000),
+                    blurRadius: 12,
+                    offset: Offset(0, 6),
+                  ),
+                ],
               ),
-              const SizedBox(width: 6),
-              Icon(icon, size: 17, color: accentColor),
-              if (onTap != null) ...[
-                const SizedBox(width: 4),
-                const Icon(
-                  Icons.arrow_forward_rounded,
-                  size: 14,
-                  color: AppColors.textMuted,
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.headlineSmall.copyWith(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Animated top accent bar
+                  Container(
+                    height: 3,
+                    width: 38 + 10 * pulse,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(3),
+                      gradient: LinearGradient(colors: [
+                        widget.accentColor,
+                        widget.accentColor.withValues(alpha: .3),
+                      ]),
+                      boxShadow: [
+                        BoxShadow(
+                          color: widget.accentColor.withValues(alpha: 0.5),
+                          blurRadius: 6 + 4 * pulse,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      // Glowing icon box
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          gradient: RadialGradient(colors: [
+                            widget.accentColor.withValues(alpha: 0.22 + 0.1 * pulse),
+                            widget.accentColor.withValues(alpha: 0.06),
+                          ]),
+                          borderRadius: BorderRadius.circular(11),
+                          border: Border.all(
+                            color: widget.accentColor.withValues(alpha: 0.25 + 0.1 * pulse),
+                          ),
+                        ),
+                        child: Icon(widget.icon, size: 18, color: widget.accentColor),
+                      ),
+                      const Spacer(),
+                      if (widget.onTap != null)
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 14,
+                          color: widget.accentColor.withValues(alpha: 0.5),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.label.copyWith(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.9,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    widget.value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.headlineSmall.copyWith(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.8,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    widget.subLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.caption.copyWith(
+                      fontSize: 10,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            subLabel,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.caption.copyWith(
-              fontSize: 11,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
-class _ActionTile extends StatelessWidget {
+class _ActionTile extends StatefulWidget {
   const _ActionTile({
     super.key,
     required this.icon,
@@ -1728,84 +1770,138 @@ class _ActionTile extends StatelessWidget {
   final bool compact;
 
   @override
+  State<_ActionTile> createState() => _ActionTileState();
+}
+
+class _ActionTileState extends State<_ActionTile> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return InventoryPanel(
-      padding: EdgeInsets.all(compact ? 12 : 14),
-      borderColor: const Color(0xFF29394D),
-      onTap: onTap,
-      child: compact
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.95 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: EdgeInsets.all(widget.compact ? 13 : 15),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF131D30),
+                Color.lerp(const Color(0xFF0F1829), widget.color, 0.07)!,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: _pressed
+                  ? widget.color.withValues(alpha: 0.55)
+                  : widget.color.withValues(alpha: 0.2),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _pressed
+                    ? widget.color.withValues(alpha: 0.22)
+                    : widget.color.withValues(alpha: 0.08),
+                blurRadius: _pressed ? 20 : 10,
+                offset: const Offset(0, 5),
+              ),
+              const BoxShadow(
+                color: Color(0x30000000),
+                blurRadius: 12,
+                offset: Offset(0, 5),
+              ),
+            ],
+          ),
+          child: widget.compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildIcon(size: 40),
-                    const Spacer(),
-                    const Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 15,
-                      color: AppColors.textMuted,
+                    Row(
+                      children: [
+                        _buildIcon(size: 40),
+                        const Spacer(),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 14,
+                          color: widget.color.withValues(alpha: 0.55),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      widget.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.subtitle.copyWith(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        letterSpacing: -.2,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      widget.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 10,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    _buildIcon(),
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.title,
+                            style: AppTextStyles.subtitle.copyWith(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              letterSpacing: -.2,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            widget.subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 12,
+                      color: widget.color.withValues(alpha: 0.55),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.subtitle.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textSecondary,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            )
-          : Row(
-              children: [
-                _buildIcon(),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        title,
-                        style: AppTextStyles.subtitle.copyWith(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.textSecondary,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 12,
-                  color: AppColors.textMuted,
-                ),
-              ],
-            ),
+        ),
+      ),
     );
   }
 
@@ -1814,10 +1910,14 @@ class _ActionTile extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.11),
-        borderRadius: BorderRadius.circular(12),
+        gradient: RadialGradient(colors: [
+          widget.color.withValues(alpha: 0.22),
+          widget.color.withValues(alpha: 0.06),
+        ]),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: widget.color.withValues(alpha: 0.28)),
       ),
-      child: Icon(icon, color: color, size: size * .5),
+      child: Icon(widget.icon, color: widget.color, size: size * .48),
     );
   }
 }
@@ -1910,4 +2010,307 @@ class DashboardSummary {
   });
   final int totalItems, lowStock, outOfStock, pendingOrders;
   final double totalValue;
+}
+
+class _AnimatedHeroBanner extends StatefulWidget {
+  const _AnimatedHeroBanner({
+    required this.summary,
+    required this.allItemsLength,
+    required this.loading,
+    this.role,
+  });
+
+  final DashboardSummary? summary;
+  final int allItemsLength;
+  final bool loading;
+  final String? role;
+
+  @override
+  State<_AnimatedHeroBanner> createState() => _AnimatedHeroBannerState();
+}
+
+class _AnimatedHeroBannerState extends State<_AnimatedHeroBanner>
+    with TickerProviderStateMixin {
+  late final AnimationController _pulseCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 4),
+  )..repeat(reverse: true);
+
+  late final AnimationController _sheenCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3200),
+  )..repeat();
+
+  late final AnimationController _floatCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2400),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    _sheenCtrl.dispose();
+    _floatCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_pulseCtrl, _sheenCtrl, _floatCtrl]),
+      builder: (context, _) {
+        final pulse = Curves.easeInOut.transform(_pulseCtrl.value);
+        final floatY = -4.0 * Curves.easeInOut.transform(_floatCtrl.value);
+
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: Color.lerp(
+                const Color(0xFF3B527E),
+                const Color(0xFF6366F1),
+                pulse,
+              )!.withValues(alpha: 0.6 + 0.3 * pulse),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF4F46E5).withValues(alpha: 0.15 + 0.12 * pulse),
+                blurRadius: 28 + 12 * pulse,
+                spreadRadius: 2 * pulse,
+                offset: const Offset(0, 8),
+              ),
+              const BoxShadow(
+                color: Color(0x40000000),
+                blurRadius: 16,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment(-1.0 + 0.4 * pulse, -1.0),
+                  end: Alignment(1.0, 1.0 - 0.4 * pulse),
+                  colors: [
+                    Color.lerp(const Color(0xFF162344), const Color(0xFF1E1B4B), pulse)!,
+                    Color.lerp(const Color(0xFF142036), const Color(0xFF281E54), pulse)!,
+                    const Color(0xFF111E30),
+                  ],
+                ),
+              ),
+              child: Stack(
+                children: [
+                  // Ambient glowing orb top right
+                  Positioned(
+                    right: -30,
+                    top: -50,
+                    child: Container(
+                      width: 180 + 30 * pulse,
+                      height: 180 + 30 * pulse,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            const Color(0xFF7C3AED).withValues(alpha: 0.22 + 0.12 * pulse),
+                            const Color(0xFF06B6D4).withValues(alpha: 0.08),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Ambient secondary glow bottom left
+                  Positioned(
+                    left: -20,
+                    bottom: -30,
+                    child: Container(
+                      width: 140,
+                      height: 140,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            const Color(0xFF00E5FF).withValues(alpha: 0.12 + 0.08 * pulse),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Shimmer sweep beam
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Align(
+                        alignment: Alignment(-2.0 + 4.0 * _sheenCtrl.value, 0),
+                        child: Transform.rotate(
+                          angle: -0.35,
+                          child: Container(
+                            width: 60,
+                            height: 400,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.transparent,
+                                  Colors.white.withValues(alpha: 0.05),
+                                  Colors.white.withValues(alpha: 0.12),
+                                  Colors.white.withValues(alpha: 0.05),
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Main content
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            // 3D Bobbing glowing icon container
+                            Transform.translate(
+                              offset: Offset(0, floatY),
+                              child: Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF312E81),
+                                      Color(0xFF1E1B4B),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0xFF6366F1).withValues(
+                                        alpha: 0.4 + 0.3 * pulse),
+                                    width: 1.4,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF6366F1)
+                                          .withValues(alpha: 0.3 + 0.2 * pulse),
+                                      blurRadius: 14 + 6 * pulse,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.inventory_2_rounded,
+                                  color: Color(0xFF67E8F9),
+                                  size: 26,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: const Color(0xFF22C55E),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFF22C55E)
+                                                  .withValues(alpha: 0.7),
+                                              blurRadius: 6 + 4 * pulse,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'LIVE OPERATIONS',
+                                        style: AppTextStyles.label.copyWith(
+                                          color: const Color(0xFF67E8F9),
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 1.2,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  ShaderMask(
+                                    shaderCallback: (bounds) =>
+                                        const LinearGradient(
+                                      colors: [
+                                        Colors.white,
+                                        Color(0xFFE0E7FF),
+                                        Color(0xFFC7D2FE),
+                                      ],
+                                    ).createShader(bounds),
+                                    child: Text(
+                                      'Inventory Hub',
+                                      style: AppTextStyles.title.copyWith(
+                                        fontSize: 23,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: -0.6,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (widget.role case final role?)
+                              _RoleBadge(label: role.trim().toUpperCase()),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          'Real-time overview of products, stock movements, branch allocations, and reorder levels.',
+                          style: AppTextStyles.body.copyWith(
+                            color: const Color(0xFFCBD5E1),
+                            fontSize: 12.5,
+                            height: 1.45,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _HeroPill(
+                              icon: Icons.inventory_2_outlined,
+                              label:
+                                  '${widget.summary?.totalItems ?? widget.allItemsLength} SKUs Monitored',
+                            ),
+                            _HeroPill(
+                              icon: Icons.wifi_tethering_rounded,
+                              label: widget.loading
+                                  ? 'Synchronizing...'
+                                  : 'Active Feed',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

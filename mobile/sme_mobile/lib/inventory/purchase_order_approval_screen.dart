@@ -608,13 +608,36 @@ class _PurchaseOrderApprovalScreenState
     return AppBackgroundScaffold(
       showParticles: false,
       floatingActionButton: widget.canCreate
-          ? FloatingActionButton.extended(
-              backgroundColor: AppColors.cyan,
-              foregroundColor: const Color(0xFF0A111E),
-              icon: const Icon(Icons.add_rounded, size: 20),
-              label: const Text('New PO',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-              onPressed: _showCreateOrderModal,
+          ? Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF00E5FF), Color(0xFF4C6FFF)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00E5FF).withValues(alpha: 0.4),
+                    blurRadius: 18,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: FloatingActionButton.extended(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                highlightElevation: 0,
+                foregroundColor: const Color(0xFF04121A),
+                icon: const Icon(Icons.add_rounded, size: 22),
+                label: const Text(
+                  'New PO',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13.5,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                onPressed: _showCreateOrderModal,
+              ),
             )
           : null,
       appBar: GlassAppBar(
@@ -827,179 +850,255 @@ class _PurchaseOrderApprovalScreenState
         .length;
 
     return Container(
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F1C2B), Color(0xFF132030)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: const Color(0xFF4F46E5).withValues(alpha: 0.35),
+          width: 1.2,
         ),
-        border: Border.all(color: const Color(0xFF263C54)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x44000000),
-            blurRadius: 20,
+            color: Color(0x384F46E5),
+            blurRadius: 24,
             offset: Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Color(0x50000000),
+            blurRadius: 16,
+            offset: Offset(0, 6),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top row: badge + role chip
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            runSpacing: 8,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color(0xFF162344),
+                Color(0xFF1E1E4C),
+                Color(0xFF10192E),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Stack(
             children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B).withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+              // Ambient top-right glow orb
+              Positioned(
+                right: -25,
+                top: -35,
+                child: Container(
+                  width: 160,
+                  height: 160,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFF6366F1).withValues(alpha: 0.25),
+                        Colors.transparent,
+                      ],
+                    ),
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+              ),
+
+              Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF59E0B),
-                        shape: BoxShape.circle,
+                    // Top row: badge + role chip
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      runSpacing: 8,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color:
+                                const Color(0xFFF59E0B).withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFFF59E0B)
+                                  .withValues(alpha: 0.45),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFF59E0B)
+                                    .withValues(alpha: 0.12),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF59E0B),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Color(0xFFF59E0B),
+                                      blurRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'PROCUREMENT DESK',
+                                style: AppTextStyles.label.copyWith(
+                                  color: const Color(0xFFFCD34D),
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: widget.canApprove
+                                ? const Color(0xFF10B981)
+                                    .withValues(alpha: 0.18)
+                                : widget.canCreate
+                                    ? AppColors.cyan.withValues(alpha: 0.18)
+                                    : Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: widget.canApprove
+                                  ? const Color(0xFF10B981)
+                                      .withValues(alpha: 0.45)
+                                  : widget.canCreate
+                                      ? AppColors.cyan.withValues(alpha: 0.45)
+                                      : AppColors.glassBorder,
+                            ),
+                          ),
+                          child: Text(
+                            widget.canApprove
+                                ? 'APPROVAL PERMITTED'
+                                : widget.canCreate
+                                    ? 'REQUEST CREATION'
+                                    : 'READ ONLY AUDIT',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                              color: widget.canApprove
+                                  ? const Color(0xFF34D399)
+                                  : widget.canCreate
+                                      ? const Color(0xFF67E8F9)
+                                      : AppColors.textMuted,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Total value — all orders
+                    Text('TOTAL PORTFOLIO VALUE',
+                        style: AppTextStyles.label.copyWith(
+                          fontSize: 9.5,
+                          letterSpacing: 1.2,
+                          color: const Color(0xFF94A3B8),
+                        )),
+                    const SizedBox(height: 3),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [
+                            Colors.white,
+                            Color(0xFFE0E7FF),
+                            Color(0xFF818CF8),
+                          ],
+                        ).createShader(bounds),
+                        child: Text(
+                          'LKR ${_formatCurrency(totalValue)}',
+                          style: AppTextStyles.headline.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: -0.6,
+                            fontSize: 26,
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 6),
+
+                    // Sub-label: breakdown
+                    const SizedBox(height: 4),
                     Text(
-                      'PROCUREMENT DESK',
-                      style: AppTextStyles.label.copyWith(
-                        color: const Color(0xFFF59E0B),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
+                      '${_openOrders.length} open · $receivedCount received · $rejectedCount rejected · $cancelledCount cancelled',
+                      style: AppTextStyles.caption.copyWith(
+                        color: const Color(0xFF94A3B8),
+                        fontSize: 11,
                       ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // 4 tappable metric tiles
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildMetricTile(
+                            label: 'OPEN',
+                            value: '${_openOrders.length}',
+                            color: AppColors.cyan,
+                            icon: Icons.inventory_2_rounded,
+                            filterKey: 'all',
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _buildMetricTile(
+                            label: 'ACTION DUE',
+                            value: '$_needsActionCount',
+                            color: const Color(0xFFFBBF24),
+                            icon: Icons.pending_actions_rounded,
+                            filterKey: 'needs_action',
+                            highlight: _needsActionCount > 0,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _buildMetricTile(
+                            label: 'IN TRANSIT',
+                            value: '$_inFulfillmentCount',
+                            color: const Color(0xFF60A5FA),
+                            icon: Icons.local_shipping_rounded,
+                            filterKey: 'fulfillment',
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _buildMetricTile(
+                            label: 'PAST',
+                            value: '$_completedCount',
+                            color: const Color(0xFF10B981),
+                            icon: Icons.check_circle_outline_rounded,
+                            filterKey: 'history',
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: widget.canApprove
-                      ? const Color(0xFF10B981).withValues(alpha: 0.18)
-                      : widget.canCreate
-                          ? AppColors.cyan.withValues(alpha: 0.18)
-                          : Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: widget.canApprove
-                        ? const Color(0xFF10B981).withValues(alpha: 0.4)
-                        : widget.canCreate
-                            ? AppColors.cyan.withValues(alpha: 0.4)
-                            : AppColors.glassBorder,
-                  ),
-                ),
-                child: Text(
-                  widget.canApprove
-                      ? 'APPROVAL PERMITTED'
-                      : widget.canCreate
-                          ? 'REQUEST CREATION'
-                          : 'READ ONLY AUDIT',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: widget.canApprove
-                        ? const Color(0xFF10B981)
-                        : widget.canCreate
-                            ? AppColors.cyan
-                            : AppColors.textMuted,
-                  ),
-                ),
-              ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          // Total value — all orders
-          Text('TOTAL PORTFOLIO VALUE',
-              style: AppTextStyles.label
-                  .copyWith(fontSize: 10, letterSpacing: 1.2)),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'LKR ${_formatCurrency(totalValue)}',
-              style: AppTextStyles.headline.copyWith(
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ),
-
-          // Sub-label: breakdown
-          const SizedBox(height: 4),
-          Text(
-            '${_openOrders.length} open · $receivedCount received · $rejectedCount rejected · $cancelledCount cancelled',
-            style: AppTextStyles.caption.copyWith(
-              color: AppColors.textMuted,
-              fontSize: 11,
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // 4 tappable metric tiles
-          Row(
-            children: [
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'OPEN',
-                  value: '${_openOrders.length}',
-                  color: AppColors.cyan,
-                  icon: Icons.inventory_2_rounded,
-                  filterKey: 'all',
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'ACTION DUE',
-                  value: '$_needsActionCount',
-                  color: const Color(0xFFFBBF24),
-                  icon: Icons.pending_actions_rounded,
-                  filterKey: 'needs_action',
-                  highlight: _needsActionCount > 0,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'IN TRANSIT',
-                  value: '$_inFulfillmentCount',
-                  color: const Color(0xFF60A5FA),
-                  icon: Icons.local_shipping_rounded,
-                  filterKey: 'fulfillment',
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'PAST',
-                  value: '$_completedCount',
-                  color: const Color(0xFF10B981),
-                  icon: Icons.check_circle_outline_rounded,
-                  filterKey: 'history',
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1021,28 +1120,52 @@ class _PurchaseOrderApprovalScreenState
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
         decoration: BoxDecoration(
-          color: isActive
-              ? color.withValues(alpha: 0.18)
-              : highlight
-                  ? color.withValues(alpha: 0.12)
-                  : Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              isActive
+                  ? color.withValues(alpha: 0.22)
+                  : highlight
+                      ? color.withValues(alpha: 0.14)
+                      : const Color(0xFF121A2C),
+              Color.lerp(const Color(0xFF0F1524), color, isActive ? 0.15 : 0.04)!,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(13),
           border: Border.all(
             color: isActive
-                ? color.withValues(alpha: 0.7)
+                ? color.withValues(alpha: 0.8)
                 : highlight
-                    ? color.withValues(alpha: 0.5)
+                    ? color.withValues(alpha: 0.55)
                     : color.withValues(alpha: 0.22),
             width: isActive || highlight ? 1.5 : 1,
           ),
+          boxShadow: [
+            if (isActive || highlight)
+              BoxShadow(
+                color: color.withValues(alpha: 0.2),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              height: 2,
+              width: 18,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 6),
             Row(
               children: [
                 Icon(icon, size: 11, color: color),
-                const SizedBox(width: 3),
+                const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     label,
@@ -1050,8 +1173,8 @@ class _PurchaseOrderApprovalScreenState
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 8,
-                      fontWeight: FontWeight.w700,
-                      color: isActive ? color : AppColors.textMuted,
+                      fontWeight: FontWeight.w800,
+                      color: isActive ? color : const Color(0xFF94A3B8),
                       letterSpacing: 0.4,
                     ),
                   ),
@@ -1064,19 +1187,21 @@ class _PurchaseOrderApprovalScreenState
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w900,
-                color: color,
+                color: Colors.white,
                 height: 1,
               ),
             ),
-            if (filterKey != null)
+            if (filterKey != null) ...[
+              const SizedBox(height: 2),
               Text(
                 'tap to view',
                 style: TextStyle(
                   fontSize: 8,
-                  color: color.withValues(alpha: isActive ? 0.9 : 0.5),
+                  color: color.withValues(alpha: isActive ? 0.95 : 0.6),
                   fontWeight: FontWeight.w600,
                 ),
               ),
+            ],
           ],
         ),
       ),
@@ -1091,7 +1216,7 @@ class _PurchaseOrderApprovalScreenState
       margin: const EdgeInsets.only(bottom: 14),
       child: InventoryPanel(
         padding: const EdgeInsets.all(16),
-        borderColor: statusColor.withValues(alpha: 0.35),
+        borderColor: statusColor.withValues(alpha: 0.38),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1102,11 +1227,22 @@ class _PurchaseOrderApprovalScreenState
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.14),
+                    gradient: LinearGradient(
+                      colors: [
+                        statusColor.withValues(alpha: 0.18),
+                        statusColor.withValues(alpha: 0.06),
+                      ],
+                    ),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: statusColor.withValues(alpha: 0.3),
+                      color: statusColor.withValues(alpha: 0.4),
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: statusColor.withValues(alpha: 0.12),
+                        blurRadius: 8,
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1132,7 +1268,7 @@ class _PurchaseOrderApprovalScreenState
                         ? order.createdAt
                         : order.updatedAt),
                     style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textMuted,
+                      color: const Color(0xFF94A3B8),
                       fontSize: 11,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -1140,12 +1276,18 @@ class _PurchaseOrderApprovalScreenState
                 ),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.16),
+                    color: statusColor.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(20),
                     border:
-                        Border.all(color: statusColor.withValues(alpha: 0.45)),
+                        Border.all(color: statusColor.withValues(alpha: 0.5)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: statusColor.withValues(alpha: 0.22),
+                        blurRadius: 8,
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1156,6 +1298,12 @@ class _PurchaseOrderApprovalScreenState
                         decoration: BoxDecoration(
                           color: statusColor,
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: statusColor,
+                              blurRadius: 6,
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 5),
@@ -1163,9 +1311,9 @@ class _PurchaseOrderApprovalScreenState
                         status.label.toUpperCase(),
                         style: TextStyle(
                           color: statusColor,
-                          fontSize: 10,
+                          fontSize: 9.5,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
+                          letterSpacing: 0.6,
                         ),
                       ),
                     ],
@@ -1213,7 +1361,7 @@ class _PurchaseOrderApprovalScreenState
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: AppTextStyles.caption.copyWith(
-                                color: AppColors.textSecondary,
+                                color: const Color(0xFFCBD5E1),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -1228,14 +1376,17 @@ class _PurchaseOrderApprovalScreenState
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text('TOTAL VALUE',
-                        style: AppTextStyles.label.copyWith(fontSize: 9)),
+                        style: AppTextStyles.label.copyWith(
+                          fontSize: 9,
+                          color: const Color(0xFF94A3B8),
+                        )),
                     const SizedBox(height: 2),
                     Text(
                       'LKR ${_formatCurrency(order.amount)}',
                       style: AppTextStyles.title.copyWith(
                         color: const Color(0xFF10B981),
                         fontWeight: FontWeight.w900,
-                        fontSize: 16,
+                        fontSize: 16.5,
                       ),
                     ),
                   ],
@@ -1316,10 +1467,16 @@ class _PurchaseOrderApprovalScreenState
             final isDone = activeIndex > stepBefore;
             return Expanded(
               child: Container(
-                height: 2,
-                color: isDone
-                    ? const Color(0xFF10B981)
-                    : Colors.white.withValues(alpha: 0.1),
+                height: 2.5,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(2),
+                  gradient: isDone
+                      ? const LinearGradient(
+                          colors: [Color(0xFF059669), Color(0xFF10B981)],
+                        )
+                      : null,
+                  color: isDone ? null : Colors.white.withValues(alpha: 0.08),
+                ),
               ),
             );
           }
@@ -1338,23 +1495,32 @@ class _PurchaseOrderApprovalScreenState
           return Tooltip(
             message: step.label,
             child: Container(
-              width: 18,
-              height: 18,
+              width: 20,
+              height: 20,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: isCurrent
-                    ? dotColor.withValues(alpha: 0.25)
-                    : dotColor.withValues(alpha: 0.15),
+                    ? dotColor.withValues(alpha: 0.28)
+                    : dotColor.withValues(alpha: 0.12),
                 border: Border.all(
                   color: dotColor,
                   width: isCurrent ? 2 : 1.2,
                 ),
+                boxShadow: isCurrent
+                    ? [
+                        BoxShadow(
+                          color: dotColor.withValues(alpha: 0.55),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
               ),
               child: Center(
                 child: isPast || isCurrent
                     ? Container(
-                        width: 6,
-                        height: 6,
+                        width: 7,
+                        height: 7,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: dotColor,

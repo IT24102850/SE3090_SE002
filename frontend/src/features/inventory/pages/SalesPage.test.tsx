@@ -329,9 +329,13 @@ describe('SalesPage', () => {
     const receiptButton = await screen.findByRole('button', { name: 'View receipt' });
     expect(screen.getByRole('heading', { name: 'Recent sales & receipts' })).toBeInTheDocument();
     expect(screen.getByText('1 sale')).toBeInTheDocument();
+    const heroActivity = screen.getByRole('complementary', { name: 'Latest sales activity' });
+    expect(within(heroActivity).getByText('SALE-001')).toBeInTheDocument();
+    expect(within(heroActivity).getByText('LKR 750.00')).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Sale reference' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Date & time' })).toBeInTheDocument();
-    const saleRow = screen.getByText('SALE-001').closest('tr');
+    const salesTable = screen.getByRole('table');
+    const saleRow = within(salesTable).getByText('SALE-001').closest('tr');
     expect(saleRow).not.toBeNull();
     expect(within(saleRow!).getByText('Paper')).toBeInTheDocument();
     expect(receiptButton).toHaveClass('sales-receipt-button');

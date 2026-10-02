@@ -27,7 +27,12 @@ type BranchCommerceSummary = {
   branchName: string;
   salesCount: number;
   salesRevenue: number;
+  manualSalesCount: number;
+  manualSalesRevenue: number;
+  customerOrderSalesCount: number;
+  customerOrderSalesRevenue: number;
   customerOrderCount: number;
+  customerOrderValue: number;
   pendingOrders: number;
   confirmedOrders: number;
   preparingOrders: number;
@@ -39,7 +44,12 @@ type BranchCommerceSummary = {
 type BranchCommerceReport = {
   salesCount: number;
   salesRevenue: number;
+  manualSalesCount: number;
+  manualSalesRevenue: number;
+  customerOrderSalesCount: number;
+  customerOrderSalesRevenue: number;
   customerOrderCount: number;
+  customerOrderValue: number;
   pendingOrders: number;
   confirmedOrders: number;
   preparingOrders: number;
@@ -354,10 +364,12 @@ export function BranchOverviewPage() {
         </div>
         {commerceError && <p className="branch-commerce-error" role="alert">{commerceError}</p>}
         <div className="branch-commerce-metrics">
-          <article><span>Sales revenue</span><strong>{commerceLoading && !commerce ? '…' : money(commerce?.salesRevenue ?? 0)}</strong><small>{commerce?.salesCount ?? 0} completed sales</small></article>
-          <article><span>Customer orders</span><strong>{commerceLoading && !commerce ? '…' : commerce?.customerOrderCount ?? 0}</strong><small>Placed in this period</small></article>
+          <article><span>Total sales</span><strong>{commerceLoading && !commerce ? '…' : money(commerce?.salesRevenue ?? 0)}</strong><small>{commerce?.salesCount ?? 0} recorded sales</small></article>
+          <article><span>Manual sales</span><strong>{commerceLoading && !commerce ? '…' : money(commerce?.manualSalesRevenue ?? 0)}</strong><small>{commerce?.manualSalesCount ?? 0} manually recorded</small></article>
+          <article><span>Customer-order sales</span><strong>{commerceLoading && !commerce ? '…' : money(commerce?.customerOrderSalesRevenue ?? 0)}</strong><small>{commerce?.customerOrderSalesCount ?? 0} completed orders · included in total sales</small></article>
+          <article><span>Customer orders</span><strong>{commerceLoading && !commerce ? '…' : commerce?.customerOrderCount ?? 0}</strong><small>{money(commerce?.customerOrderValue ?? 0)} order value · excludes cancelled</small></article>
           <article><span>Open orders</span><strong>{commerceLoading && !commerce ? '…' : activeOrderCount}</strong><small>{commerce?.pendingOrders ?? 0} awaiting confirmation</small></article>
-          <article><span>Completed orders</span><strong>{commerceLoading && !commerce ? '…' : commerce?.completedOrders ?? 0}</strong><small>Included in sales revenue</small></article>
+          <article><span>Completed orders</span><strong>{commerceLoading && !commerce ? '…' : commerce?.completedOrders ?? 0}</strong><small>Recorded once as customer-order sales</small></article>
         </div>
       </section>
       <section className="branch-summary-grid" aria-label="Branch stock summary">
@@ -370,8 +382,10 @@ export function BranchOverviewPage() {
             </div>
             <div className="branch-card-value"><strong>{money(branch.value)}</strong><span>Inventory value</span></div>
             <div className="branch-card-commerce" aria-label={`${branch.name} sales and order activity`}>
-              <div><span>30-day sales</span><strong>{money(commerceByBranch.get(branch.id)?.salesRevenue ?? 0)}</strong></div>
-              <div><span>Customer orders</span><strong>{commerceByBranch.get(branch.id)?.customerOrderCount ?? 0}</strong></div>
+              <div><span>Total sales</span><strong>{money(commerceByBranch.get(branch.id)?.salesRevenue ?? 0)}</strong><small>{commerceByBranch.get(branch.id)?.salesCount ?? 0} recorded</small></div>
+              <div><span>Manual sales</span><strong>{money(commerceByBranch.get(branch.id)?.manualSalesRevenue ?? 0)}</strong><small>{commerceByBranch.get(branch.id)?.manualSalesCount ?? 0} recorded</small></div>
+              <div><span>Customer-order sales</span><strong>{money(commerceByBranch.get(branch.id)?.customerOrderSalesRevenue ?? 0)}</strong><small>{commerceByBranch.get(branch.id)?.customerOrderSalesCount ?? 0} completed</small></div>
+              <div><span>Customer orders</span><strong>{commerceByBranch.get(branch.id)?.customerOrderCount ?? 0}</strong><small>{money(commerceByBranch.get(branch.id)?.customerOrderValue ?? 0)} value · excl. cancelled</small></div>
               <small>
                 {commerceByBranch.get(branch.id)?.pendingOrders ?? 0} pending ·{' '}
                 {commerceByBranch.get(branch.id)?.preparingOrders ?? 0} preparing ·{' '}
