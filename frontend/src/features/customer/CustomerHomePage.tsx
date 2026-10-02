@@ -40,7 +40,7 @@ export default function CustomerHomePage() {
           <div className="cust-home-intro">
             <span className="cust-home-eyebrow"><i aria-hidden="true" /> YOUR CUSTOMER SPACE</span>
             <h1 id="cust-home-title">{firstName ? `Welcome back, ${firstName}` : 'Welcome back'}</h1>
-            <p>Your appointments and orders{tenant?.name ? ` with ${tenant.name}` : ''}, all in one place.</p>
+            <p>Your customer space for bookings and shopping, all in one place.</p>
             {todayHours && (
               <span className={`cust-home-hours${todayHours.isClosed ? ' is-closed' : ''}`}>
                 <i aria-hidden="true" />
