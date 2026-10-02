@@ -294,8 +294,8 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
     _deliverySearchDebounce?.cancel();
     final query = _locationSearchController.text.trim();
     if (query.length < 3) {
-      setSheetState(
-          () => _deliverySearchError = 'Enter at least 3 characters to search.');
+      setSheetState(() =>
+          _deliverySearchError = 'Enter at least 3 characters to search.');
       return;
     }
     final requestId = ++_deliverySearchRequestId;
@@ -628,7 +628,8 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                                 prefixIcon: const Icon(Icons.search_rounded),
                                 labelText: 'Search a place or landmark',
                                 hintText: 'Town, street or nearby place',
-                                suffixIcon: _locationSearchController.text.isEmpty
+                                suffixIcon: _locationSearchController
+                                        .text.isEmpty
                                     ? null
                                     : IconButton(
                                         tooltip: 'Clear place search',
@@ -708,7 +709,8 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                               const SizedBox(
                                 width: 17,
                                 height: 17,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               ),
                               const SizedBox(width: 9),
                               Text('Finding places near you…',
@@ -1543,62 +1545,208 @@ class _CartAppBarAction extends StatelessWidget {
   }
 }
 
-class _ShopHero extends StatelessWidget {
+class _ShopHero extends StatefulWidget {
   const _ShopHero({required this.orderCount});
 
   final int orderCount;
 
   @override
+  State<_ShopHero> createState() => _ShopHeroState();
+}
+
+class _ShopHeroState extends State<_ShopHero>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glowController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3600),
+  )..forward();
+
+  @override
+  void dispose() {
+    _glowController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (reduceMotion && _glowController.isAnimating) _glowController.stop();
+    final heroContent = Container(
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(26),
         gradient: const LinearGradient(
           colors: [
+            Color(0xFF38246F),
             AppColors.shopIndigo,
             AppColors.shopViolet,
             AppColors.shopRose
           ],
+          stops: [0, .3, .68, 1],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(color: AppColors.glassBorder),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.38)),
         boxShadow: [
           BoxShadow(
-              color: AppColors.violet.withValues(alpha: 0.2),
-              blurRadius: 24,
-              offset: const Offset(0, 9)),
+            color: AppColors.violet.withValues(alpha: 0.25),
+            blurRadius: 28,
+            offset: const Offset(0, 11),
+          ),
+          BoxShadow(
+            color: AppColors.cyan.withValues(alpha: 0.08),
+            blurRadius: 30,
+            spreadRadius: -8,
+          ),
         ],
       ),
-      child: Row(
+      child: Stack(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('A LITTLE SOMETHING FOR YOU',
-                    style: AppTextStyles.label.copyWith(fontSize: 9)),
-                const SizedBox(height: 7),
-                Text('Find your next favorite',
-                    style: AppTextStyles.headlineSmall.copyWith(fontSize: 21)),
-                const SizedBox(height: 5),
-                Text('Browse the collection, then pick up or get it delivered.',
-                    style: AppTextStyles.caption
-                        .copyWith(color: AppColors.textBody)),
-                const SizedBox(height: 12),
-                Text(
-                    '$orderCount ${orderCount == 1 ? 'order' : 'orders'} with us',
-                    style:
-                        AppTextStyles.caption.copyWith(color: AppColors.cyan)),
-              ],
+          Positioned(
+            right: -48,
+            top: -80,
+            child: AnimatedBuilder(
+              animation: _glowController,
+              builder: (context, child) => Transform.translate(
+                offset: reduceMotion
+                    ? Offset.zero
+                    : Offset(
+                        5 * _glowController.value,
+                        8 * _glowController.value,
+                      ),
+                child: child,
+              ),
+              child: Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    width: 1.2,
+                  ),
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.22),
+                      Colors.white.withValues(alpha: 0.025),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-          const Icon(Icons.shopping_bag_rounded,
-              size: 54, color: Color(0xB3FFFFFF)),
+          Positioned(
+            right: 34,
+            bottom: -116,
+            child: Container(
+              width: 190,
+              height: 190,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withValues(alpha: 0.11)),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('A LITTLE SOMETHING FOR YOU',
+                        style: AppTextStyles.label.copyWith(
+                          fontSize: 9,
+                          color: Colors.white.withValues(alpha: 0.75),
+                          letterSpacing: 1.2,
+                        )),
+                    const SizedBox(height: 8),
+                    Text('Find your next favorite',
+                        style: AppTextStyles.headlineSmall.copyWith(
+                          fontSize: 22,
+                          color: Colors.white,
+                        )),
+                    const SizedBox(height: 5),
+                    Text(
+                      'Browse the collection, then pick up or get it delivered.',
+                      style: AppTextStyles.caption.copyWith(
+                        color: Colors.white.withValues(alpha: 0.86),
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 13),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.13),
+                        borderRadius: BorderRadius.circular(99),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.18)),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        child: Text(
+                          '${widget.orderCount} ${widget.orderCount == 1 ? 'order' : 'orders'} with us',
+                          style: AppTextStyles.caption.copyWith(
+                            color: const Color(0xFF8DF4F0),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              AnimatedBuilder(
+                animation: _glowController,
+                builder: (context, child) => Transform.translate(
+                  offset: reduceMotion
+                      ? Offset.zero
+                      : Offset(0, -3 * _glowController.value),
+                  child: child,
+                ),
+                child: Container(
+                  width: 62,
+                  height: 62,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    color: Colors.white.withValues(alpha: 0.18),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.38)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.12),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.shopping_bag_rounded,
+                    size: 34,
+                    color: Color(0xE6FFFFFF),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
+    );
+
+    if (reduceMotion) return heroContent;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 550),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, 10 * (1 - value)),
+          child: child,
+        ),
+      ),
+      child: heroContent,
     );
   }
 }
