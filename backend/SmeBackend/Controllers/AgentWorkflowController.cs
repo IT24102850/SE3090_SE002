@@ -401,7 +401,7 @@ public class AgentWorkflowController : ControllerBase
                 && b.StartTime < endTime && b.EndTime > startTime);
             if (conflict) { skipped++; continue; }
 
-            _db.Bookings.Add(new Booking
+            var autoBooking = new Booking
             {
                 TenantId = wf.TenantId,
                 ResourceId = resourceId,
@@ -412,7 +412,9 @@ public class AgentWorkflowController : ControllerBase
                 EndTime = endTime,
                 Status = BookingStatus.Confirmed,
                 Priority = BookingPriority.Normal
-            });
+            };
+            await BookingExclusivity.ApplyAsync(_db, autoBooking);
+            _db.Bookings.Add(autoBooking);
             created++;
         }
 

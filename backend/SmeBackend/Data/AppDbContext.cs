@@ -174,6 +174,9 @@ public class AppDbContext : DbContext
                 // Data-integrity rules the database itself enforces, whatever
                 // code path writes the row (migration AddDataIntegrityChecks).
                 t.HasCheckConstraint("CK_bookings_end_after_start", "\"EndTime\" > \"StartTime\"");
+                // The overlap exclusion constraint itself is raw SQL in
+                // migration AddBookingOverlapExclusion: EF Core cannot model
+                // an EXCLUDE ... USING gist constraint.
                 t.HasCheckConstraint("CK_bookings_attendee_count_positive", "\"AttendeeCount\" IS NULL OR \"AttendeeCount\" > 0");
             });
             entity.HasQueryFilter(b => b.DeletedAt == null);

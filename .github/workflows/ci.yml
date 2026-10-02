@@ -9,8 +9,10 @@ name: CI
 on:
   push:
     branches: [main, dev]
+  # Every pull request, whatever it targets. A change stacked on another
+  # branch - a feature on top of a pending merge, say - still has to prove
+  # itself before anyone reviews it.
   pull_request:
-    branches: [main, dev]
   workflow_dispatch:
 
 # A new push to the same branch supersedes the previous run.
