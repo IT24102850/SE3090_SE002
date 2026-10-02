@@ -464,6 +464,7 @@ public class AppDbContext : DbContext
             entity.Property(item => item.Name).HasMaxLength(150).IsRequired();
             entity.Property(item => item.Sku).HasMaxLength(64).IsRequired();
             entity.Property(item => item.Description).HasMaxLength(2000);
+            entity.Property(item => item.ImageUrl).HasMaxLength(2048);
             entity.Property(item => item.Quantity).HasPrecision(18, 3);
             entity.Property(item => item.ReorderLevel).HasPrecision(18, 3);
             entity.Property(item => item.UnitCost).HasPrecision(18, 2);

@@ -20,10 +20,12 @@ public class CustomerOrdersControllerTests
     {
         var tenantId = Guid.NewGuid();
         var branchId = Guid.NewGuid();
+        var availableProduct = Product(tenantId, branchId, "Available", 4m, 200m);
+        availableProduct.ImageUrl = "https://images.example.test/available.jpg";
         await using var db = CreateDbContext(tenantId);
         db.Branches.Add(new Branch { TenantId = tenantId, Id = branchId, Name = "Main" });
         db.InventoryItems.AddRange(
-            Product(tenantId, branchId, "Available", 4m, 200m),
+            availableProduct,
             Product(tenantId, branchId, "No price", 4m, null),
             Product(tenantId, branchId, "Bad price", 4m, -1m),
             Product(tenantId, branchId, "Out of stock", 0m, 200m),
@@ -38,6 +40,7 @@ public class CustomerOrdersControllerTests
         var product = Assert.Single(Assert.IsAssignableFrom<IEnumerable<CustomerProductResponse>>(products));
         Assert.Equal("Available", product.Name);
         Assert.Equal(200m, product.Price);
+        Assert.Equal(availableProduct.ImageUrl, product.ImageUrl);
     }
 
     [Fact]

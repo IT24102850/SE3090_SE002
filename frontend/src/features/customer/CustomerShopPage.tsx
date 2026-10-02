@@ -216,7 +216,11 @@ export default function CustomerShopPage() {
                 <div className="cust-shop-products">
                   {visibleProducts.map((product, index) => (
                     <article key={product.id} className="cust-shop-product" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
-                      <div className="cust-shop-product-art"><span aria-hidden="true">✦</span><small>{product.category}</small></div>
+                      <div className="cust-shop-product-art">
+                        <span aria-hidden="true">✦</span>
+                        {product.imageUrl && <img src={product.imageUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} />}
+                        <small>{product.category}</small>
+                      </div>
                       <div className="cust-shop-product-body">
                         <div className="cust-shop-product-meta"><span>{product.sku}</span><span>{product.quantityAvailable} available</span></div>
                         <h2>{product.name}</h2>

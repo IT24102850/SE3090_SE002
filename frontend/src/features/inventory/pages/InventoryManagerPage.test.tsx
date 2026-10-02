@@ -144,6 +144,9 @@ describe('InventoryManagerPage price editing', () => {
     await screen.findByRole('button', { name: /Add item/ });
     fireEvent.click(screen.getByRole('button', { name: /Add item/ }));
     fireEvent.change(screen.getByLabelText('Item name'), { target: { value: 'Wireless Mouse' } });
+    fireEvent.change(screen.getByLabelText('Picture link'), {
+      target: { value: 'https://images.example.test/mouse.jpg' },
+    });
     fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'piece' } });
     fireEvent.change(screen.getByLabelText('Starting stock for Main branch'), { target: { value: '8' } });
     fireEvent.click(screen.getByLabelText('Kandy branch'));
@@ -157,6 +160,7 @@ describe('InventoryManagerPage price editing', () => {
         { branchId: 'branch-1', quantity: 8 },
         { branchId: 'branch-2', quantity: 4 },
       ]);
+      expect(createBody?.imageUrl).toBe('https://images.example.test/mouse.jpg');
       expect(createBody?.branchId).toBeNull();
     });
   });

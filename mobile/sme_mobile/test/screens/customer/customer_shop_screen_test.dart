@@ -223,9 +223,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Colombo, Sri Lanka'), findsOneWidget,
         reason: 'Requests: ${adapter.requests}');
+    await tester.tap(find.byTooltip('Clear place search'));
+    await tester.pumpAndSettle();
+    expect(find.text('Colombo, Sri Lanka'), findsNothing);
+    await tester.enterText(
+      find.ancestor(
+        of: find.text('Search a place or landmark'),
+        matching: find.byType(TextField),
+      ),
+      'Colombo',
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Colombo, Sri Lanka'), findsOneWidget);
     await tester.tap(find.text('Colombo, Sri Lanka'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Pin selected.'), findsOneWidget);
+    expect(find.text('Open in Google Maps'), findsOneWidget);
     await tester.enterText(
       find.ancestor(
         of: find.text('Delivery address'),

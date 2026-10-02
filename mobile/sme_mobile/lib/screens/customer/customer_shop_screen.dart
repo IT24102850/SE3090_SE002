@@ -60,11 +60,13 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
   String? _deliverySearchError;
   bool _searchingDeliveryPlace = false;
   bool _deliveryMapReady = false;
+  int _deliverySearchRequestId = 0;
   bool _loading = true;
   bool _submitting = false;
   bool _refreshingOrders = false;
   String? _orderRefreshError;
   Timer? _trackingTimer;
+  Timer? _deliverySearchDebounce;
 
   @override
   void initState() {
@@ -78,6 +80,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
   @override
   void dispose() {
     _trackingTimer?.cancel();
+    _deliverySearchDebounce?.cancel();
     _addressController.dispose();
     _notesController.dispose();
     _locationSearchController.dispose();
@@ -288,12 +291,14 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
 
   Future<void> _searchDeliveryPlaces(
       BuildContext sheetContext, StateSetter setSheetState) async {
+    _deliverySearchDebounce?.cancel();
     final query = _locationSearchController.text.trim();
-    if (query.isEmpty) {
+    if (query.length < 3) {
       setSheetState(
-          () => _deliverySearchError = 'Enter a place or address to search.');
+          () => _deliverySearchError = 'Enter at least 3 characters to search.');
       return;
     }
+    final requestId = ++_deliverySearchRequestId;
     setSheetState(() {
       _searchingDeliveryPlace = true;
       _deliverySearchError = null;
@@ -309,7 +314,8 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
         ),
       );
       if (response.data is! List) {
-        throw const FormatException('The place search returned an invalid response.');
+        throw const FormatException(
+            'The place search returned an invalid response.');
       }
       final places = (response.data as List).whereType<Map>().map((place) {
         final latitude = double.tryParse(place['lat']?.toString() ?? '');
@@ -328,7 +334,11 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
           'label': label,
         };
       }).toList();
-      if (!mounted || !sheetContext.mounted) return;
+      if (requestId != _deliverySearchRequestId ||
+          !mounted ||
+          !sheetContext.mounted) {
+        return;
+      }
       setSheetState(() {
         _deliveryPlaceResults = places;
         if (places.isEmpty) {
@@ -337,16 +347,22 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
         }
       });
     } on DioException {
-      if (mounted && sheetContext.mounted) {
+      if (requestId == _deliverySearchRequestId &&
+          mounted &&
+          sheetContext.mounted) {
         setSheetState(() => _deliverySearchError =
             'Place search is unavailable right now. You can still tap the map to place a pin.');
       }
     } on FormatException catch (error) {
-      if (mounted && sheetContext.mounted) {
+      if (requestId == _deliverySearchRequestId &&
+          mounted &&
+          sheetContext.mounted) {
         setSheetState(() => _deliverySearchError = error.message);
       }
     } finally {
-      if (mounted && sheetContext.mounted) {
+      if (requestId == _deliverySearchRequestId &&
+          mounted &&
+          sheetContext.mounted) {
         setSheetState(() => _searchingDeliveryPlace = false);
       }
     }
@@ -607,15 +623,50 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                             child: TextField(
                               controller: _locationSearchController,
                               maxLength: 180,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 counterText: '',
-                                prefixIcon: Icon(Icons.search_rounded),
+                                prefixIcon: const Icon(Icons.search_rounded),
                                 labelText: 'Search a place or landmark',
                                 hintText: 'Town, street or nearby place',
+                                suffixIcon: _locationSearchController.text.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        tooltip: 'Clear place search',
+                                        onPressed: () {
+                                          _deliverySearchDebounce?.cancel();
+                                          _deliverySearchRequestId++;
+                                          _locationSearchController.clear();
+                                          setSheetState(() {
+                                            _deliveryPlaceResults = [];
+                                            _deliverySearchError = null;
+                                            _searchingDeliveryPlace = false;
+                                          });
+                                        },
+                                        icon: const Icon(Icons.close_rounded),
+                                      ),
                               ),
+                              onChanged: (query) {
+                                _deliverySearchDebounce?.cancel();
+                                _deliverySearchRequestId++;
+                                setSheetState(() {
+                                  _deliveryPlaceResults = [];
+                                  _deliverySearchError = null;
+                                  _searchingDeliveryPlace = false;
+                                });
+                                if (query.trim().length >= 3) {
+                                  _deliverySearchDebounce = Timer(
+                                    const Duration(seconds: 1),
+                                    () {
+                                      if (context.mounted) {
+                                        unawaited(_searchDeliveryPlaces(
+                                            context, setSheetState));
+                                      }
+                                    },
+                                  );
+                                }
+                              },
                               onSubmitted: (_) =>
-                                  _searchDeliveryPlaces(
-                                      context, setSheetState),
+                                  _searchDeliveryPlaces(context, setSheetState),
                             ),
                           ),
                           const SizedBox(width: 7),
@@ -644,6 +695,32 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                               .copyWith(color: AppColors.error),
                         ),
                       ],
+                      if (_searchingDeliveryPlace)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.violet.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const SizedBox(
+                                width: 17,
+                                height: 17,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              const SizedBox(width: 9),
+                              Text('Finding places near you…',
+                                  style: AppTextStyles.caption),
+                              const Spacer(),
+                              const SizedBox(
+                                width: 40,
+                                child: LinearProgressIndicator(),
+                              ),
+                            ],
+                          ),
+                        ),
                       if (_deliveryPlaceResults.isNotEmpty)
                         ..._deliveryPlaceResults.map((place) => ListTile(
                               dense: true,
@@ -673,8 +750,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                                 _deliveryLatitude ?? 6.9271,
                                 _deliveryLongitude ?? 79.8612,
                               ),
-                              initialZoom:
-                                  _deliveryLatitude == null ? 13 : 15,
+                              initialZoom: _deliveryLatitude == null ? 13 : 15,
                               onMapReady: () => _deliveryMapReady = true,
                               onTap: (_, point) => _setDeliveryPin(
                                 point.latitude,
@@ -750,14 +826,33 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                         ),
                       ],
                       if (_deliveryLatitude != null)
-                        TextButton(
-                          onPressed: () => setSheetState(() {
-                            _deliveryLatitude = null;
-                            _deliveryLongitude = null;
-                            _deliveryLocationMessage = 'Delivery pin removed.';
-                            _deliveryPlaceResults = [];
-                          }),
-                          child: const Text('Remove delivery pin'),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 0,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () => unawaited(launchUrl(
+                                Uri.https('www.google.com', '/maps/search/', {
+                                  'api': '1',
+                                  'query':
+                                      '$_deliveryLatitude,$_deliveryLongitude',
+                                }),
+                                mode: LaunchMode.externalApplication,
+                              )),
+                              icon: const Icon(Icons.map_outlined, size: 18),
+                              label: const Text('Open in Google Maps'),
+                            ),
+                            TextButton(
+                              onPressed: () => setSheetState(() {
+                                _deliveryLatitude = null;
+                                _deliveryLongitude = null;
+                                _deliveryLocationMessage =
+                                    'Delivery pin removed.';
+                                _deliveryPlaceResults = [];
+                              }),
+                              child: const Text('Remove delivery pin'),
+                            ),
+                          ],
                         ),
                       const SizedBox(height: 8),
                     ],

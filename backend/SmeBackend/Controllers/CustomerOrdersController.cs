@@ -61,7 +61,8 @@ public sealed class CustomerOrdersController(AppDbContext db, IBillingMessenger 
                 item.Category == null ? "Everyday essentials" : item.Category.Name,
                 item.Unit == null ? null : item.Unit.Name,
                 item.Quantity,
-                item.SellingPrice!.Value))
+                item.SellingPrice!.Value,
+                item.ImageUrl))
             .ToListAsync(cancellationToken);
 
         return Ok(products);
@@ -356,7 +357,8 @@ public sealed record CustomerProductResponse(
     string Category,
     string? Unit,
     decimal QuantityAvailable,
-    decimal Price);
+    decimal Price,
+    string? ImageUrl);
 public sealed record PlaceCustomerOrderLineRequest(Guid InventoryItemId, decimal Quantity);
 public sealed record PlaceCustomerOrderRequest(
     Guid BranchId,

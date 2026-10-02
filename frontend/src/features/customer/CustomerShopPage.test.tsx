@@ -121,6 +121,7 @@ describe('CustomerShopPage', () => {
           unit: 'pack',
           quantityAvailable: 5,
           price: 75,
+          imageUrl: 'https://images.example.test/tea.jpg',
         }]);
       }
       if (url.pathname.endsWith('/customer-orders') && request.method === 'POST') {
@@ -172,13 +173,27 @@ describe('CustomerShopPage', () => {
   it('searches for a place and submits its delivery pin only after selection', async () => {
     renderPage();
     expect(await screen.findByText('Fresh tea leaves')).toBeTruthy();
+    expect(document.querySelector('.cust-shop-product-art img'))
+      .toHaveAttribute('src', 'https://images.example.test/tea.jpg');
     fireEvent.click(screen.getByRole('button', { name: /add fresh tea leaves to basket/i }));
     fireEvent.click(screen.getByLabelText('Deliver to me'));
     fireEvent.change(screen.getByLabelText('Delivery address'), { target: { value: '12 Main Road' } });
-    fireEvent.change(screen.getByRole('textbox', { name: /search delivery location/i }), { target: { value: 'Colombo' } });
-    fireEvent.click(screen.getByRole('button', { name: /search$/i }));
+    const placeSearch = screen.getByRole('textbox', { name: /search delivery location/i });
+    fireEvent.change(placeSearch, { target: { value: 'Colombo' } });
+    expect(await screen.findByRole(
+      'button',
+      { name: /colombo, sri lanka/i },
+      { timeout: 3000 },
+    )).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(placeSearch).toHaveValue('');
+    expect(screen.queryByRole('button', { name: /colombo, sri lanka/i })).not.toBeInTheDocument();
+    fireEvent.change(placeSearch, { target: { value: 'Colombo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search', exact: true }));
     fireEvent.click(await screen.findByRole('button', { name: /colombo, sri lanka/i }));
     expect(screen.getByText(/Pin set · 6\.92710, 79\.86120/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /open in google maps/i }))
+      .toHaveAttribute('href', 'https://www.google.com/maps/search/?api=1&query=6.9271,79.8612');
     fireEvent.click(screen.getByRole('button', { name: /place my order/i }));
 
     await waitFor(() => expect(placedBody).not.toBeNull());

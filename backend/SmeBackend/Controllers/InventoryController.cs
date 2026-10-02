@@ -416,6 +416,12 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
+        if (!IsValidImageUrl(request.ImageUrl))
+        {
+            ModelState.AddModelError("imageUrl", "Image URL must be a valid HTTP or HTTPS link no longer than 2048 characters.");
+            return ValidationProblem(ModelState);
+        }
+
         if (request.ReorderLevel < 0)
         {
             ModelState.AddModelError("reorderLevel", "Reorder level cannot be negative.");
@@ -586,6 +592,7 @@ public sealed class InventoryController(
                 branchItem.Name = name;
                 branchItem.Sku = sku;
                 branchItem.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+                branchItem.ImageUrl = string.IsNullOrWhiteSpace(request.ImageUrl) ? null : request.ImageUrl.Trim();
                 branchItem.CategoryId = categoryId;
                 branchItem.UnitId = request.UnitId ?? item.UnitId;
                 if (request.SupplierId.HasValue) branchItem.SupplierId = request.SupplierId;
@@ -623,6 +630,7 @@ public sealed class InventoryController(
         item.Name = name;
         item.Sku = sku;
         item.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        item.ImageUrl = string.IsNullOrWhiteSpace(request.ImageUrl) ? null : request.ImageUrl.Trim();
         item.CategoryId = categoryId;
         item.UnitId = request.UnitId ?? item.UnitId;
         item.BranchId = request.BranchId ?? item.BranchId;
@@ -1387,6 +1395,12 @@ public sealed class InventoryController(
             return ValidationProblem(ModelState);
         }
 
+        if (!IsValidImageUrl(request.ImageUrl))
+        {
+            ModelState.AddModelError("imageUrl", "Image URL must be a valid HTTP or HTTPS link no longer than 2048 characters.");
+            return ValidationProblem(ModelState);
+        }
+
         if (request.Quantity < 0)
         {
             ModelState.AddModelError("quantity", "Quantity cannot be negative.");
@@ -1541,6 +1555,7 @@ public sealed class InventoryController(
             Name = name,
             Sku = sku,
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+            ImageUrl = string.IsNullOrWhiteSpace(request.ImageUrl) ? null : request.ImageUrl.Trim(),
             CategoryId = categoryId,
             UnitId = request.UnitId,
             BranchId = stock.BranchId,
@@ -1750,6 +1765,7 @@ public sealed class InventoryController(
             item.Name,
             item.Sku,
             item.Description,
+            item.ImageUrl,
             item.CategoryId,
             item.Category?.Name,
             item.UnitId,
@@ -1765,6 +1781,14 @@ public sealed class InventoryController(
             item.SellingPrice,
             status,
             item.CreatedAt);
+    }
+
+    private static bool IsValidImageUrl(string? imageUrl)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrl)) return true;
+        return imageUrl.Length <= 2048 &&
+               Uri.TryCreate(imageUrl.Trim(), UriKind.Absolute, out var uri) &&
+               (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 }
 
@@ -1788,6 +1812,7 @@ public sealed record InventoryItemResponse(
     string Name,
     string Sku,
     string? Description,
+    string? ImageUrl,
     Guid? CategoryId,
     string? Category,
     Guid? UnitId,
@@ -1857,7 +1882,8 @@ public sealed record CreateInventoryRequest(
     Guid? SupplierId = null,
     string? Category = null,
     decimal? SellingPrice = null,
-    IReadOnlyList<InventoryBranchStockRequest>? BranchStocks = null);
+    IReadOnlyList<InventoryBranchStockRequest>? BranchStocks = null,
+    string? ImageUrl = null);
 
 public sealed record UpdateInventoryRequest(
     string? Name,
@@ -1872,7 +1898,8 @@ public sealed record UpdateInventoryRequest(
     bool ClearSupplier = false,
     string? Category = null,
     decimal? SellingPrice = null,
-    IReadOnlyList<InventoryBranchStockRequest>? BranchStocks = null);
+    IReadOnlyList<InventoryBranchStockRequest>? BranchStocks = null,
+    string? ImageUrl = null);
 
 public sealed record AdjustInventoryRequest(
     decimal Quantity,

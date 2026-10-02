@@ -318,13 +318,15 @@ public class InventoryControllerTests
                 [
                     new InventoryBranchStockRequest(mainBranchId, 8m),
                     new InventoryBranchStockRequest(kandyBranchId, 4m),
-                ]),
+                ],
+                ImageUrl: "https://images.example.test/mouse.jpg"),
             CancellationToken.None);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
         var branchItems = await db.InventoryItems.OrderBy(item => item.BranchId).ToListAsync();
         Assert.Equal(2, branchItems.Count);
         Assert.All(branchItems, item => Assert.Equal("MOUSE-001", item.Sku));
+        Assert.All(branchItems, item => Assert.Equal("https://images.example.test/mouse.jpg", item.ImageUrl));
         Assert.Equal(8m, branchItems.Single(item => item.BranchId == mainBranchId).Quantity);
         Assert.Equal(4m, branchItems.Single(item => item.BranchId == kandyBranchId).Quantity);
     }

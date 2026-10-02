@@ -23,12 +23,14 @@ type StockRow = {
   unit: string;
   costPrice: number | null;
   sellingPrice: number | null;
+  imageUrl: string | null;
   qty: number;
   reorder: number;
   owner: string;
 };
 
-type StockForm = Omit<StockRow, 'sku'> & {
+type StockForm = Omit<StockRow, 'sku' | 'imageUrl'> & {
+  imageUrl: string;
   branchStocks?: Array<{ branchId: string; quantity: number }>;
 };
 type SupplierOption = { id: string; name: string; leadTimeDays: number | null };
@@ -54,6 +56,7 @@ const emptyForm: StockForm = {
   unit: '',
   costPrice: null,
   sellingPrice: null,
+  imageUrl: '',
   qty: 0,
   reorder: 10,
   owner: '',
@@ -201,6 +204,17 @@ function ItemModal({
       setError('Select at least one branch to update or add this item.');
       return;
     }
+    if (form.imageUrl.trim()) {
+      try {
+        const imageUrl = new URL(form.imageUrl.trim());
+        if (imageUrl.protocol !== 'https:' && imageUrl.protocol !== 'http:') {
+          throw new Error();
+        }
+      } catch {
+        setError('Enter a valid image link starting with http:// or https://.');
+        return;
+      }
+    }
     if ((form.costPrice ?? 0) < 0 ||
         (form.sellingPrice ?? 0) < 0 ||
         form.qty < 0 ||
@@ -245,6 +259,36 @@ function ItemModal({
             <label className="form-field form-field-wide">
               Item name
               <input value={form.item} onChange={(event) => update('item', event.target.value)} placeholder="e.g. Premium Coffee Beans" />
+            </label>
+            <label className="form-field form-field-wide">
+              Picture link <span>(optional)</span>
+              <input
+                type="url"
+                value={form.imageUrl}
+                onChange={(event) => update('imageUrl', event.target.value)}
+                maxLength={2048}
+                placeholder="https://example.com/product-photo.jpg"
+                aria-label="Picture link"
+              />
+              <span className="inventory-image-help">
+                Paste a direct link to an online image.{' '}
+                <a
+                  href={`https://unsplash.com/s/photos/${encodeURIComponent(form.item.trim() || 'product')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Find a free image ↗
+                </a>
+              </span>
+              {form.imageUrl.trim() && (
+                <img
+                  className="inventory-image-preview"
+                  src={form.imageUrl.trim()}
+                  alt={`Preview of ${form.item || 'inventory item'}`}
+                  onError={(event) => { event.currentTarget.hidden = true; }}
+                  onLoad={(event) => { event.currentTarget.hidden = false; }}
+                />
+              )}
             </label>
             <fieldset className="form-field form-field-wide inventory-branch-stock-field">
                 <legend>{isEditing ? 'Branches and stock' : 'Branches and starting stock'}</legend>
@@ -524,6 +568,7 @@ export function InventoryManagerPage() {
         supplierId: item.supplierId ?? undefined,
         costPrice: item.unitCost == null ? null : Number(item.unitCost),
         sellingPrice: item.sellingPrice == null ? null : Number(item.sellingPrice),
+        imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : null,
         qty: Number(item.quantity ?? 0),
         reorder: Number(item.reorderLevel ?? 0),
         owner: item.branch ?? 'Inventory Admin',
@@ -609,7 +654,7 @@ export function InventoryManagerPage() {
         });
         if (res.ok) {
           createdCount++;
-          stagedItems.push({ sku, item: name, category, unit, costPrice, sellingPrice, qty, reorder, owner: 'Inventory Admin' });
+          stagedItems.push({ sku, item: name, category, unit, costPrice, sellingPrice, imageUrl: null, qty, reorder, owner: 'Inventory Admin' });
         } else {
           failedCount++;
         }
@@ -703,6 +748,7 @@ export function InventoryManagerPage() {
           name: form.item,
           sku: existing?.sku ?? nextSku(items),
           description: null,
+          imageUrl: form.imageUrl.trim() || null,
           categoryId: form.categoryId ?? existing?.categoryId ?? null,
           category: existing && !form.categoryId ? null : form.category,
           unitId: existing?.unitId ?? null,
@@ -1013,6 +1059,7 @@ export function InventoryManagerPage() {
                 unit: editingItem.unit,
                 costPrice: editingItem.costPrice,
                 sellingPrice: editingItem.sellingPrice,
+                imageUrl: editingItem.imageUrl ?? '',
                 qty: editingItem.qty,
                 reorder: editingItem.reorder,
                 owner: editingItem.owner,

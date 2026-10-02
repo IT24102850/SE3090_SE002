@@ -821,6 +821,7 @@ export interface CustomerOrderProduct {
   id: string;
   name: string;
   description?: string | null;
+  imageUrl?: string | null;
   sku: string;
   category: string;
   unit?: string | null;
