@@ -1624,6 +1624,17 @@ public class BookingsController : ControllerBase
     }
 
     private record BatchOutcome(bool RequiresApproval, Guid? WorkflowId, List<BulkItemResult> Results);
+    private record ConflictCandidate(
+        Guid Id,
+        Guid ResourceId,
+        string ResourceName,
+        string Title,
+        DateTime StartTime,
+        DateTime EndTime,
+        Guid BookingTypeId,
+        Models.BookingType BookingType,
+        Models.Resource Resource,
+        Guid? DepartureId);
 
     // ── GET /api/bookings/conflicts ─────────────────────────────
     // Detects overlapping bookings on the same resource. Under normal operation
@@ -1648,18 +1659,31 @@ public class BookingsController : ControllerBase
         if (to.HasValue) query = query.Where(b => b.StartTime <= DateTimeUtil.AsUtc(to.Value));
 
         var bookings = await query
-            .Select(b => new
-            {
+            .Select(b => new ConflictCandidate(
                 b.Id,
                 b.ResourceId,
-                ResourceName = b.Resource.Name,
+                b.Resource.Name,
                 b.Title,
                 b.StartTime,
                 b.EndTime,
                 b.BookingTypeId,
-                BookingType = b.BookingType
-            })
+                b.BookingType,
+                b.Resource,
+                b.DepartureId))
             .ToListAsync();
+
+        // The capacity a sailing was sold against: a departure may license
+        // fewer seats than the vessel holds, and that override decides
+        // whether the resource is shared at all.
+        var departureIds = bookings.Where(b => b.DepartureId != null).Select(b => b.DepartureId!.Value).Distinct().ToList();
+        var departures = departureIds.Count == 0
+            ? new Dictionary<Guid, Models.Departure>()
+            : await _db.Departures.AsNoTracking()
+                .Where(d => departureIds.Contains(d.Id))
+                .ToDictionaryAsync(d => d.Id);
+
+        Models.Departure? DepartureOf(Guid? id) =>
+            id != null && departures.TryGetValue(id.Value, out var d) ? d : null;
 
         // Two bookings of the same type starting together on one resource
         // are one group session (a class register, a gym class), not a
@@ -1683,6 +1707,14 @@ public class BookingsController : ControllerBase
                     if (sorted[i].BookingTypeId == sorted[j].BookingTypeId && sorted[i].StartTime == sorted[j].StartTime) continue;
                     if (SharesFloor(sorted[i].BookingType) && SharesFloor(sorted[j].BookingType)) continue;
                     if (IsRecordOnly(sorted[i].BookingType) || IsRecordOnly(sorted[j].BookingType)) continue;
+                    // A shared vessel sells seats, not exclusive use of the
+                    // trip, so two reservations on one 12:00 sailing are two
+                    // parties aboard - the same rule Create and Reschedule
+                    // already booked them under.
+                    if (CapacityRules.ShareOneSailing(
+                            sorted[i].Resource,
+                            sorted[i].BookingType, DepartureOf(sorted[i].DepartureId),
+                            sorted[j].BookingType, DepartureOf(sorted[j].DepartureId))) continue;
                     conflicts.Add(new
                     {
                         resourceId = group.Key,
