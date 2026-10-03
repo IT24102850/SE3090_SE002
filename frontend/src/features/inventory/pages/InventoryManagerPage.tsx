@@ -9,6 +9,7 @@ import { useToast } from '../ui/ToastContext';
 import { Icon } from '../ui/Icon';
 import { getStoredToken } from '../authToken';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
+import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 
 type StockStatus = 'In stock' | 'Low stock' | 'Out of stock';
 
@@ -438,6 +439,7 @@ function ItemModal({
 
 export function InventoryManagerPage() {
   const { notify } = useToast();
+  const confirm = useConfirmation();
   const token = getStoredToken();
   const { user } = useSelector((state: RootState) => state.auth);
   const isAdmin = user?.role === 'Admin';
@@ -637,6 +639,11 @@ export function InventoryManagerPage() {
       if (lines.length < 2) {
         throw new Error('CSV file is empty or missing headers.');
       }
+      if (!await confirm({
+        title: 'Import inventory items?',
+        message: `Import ${lines.length - 1} rows from "${file.name}"? This creates new inventory records with the stock quantities in the file.`,
+        confirmLabel: 'Import items',
+      })) return;
       // Simple parse: skip header
       let createdCount = 0;
       let failedCount = 0;

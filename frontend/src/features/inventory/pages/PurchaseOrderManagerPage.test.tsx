@@ -1,11 +1,12 @@
 import { configureStore } from '@reduxjs/toolkit';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import authReducer from '../../../store/authSlice';
 import { ToastProvider as AppToastProvider } from '../../../shared/components/Toast';
 import { ToastProvider } from '../ui/ToastContext';
+import { ConfirmationProvider } from '../../../shared/components/ConfirmationProvider';
 import { PurchaseOrderManagerPage } from './PurchaseOrderManagerPage';
 
 function renderPage(role: 'Admin' | 'Manager' | 'Staff' = 'Manager') {
@@ -33,7 +34,7 @@ function renderPage(role: 'Admin' | 'Manager' | 'Staff' = 'Manager') {
     <Provider store={store}>
       <AppToastProvider>
         <ToastProvider>
-          <MemoryRouter><PurchaseOrderManagerPage /></MemoryRouter>
+          <MemoryRouter><ConfirmationProvider><PurchaseOrderManagerPage /></ConfirmationProvider></MemoryRouter>
         </ToastProvider>
       </AppToastProvider>
     </Provider>,
@@ -270,5 +271,17 @@ describe('PurchaseOrderManagerPage catalog-linked order items', () => {
     fireEvent.change(damaged, { target: { value: '1' } });
     expect(remaining).toHaveTextContent('0');
     expect(remaining).toHaveTextContent('of 2 remaining before this delivery');
+    const receiptRequests = () => vi.mocked(fetch).mock.calls.filter(([url, init]) =>
+      String(url).endsWith('/receive') && init?.method === 'POST',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Record receipt and update stock' }));
+    expect(receiptRequests()).toHaveLength(0);
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }));
+    expect(receiptRequests()).toHaveLength(0);
+    expect(accepted).toHaveValue(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Record receipt and update stock' }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('1 accepted units and 1 damaged units');
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Record delivery' }));
+    await waitFor(() => expect(receiptRequests()).toHaveLength(1));
   });
 });

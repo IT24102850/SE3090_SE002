@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import authReducer from '../../../store/authSlice';
 import { ToastProvider as AppToastProvider } from '../../../shared/components/Toast';
 import { ToastProvider } from '../ui/ToastContext';
+import { ConfirmationProvider } from '../../../shared/components/ConfirmationProvider';
 import { InventoryManagerPage } from './InventoryManagerPage';
 
 const itemId = '6aa6b7bd-32d6-44be-9382-fb2e790375f2';
@@ -37,7 +38,7 @@ function renderPage(userOverrides: { role?: 'Admin' | 'Manager' | 'Staff'; branc
       <AppToastProvider>
         <ToastProvider>
           <MemoryRouter>
-            <InventoryManagerPage />
+            <ConfirmationProvider><InventoryManagerPage /></ConfirmationProvider>
           </MemoryRouter>
         </ToastProvider>
       </AppToastProvider>

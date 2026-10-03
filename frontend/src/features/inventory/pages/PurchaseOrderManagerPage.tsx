@@ -8,6 +8,7 @@ import { getStoredToken } from '../authToken';
 import { Badge, type BadgeTone } from '../ui/Badge';
 import { useToast } from '../ui/ToastContext';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
+import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 
 type POStatus = 'Draft' | 'InReview' | 'Placed' | 'InTransit' | 'PartiallyReceived' | 'Received' | 'Rejected' | 'Cancelled';
 
@@ -1116,6 +1117,7 @@ function ReceivePoModal({
 
 export function PurchaseOrderManagerPage() {
   const { notify } = useToast();
+  const confirm = useConfirmation();
   const token = getStoredToken();
   const { user } = useSelector((state: RootState) => state.auth);
   const canManagePurchaseOrders = user?.role === 'Admin' || user?.role === 'Manager';
@@ -1253,6 +1255,11 @@ export function PurchaseOrderManagerPage() {
     if (!canManagePurchaseOrders || statusSavingId) return;
     const next = nextStatus(order.status);
     if (!next) return;
+    if (!await confirm({
+      title: `Move ${order.number} to ${statusLabels[next]}?`,
+      message: `This will update the purchase order status to ${statusLabels[next]}.`,
+      confirmLabel: order.status === 'InReview' ? 'Approve order' : 'Update status',
+    })) return;
 
     const now = new Date().toISOString();
     const timelineEvent: TimelineEvent = { status: next, at: now, by: performer };
@@ -1279,6 +1286,12 @@ export function PurchaseOrderManagerPage() {
 
   async function cancelOrder(order: PurchaseOrder) {
     if (!canManagePurchaseOrders || statusSavingId || order.status === 'Received' || order.status === 'Rejected' || order.status === 'Cancelled') return;
+    if (!await confirm({
+      title: `Cancel ${order.number}?`,
+      message: 'This will cancel the purchase order and stop further receiving against it.',
+      confirmLabel: 'Cancel order',
+      tone: 'danger',
+    })) return;
     const now = new Date().toISOString();
     const timelineEvent: TimelineEvent = { status: 'Cancelled', at: now, by: performer, note: 'Cancelled by user' };
     setOrders((prev) => prev.map((candidate) => (
@@ -1302,6 +1315,12 @@ export function PurchaseOrderManagerPage() {
 
   async function rejectOrder(order: PurchaseOrder) {
     if (!canManagePurchaseOrders || statusSavingId || order.status !== 'InReview') return;
+    if (!await confirm({
+      title: `Reject ${order.number}?`,
+      message: 'This purchase order request will be marked as rejected.',
+      confirmLabel: 'Reject order',
+      tone: 'danger',
+    })) return;
     setStatusSavingId(order.id);
     try {
       const updated = await apiPut<PurchaseOrderResponse>(
@@ -1339,7 +1358,14 @@ export function PurchaseOrderManagerPage() {
     notes: string;
     inventoryItemId?: string;
   }>, photos: File[]) {
-    if (!canReceivePurchaseOrders) return;
+    if (!canReceivePurchaseOrders || statusSavingId) return;
+    const accepted = items.reduce((total, item) => total + item.acceptedQuantity, 0);
+    const damaged = items.reduce((total, item) => total + item.damagedQuantity, 0);
+    if (!await confirm({
+      title: `Record delivery for ${order.number}?`,
+      message: `Record ${accepted} accepted units and ${damaged} damaged units${photos.length ? ` with ${photos.length} attached photos` : ''}. Accepted units will be added to inventory stock.`,
+      confirmLabel: 'Record delivery',
+    })) return;
     setStatusSavingId(order.id);
     let receiptSaved = false;
     try {

@@ -177,6 +177,15 @@ describe('SuppliersPage', () => {
     fireEvent.change(screen.getByLabelText('Usual lead time (days)'), { target: { value: '5' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save supplier' }));
 
+    expect(saveBody).toBeUndefined();
+    const confirmation = screen.getByRole('alertdialog', { name: 'Add this supplier?' });
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Supplier name')).toHaveValue(supplier.name);
+    expect(saveBody).toBeUndefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Save supplier' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Add supplier' }));
+
     await waitFor(() => expect(saveBody).toMatchObject({
       contactPerson: supplier.contactPerson,
       address: supplier.address,
@@ -272,6 +281,13 @@ describe('SuppliersPage', () => {
     fireEvent.change(screen.getByLabelText('Business address'), { target: { value: '42 New Street' } });
     fireEvent.change(screen.getByLabelText('Supplier notes'), { target: { value: 'Updated delivery notes' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(updateBody).toBeUndefined();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Update supplier' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Save supplier changes?' })).getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(updateBody).toMatchObject({
       paymentTerms: 'Net 14',
