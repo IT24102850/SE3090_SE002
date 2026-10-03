@@ -2,6 +2,7 @@
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
 import { API_BASE_URL, LOCAL_API_BASE_URL } from './apiBaseUrl';
 import { expireSession, refreshSession } from './sessionRefresh';
+import type { CheckoutResponse } from '../features/billing/billingApi';
 import type {
   AgentWorkflow,
   BookingEvent,
@@ -266,6 +267,25 @@ export const bookingApi = createApi({
       }
     >({
       query: (body) => ({ url: '/bookings', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }, ...NOTIFICATION_TAGS],
+    }),
+    checkoutBooking: builder.mutation<{
+      bookingId: string;
+      status: string;
+      amountDue: number;
+      amountPayableNow: number;
+      currency: string;
+      paymentMode: string;
+      holdExpiresAt: string | null;
+      invoiceId: string | null;
+      checkout: CheckoutResponse | null;
+    }, {
+      tenantId: string; resourceId: string; bookingTypeId: string; bookedBy: string;
+      startTime: string; endTime: string; priority: string;
+      attendeeCount?: number; title?: string; notes?: string; source?: string;
+      ticketBreakdown?: TicketLine[]; departureId?: string; formData?: string; waiver?: string;
+    }>({
+      query: (body) => ({ url: '/bookings/checkout', method: 'POST', body }),
       invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     updateBooking: builder.mutation<unknown, { id: string; body: Partial<Booking> }>({
@@ -902,6 +922,7 @@ export const {
   useGetBookingQuery,
   useGetBookingHistoryQuery,
   useCreateBookingMutation,
+  useCheckoutBookingMutation,
   useUpdateBookingMutation,
   useDeleteBookingMutation,
   useRescheduleBookingMutation,

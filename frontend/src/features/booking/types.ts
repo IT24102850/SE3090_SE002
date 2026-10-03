@@ -1,5 +1,6 @@
 export type BookingStatus =
   | 'Pending'
+  | 'PendingPayment'
   | 'Confirmed'
   | 'CheckedIn'
   | 'InProgress'
@@ -9,7 +10,8 @@ export type BookingStatus =
   | 'Rejected'
   // Set by the weather-cancel flow, never by a guest. Kept apart from
   // Cancelled so weather losses do not read as churn in the reports.
-  | 'WeatherCancelled';
+  | 'WeatherCancelled'
+  | 'Expired';
 
 export type BookingPriority = 'Low' | 'Normal' | 'High' | 'Urgent';
 
@@ -609,6 +611,7 @@ export interface ConflictPair {
 
 export const STATUS_COLORS: Record<BookingStatus, { fg: string; bg: string; tone: 'good' | 'warning' | 'critical' | 'neutral' | 'primary' }> = {
   Pending: { fg: '#92400e', bg: '#FBBF24', tone: 'warning' },
+  PendingPayment: { fg: '#9a3412', bg: '#FDBA74', tone: 'warning' },
   Confirmed: { fg: '#1d4ed8', bg: '#2563EB', tone: 'primary' },
   CheckedIn: { fg: '#0f766e', bg: '#22D3EE', tone: 'good' },
   InProgress: { fg: '#155e75', bg: '#0E7490', tone: 'primary' },
@@ -619,12 +622,13 @@ export const STATUS_COLORS: Record<BookingStatus, { fg: string; bg: string; tone
   // Storm blue rather than the red of a rejection: the operator did not
   // turn this guest away, the sea did.
   WeatherCancelled: { fg: '#075985', bg: '#38BDF8', tone: 'warning' },
+  Expired: { fg: '#475569', bg: '#CBD5E1', tone: 'neutral' },
 };
 
 export const RESOURCE_CATEGORIES: ResourceCategory[] = ['Room', 'Equipment', 'Vehicle', 'Staff', 'Desk', 'Other'];
 export const BOOKING_STATUSES: BookingStatus[] = [
-  'Pending', 'Confirmed', 'CheckedIn', 'InProgress', 'Completed', 'Cancelled', 'NoShow', 'Rejected',
-  'WeatherCancelled',
+  'Pending', 'PendingPayment', 'Confirmed', 'CheckedIn', 'InProgress', 'Completed', 'Cancelled', 'NoShow', 'Rejected',
+  'WeatherCancelled', 'Expired',
 ];
 
 // ── Clinic operations dashboard (ClinicReportsController) ─────────────

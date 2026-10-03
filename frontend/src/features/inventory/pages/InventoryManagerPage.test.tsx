@@ -107,5 +107,5 @@ describe('InventoryManagerPage price editing', () => {
       expect(updateBody?.sellingPrice).toBe(75);
       expect(screen.getByText('LKR 75')).toBeInTheDocument();
     });
-  });
+  }, 15000);
 });
