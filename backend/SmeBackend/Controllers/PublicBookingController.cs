@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -292,6 +292,7 @@ public class PublicBookingController : ControllerBase
             Source = Source,
             TotalCost = priced.Total,
         };
+        await BookingExclusivity.ApplyAsync(_db, booking);
         _db.Bookings.Add(booking);
 
         // Tenant-wide (UserId null) so every admin, manager and staff member

@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../../../store/store';
 import { useToast } from '../../../shared/components/Toast';
-import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 import { billingApi, errorMessage, type DynamicForm, type JsonSchema, type JsonSchemaField } from '../billingApi';
 import { useAsync } from '../useAsync';
 import {
@@ -24,7 +23,6 @@ export default function DynamicFormBuilderPage() {
   const { user } = useSelector((s: RootState) => s.auth);
   const canEdit = user?.role === 'Admin' || user?.role === 'Manager';
   const toast = useToast();
-  const confirm = useConfirmation();
   const { data: forms, reload } = useAsync(() => billingApi.listForms(), []);
 
   const [formType, setFormType] = useState('');
@@ -113,12 +111,7 @@ export default function DynamicFormBuilderPage() {
   };
 
   const remove = async () => {
-    if (!existing || !await confirm({
-      title: 'Delete this form?',
-      message: `Delete the "${existing.formType}" form? Past submissions are kept.`,
-      confirmLabel: 'Delete form',
-      tone: 'danger',
-    })) return;
+    if (!existing || !window.confirm(`Delete the "${existing.formType}" form? Past submissions are kept.`)) return;
     try {
       await billingApi.deleteForm(existing.formType);
       startNew();

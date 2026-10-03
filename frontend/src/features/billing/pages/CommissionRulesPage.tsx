@@ -3,7 +3,6 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '../../../store/store';
 import Modal from '../../../shared/components/Modal';
 import { useToast } from '../../../shared/components/Toast';
-import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 import { billingApi, errorMessage, type CommissionRule, type CommissionSplit } from '../billingApi';
 import { money } from '../format';
 import { useAsync } from '../useAsync';
@@ -20,7 +19,6 @@ export default function CommissionRulesPage() {
   const { user } = useSelector((s: RootState) => s.auth);
   const canEdit = user?.role === 'Admin' || user?.role === 'Manager';
   const toast = useToast();
-  const confirm = useConfirmation();
   const { data: rules, reload } = useAsync(() => billingApi.listCommissionRules(), []);
   const [editing, setEditing] = useState<{ id: string | null; draft: Draft } | null>(null);
   const [deal, setDeal] = useState('');
@@ -35,12 +33,7 @@ export default function CommissionRulesPage() {
   };
 
   const remove = async (r: CommissionRule) => {
-    if (!await confirm({
-      title: 'Delete this commission rule?',
-      message: `Delete the "${r.name}" rule? This cannot be undone.`,
-      confirmLabel: 'Delete rule',
-      tone: 'danger',
-    })) return;
+    if (!window.confirm(`Delete the "${r.name}" rule?`)) return;
     try {
       await billingApi.deleteCommissionRule(r.id);
       reload();

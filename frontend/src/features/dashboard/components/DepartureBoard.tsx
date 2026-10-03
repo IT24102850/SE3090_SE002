@@ -4,7 +4,6 @@ import {
   useSetSafetyChecklistMutation,
 } from '../../../api/bookingApi';
 import { useToast } from '../../../shared/components/Toast';
-import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 import { formatTime } from '../../../shared/dateUtils';
 import {
   DEPARTURE_STATUS_COLORS,
@@ -13,6 +12,7 @@ import {
   type DepartureStatus,
   type DepartureSummary,
 } from '../../booking/types';
+import { DepartureForecastPanel } from './DepartureForecastPanel';
 
 /* The departure operations board: one card per sailing, with the one-click
  * actions an operator needs between the office and the jetty.
@@ -121,7 +121,6 @@ export default function DepartureBoard({
   const [setStatus] = useSetDepartureStatusMutation();
   const [expanded, setExpanded] = useState<string | null>(null);
   const toast = useToast();
-  const confirm = useConfirmation();
 
   const move = async (departure: DepartureSummary, status: DepartureStatus) => {
     try {
@@ -133,12 +132,7 @@ export default function DepartureBoard({
       // the checklist, because the gate exists for a reason.
       const data = (error as { data?: { message?: string; requiresOverride?: boolean } })?.data;
       if (data?.requiresOverride && isAdmin) {
-        if (await confirm({
-          title: 'Override safety checklist?',
-          message: `${data.message} Override and mark this departure at sea anyway?`,
-          confirmLabel: 'Override safety check',
-          tone: 'danger',
-        })) {
+        if (window.confirm(`${data.message}\n\nOverride and mark this departure at sea anyway?`)) {
           try {
             await setStatus({ id: departure.id, status, overrideSafetyChecklist: true }).unwrap();
             toast.show('Departure marked at sea with a safety-checklist override.', 'success');
@@ -249,6 +243,7 @@ export default function DepartureBoard({
                 ))}
                 {!cancelled && (
                   <>
+                    <DepartureForecastPanel departure={departure} onCancelWeather={onCancelWeather} />
                     <button className="btn btn-secondary btn-sm" onClick={() => onLogSighting(departure)}>
                       Log sighting
                     </button>

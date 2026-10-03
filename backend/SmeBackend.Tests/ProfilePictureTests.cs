@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Moq;
 using SmeBackend.Controllers;
 using SmeBackend.DTOs;
 using SmeBackend.Models;
@@ -77,12 +76,8 @@ public class ProfilePictureTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var controller = new AuthController(
-            db,
-            new StubJwtService(),
-            new CustomerAccountService(db),
-            Mock.Of<IPasswordResetManager>(),
-            Mock.Of<IMobileExternalAuthService>());
+        var controller = new AuthController(db, new StubJwtService(), new CustomerAccountService(db),
+            new StubPasswordResetManager(), new StubMobileExternalAuthService());
         TestHelpers.SetUser(controller, user.Id, user.TenantId, Roles.Customer);
 
         var result = await controller.UpdateCurrentUser(new UpdateProfileDto { ProfilePictureUrl = "" });
@@ -109,12 +104,8 @@ public class ProfilePictureTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var controller = new AuthController(
-            db,
-            new StubJwtService(),
-            new CustomerAccountService(db),
-            Mock.Of<IPasswordResetManager>(),
-            Mock.Of<IMobileExternalAuthService>());
+        var controller = new AuthController(db, new StubJwtService(), new CustomerAccountService(db),
+            new StubPasswordResetManager(), new StubMobileExternalAuthService());
         TestHelpers.SetUser(controller, user.Id, user.TenantId, Roles.Customer);
 
         var result = await controller.UpdateCurrentUser(new UpdateProfileDto { Phone = "0771234567" });

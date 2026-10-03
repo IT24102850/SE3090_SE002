@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import Modal from '../../../shared/components/Modal';
 import { useToast } from '../../../shared/components/Toast';
-import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 import { billingApi, errorMessage, type Invoice, type Receipt } from '../billingApi';
 import { date, dateTime, downloadBlob, money } from '../format';
 import StatusBadge from './StatusBadge';
@@ -20,7 +19,6 @@ interface Props {
 
 export default function InvoiceDetailModal({ invoice: initial, canManage, canCancel, onClose, onChanged }: Props) {
   const toast = useToast();
-  const confirm = useConfirmation();
   const [invoice, setInvoice] = useState(initial);
   const [panel, setPanel] = useState<Panel>('none');
   const [busy, setBusy] = useState(false);
@@ -84,15 +82,7 @@ export default function InvoiceDetailModal({ invoice: initial, canManage, canCan
   });
 
   const cancel = () => run('Cancelling', async () => {
-    const enteredReason = window.prompt('Why is this invoice being cancelled?');
-    if (enteredReason === null) return;
-    if (!await confirm({
-      title: 'Cancel this invoice?',
-      message: 'This invoice will be marked as cancelled and can no longer be paid.',
-      confirmLabel: 'Cancel invoice',
-      tone: 'danger',
-    })) return;
-    const reason = enteredReason || undefined;
+    const reason = window.prompt('Why is this invoice being cancelled?') ?? undefined;
     changed(await billingApi.cancelInvoice(invoice.id, reason));
     toast.show('Invoice cancelled.', 'success');
   });

@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
-using Moq;
 using SmeBackend.Controllers;
 using SmeBackend.DTOs;
 using SmeBackend.Models;
@@ -35,12 +34,8 @@ public class ChangePasswordTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var controller = new AuthController(
-            db,
-            new StubJwtService(),
-            new CustomerAccountService(db),
-            Mock.Of<IPasswordResetManager>(),
-            Mock.Of<IMobileExternalAuthService>());
+        var controller = new AuthController(db, new StubJwtService(), new CustomerAccountService(db),
+            new StubPasswordResetManager(), new StubMobileExternalAuthService());
         TestHelpers.SetUser(controller, user.Id, user.TenantId, Roles.Admin);
         return (controller, user);
     }

@@ -33,9 +33,6 @@ class AppColors {
 
   /// Background blooms and the "in progress" state.
   static const violet = Color(0xFF7A4DFF);
-  static const shopIndigo = Color(0xFF273B80);
-  static const shopViolet = Color(0xFF583D96);
-  static const shopRose = Color(0xFF8E4F8B);
 
   // ───────────────────────── Text ─────────────────────────
   static const textPrimary = Color(0xFFFFFFFF);

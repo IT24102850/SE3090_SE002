@@ -6,8 +6,6 @@ public static class InventoryAuthorizationPolicies
 {
     public const string InventoryRead = "InventoryRead";
     public const string InventoryWrite = "InventoryWrite";
-    public const string InventoryMetadataRead = "InventoryMetadataRead";
-    public const string InventoryMetadataWrite = "InventoryMetadataWrite";
     public const string PurchaseOrderRead = "PurchaseOrderRead";
     public const string PurchaseOrderWrite = "PurchaseOrderWrite";
 
@@ -15,8 +13,6 @@ public static class InventoryAuthorizationPolicies
     {
         Add(options, InventoryRead, "inventory.read");
         Add(options, InventoryWrite, "inventory.write");
-        AddMetadata(options, InventoryMetadataRead, "inventory.read");
-        AddMetadata(options, InventoryMetadataWrite, "inventory.write");
         Add(options, PurchaseOrderRead, "purchase-orders.read");
         Add(options, PurchaseOrderWrite, "purchase-orders.write");
     }
@@ -27,15 +23,6 @@ public static class InventoryAuthorizationPolicies
         {
             policy.RequireAuthenticatedUser();
             policy.AddRequirements(new InventoryAccessRequirement(component));
-        });
-    }
-
-    private static void AddMetadata(AuthorizationOptions options, string policyName, string component)
-    {
-        options.AddPolicy(policyName, policy =>
-        {
-            policy.RequireAuthenticatedUser();
-            policy.AddRequirements(new InventoryAccessRequirement(component, allowsBranchlessMetadata: true));
         });
     }
 }

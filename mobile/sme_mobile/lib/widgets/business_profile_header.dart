@@ -90,20 +90,17 @@ class BusinessProfileHeader extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 18),
-        if (p.galleryImageUrls.isNotEmpty)
-          _GalleryStrip(imageUrls: p.galleryImageUrls)
-        else
-          _EmptyGallery(themeColor: themeColor, themeIcon: themeIcon),
-        const SizedBox(height: 18),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: _AboutSection(
-            description: p.description,
-            amenities: p.amenities,
-            themeColor: themeColor,
+        if (p.galleryImageUrls.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          _GalleryStrip(imageUrls: p.galleryImageUrls),
+        ],
+        if ((p.description != null && p.description!.trim().isNotEmpty) || p.amenities.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _AboutSection(description: p.description, amenities: p.amenities, themeColor: themeColor),
           ),
-        ),
+        ],
         const SizedBox(height: 18),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -139,10 +136,9 @@ class _Hero extends StatelessWidget {
                 ? Image.network(
                     profile.coverImageUrl!,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        _CoverFallback(themeColor: themeColor, themeIcon: themeIcon),
+                    errorBuilder: (context, error, stackTrace) => _CoverFallback(themeColor: themeColor),
                   )
-                : _CoverFallback(themeColor: themeColor, themeIcon: themeIcon),
+                : _CoverFallback(themeColor: themeColor),
           ),
           // Logo avatar, overlapping the cover's bottom edge.
           Positioned(
@@ -154,7 +150,7 @@ class _Hero extends StatelessWidget {
               padding: const EdgeInsets.all(3),
               decoration: const BoxDecoration(color: AppColors.bgMid, shape: BoxShape.circle),
               child: ClipOval(
-                child: profile.logoUrl != null && profile.logoUrl!.trim().isNotEmpty
+                child: profile.logoUrl != null
                     ? Image.network(
                         profile.logoUrl!,
                         fit: BoxFit.cover,
@@ -172,61 +168,18 @@ class _Hero extends StatelessWidget {
 
 class _CoverFallback extends StatelessWidget {
   final Color themeColor;
-  final IconData themeIcon;
-
-  const _CoverFallback({required this.themeColor, required this.themeIcon});
+  const _CoverFallback({required this.themeColor});
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color.lerp(themeColor, AppColors.bgMid, 0.32)!,
-                Color.lerp(themeColor, AppColors.bgTop, 0.76)!,
-              ],
-            ),
-          ),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [themeColor, themeColor.withValues(alpha: 0.6)],
         ),
-        Positioned(
-          right: 14,
-          top: -30,
-          child: Icon(
-            themeIcon,
-            size: 150,
-            color: Colors.white.withValues(alpha: 0.10),
-          ),
-        ),
-        Positioned(
-          left: -36,
-          bottom: -100,
-          child: Container(
-            width: 210,
-            height: 210,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.08),
-                width: 18,
-              ),
-            ),
-          ),
-        ),
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.transparent, Color(0x99050514)],
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -283,52 +236,6 @@ class _GalleryStrip extends StatelessWidget {
   }
 }
 
-class _EmptyGallery extends StatelessWidget {
-  const _EmptyGallery({required this.themeColor, required this.themeIcon});
-
-  final Color themeColor;
-  final IconData themeIcon;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(
-          height: 78,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [themeColor.withValues(alpha: 0.14), AppColors.glassFill],
-            ),
-            borderRadius: BorderRadius.circular(AppRadii.row),
-            border: Border.all(color: themeColor.withValues(alpha: 0.24)),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 16),
-              Icon(Icons.photo_library_outlined,
-                  color: themeColor.withValues(alpha: 0.9), size: 25),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Photo gallery',
-                        style: AppTextStyles.subtitle.copyWith(fontSize: 13)),
-                    const SizedBox(height: 2),
-                    Text('Photos will appear here',
-                        style: AppTextStyles.caption.copyWith(fontSize: 11)),
-                  ],
-                ),
-              ),
-              Icon(themeIcon,
-                  color: themeColor.withValues(alpha: 0.28), size: 42),
-              const SizedBox(width: 14),
-            ],
-          ),
-        ),
-      );
-}
-
 class _GalleryViewer extends StatelessWidget {
   final List<String> imageUrls;
   final int initialIndex;
@@ -374,12 +281,6 @@ class _AboutSection extends StatelessWidget {
         if (description != null && description!.trim().isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(description!, style: AppTextStyles.body.copyWith(fontSize: 13, height: 1.5)),
-        ] else ...[
-          const SizedBox(height: 8),
-          Text(
-            'This business is preparing its profile story. Check back for updates.',
-            style: AppTextStyles.bodyMuted.copyWith(fontSize: 13),
-          ),
         ],
         if (amenities.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -462,13 +363,6 @@ class _ContactAndHoursSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           ...profile.businessHours.map((h) => _HourRow(entry: h, isToday: today != null && h.dayOfWeek == today.dayOfWeek)),
-        ],
-        if (!hasContact && profile.businessHours.isEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            'Contact details and opening hours have not been added yet.',
-            style: AppTextStyles.bodyMuted.copyWith(fontSize: 13),
-          ),
         ],
       ],
     );

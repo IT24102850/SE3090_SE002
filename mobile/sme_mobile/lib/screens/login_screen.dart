@@ -5,7 +5,7 @@ import '../theme/app_theme.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/ui/ui.dart';
 import 'register_screen.dart';
-import 'dashboard_screen.dart';
+import 'role_home.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -39,7 +39,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (success && mounted) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        MaterialPageRoute(builder: (_) => roleHome(ref.read(authProvider).user?.role)),
         (route) => false,
       );
     } else if (mounted) {

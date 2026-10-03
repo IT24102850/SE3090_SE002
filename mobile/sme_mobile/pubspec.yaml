@@ -25,6 +25,9 @@ dependencies:
   # files are added - see services/push_notification_service.dart.
   firebase_core: ^3.6.0
   firebase_messaging: ^15.1.3
+  # Device notifications without Firebase: the API's live notification
+  # stream raised as Android notifications - services/device_notification_service.dart
+  flutter_local_notifications: ^17.2.3
   # Business Profile: tap-to-call/email/website/social links.
   url_launcher: ^6.3.1
   # Business Profile editor (Admin/Manager): pick logo/cover/gallery images.
@@ -33,16 +36,23 @@ dependencies:
   image_picker: ^1.1.2
   google_fonts: ^6.3.2
   share_plus: ^12.0.2
-  connectivity_plus: ^6.1.3
-  shared_preferences: ^2.3.5
-  web_socket_channel: ^2.2.0
+  # Inventory (feat/inventory-agentic-updates). The branch shipped code
+  # importing these three but never declared them, so the app would not
+  # analyse or build after the merge.
+  # Live stock/notification feed: lib/inventory/notification_ws.dart
+  web_socket_channel: ^3.0.1
+  # Offline stock counting needs to know when the device is back online, and
+  # to keep a partial count across a restart: lib/inventory/stock_count_screen.dart
+  connectivity_plus: ^6.1.0
+  shared_preferences: ^2.3.2
+  # Social sign-in and biometric unlock (services/social_auth_service.dart,
+  # services/biometric_auth_service.dart, widgets/unify_auth/ios_passcode_pad.dart)
+  # and the PDF sale receipt (inventory/sale_receipt.dart). The branch these
+  # came from imported all four without declaring them.
   google_sign_in: ^7.2.0
   flutter_appauth: ^8.0.3
-  local_auth: ^3.0.2
-  pdf: ^3.13.1
-  geolocator: ^14.0.2
-  flutter_map: ^8.3.2
-  latlong2: ^0.10.1
+  local_auth: ^2.3.0
+  pdf: ^3.11.1
 
 dev_dependencies:
   flutter_test:

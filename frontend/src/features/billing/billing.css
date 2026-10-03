@@ -18,27 +18,10 @@
 
 /* Status badges */
 .bl-badge {
-  position: relative; overflow: hidden;
   display: inline-flex; align-items: center; gap: 4px;
   padding: 2px 9px; border-radius: 999px;
   font-size: 12px; font-weight: 600; white-space: nowrap;
   background: var(--color-neutral-soft); color: var(--color-neutral);
-  animation: billing-badge-glow 2.4s ease-in-out infinite;
-  isolation: isolate;
-}
-.bl-badge::after {
-  content: ''; position: absolute; inset: 0 auto 0 -45%; width: 34%;
-  pointer-events: none; transform: skewX(-18deg);
-  background: linear-gradient(105deg, transparent, rgba(255,255,255,.38), transparent);
-  animation: billing-badge-shimmer 2.8s ease-in-out infinite;
-}
-.bl-badge > * { position: relative; z-index: 1; }
-@keyframes billing-badge-glow { 0%, 100% { box-shadow: 0 0 0 transparent; } 50% { box-shadow: 0 0 14px color-mix(in srgb, currentColor 28%, transparent); } }
-@keyframes billing-badge-shimmer { 0%, 35% { left: -45%; } 75%, 100% { left: 125%; } }
-.bl-badge:hover { transform: translateY(-1px) scale(1.03); transition: transform .16s ease; }
-@media (prefers-reduced-motion: reduce) {
-  .bl-badge { animation: none; }
-  .bl-badge::after { animation: none; }
 }
 .bl-badge-good { background: var(--color-good-soft); color: var(--color-good); }
 .bl-badge-warning { background: var(--color-warning-soft); color: var(--color-warning); }

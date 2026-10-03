@@ -41,13 +41,4 @@ class InventoryToolsClient:
         params: dict[str, Any] = {"pageSize": 100}
         if branch_id:
             params["branchId"] = branch_id
-        payload = self._get("/inventory/movements", params)
-        if isinstance(payload, dict):
-            movements = payload.get("items")
-        else:
-            movements = payload
-        if not isinstance(movements, list) or any(
-            not isinstance(movement, dict) for movement in movements
-        ):
-            raise ValueError("Inventory API returned an invalid stock movement list.")
-        return movements
+        return self._get("/inventory/movements", params)

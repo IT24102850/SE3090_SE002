@@ -15,9 +15,8 @@ import 'my_bookings_screen.dart';
 /// (Planner -> Domain Analysis -> Action/Tool -> Validation/Safety) behind
 /// POST /api/agent/find-and-book. The customer states an objective in plain
 /// English against a booking type they already offer; the Validation/Safety
-/// agent re-checks the selected slot and duration before booking or rejecting
-/// it. Configured approval thresholds can route a request to a manager.
-/// See findAndBook() in
+/// agent either books it outright, sends it for manager approval (high
+/// booking count / revenue impact), or rejects it - see findAndBook() in
 /// booking_providers.dart for how those three outcomes map to this screen.
 class AiPlannerScreen extends ConsumerStatefulWidget {
   const AiPlannerScreen({super.key});
@@ -27,7 +26,8 @@ class AiPlannerScreen extends ConsumerStatefulWidget {
 }
 
 class _AiPlannerScreenState extends ConsumerState<AiPlannerScreen> {
-  final _objectiveController = TextEditingController(text: 'Book me the best available option this week');
+  final _objectiveController = TextEditingController(
+      text: 'Book me the best available option this week');
   String? _bookingTypeId;
   int _withinDays = 7;
   bool _submitting = false;
@@ -83,101 +83,104 @@ class _AiPlannerScreenState extends ConsumerState<AiPlannerScreen> {
           IconButton(
             icon: const Icon(Icons.history_rounded),
             tooltip: 'My AI requests',
-            onPressed: () => Navigator.of(context).push(slideFadeRoute(const MyAiRequestsScreen())),
+            onPressed: () => Navigator.of(context)
+                .push(slideFadeRoute(const MyAiRequestsScreen())),
           ),
         ],
       ),
       child: SafeArea(
         child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: AppColors.heroGradientFor(AppColors.violet),
-                borderRadius: BorderRadius.circular(AppRadii.card),
-                border: Border.all(color: AppColors.glassBorder),
-              ),
-              child: Row(
-                children: [
-                  const IconWell(icon: Icons.auto_awesome, color: AppColors.violet, size: 44),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(
-                      'Choose a service and describe what you need. AI ranks matching resources and checks available times. A separate safety step re-checks the slot before booking; some requests may need manager approval.',
-                      style: AppTextStyles.body.copyWith(fontSize: 13),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: AppColors.heroGradientFor(AppColors.violet),
+                  borderRadius: BorderRadius.circular(AppRadii.card),
+                  border: Border.all(color: AppColors.glassBorder),
+                ),
+                child: Row(
+                  children: [
+                    const IconWell(
+                        icon: Icons.auto_awesome,
+                        color: AppColors.violet,
+                        size: 44),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        'Describe what you want in plain English. A 4-agent AI pipeline finds the best match, checks availability, and books it — or asks the business to approve it first.',
+                        style: AppTextStyles.body.copyWith(fontSize: 13),
+                      ),
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              const SectionHeader('What do you want to book?'),
+              bookingTypesAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: LinearProgressIndicator(
+                    color: AppColors.cyan,
+                    backgroundColor: AppColors.inputFill,
+                  ),
+                ),
+                error: (err, stack) => Text(
+                  'Could not load this business\'s services.',
+                  style: AppTextStyles.body.copyWith(color: AppColors.danger),
+                ),
+                data: (types) => _BookingTypeSelector(
+                  types: types,
+                  selectedId: _bookingTypeId,
+                  onSelected: (id) => setState(() => _bookingTypeId = id),
+                ),
+              ),
+              const SizedBox(height: 24),
+              NeonInputField(
+                label: 'Tell the AI what you\'re looking for',
+                controller: _objectiveController,
+                maxLines: 3,
+                hintText:
+                    'e.g. "Find me the earliest beginner-friendly slot this week"',
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Text('Within', style: AppTextStyles.bodyMuted),
+                  const SizedBox(width: 12),
+                  DropdownButton<int>(
+                    value: _withinDays,
+                    dropdownColor: AppColors.overlaySurface,
+                    borderRadius: BorderRadius.circular(AppRadii.control),
+                    underline: const SizedBox.shrink(),
+                    style: AppTextStyles.body
+                        .copyWith(color: AppColors.textPrimary),
+                    icon: const Icon(Icons.expand_more_rounded,
+                        color: AppColors.iconSecondary),
+                    items: const [3, 7, 14, 30]
+                        .map((d) =>
+                            DropdownMenuItem(value: d, child: Text('$d days')))
+                        .toList(),
+                    onChanged: (v) => setState(() => _withinDays = v ?? 7),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
-
-            const SectionHeader('What do you want to book?'),
-            bookingTypesAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: LinearProgressIndicator(
-                  color: AppColors.cyan,
-                  backgroundColor: AppColors.inputFill,
-                ),
-              ),
-              error: (err, stack) => Text(
-                'Could not load this business\'s services.',
-                style: AppTextStyles.body.copyWith(color: AppColors.danger),
-              ),
-              data: (types) => _BookingTypeSelector(
-                types: types,
-                selectedId: _bookingTypeId,
-                onSelected: (id) => setState(() => _bookingTypeId = id),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            NeonInputField(
-              label: 'Tell the AI what you\'re looking for',
-              controller: _objectiveController,
-              maxLines: 3,
-              hintText: 'e.g. "Find me the earliest beginner-friendly slot this week"',
-            ),
-            const SizedBox(height: 20),
-
-            Row(
-              children: [
-                Text('Within', style: AppTextStyles.bodyMuted),
-                const SizedBox(width: 12),
-                DropdownButton<int>(
-                  value: _withinDays,
-                  dropdownColor: AppColors.overlaySurface,
-                  borderRadius: BorderRadius.circular(AppRadii.control),
-                  underline: const SizedBox.shrink(),
-                  style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
-                  icon: const Icon(Icons.expand_more_rounded, color: AppColors.iconSecondary),
-                  items: const [3, 7, 14, 30]
-                      .map((d) => DropdownMenuItem(value: d, child: Text('$d days')))
-                      .toList(),
-                  onChanged: (v) => setState(() => _withinDays = v ?? 7),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            NeonButton(
-              label: _submitting ? 'Asking the AI planner…' : 'Find and book',
-              icon: Icons.auto_awesome,
-              isLoading: _submitting,
-              onPressed: _submitting ? null : _submit,
-            ),
-
-            if (_result != null) ...[
               const SizedBox(height: 24),
-              _ResultCard(result: _result!),
+              NeonButton(
+                label: _submitting ? 'Asking the AI planner…' : 'Find and book',
+                icon: Icons.auto_awesome,
+                isLoading: _submitting,
+                onPressed: _submitting ? null : _submit,
+              ),
+              if (_result != null) ...[
+                const SizedBox(height: 24),
+                _ResultCard(result: _result!),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -188,7 +191,10 @@ class _BookingTypeSelector extends StatelessWidget {
   final String? selectedId;
   final ValueChanged<String> onSelected;
 
-  const _BookingTypeSelector({required this.types, required this.selectedId, required this.onSelected});
+  const _BookingTypeSelector(
+      {required this.types,
+      required this.selectedId,
+      required this.onSelected});
 
   @override
   Widget build(BuildContext context) {
@@ -211,7 +217,8 @@ class _BookingTypeSelector extends StatelessWidget {
             color: selected ? AppColors.textPrimary : AppColors.textBody,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
           ),
-          side: BorderSide(color: selected ? AppColors.violet : AppColors.glassBorder),
+          side: BorderSide(
+              color: selected ? AppColors.violet : AppColors.glassBorder),
         );
       }).toList(),
     );
@@ -226,8 +233,16 @@ class _ResultCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final (color, icon, title) = switch (result.status) {
       'Completed' => (AppColors.success, Icons.check_circle_rounded, 'Booked!'),
-      'AwaitingApproval' => (AppColors.warning, Icons.hourglass_top_rounded, 'Sent for approval'),
-      _ => (AppColors.danger, Icons.error_outline_rounded, 'Could not book that'),
+      'AwaitingApproval' => (
+          AppColors.warning,
+          Icons.hourglass_top_rounded,
+          'Sent for approval'
+        ),
+      _ => (
+          AppColors.danger,
+          Icons.error_outline_rounded,
+          'Could not book that'
+        ),
     };
 
     return GlassCard(
@@ -245,17 +260,25 @@ class _ResultCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(result.message, style: AppTextStyles.body.copyWith(fontSize: 13.5)),
+          Text(result.message,
+              style: AppTextStyles.body.copyWith(fontSize: 13.5)),
+          if (result.isBooked) ...[
+            const SizedBox(height: 8),
+            Text('Your booking is confirmed!',
+                style: AppTextStyles.bodyMuted.copyWith(fontSize: 13)),
+          ],
           if (result.workflowId != null) ...[
             const SizedBox(height: 6),
-            Text('Workflow ${result.workflowId}', style: AppTextStyles.caption.copyWith(fontSize: 11)),
+            Text('Workflow ${result.workflowId}',
+                style: AppTextStyles.caption.copyWith(fontSize: 11)),
           ],
           if (result.isBooked) ...[
             const SizedBox(height: 14),
             GhostButton(
               label: 'View my bookings',
               icon: Icons.event_available_outlined,
-              onPressed: () => Navigator.of(context).push(slideFadeRoute(const MyBookingsScreen())),
+              onPressed: () => Navigator.of(context)
+                  .push(slideFadeRoute(const MyBookingsScreen())),
             ),
           ],
         ],

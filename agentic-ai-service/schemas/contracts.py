@@ -35,10 +35,23 @@ class PlanStep(BaseModel):
     description: str
 
 
+class PredictedConflict(BaseModel):
+    """A clash the planner expects the later agents to hit. Predicted, not
+    detected: it is the planner reasoning from the objective and the
+    constraints before any tool has looked at real availability, which is
+    what makes it worth surfacing early."""
+
+    kind: Literal["resource_double_booked", "outside_working_hours", "capacity_exceeded", "insufficient_gap", "other"]
+    description: str
+    resource_id: str | None = None
+    likelihood: float = Field(ge=0.0, le=1.0)
+
+
 class PlannerOutput(BaseModel):
     plan: list[PlanStep]
     assigned_agents: list[str]
-    confidence: float = Field(ge=0.0, le=1.0)
+    predicted_conflicts: list[PredictedConflict] = Field(default_factory=list)
+    confidence_score: float = Field(ge=0.0, le=1.0)
 
 
 # ── Agent 2: Domain Analysis ────────────────────────────────────────────
@@ -77,6 +90,8 @@ class ValidationSafetyOutput(BaseModel):
     rejection_reason: str | None = None
     validation_notes: list[str] = Field(default_factory=list)
     booking_id: str | None = None  # set only if create_booking actually ran
+    invoice_id: str | None = None
+    checkout: dict[str, Any] | None = None
 
 
 # ── Full trace, returned by /plan and stored (in-memory) for /trace ─────
@@ -85,6 +100,29 @@ class ToolCallRecord(BaseModel):
     agent: str
     duration_ms: int
     success: bool
+    error: str | None = None
+
+
+class LlmCallRecord(BaseModel):
+    """One attempt against one model. Several of these for a single logical
+    step is the retry/fallback layer working, not a bug - which is why the
+    attempt number and the model are both kept rather than collapsed."""
+
+    model: str
+    attempt: int
+    duration_ms: int
+    ok: bool
+    error: str | None = None
+
+
+class AgentStepRecord(BaseModel):
+    """Wall-clock cost of one agent in the pipeline, recorded whether or not
+    it succeeded, so a slow or failing stage is attributable to an agent
+    rather than to the workflow as a whole."""
+
+    agent: str
+    duration_ms: int
+    ok: bool
     error: str | None = None
 
 
@@ -99,6 +137,8 @@ class WorkflowTrace(BaseModel):
     action_tool_output: ActionToolOutput | None = None
     validation_output: ValidationSafetyOutput | None = None
     tool_calls: list[ToolCallRecord] = Field(default_factory=list)
+    llm_calls: list[LlmCallRecord] = Field(default_factory=list)
+    agent_steps: list[AgentStepRecord] = Field(default_factory=list)
     error: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None

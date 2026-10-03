@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
-using Moq;
 using SmeBackend.Controllers;
 using SmeBackend.DTOs;
 using SmeBackend.Models;
@@ -45,12 +44,8 @@ public class LoginAcrossTenantsTests
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("nandana2004"), CreatedAt = DateTime.UtcNow.AddDays(-2),
         });
         await db.SaveChangesAsync();
-        return new AuthController(
-            db,
-            new StubJwtService(),
-            new CustomerAccountService(db),
-            Mock.Of<IPasswordResetManager>(),
-            Mock.Of<IMobileExternalAuthService>());
+        return new AuthController(db, new StubJwtService(), new CustomerAccountService(db),
+            new StubPasswordResetManager(), new StubMobileExternalAuthService());
     }
 
     private static async Task<Guid?> LoginTenant(AuthController controller, string password)

@@ -1,5 +1,6 @@
 export type BookingStatus =
   | 'Pending'
+  | 'PendingPayment'
   | 'Confirmed'
   | 'CheckedIn'
   | 'InProgress'
@@ -9,7 +10,8 @@ export type BookingStatus =
   | 'Rejected'
   // Set by the weather-cancel flow, never by a guest. Kept apart from
   // Cancelled so weather losses do not read as churn in the reports.
-  | 'WeatherCancelled';
+  | 'WeatherCancelled'
+  | 'Expired';
 
 export type BookingPriority = 'Low' | 'Normal' | 'High' | 'Urgent';
 
@@ -104,6 +106,30 @@ export const DEPARTURE_STATUS_COLORS: Record<DepartureStatus, { bg: string; labe
   CancelledWeather: { bg: '#38BDF8', label: 'Weather-cancelled' },
   CancelledOther: { bg: '#7C7C85', label: 'Cancelled' },
 };
+
+/* An Open-Meteo forecast for one departure, plus the sail/no-sail call the
+ * backend derives from it. `available: false` means the forecast service could
+ * not be reached or the vessel has no coordinates - not that it is safe. */
+export interface DepartureForecast {
+  available: boolean;
+  message?: string;
+  observation?: WeatherObservation;
+  forecast?: {
+    forecastedFor: string;
+    windSpeedKnots?: number | null;
+    windGustKnots?: number | null;
+    waveHeightMetres?: number | null;
+    visibilityKm?: number | null;
+    source: string;
+    coordinates: { latitude: number; longitude: number; from: string };
+  };
+  risk?: {
+    level: 'ok' | 'caution' | 'unsafe' | 'unknown';
+    suggestCancellation: boolean;
+    reasons: string[];
+  };
+  guestsAffected?: number;
+}
 
 export interface WeatherObservation {
   id: string;
@@ -321,8 +347,6 @@ export interface Branch {
   name: string;
   address?: string | null;
   phone?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
 }
 
 export interface Resource {
@@ -454,11 +478,59 @@ export interface WorkflowStep {
   parameters: Record<string, unknown>;
 }
 
+/* The auditable execution trace the agent service returns and ASP.NET Core
+ * stores on the workflow. Serialized as JSON strings on the entity, so the
+ * shapes below describe what parsing them yields. */
+export interface AgentStepRecord {
+  agent: string;
+  durationMs: number;
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface ToolCallRecord {
+  tool: string;
+  agent: string;
+  durationMs: number;
+  success: boolean;
+  error?: string | null;
+}
+
+/* One attempt against one model. Several entries for a single step is the
+ * retry/fallback layer working, not a fault — which is why the attempt
+ * number is kept rather than collapsed. */
+export interface LlmCallRecord {
+  model: string;
+  attempt: number;
+  durationMs: number;
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface ExecutionTrace {
+  agentSteps?: AgentStepRecord[];
+  toolCalls?: ToolCallRecord[];
+  llmCalls?: LlmCallRecord[];
+  plannerConfidence?: number | null;
+  predictedConflicts?: { kind: string; description: string; likelihood: number }[];
+  rankingCriteria?: string[];
+  error?: string | null;
+}
+
+export interface ValidationResultsSummary {
+  isAllowed?: boolean | null;
+  requiresHumanApproval?: boolean | null;
+  rejectionReason?: string | null;
+  notes?: string[];
+}
+
 export interface AgentWorkflow {
   id: string;
   tenantId: string;
   objective: string;
   planJson?: string | null;
+  toolResultsJson?: string | null;
+  validationResults?: string | null;
   status: string;
   approvalStatus: string;
   approvedBy?: string | null;
@@ -539,6 +611,7 @@ export interface ConflictPair {
 
 export const STATUS_COLORS: Record<BookingStatus, { fg: string; bg: string; tone: 'good' | 'warning' | 'critical' | 'neutral' | 'primary' }> = {
   Pending: { fg: '#92400e', bg: '#FBBF24', tone: 'warning' },
+  PendingPayment: { fg: '#9a3412', bg: '#FDBA74', tone: 'warning' },
   Confirmed: { fg: '#1d4ed8', bg: '#2563EB', tone: 'primary' },
   CheckedIn: { fg: '#0f766e', bg: '#22D3EE', tone: 'good' },
   InProgress: { fg: '#155e75', bg: '#0E7490', tone: 'primary' },
@@ -549,12 +622,13 @@ export const STATUS_COLORS: Record<BookingStatus, { fg: string; bg: string; tone
   // Storm blue rather than the red of a rejection: the operator did not
   // turn this guest away, the sea did.
   WeatherCancelled: { fg: '#075985', bg: '#38BDF8', tone: 'warning' },
+  Expired: { fg: '#475569', bg: '#CBD5E1', tone: 'neutral' },
 };
 
 export const RESOURCE_CATEGORIES: ResourceCategory[] = ['Room', 'Equipment', 'Vehicle', 'Staff', 'Desk', 'Other'];
 export const BOOKING_STATUSES: BookingStatus[] = [
-  'Pending', 'Confirmed', 'CheckedIn', 'InProgress', 'Completed', 'Cancelled', 'NoShow', 'Rejected',
-  'WeatherCancelled',
+  'Pending', 'PendingPayment', 'Confirmed', 'CheckedIn', 'InProgress', 'Completed', 'Cancelled', 'NoShow', 'Rejected',
+  'WeatherCancelled', 'Expired',
 ];
 
 // ── Clinic operations dashboard (ClinicReportsController) ─────────────
@@ -1397,4 +1471,20 @@ export interface SchoolGradebook {
   to: string;
   scale: { grade: string; min: number }[];
   assessments: SchoolAssessment[];
+}
+
+/** One entry of a booking's timeline (GET /api/bookings/{id}/history). */
+export interface BookingEvent {
+  id: string;
+  /** Created | StatusChanged | Rescheduled | ResourceChanged | Deleted */
+  type: string;
+  /** Previous value; null when the booking was created. */
+  from: string | null;
+  to: string | null;
+  actorUserId: string | null;
+  /** Null for a background service, which reports actorRole 'System'. */
+  actorName: string | null;
+  actorRole: string | null;
+  reason: string | null;
+  at: string;
 }

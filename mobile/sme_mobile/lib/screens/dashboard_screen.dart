@@ -21,12 +21,17 @@ import 'business_profile_editor_screen.dart';
 import 'clinic/clinic_desk_screen.dart';
 import 'customer/ai_planner_screen.dart';
 import 'customer/book_business_list_screen.dart';
-import 'customer/customer_order_management_screen.dart';
-import 'customer/customer_shop_screen.dart';
 import 'customer/my_bookings_screen.dart';
 import 'notifications_screen.dart';
-import 'profile_screen.dart';
 import 'security_pin_screen.dart';
+import 'profile_screen.dart';
+import 'owner/automation/agent_workflows_screen.dart';
+import 'owner/owner_home_screen.dart';
+import 'owner/reports/reports_screen.dart';
+import 'owner/resources/branches_screen.dart';
+import 'owner/resources/staff_screen.dart';
+import 'owner/scheduling/booking_manager_screen.dart';
+import 'owner/scheduling/multi_branch_schedule_screen.dart';
 import 'staff/check_in_scanner_screen.dart';
 import 'staff/my_schedule_screen.dart';
 import '../inventory/authenticated_api_client.dart';
@@ -34,9 +39,10 @@ import '../inventory/app_notifications.dart';
 import '../inventory/inventory_dashboard.dart';
 import '../inventory/sales_screen.dart';
 import '../inventory/stock_count_screen.dart';
-import '../inventory/stock_activity_history_screen.dart';
+import '../inventory/stock_check_screen.dart';
 import '../inventory/purchase_order_approval_screen.dart';
 import '../inventory/equipment_maintenance_screen.dart';
+import '../inventory/analytics_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -123,11 +129,7 @@ class DashboardScreen extends ConsumerWidget {
                   ..._quickActionsFor(
                     context,
                     user.role,
-                    user.branchId,
-                    user.tenantId,
                     role.color,
-                    onJoinBusiness: (tenantId) =>
-                        ref.read(authProvider.notifier).joinBusiness(tenantId),
                     compact: compact,
                     tileSpacing: tileSpacing,
                     clinic: isClinicDesk,
@@ -396,31 +398,22 @@ class _DashboardDrawer extends ConsumerWidget {
                   emphasized: true,
                   onTap: () => Navigator.pop(context),
                 ),
-                if (isCustomer)
-                  _DrawerItem(
-                    icon: Icons.shopping_bag_outlined,
-                    label: 'Shop & my orders',
-                    accent: AppColors.cyan,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        slideFadeRoute(
-                          CustomerShopScreen(
-                            initialBranchId: user.branchId,
-                            tenantId: user.tenantId,
-                            onJoinBusiness: (tenantId) => ref
-                                .read(authProvider.notifier)
-                                .joinBusiness(tenantId),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                if (!isCustomer)
-                  const _DrawerSectionLabel(label: 'BUSINESS OPERATIONS'),
-                if (user.role == 'Admin' ||
-                    user.role == 'Manager' ||
-                    user.role == 'Staff')
+                _DrawerItem(
+                  icon: Icons.person_outline,
+                  label: 'My Profile',
+                  accent: role.color,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context)
+                        .push(slideFadeRoute(const ProfileScreen()));
+                  },
+                ),
+                // These three used to close the drawer and go nowhere, which
+                // left "Admin Panel" as a dead end on the one screen an owner
+                // is most likely to look for it from. They open the workspace
+                // (screens/owner) that carries the same destinations as the
+                // web sidebar.
+                if (user.role == 'Admin' || user.role == 'Manager')
                   _DrawerItem(
                     icon: Icons.storefront_outlined,
                     label: 'Business Profile',
@@ -439,8 +432,7 @@ class _DashboardDrawer extends ConsumerWidget {
                     accent: AppColors.cyan,
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.of(context)
-                          .push(slideFadeRoute(const ClinicDeskScreen()));
+                      Navigator.of(context).push(slideFadeRoute(const BookingManagerScreen()));
                     },
                   ),
                 if (user.role == 'Admin' ||
@@ -452,8 +444,22 @@ class _DashboardDrawer extends ConsumerWidget {
                     accent: AppColors.violet,
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.of(context)
-                          .push(slideFadeRoute(const MyScheduleScreen()));
+                      // Staff get their own day; Admin and Manager get the
+                      // schedule across branches.
+                      Navigator.of(context).push(user.role == 'Staff'
+                          ? slideFadeRoute<void>(const MyScheduleScreen())
+                          : slideFadeRoute<void>(const MultiBranchScheduleScreen()));
+                    },
+                  ),
+                if (user.role == 'Admin' || user.role == 'Manager' || user.role == 'Staff')
+                  _DrawerItem(
+                    icon: Icons.admin_panel_settings,
+                    label: user.role == 'Admin' ? 'Admin Panel' : 'Workspace',
+                    accent: role.color,
+                    iconColor: role.color,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute<void>(const OwnerHomeScreen()));
                     },
                   ),
                 if (user.role != 'Customer')
@@ -468,27 +474,11 @@ class _DashboardDrawer extends ConsumerWidget {
                       Navigator.of(context).push(slideFadeRoute(
                         InventoryDashboard(
                           client: AuthenticatedApiClient(),
-                          role: user.role,
-                          assignedBranchId: user.branchId,
                           canApprove:
                               user.role == 'Admin' || user.role == 'Manager',
                           canReceive: user.role == 'Admin' ||
                               user.role == 'Manager' ||
                               user.role == 'Staff',
-                        ),
-                      ));
-                    },
-                  ),
-                if (user.role == 'Admin')
-                  _DrawerItem(
-                    icon: Icons.shopping_bag_outlined,
-                    label: 'Customer orders',
-                    accent: AppColors.violet,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(slideFadeRoute(
-                        CustomerOrderManagementScreen(
-                          client: AuthenticatedApiClient(),
                         ),
                       ));
                     },
@@ -506,26 +496,31 @@ class _DashboardDrawer extends ConsumerWidget {
                       ));
                     },
                   ),
-                if (user.role == 'Admin' ||
-                    user.role == 'Manager' ||
-                    user.role == 'Staff')
+                if (user.role == 'Admin' || user.role == 'Manager')
                   _DrawerItem(
-                    icon: Icons.receipt_long_outlined,
-                    label: 'Purchase orders',
+                    icon: Icons.fact_check_outlined,
+                    label: 'Purchase approvals',
                     accent: AppColors.success,
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.of(context).push(slideFadeRoute(
                         PurchaseOrderApprovalScreen(
                           client: AuthenticatedApiClient(),
-                          canApprove:
-                              user.role == 'Admin' || user.role == 'Manager',
-                          canCreate: true,
-                          canCreateMultiBranch: user.role == 'Admin',
+                          canApprove: true,
                           canReceive: true,
-                          assignedBranchId: user.branchId,
-                          requiresAssignedBranch: user.role != 'Admin',
                         ),
+                      ));
+                    },
+                  ),
+                if (user.role == 'Admin' || user.role == 'Manager')
+                  _DrawerItem(
+                    icon: Icons.insights_outlined,
+                    label: 'Inventory analytics',
+                    accent: AppColors.violet,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(slideFadeRoute(
+                        InsightsScreen(client: AuthenticatedApiClient()),
                       ));
                     },
                   ),
@@ -813,8 +808,6 @@ const _quickActionImages = <String, String>{
       'https://images.unsplash.com/photo-1501139083538-0139583c060f?auto=format&fit=crop&w=400&q=60',
   'Ask AI to book for you':
       'https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=400&q=60',
-  'Shop & order items':
-      'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=400&q=60',
   'Business Profile':
       'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=400&q=60',
   'Manage all branches':
@@ -839,23 +832,30 @@ const _quickActionImages = <String, String>{
       'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=400&q=60',
   'Inventory dashboard':
       'https://th.bing.com/th/id/OIP.v1H3kKPUl5tEIGHuHqxEBAHaE7?w=261&h=180&c=7&r=0&o=7&dpr=1.3&pid=1.7&rm=3',
-  'Stock activity':
+  'Stock movements':
       'https://images.unsplash.com/photo-1494412651409-8963ce7935a7?auto=format&fit=crop&w=400&q=60',
   'Physical stock count':
       'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=400&q=60',
-  'Purchase orders':
+  'Purchase approvals':
       'https://images.unsplash.com/photo-1554224154-26032ffc0d07?auto=format&fit=crop&w=400&q=60',
   'Equipment maintenance':
       'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=60',
+  'Inventory analytics':
+      'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=400&q=60',
 };
 
+/// Builds the quick-action tiles for a role. Every tile opens a real screen.
+///
+/// The management tiles used to be "coming soon" stubs on the grounds that
+/// the tooling lived in the web app. It no longer does: the workspace under
+/// screens/owner covers the same destinations as the web sidebar, and this
+/// dashboard is itself reachable from it ("Business Dashboard"), so a tile
+/// that does nothing is a dead end in the middle of the app. Each one now
+/// opens the workspace screen that does the job it names.
 List<_QuickActionGroup> _quickActionsFor(
   BuildContext context,
   String role,
-  String? assignedBranchId,
-  String tenantId,
   Color color, {
-  required Future<bool> Function(String tenantId) onJoinBusiness,
   required bool compact,
   required double tileSpacing,
   bool clinic = false,
@@ -867,24 +867,6 @@ List<_QuickActionGroup> _quickActionsFor(
   }
 
   if (role == 'Customer') {
-    addAction(
-      'Shopping',
-      _QuickActionCard(
-        label: 'Shop & order items',
-        icon: Icons.shopping_bag_outlined,
-        color: AppColors.cyan,
-        imageUrl: _quickActionImages['Shop & order items'],
-        onTap: () => Navigator.of(context).push(
-          slideFadeRoute(
-            CustomerShopScreen(
-              initialBranchId: assignedBranchId,
-              tenantId: tenantId,
-              onJoinBusiness: onJoinBusiness,
-            ),
-          ),
-        ),
-      ),
-    );
     addAction(
       'Appointments',
       _QuickActionCard(
@@ -951,16 +933,29 @@ List<_QuickActionGroup> _quickActionsFor(
     'Process walk-ins': Icons.directions_walk_outlined,
   };
 
-  // Most Admin/Manager tiles stay as "coming soon" stubs — that management
-  // tooling lives in the web app — except the ones with a real mobile
-  // screen wired below (Staff's FR-B7/FR-B8 tasks, and Business Profile,
-  // which was explicitly asked for on mobile too).
+  // Every tile's destination. The role that owns a tile is always allowed
+  // into the screen behind it (see the roles on each OwnerDestination in
+  // owner/owner_nav.dart), so no tile can drop someone onto a screen their
+  // role cannot use.
   final wiredTaps = <String, Widget Function()>{
+    // Staff, on mobile specifically (FR-B7/FR-B8).
     'Mark attendance': () => const MyScheduleScreen(),
     'Process walk-ins': () => const CheckInScannerScreen(),
+    // Admin.
     'Business Profile': () => const BusinessProfileEditorScreen(),
-    // For a clinic the analytics / reports / bookings tiles have a real
-    // screen behind them: the clinic desk's Reports and Today tabs.
+    'Manage all branches': () => const BranchesScreen(),
+    'Assign managers & staff': () => const StaffScreen(),
+    'View system analytics': () => const ReportsScreen(),
+    // The approval queue: what the AI agents have proposed and is waiting
+    // on a decision.
+    'Approve high-impact actions': () => const AgentWorkflowsScreen(),
+    // Manager and Staff.
+    'Manage branch bookings': () => const BookingManagerScreen(),
+    'Approve schedules': () => const BookingManagerScreen(),
+    'View branch reports': () => const ReportsScreen(),
+    'Create / view bookings': () => const BookingManagerScreen(),
+    // A clinic's desk is the better answer for the day-to-day tiles, so it
+    // wins over the generic screens above.
     if (clinic) ...{
       'View system analytics': () => const ClinicDeskScreen(initialTab: 1),
       'View branch reports': () => const ClinicDeskScreen(initialTab: 1),
@@ -997,8 +992,6 @@ List<_QuickActionGroup> _quickActionsFor(
         onTap: () => Navigator.of(context).push(slideFadeRoute(
           InventoryDashboard(
             client: client,
-            role: role,
-            assignedBranchId: assignedBranchId,
             canApprove: role == 'Admin' || role == 'Manager',
             canReceive: role == 'Admin' || role == 'Manager' || role == 'Staff',
           ),
@@ -1012,38 +1005,18 @@ List<_QuickActionGroup> _quickActionsFor(
         color: AppColors.violet,
         imageUrl: _quickActionImages['Inventory dashboard'],
         onTap: () => Navigator.of(context).push(
-          slideFadeRoute(SalesScreen(
-            client: client,
-            assignedBranchId: assignedBranchId,
-            requiresAssignedBranch: role != 'Admin',
-          )),
+          slideFadeRoute(SalesScreen(client: client)),
         ),
       ));
-  if (role == 'Admin') {
-    addAction(
-      'Inventory',
-      _QuickActionCard(
-        label: 'Customer orders',
-        icon: Icons.shopping_bag_outlined,
-        color: AppColors.violet,
-        imageUrl: _quickActionImages['Purchase orders'],
-        onTap: () => Navigator.of(context).push(
-          slideFadeRoute(
-            CustomerOrderManagementScreen(client: client),
-          ),
-        ),
-      ),
-    );
-  }
   addAction(
       'Inventory',
       _QuickActionCard(
-        label: 'Stock activity',
-        icon: Icons.history_rounded,
+        label: 'Stock movements',
+        icon: Icons.qr_code_scanner_rounded,
         color: color,
-        imageUrl: _quickActionImages['Stock activity'],
+        imageUrl: _quickActionImages['Stock movements'],
         onTap: () => Navigator.of(context).push(
-          slideFadeRoute(StockActivityHistoryScreen(client: client)),
+          slideFadeRoute(StockCheckScreen(client: client)),
         ),
       ));
   addAction(
@@ -1057,24 +1030,16 @@ List<_QuickActionGroup> _quickActionsFor(
           slideFadeRoute(StockCountScreen(client: client)),
         ),
       ));
-  if (role == 'Admin' || role == 'Manager' || role == 'Staff') {
+  if (role == 'Admin' || role == 'Manager') {
     addAction(
         'Inventory',
         _QuickActionCard(
-          label: 'Purchase orders',
-          icon: Icons.receipt_long_outlined,
+          label: 'Purchase approvals',
+          icon: Icons.approval_outlined,
           color: color,
-          imageUrl: _quickActionImages['Purchase orders'],
+          imageUrl: _quickActionImages['Purchase approvals'],
           onTap: () => Navigator.of(context).push(slideFadeRoute(
-            PurchaseOrderApprovalScreen(
-              client: client,
-              canApprove: role == 'Admin' || role == 'Manager',
-              canCreate: true,
-              canCreateMultiBranch: role == 'Admin',
-              canReceive: true,
-              assignedBranchId: assignedBranchId,
-              requiresAssignedBranch: role != 'Admin',
-            ),
+            PurchaseOrderApprovalScreen(client: client, canApprove: true),
           )),
         ));
   }
@@ -1089,6 +1054,19 @@ List<_QuickActionGroup> _quickActionsFor(
           slideFadeRoute(EquipmentMaintenanceScreen(client: client)),
         ),
       ));
+  if (role == 'Admin' || role == 'Manager') {
+    addAction(
+        'Insights',
+        _QuickActionCard(
+          label: 'Inventory analytics',
+          icon: Icons.insights_outlined,
+          color: color,
+          imageUrl: _quickActionImages['Inventory analytics'],
+          onTap: () => Navigator.of(context).push(
+            slideFadeRoute(InsightsScreen(client: client)),
+          ),
+        ));
+  }
   return _buildActionGroupSections(
     groupedActions,
     compact: compact,
@@ -1116,7 +1094,6 @@ List<_QuickActionGroup> _buildActionGroupSections(
 }) {
   const order = [
     'Appointments',
-    'Shopping',
     'Daily operations',
     'Business',
     'Inventory',
@@ -1134,11 +1111,6 @@ List<_QuickActionGroup> _buildActionGroupSections(
       'Appointments' => (
           Icons.calendar_month_outlined,
           'Plan and manage appointments',
-          AppColors.cyan
-        ),
-      'Shopping' => (
-          Icons.shopping_bag_outlined,
-          'Browse items and follow your orders',
           AppColors.cyan
         ),
       'Daily operations' => (

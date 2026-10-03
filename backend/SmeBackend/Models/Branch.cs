@@ -7,7 +7,5 @@ public class Branch : BaseEntity, ITenantScoped
     public string Name { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
-    public decimal? Latitude { get; set; }
-    public decimal? Longitude { get; set; }
     public bool IsActive { get; set; } = true;
 }

@@ -1,4 +1,4 @@
-/// The inventory app's read models, shaped by what /api/inventory and
+﻿/// The inventory app's read models, shaped by what /api/inventory and
 /// /api/purchase-orders return.
 ///
 /// These used to live in mock_inventory_data.dart under the names

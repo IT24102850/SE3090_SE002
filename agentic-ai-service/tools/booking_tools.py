@@ -7,6 +7,9 @@ lives in the caller's search params, not in these function names.
 """
 from __future__ import annotations
 
+import functools
+import time
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -18,6 +21,85 @@ class ToolError(Exception):
     into the agent loop."""
 
 
+# Least privilege for the find-and-book pipeline, enforced here rather than
+# only documented: a tool call from an agent not listed for that tool is
+# refused with a ToolError and recorded in the trace like any other call.
+# The Planner reads no data at all; only the deterministic Validation/Safety
+# agent may write (create_booking), and only after its own checks pass.
+# "unknown" is the client before the orchestrator hands it to an agent -
+# direct use in tests and scripts - and is not restricted.
+BOOKING_ALLOWED_TOOLS: dict[str, frozenset[str]] = {
+    "PlannerAgent": frozenset(),
+    "DomainAnalysisAgent": frozenset({"search_resources", "get_resource_metadata", "check_staff_schedule"}),
+    "ActionToolAgent": frozenset({
+        "query_resource_availability", "detect_conflicts", "get_resource_metadata", "predict_no_show_probability",
+    }),
+    "ValidationSafetyAgent": frozenset({"detect_conflicts", "predict_no_show_probability", "create_booking"}),
+}
+
+
+def _records_call(tool_name: str):
+    """Record every invocation of an allow-listed tool on the client.
+
+    The workflow trace is required to show which tools ran, in what order,
+    how long each took and whether it failed. Recording that here rather
+    than at each call site means a tool cannot be used without appearing in
+    the audit trail - including when it raises, which is exactly the case
+    an after-the-fact log tends to miss.
+    """
+
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(self, *args, **kwargs):
+            started = time.monotonic()
+            agent = getattr(self, "current_agent", "unknown")
+            allowed = BOOKING_ALLOWED_TOOLS.get(agent)
+            # Subclasses (ScheduleToolsClient) carry their own per-agent gate.
+            if type(self) is BookingToolsClient and allowed is not None and tool_name not in allowed:
+                error = f"{agent} is not permitted to call {tool_name}."
+                self._record(tool_name, started, ok=False, error=error)
+                raise ToolError(error)
+            try:
+                result = fn(self, *args, **kwargs)
+            except Exception as e:
+                self._record(tool_name, started, ok=False, error=str(e)[:200])
+                raise
+            self._record(tool_name, started, ok=True, error=None)
+            return result
+
+        return wrapper
+
+    return decorator
+
+
+def as_utc(value: datetime) -> datetime:
+    """A timestamp with no zone is the API's UTC wall clock - every DateTime
+    it stores and returns is UTC - so naive means UTC here, not local."""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def parse_dt(value: Any) -> datetime | None:
+    """Parse an ISO-8601 timestamp from either side of the wire, or None.
+
+    The two sides do not spell the same instant the same way: .NET writes a
+    UTC DateTime as "2026-09-28T10:00:00Z" while Python's isoformat() writes
+    "2026-09-28T10:00:00+00:00". Comparing those as strings says they differ,
+    which is exactly how every AI booking came to be rejected with "requested
+    time is not a valid slot" while the slot sat there, free, in the very
+    list being searched. Timestamps are compared as instants here, never as
+    text.
+    """
+    if not value:
+        return None
+    text = str(value).strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    try:
+        return as_utc(datetime.fromisoformat(text))
+    except ValueError:
+        return None
+
+
 class BookingToolsClient:
     def __init__(self, base_url: str, auth_token: str, timeout: float = 15.0):
         self._client = httpx.Client(
@@ -25,6 +107,20 @@ class BookingToolsClient:
             headers={"Authorization": f"Bearer {auth_token}"},
             timeout=timeout,
         )
+        # Appended to by _records_call. The orchestrator sets current_agent
+        # before handing the client to each agent, so every entry is
+        # attributed to whichever agent was actually holding the client.
+        self.calls: list[dict[str, Any]] = []
+        self.current_agent: str = "unknown"
+
+    def _record(self, tool: str, started: float, *, ok: bool, error: str | None) -> None:
+        self.calls.append({
+            "tool": tool,
+            "agent": self.current_agent,
+            "duration_ms": int((time.monotonic() - started) * 1000),
+            "success": ok,
+            "error": error,
+        })
 
     def close(self) -> None:
         self._client.close()
@@ -36,6 +132,7 @@ class BookingToolsClient:
         self.close()
 
     # ── Domain Analysis Agent tools (read-only) ─────────────────────────
+    @_records_call("search_resources")
     def search_resources(
         self,
         tenant_id: str,
@@ -61,12 +158,14 @@ class BookingToolsClient:
             params["search"] = search
         return self._get("/resources", params)
 
+    @_records_call("get_resource_metadata")
     def get_resource_metadata(self, resource_id: str) -> dict[str, Any]:
         """Full detail for one resource, including the generic CustomAttributes/
         LocationMetadata JSON bags where business-type-specific ranking
         signals (rating, cuisine, distance, wait time, ...) live."""
         return self._get(f"/resources/{resource_id}")
 
+    @_records_call("check_staff_schedule")
     def check_staff_schedule(self, resource_id: str) -> dict[str, Any]:
         """Coarser than query_resource_availability: the full weekly working
         pattern (which days this resource works at all, plus any configured
@@ -76,6 +175,7 @@ class BookingToolsClient:
         return {"schedule": self._get(f"/resources/{resource_id}/schedule")}
 
     # ── Action/Tool Agent tools (read-only) ─────────────────────────────
+    @_records_call("query_resource_availability")
     def query_resource_availability(
         self, resource_id: str, date: str, duration_minutes: int, booking_type_id: str | None = None
     ) -> dict[str, Any]:
@@ -84,6 +184,7 @@ class BookingToolsClient:
             params["bookingTypeId"] = booking_type_id
         return self._get("/bookings/available-slots", params)
 
+    @_records_call("detect_conflicts")
     def detect_conflicts(
         self,
         resource_id: str,
@@ -99,7 +200,11 @@ class BookingToolsClient:
         existing data, not "is this one slot free")."""
         data = self.query_resource_availability(resource_id, date, duration_minutes, booking_type_id)
         slots = data.get("slots", [])
-        match = next((s for s in slots if s.get("startTime") == scheduled_datetime), None)
+        wanted = parse_dt(scheduled_datetime)
+        match = next(
+            (s for s in slots if wanted is not None and parse_dt(s.get("startTime")) == wanted),
+            None,
+        )
         if not data.get("isOpen", False):
             return {"has_conflict": True, "reason": "Resource is closed on this date."}
         if match is None:
@@ -108,14 +213,18 @@ class BookingToolsClient:
             return {"has_conflict": True, "reason": "Slot is no longer available."}
         return {"has_conflict": False, "reason": None}
 
+    @_records_call("predict_no_show_probability")
     def predict_no_show_probability(self) -> dict[str, Any]:
         """A real historical-rate heuristic (this customer's own past
         completed-vs-no-show ratio), not a trained ML model. Called directly
-        by validation_safety_agent.py, never exposed as an LLM-visible tool —
-        informational only, never a reason to deny a booking."""
+        by validation_safety_agent.py and also exposed to the Action/Tool
+        agent as an allow-listed tool, so a proposal can take a customer's
+        history into account. Informational either way: a high rate may
+        change which slot is proposed, and never denies a booking."""
         return self._get("/bookings/my-no-show-rate")
 
     # ── Validation/Safety Agent's own direct call (never a Gemini tool) ─
+    @_records_call("create_booking")
     def create_booking(
         self,
         tenant_id: str,

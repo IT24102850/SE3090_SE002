@@ -254,7 +254,7 @@ class _NewClaimSheetState extends ConsumerState<_NewClaimSheet> {
             Text('New insurance claim', style: AppTextStyles.title),
             const SizedBox(height: 16),
             DropdownButtonFormField<Invoice>(
-              initialValue: _invoice,
+              value: _invoice,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Bill'),
               items: [

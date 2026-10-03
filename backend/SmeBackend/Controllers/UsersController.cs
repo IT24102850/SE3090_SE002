@@ -4,13 +4,15 @@ using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Authorization;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
 [ApiController]
 [Authorize(Roles = "Admin")]
 [Route("api/users")]
-public sealed class UsersController(AppDbContext db) : ControllerBase
+public sealed class UsersController(AppDbContext db, IEntitlementService entitlements) : ControllerBase
 {
     [HttpGet("branches")]
     public async Task<ActionResult<IReadOnlyList<BranchResponse>>> GetBranches(CancellationToken cancellationToken)
@@ -39,9 +41,8 @@ public sealed class UsersController(AppDbContext db) : ControllerBase
     [HttpGet("pending")]
     public async Task<ActionResult<IReadOnlyList<UserResponse>>> GetPendingUsers(CancellationToken cancellationToken)
     {
-        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
         var users = await db.Users.IgnoreQueryFilters().AsNoTracking()
-            .Where(user => user.TenantId == tenantId && !user.IsApproved && user.Tenant.IsActive)
+            .Where(user => !user.IsApproved && user.Tenant.IsActive)
             .OrderBy(user => user.CreatedAt)
             .Select(user => new UserResponse(user.Id, user.FullName, user.Email, user.Phone, user.Role.ToString(), user.BranchId, user.IsApproved))
             .ToListAsync(cancellationToken);
@@ -53,11 +54,11 @@ public sealed class UsersController(AppDbContext db) : ControllerBase
     {
         if (!TryGetTenantId(out var tenantId)) return Unauthorized();
         var email = request.Email.Trim().ToLowerInvariant();
-        if (!Enum.TryParse<UserRole>(request.Role, true, out var role) || !IsTenantRole(role) ||
+        if (!Enum.TryParse<UserRole>(request.Role, true, out var role) || role == UserRole.Customer ||
             string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(email) ||
             string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
         {
-            return BadRequest(new { message = "Provide a name, Admin, Manager, or Staff role, email, and password of at least 8 characters." });
+            return BadRequest(new { message = "Provide a name, valid role, email, and password of at least 8 characters." });
         }
         if (await db.Users.IgnoreQueryFilters().AnyAsync(user => user.Email == email, cancellationToken))
         {
@@ -68,6 +69,14 @@ public sealed class UsersController(AppDbContext db) : ControllerBase
         {
             return BadRequest(new { message = "The selected branch does not belong to your tenant." });
         }
+
+        // Seats are a plan limit. Customers are not seats - they are the
+        // tenant's own clientele, and charging a business per customer would
+        // punish exactly the growth we are selling.
+        var seatsUsed = await db.Users.IgnoreQueryFilters()
+            .CountAsync(u => u.TenantId == tenantId && u.Role != UserRole.Customer && u.IsActive, cancellationToken);
+        if (await entitlements.CheckCapAsync(tenantId, EntitlementService.CapStaffSeats, seatsUsed, cancellationToken) is { } paywall)
+            return PlanGate.PaymentRequired(paywall);
 
         var user = new User
         {
@@ -82,19 +91,18 @@ public sealed class UsersController(AppDbContext db) : ControllerBase
         };
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken);
+        entitlements.Invalidate(tenantId);
         return CreatedAtAction(nameof(GetUsers), new { }, new UserResponse(user.Id, user.FullName, user.Email, user.Phone, user.Role.ToString(), user.BranchId, user.IsApproved));
     }
 
     [HttpPut("{id:guid}/approve")]
     public async Task<ActionResult<UserResponse>> ApproveUser(Guid id, ApproveUserRequest request, CancellationToken cancellationToken)
     {
-        if (!TryGetTenantId(out var tenantId)) return Unauthorized();
-        if (!Enum.TryParse<UserRole>(request.Role, true, out var role) || !IsTenantRole(role))
+        if (!Enum.TryParse<UserRole>(request.Role, true, out var role) || role == UserRole.Customer)
             return BadRequest(new { message = "Role must be Admin, Manager, or Staff." });
-        var user = await db.Users.IgnoreQueryFilters().SingleOrDefaultAsync(candidate =>
-            candidate.Id == id && candidate.TenantId == tenantId && !candidate.IsApproved && candidate.Tenant.IsActive, cancellationToken);
+        var user = await db.Users.IgnoreQueryFilters().SingleOrDefaultAsync(candidate => candidate.Id == id && !candidate.IsApproved && candidate.Tenant.IsActive, cancellationToken);
         if (user is null) return NotFound(new { message = "Pending signup request not found." });
-        if (!await db.Branches.IgnoreQueryFilters().AnyAsync(branch => branch.TenantId == tenantId && branch.Id == request.BranchId && branch.IsActive, cancellationToken))
+        if (!await db.Branches.IgnoreQueryFilters().AnyAsync(branch => branch.TenantId == user.TenantId && branch.Id == request.BranchId && branch.IsActive, cancellationToken))
             return BadRequest(new { message = "Select a valid branch for this user." });
         user.Role = role;
         user.BranchId = request.BranchId;
@@ -109,7 +117,7 @@ public sealed class UsersController(AppDbContext db) : ControllerBase
         if (!TryGetTenantId(out var tenantId)) return Unauthorized();
         var user = await db.Users.IgnoreQueryFilters().SingleOrDefaultAsync(candidate => candidate.Id == id && candidate.TenantId == tenantId && candidate.Tenant.IsActive, cancellationToken);
         if (user is null) return NotFound();
-        if (!Enum.TryParse<UserRole>(request.Role, true, out var role) || !IsTenantRole(role))
+        if (!Enum.TryParse<UserRole>(request.Role, true, out var role) || role == UserRole.Customer)
         {
             return BadRequest(new { message = "Role must be Admin, Manager, or Staff." });
         }
@@ -117,11 +125,6 @@ public sealed class UsersController(AppDbContext db) : ControllerBase
         if (Guid.TryParse(currentUserId, out var currentId) && currentId == id && role != UserRole.Admin)
         {
             return BadRequest(new { message = "You cannot remove your own Admin access." });
-        }
-        if (user.Role == UserRole.Admin && user.IsApproved && user.IsActive && role != UserRole.Admin &&
-            await CountActiveAdmins(tenantId, cancellationToken) <= 1)
-        {
-            return BadRequest(new { message = "Each business must have at least one active Admin." });
         }
         if (request.BranchId.HasValue && !await db.Branches.IgnoreQueryFilters().AnyAsync(branch => branch.TenantId == tenantId && branch.Id == request.BranchId.Value && branch.IsActive, cancellationToken))
         {
@@ -148,28 +151,19 @@ public sealed class UsersController(AppDbContext db) : ControllerBase
         if (Guid.TryParse(currentUserId, out var currentId) && currentId == id)
             return BadRequest(new { message = "You cannot delete your own account." });
         var user = await db.Users.IgnoreQueryFilters().SingleOrDefaultAsync(candidate =>
-            candidate.Id == id && candidate.TenantId == tenantId && candidate.Tenant.IsActive, cancellationToken);
+            candidate.Id == id && candidate.Tenant.IsActive &&
+            (!candidate.IsApproved || candidate.TenantId == tenantId), cancellationToken);
         if (user is null) return NotFound();
-        if (user.Role == UserRole.Admin && user.IsApproved && user.IsActive &&
-            await CountActiveAdmins(tenantId, cancellationToken) <= 1)
-        {
-            return BadRequest(new { message = "Each business must have at least one active Admin." });
-        }
         db.Users.Remove(user);
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 
-    private Task<int> CountActiveAdmins(Guid tenantId, CancellationToken cancellationToken) =>
-        db.Users.IgnoreQueryFilters().CountAsync(user =>
-            user.TenantId == tenantId && user.Role == UserRole.Admin && user.IsApproved && user.IsActive,
-            cancellationToken);
-
-    private static bool IsTenantRole(UserRole role) =>
-        role is UserRole.Admin or UserRole.Manager or UserRole.Staff;
-
+    // JwtService issues the claim as "tenantId"; reading only "tenant_id"
+    // (as this did) turned every Admin request here into a 401. Caught by
+    // Api/AuthAndRoleApiTests.UserManagement_IsAdminOnly.
     private bool TryGetTenantId(out Guid tenantId) =>
-        Guid.TryParse(User.FindFirst("tenantId")?.Value, out tenantId);
+        Guid.TryParse((User.FindFirst("tenantId") ?? User.FindFirst("tenant_id"))?.Value, out tenantId);
 }
 
 public sealed record UserResponse(Guid Id, string FullName, string Email, string Phone, string Role, Guid? BranchId, bool IsApproved);

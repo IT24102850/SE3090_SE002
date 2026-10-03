@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'inventory_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -13,7 +12,6 @@ import '../widgets/ui/ui.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
 import 'inventory_panel.dart';
-import 'inventory_loading_state.dart';
 
 class EquipmentMaintenanceScreen extends StatefulWidget {
   const EquipmentMaintenanceScreen({super.key, required this.client});
@@ -226,7 +224,7 @@ class _EquipmentMaintenanceScreenState
                   const SizedBox(height: 8),
                   _formLabel('BRANCH'),
                   DropdownButtonFormField<String>(
-                    initialValue: selectedBranchId,
+                    value: selectedBranchId,
                     dropdownColor: const Color(0xFF17233A),
                     decoration: _maintenanceInputDecoration(),
                     items: branches
@@ -294,20 +292,6 @@ class _EquipmentMaintenanceScreenState
                               );
                               return;
                             }
-                            final branchName = branches
-                                .where((branch) => branch.id == selectedBranchId)
-                                .map((branch) => branch.name)
-                                .firstOrNull;
-                            final confirmed = await showAppConfirmation(
-                              context: sheetContext,
-                              title: 'Add equipment?',
-                              message:
-                                  'Add "$name"${branchName == null ? '' : ' to $branchName'} and make it available for maintenance scheduling?',
-                              confirmLabel: 'Add Equipment',
-                              icon: Icons.precision_manufacturing_rounded,
-                              accent: AppColors.cyan,
-                            );
-                            if (!confirmed || !sheetContext.mounted) return;
                             setSheetState(() => submitting = true);
                             try {
                               final response = await widget.client
@@ -413,7 +397,7 @@ class _EquipmentMaintenanceScreenState
                   const SizedBox(height: 18),
                   _formLabel('EQUIPMENT'),
                   DropdownButtonFormField<String>(
-                    initialValue: selectedEquipmentId,
+                    value: selectedEquipmentId,
                     dropdownColor: const Color(0xFF17233A),
                     decoration: _maintenanceInputDecoration(),
                     items: _equipment
@@ -503,21 +487,6 @@ class _EquipmentMaintenanceScreenState
                                   tone: AppNotificationTone.warning);
                               return;
                             }
-                            final equipmentName = _equipment
-                                .where((item) =>
-                                    item.id == selectedEquipmentId)
-                                .map((item) => item.name)
-                                .firstOrNull;
-                            final confirmed = await showAppConfirmation(
-                              context: sheetContext,
-                              title: 'Schedule maintenance service?',
-                              message:
-                                  'Schedule service for ${equipmentName ?? 'this equipment'} on ${_formatDate(maintenanceDate)}, with the next service due ${_formatDate(nextDueDate)}?',
-                              confirmLabel: 'Schedule Service',
-                              icon: Icons.event_available_rounded,
-                              accent: AppColors.cyan,
-                            );
-                            if (!confirmed || !sheetContext.mounted) return;
                             setSheetState(() => isSubmitting = true);
                             try {
                               final response = await widget.client
@@ -714,17 +683,6 @@ class _EquipmentMaintenanceScreenState
         maxWidth: 900,
       );
       if (photo == null) return;
-      if (!mounted) return;
-      final confirmed = await showAppConfirmation(
-        context: context,
-        title: 'Attach photo evidence?',
-        message:
-            'Upload the selected photo and attach it to the maintenance record for "${task.name}"?',
-        confirmLabel: 'Attach Photo',
-        icon: Icons.add_a_photo_rounded,
-        accent: AppColors.cyan,
-      );
-      if (!confirmed || !mounted) return;
       final bytes = await photo.readAsBytes();
       final url = await widget.client.uploadMaintenancePhoto(bytes, photo.name);
       final photoUrls = [...task.photoUrls, url];
@@ -998,33 +956,26 @@ class _EquipmentMaintenanceScreenState
     final pendingCount = _tasks.where((t) => !t.completed).length;
     final completedCount = _tasks.where((t) => t.completed).length;
     final dueCount = _tasks
-        .where((t) =>
-            !t.completed &&
-            !_dateOnly(t.nextDueDate).isAfter(_dateOnly(DateTime.now())))
+        .where((t) => !t.completed && !t.nextDueDate.isAfter(DateTime.now()))
         .length;
 
-    return InventoryScaffold(
+    return AppBackgroundScaffold(
       showParticles: false,
       appBar: const GlassAppBar(
         title: 'Equipment Maintenance',
       ),
       child: SafeArea(
         child: _loading
-            ? const InventoryLoadingState(
-                message: 'Loading maintenance',
-                detail: 'Preparing your equipment records',
-              )
+            ? const AppLoader(message: 'Loading asset maintenance logs...')
             : RefreshIndicator(
                 color: AppColors.cyan,
                 backgroundColor: AppColors.overlaySurface,
                 onRefresh: () => _load(showSuccess: true),
                 child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   children: [
                     // Top Overview Card
-                    _animateEntrance(
-                        _buildOverviewHeader(dueCount, completedCount)),
+                    _buildOverviewHeader(dueCount, completedCount),
                     const SizedBox(height: 18),
 
                     if (_loadError != null) ...[
@@ -1105,11 +1056,7 @@ class _EquipmentMaintenanceScreenState
                                   : 'Completed service records will appear here.',
                             )
                     else
-                      ..._filteredTasks.asMap().entries.map((entry) =>
-                          _animateEntrance(_buildTaskCard(entry.value),
-                              key:
-                                  ValueKey('${_selectedTab}_${entry.value.id}'),
-                              index: entry.key)),
+                      ..._filteredTasks.map((task) => _buildTaskCard(task)),
                   ],
                 ),
               ),
@@ -1146,133 +1093,142 @@ class _EquipmentMaintenanceScreenState
         ),
       );
 
-  Widget _animateEntrance(Widget child, {Key? key, int index = 0}) {
-    final reducedMotion = MediaQuery.of(context).disableAnimations;
-    return TweenAnimationBuilder<double>(
-      key: key,
-      tween: Tween(begin: reducedMotion ? 1 : 0, end: 1),
-      duration: Duration(
-          milliseconds: reducedMotion ? 0 : 420 + (index.clamp(0, 6) * 60)),
-      curve: Curves.easeOutCubic,
-      child: child,
-      builder: (context, value, child) => Opacity(
-        opacity: value,
-        child: Transform.translate(
-            offset: Offset(0, 20 * (1 - value)), child: child),
-      ),
-    );
-  }
-
-  Widget _buildOverviewHeader(int due, int completed) {
-    final progress = _tasks.isEmpty ? 0.0 : completed / _tasks.length;
+  Widget _buildOverviewHeader(int pending, int completed) {
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF21574F), Color(0xFF183C43), Color(0xFF172C38)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(color: AppColors.cyan.withValues(alpha: 0.25)),
-        boxShadow: [
+        borderRadius: BorderRadius.circular(22),
+        color: const Color(0xFF142235),
+        border: Border.all(color: const Color(0xFF2A4058)),
+        boxShadow: const [
           BoxShadow(
-              color: AppColors.cyan.withValues(alpha: 0.08),
-              blurRadius: 28,
-              offset: const Offset(0, 10))
+            color: Color(0x26000000),
+            blurRadius: 16,
+            offset: Offset(0, 7),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                  color: AppColors.cyan.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(14)),
-              child: const Icon(Icons.handyman_rounded,
-                  color: AppColors.cyan, size: 24),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-                child: Text('EQUIPMENT CARE',
-                    style: AppTextStyles.label
-                        .copyWith(color: AppColors.cyan, letterSpacing: 1.8))),
-          ]),
-          const SizedBox(height: 20),
-          Text('Keep your business\nrunning smoothly.',
-              style: AppTextStyles.title.copyWith(
-                  fontSize: 27,
-                  height: 1.15,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  letterSpacing: -0.7)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  'ASSET CARE & PREVENTIVE LOGS',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.label.copyWith(
+                    color: const Color(0xFFFBBF24),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${_tasks.length} Tracked Tasks',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           Text(
-              'Plan services, track repairs and give every asset the care it needs.',
-              style: AppTextStyles.caption
-                  .copyWith(color: const Color(0xFFB8C8DC), height: 1.6)),
-          const SizedBox(height: 22),
-          Wrap(spacing: 10, runSpacing: 10, children: [
-            _overviewMetric(Icons.inventory_2_outlined, _equipment.length,
-                'Equipment', AppColors.cyan),
-            _overviewMetric(Icons.schedule_rounded, due, 'Due now',
-                const Color(0xFFFBBF24)),
-            _overviewMetric(Icons.task_alt_rounded, completed, 'Completed',
-                const Color(0xFF34D399)),
-          ]),
-          const SizedBox(height: 22),
-          Row(children: [
-            Expanded(
-                child: Text('Service completion',
-                    style: AppTextStyles.caption
-                        .copyWith(color: const Color(0xFFB8C8DC)))),
-            Text('${(progress * 100).round()}%',
-                style: AppTextStyles.caption.copyWith(
-                    color: Colors.white, fontWeight: FontWeight.w800)),
-          ]),
-          const SizedBox(height: 10),
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: progress),
-            duration: Duration(
-                milliseconds:
-                    MediaQuery.of(context).disableAnimations ? 0 : 750),
-            curve: Curves.easeOutCubic,
-            builder: (context, value, _) => ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                  value: value,
-                  minHeight: 7,
-                  backgroundColor: Colors.white.withValues(alpha: 0.08),
-                  color: AppColors.cyan),
-            ),
+            'Machinery & Equipment Service',
+            style: AppTextStyles.title
+                .copyWith(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Keep appliances, espresso machines, refrigeration & POS hardware in peak condition.',
+            style: AppTextStyles.caption
+                .copyWith(color: AppColors.textSecondary, height: 1.35),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.pending_actions_rounded,
+                          size: 18, color: Color(0xFFFBBF24)),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          '$pending Due Now',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.subtitle.copyWith(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFFFBBF24),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded,
+                          size: 18, color: Color(0xFF10B981)),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          '$completed Completed',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.subtitle.copyWith(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF10B981),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
-
-  Widget _overviewMetric(IconData icon, int count, String label, Color color) =>
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 17, color: color),
-          const SizedBox(width: 8),
-          Text('$count',
-              style: AppTextStyles.subtitle
-                  .copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
-          const SizedBox(width: 6),
-          Text(label,
-              style: AppTextStyles.caption
-                  .copyWith(color: const Color(0xFFB8C8DC))),
-        ]),
-      );
 
   Widget _buildTabSwitcher(int pending, int completed) {
     return Container(
@@ -1301,11 +1257,8 @@ class _EquipmentMaintenanceScreenState
           HapticFeedback.selectionClick();
           setState(() => _selectedTab = label);
         },
-        child: AnimatedContainer(
-          duration: Duration(
-              milliseconds: MediaQuery.of(context).disableAnimations ? 0 : 220),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color: isSelected
                 ? AppColors.cyan.withValues(alpha: 0.22)
@@ -1318,16 +1271,13 @@ class _EquipmentMaintenanceScreenState
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Flexible(
-                  child: Text(
+              Text(
                 label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.caption.copyWith(
                   color: isSelected ? Colors.white : AppColors.textSecondary,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 ),
-              )),
+              ),
               const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
@@ -1354,19 +1304,13 @@ class _EquipmentMaintenanceScreenState
   }
 
   Widget _buildTaskCard(_MaintenanceTask task) {
-    final due = !task.completed &&
-        !_dateOnly(task.nextDueDate).isAfter(_dateOnly(DateTime.now()));
-    final statusColor = task.completed
-        ? const Color(0xFF34D399)
-        : due
-            ? const Color(0xFFFB7185)
-            : AppColors.cyan;
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: InventoryPanel(
         padding: const EdgeInsets.all(16),
-        borderColor: statusColor.withValues(alpha: 0.35),
+        borderColor: task.completed
+            ? const Color(0xFF10B981).withValues(alpha: 0.3)
+            : const Color(0xFFF59E0B).withValues(alpha: 0.3),
         onTap: () => _showTask(task),
         child: Row(
           children: [
@@ -1374,28 +1318,25 @@ class _EquipmentMaintenanceScreenState
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  colors: [
-                    statusColor.withValues(alpha: 0.24),
-                    statusColor.withValues(alpha: 0.06),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(13),
+                color: (task.completed
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFF59E0B))
+                    .withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: statusColor.withValues(alpha: 0.4),
+                  color: (task.completed
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFFF59E0B))
+                      .withValues(alpha: 0.35),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: statusColor.withValues(alpha: 0.15),
-                    blurRadius: 8,
-                  ),
-                ],
               ),
               child: Icon(
                 task.completed
                     ? Icons.check_circle_rounded
                     : Icons.build_rounded,
-                color: statusColor,
+                color: task.completed
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFFF59E0B),
                 size: 22,
               ),
             ),
@@ -1417,19 +1358,7 @@ class _EquipmentMaintenanceScreenState
                           : AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                      task.completed
-                          ? 'COMPLETED'
-                          : due
-                              ? 'SERVICE DUE'
-                              : 'UPCOMING',
-                      style: AppTextStyles.caption.copyWith(
-                          color: statusColor,
-                          fontSize: 10,
-                          letterSpacing: 1,
-                          fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
                       Flexible(

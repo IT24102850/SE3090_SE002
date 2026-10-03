@@ -394,82 +394,6 @@ button, input, select, textarea { font-family: inherit; }
 *::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
 *::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); background-clip: content-box; }
 
-/* Shared animated header card across signed-in web pages. */
-.app-content .page-header,
-.inventory-scope .page-head {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding: clamp(16px, 2.5vw, 25px);
-  background:
-    radial-gradient(ellipse at 94% 0%, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent 38%),
-    linear-gradient(120deg, var(--color-surface), color-mix(in srgb, var(--color-primary-soft) 44%, var(--color-surface)));
-  border: 1px solid var(--color-border);
-  border-radius: 20px;
-  box-shadow: var(--shadow-sm);
-  animation: shared-page-header-enter .45s cubic-bezier(.2, .75, .25, 1) both;
-}
-
-.app-content .page-header::after,
-.inventory-scope .page-head::before {
-  position: absolute;
-  z-index: -1;
-  top: -64px;
-  right: 9%;
-  width: 150px;
-  height: 150px;
-  content: '';
-  pointer-events: none;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 14%, transparent);
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 18px color-mix(in srgb, var(--color-primary) 4%, transparent),
-    0 0 0 38px color-mix(in srgb, var(--color-primary) 3%, transparent);
-  animation: shared-header-orbit 8s ease-in-out infinite alternate;
-}
-
-.app-content .page-header > *,
-.inventory-scope .page-head > * {
-  position: relative;
-  z-index: 1;
-}
-
-.app-content .page-header .page-title {
-  letter-spacing: -.04em;
-}
-
-@keyframes shared-page-header-enter {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes shared-header-orbit {
-  from { transform: translate3d(0, 0, 0) scale(.96); }
-  to { transform: translate3d(-9px, 7px, 0) scale(1.04); }
-}
-
-@media (max-width: 560px) {
-  .app-content .page-header,
-  .inventory-scope .page-head {
-    padding: 15px;
-    border-radius: 16px;
-  }
-
-  .app-content .page-header::after,
-  .inventory-scope .page-head::before {
-    right: -54px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-content .page-header,
-  .inventory-scope .page-head,
-  .app-content .page-header::after,
-  .inventory-scope .page-head::before {
-    animation: none;
-  }
-}
-
 /* ── Layout shell ─────────────────────────────────────────── */
 .app-shell {
   display: flex;
@@ -1511,19 +1435,6 @@ body.modal-open { overflow: hidden; }
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
-:root:not([data-theme="dark"]):not([data-theme="system"]) .hero-tile,
-:root[data-theme="light"] .hero-tile {
-  background: rgba(255, 255, 255, 0.26);
-  border-color: rgba(255, 255, 255, 0.42);
-  box-shadow: 0 4px 12px rgba(10, 15, 29, 0.12);
-}
-@media (prefers-color-scheme: light) {
-  :root[data-theme="system"] .hero-tile {
-    background: rgba(255, 255, 255, 0.26);
-    border-color: rgba(255, 255, 255, 0.42);
-    box-shadow: 0 4px 12px rgba(10, 15, 29, 0.12);
-  }
-}
 .hero-tile-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(255, 255, 255, 0.8); }
 .hero-tile-value { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.04em; margin-top: 5px; line-height: 1; color: #FFFFFF; }
 .hero-tile-sub { font-size: 0.72rem; color: rgba(255, 255, 255, 0.75); margin-top: 5px; }
@@ -1620,21 +1531,6 @@ body.modal-open { overflow: hidden; }
   padding-left: var(--space-2);
   margin-left: 6px;
   border-left: 1px solid var(--color-border);
-}
-
-.sidebar-link.sidebar-link-admin-shortcut {
-  margin-top: 5px;
-  color: var(--color-primary);
-  font-weight: 700;
-  background: color-mix(in srgb, var(--color-primary-soft) 52%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
-}
-
-.sidebar-link.sidebar-link-admin-shortcut:hover,
-.sidebar-link.sidebar-link-admin-shortcut.active {
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary-soft) 82%, transparent);
-  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 /* Dialogs and form controls share the same expressive language as the dashboard. */
@@ -2124,41 +2020,3 @@ body:has(.inventory-scope) .app-content {
     transition: none;
   }
 }
-
-/* Updates center: animated activity summary and spacious feed. */
-.notification-panel { width: min(430px, calc(100vw - 28px)); border-radius: 24px; }
-.notification-panel .notification-panel-header { flex-wrap: wrap; padding: 20px; }
-.notification-panel-header-actions { flex-wrap: wrap; }
-.notification-update-summary { display: flex; align-items: center; gap: 14px; margin: 14px; padding: 20px 16px; border: 1px solid color-mix(in srgb, var(--color-primary) 22%, var(--color-border)); border-radius: 18px; background: radial-gradient(ellipse at top left, var(--color-primary-soft), transparent 85%), var(--color-surface); }
-.notification-orbit { display: grid; place-items: center; flex: 0 0 44px; height: 44px; border-radius: 50%; color: var(--color-primary); background: var(--color-primary-soft); font-size: 1.4rem; animation: updates-orbit-pulse 2.8s ease-in-out infinite; }
-.notification-summary-copy { flex: 1; min-width: 0; }
-.notification-summary-copy strong { display: block; color: var(--color-text); font-size: 1.12rem; letter-spacing: -.03em; animation: updates-copy-in .3s ease both; }
-.notification-summary-copy p { margin: 6px 0 0; color: var(--color-text-secondary); font-size: .73rem; line-height: 1.5; }
-.notification-refresh { display: grid; place-items: center; flex: 0 0 32px; height: 32px; border: 1px solid var(--color-border); border-radius: 50%; color: var(--color-primary); background: var(--color-surface-raised); font-size: 1.25rem; cursor: pointer; transition: background .2s, transform .2s; }
-.notification-refresh:hover { background: var(--color-primary-soft); transform: translateY(-2px); }
-.notification-refresh:disabled { cursor: progress; opacity: .6; }
-.notification-refresh .is-syncing { animation: updates-refresh-spin 1s linear infinite; }
-.notification-list { display: grid; gap: 6px; padding: 0 14px 14px; }
-.notification-item { grid-template-columns: 36px minmax(0, 1fr) auto; padding: 15px 12px; border: 1px solid var(--color-border); border-radius: 16px; animation: updates-copy-in .35s ease both; transition: background .2s, border-color .2s; }
-.notification-item:hover { border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border)); }
-.notification-item > i { width: 34px; height: 34px; border-radius: 11px; font-size: 1rem; }
-.notification-item small, .notification-item strong { overflow-wrap: anywhere; }
-.notification-trigger:focus-visible, .notification-panel button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
-@keyframes updates-orbit-pulse { 50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-primary) 8%, transparent); transform: scale(1.06); } }
-@keyframes updates-copy-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes updates-refresh-spin { to { transform: rotate(360deg); } }
-@media (max-width: 480px) { .notification-panel { position: fixed; top: 78px; right: 14px; max-height: calc(100dvh - 100px); }.notification-update-summary { gap: 10px; padding: 16px 12px; }.notification-orbit { flex-basis: 36px; height: 36px; } }
-@media (prefers-reduced-motion: reduce) { .notification-orbit, .notification-summary-copy strong, .notification-item, .notification-refresh .is-syncing { animation: none; }.notification-refresh, .notification-item { transition: none; } }
-
-/* Compact Updates badge, shared across customer and workspace headers. */
-.notification-trigger { gap: 9px; min-height: 42px; padding: 6px 12px 6px 7px; border-color: color-mix(in srgb, var(--color-primary) 28%, var(--color-border)); background: linear-gradient(135deg, var(--color-primary-soft), var(--color-surface)); color: var(--color-text); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-text) 5%, transparent); transition: border-color .2s, box-shadow .2s, transform .2s; }
-.notification-trigger .notification-bell-glyph { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 12%, transparent); }
-.notification-bell-glyph svg { display: block; }
-.notification-trigger small { font-size: .76rem; font-weight: 700; letter-spacing: .01em; }
-.notification-trigger .notification-count { position: static; display: grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; border: 1px solid color-mix(in srgb, white 18%, transparent); border-radius: 99px; background: var(--color-primary); color: var(--color-on-primary, white); font-size: .64rem; font-weight: 800; box-shadow: 0 3px 10px color-mix(in srgb, var(--color-primary) 25%, transparent); }
-.notification-trigger:hover, .notification-trigger[aria-expanded="true"] { transform: translateY(-1px); border-color: var(--color-primary); box-shadow: 0 5px 18px -8px color-mix(in srgb, var(--color-primary) 50%, transparent); }
-.notification-trigger.has-new .notification-bell-glyph { display: grid; }
-.notification-trigger.has-new .notification-count { animation: notification-badge-in .24s ease both, updates-count-glow 1.2s ease-in-out 3; }
-@keyframes updates-count-glow { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 16%, transparent); } }
-@media (max-width: 640px) { .notification-trigger { width: auto; min-width: 42px; padding: 6px; gap: 5px; }.notification-trigger .notification-count { min-width: 22px; height: 22px; } }
-@media (prefers-reduced-motion: reduce) { .notification-trigger { transition: none; }.notification-trigger:hover, .notification-trigger[aria-expanded="true"] { transform: none; }.notification-trigger.has-new .notification-count { animation: none; } }

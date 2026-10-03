@@ -15,23 +15,23 @@ CHAT_URL = f"{OLLAMA_BASE_URL}/api/chat"
 @respx.mock
 def test_ollama_structured_response_parses():
     respx.post(CHAT_URL).mock(
-        return_value=httpx.Response(200, json={"message": {"content": '{"plan": [], "assigned_agents": [], "confidence": 0.7}'}})
+        return_value=httpx.Response(200, json={"message": {"content": '{"plan": [], "assigned_agents": [], "confidence_score": 0.7}'}})
     )
 
     result = generate_structured(system_instruction="x", user_content="y", response_schema=PlannerOutput, model="llama3.1")
 
     assert isinstance(result, PlannerOutput)
-    assert result.confidence == 0.7
+    assert result.confidence_score == 0.7
 
 
 @respx.mock
 def test_ollama_prose_wrapped_json_still_parses():
     """Reuses gemini_client's defensive parser, so this must behave the same way it does for Gemini."""
-    wrapped = 'Sure, here you go:\n```json\n{"plan": [], "assigned_agents": [], "confidence": 0.5}\n```'
+    wrapped = 'Sure, here you go:\n```json\n{"plan": [], "assigned_agents": [], "confidence_score": 0.5}\n```'
     respx.post(CHAT_URL).mock(return_value=httpx.Response(200, json={"message": {"content": wrapped}}))
 
     result = generate_structured(system_instruction="x", user_content="y", response_schema=PlannerOutput, model="llama3.1")
-    assert result.confidence == 0.5
+    assert result.confidence_score == 0.5
 
 
 @respx.mock
