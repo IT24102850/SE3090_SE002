@@ -41,7 +41,7 @@ dependencies:
   web_socket_channel: ^2.2.0
   google_sign_in: ^7.2.0
   flutter_appauth: ^8.0.3
-  local_auth: ^3.0.2
+  local_auth: ^2.3.0
   # Keep below 3.13.0 until CI upgrades from Dart 3.8.x.
   pdf: ^3.11.3
   geolocator: ^14.0.2
