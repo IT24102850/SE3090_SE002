@@ -8,32 +8,32 @@
 **Status:** Accepted
 
 **Context:**
-The React web application supports three independently-developed admin modules (Booking, 
-Billing, Inventory) that all consume the same authenticated session, tenant context, and 
-Agentic AI workflow data. Each module needs complex async data fetching (bookings, invoices, 
+The React web application supports three independently-developed admin modules (Booking,
+Billing, Inventory) that all consume the same authenticated session, tenant context, and
+Agentic AI workflow data. Each module needs complex async data fetching (bookings, invoices,
 stock levels) alongside shared cross-cutting state (auth token, current tenant, role).
 
 **Options Considered:**
-1. **Context API** — built into React, no extra dependency, but causes unnecessary re-renders 
-   across unrelated modules when shared state changes, and offers no structured pattern for 
+1. **Context API** — built into React, no extra dependency, but causes unnecessary re-renders
+   across unrelated modules when shared state changes, and offers no structured pattern for
    async API calls at this scale.
-2. **Zustand** — lightweight and simple, but less structured for a 3-person team working in 
+2. **Zustand** — lightweight and simple, but less structured for a 3-person team working in
    parallel; weaker built-in devtools/async conventions than RTK.
-3. **MobX** — powerful but has a steeper learning curve and less predictable data flow, which 
+3. **MobX** — powerful but has a steeper learning curve and less predictable data flow, which
    makes it harder for three people to debug each other's modules during the viva.
-4. **Redux Toolkit (chosen)** — predictable, centralized state with RTK Query for typed async 
+4. **Redux Toolkit (chosen)** — predictable, centralized state with RTK Query for typed async
    API calls, and Redux DevTools for live debugging during development and demo.
 
 **Decision:**
-We chose Redux Toolkit because it gives each team member an isolated "slice" (bookingSlice, 
-billingSlice, inventorySlice) that can be developed independently without state collisions, 
-while RTK Query standardizes how all three modules call the shared ASP.NET Core API (caching, 
+We chose Redux Toolkit because it gives each team member an isolated "slice" (bookingSlice,
+billingSlice, inventorySlice) that can be developed independently without state collisions,
+while RTK Query standardizes how all three modules call the shared ASP.NET Core API (caching,
 loading/error states, automatic refetching on mutation).
 
 **Consequences:**
-- Positive: Predictable state flow, built-in caching reduces redundant API calls, DevTools 
+- Positive: Predictable state flow, built-in caching reduces redundant API calls, DevTools
   makes debugging live during the viva straightforward.
-- Trade-off: More boilerplate than Context API for simple state; team needs to agree on slice 
+- Trade-off: More boilerplate than Context API for simple state; team needs to agree on slice
   boundaries early to avoid duplicate logic.
 
 ---
@@ -43,30 +43,30 @@ loading/error states, automatic refetching on mutation).
 **Status:** Accepted
 
 **Context:**
-The Flutter mobile app needs to manage authenticated API calls, real-time status updates 
-(booking confirmations, payment status, low-stock alerts), and device-feature-driven state 
-(QR scans, camera uploads) across three independently-built modules, while keeping the app 
+The Flutter mobile app needs to manage authenticated API calls, real-time status updates
+(booking confirmations, payment status, low-stock alerts), and device-feature-driven state
+(QR scans, camera uploads) across three independently-built modules, while keeping the app
 testable for the required Flutter widget tests.
 
 **Options Considered:**
-1. **Bloc** — powerful and testable, but introduces significant boilerplate (events, states, 
+1. **Bloc** — powerful and testable, but introduces significant boilerplate (events, states,
    bloc classes) that slows down a 9-week team project.
-2. **Provider** — simple but weaker testability guarantees and less compile-time safety for 
+2. **Provider** — simple but weaker testability guarantees and less compile-time safety for
    dependency injection across modules owned by different students.
-3. **GetX** — fast to write but relies on "magic" (implicit dependency resolution, global 
+3. **GetX** — fast to write but relies on "magic" (implicit dependency resolution, global
    state) that makes code harder to explain individually during the viva.
 4. **Riverpod (chosen)** — compile-safe, testable, and works well with async data (FutureProvider/
    StreamProvider) for the same kind of workflow-status polling every module needs.
 
 **Decision:**
-We chose Riverpod because its compile-time safety catches provider-wiring mistakes before 
-runtime (important across three parallel codebases), and its `ProviderScope` overrides make 
+We chose Riverpod because its compile-time safety catches provider-wiring mistakes before
+runtime (important across three parallel codebases), and its `ProviderScope` overrides make
 Flutter widget tests straightforward to write and defend individually at the viva.
 
 **Consequences:**
 - Positive: Compile-safe DI, easy unit/widget testing, clean async state handling for agent-
   triggered UI updates (e.g. PO approval status).
-- Trade-off: Slightly steeper learning curve than Provider for anyone new to Riverpod; requires 
+- Trade-off: Slightly steeper learning curve than Provider for anyone new to Riverpod; requires
   consistent naming conventions across three students' modules to stay organized.
 
 ---
@@ -140,49 +140,49 @@ swapped without touching an agent.
 **Status:** Accepted
 
 **Context:**
-All four agents need to persist workflow ID, objective, plan, completed steps, tool results, 
-validation results, approval status, and final outcome in a way that is auditable, queryable 
-from the React Agent Workflow Monitor, and consistent with our existing PostgreSQL business 
+All four agents need to persist workflow ID, objective, plan, completed steps, tool results,
+validation results, approval status, and final outcome in a way that is auditable, queryable
+from the React Agent Workflow Monitor, and consistent with our existing PostgreSQL business
 data (Bookings, Invoices, Inventory).
 
 **Options Considered:**
-1. **JSONB columns on existing entities** — flexible, but harder to query and index for the 
-   Agent Workflow Monitor's filtering/reporting needs, and blurs the boundary between business 
+1. **JSONB columns on existing entities** — flexible, but harder to query and index for the
+   Agent Workflow Monitor's filtering/reporting needs, and blurs the boundary between business
    data and agent execution history.
-2. **MongoDB (separate store)** — good for unstructured workflow logs, but introduces a second 
-   database technology, contradicting the assignment's single-database simplicity goal and 
+2. **MongoDB (separate store)** — good for unstructured workflow logs, but introduces a second
+   database technology, contradicting the assignment's single-database simplicity goal and
    complicating backup/restore.
-3. **Redis** — fast, but not durable enough by default for an audit trail that must survive 
+3. **Redis** — fast, but not durable enough by default for an audit trail that must survive
    restarts and be reviewable weeks later during evaluation.
-4. **Dedicated PostgreSQL `agent_workflows` table (chosen)** — a shared, structured table with 
-   EF Core migrations, scoped to the tenant (`TenantId` + the global tenant query filter) and 
-   indexed on `(TenantId, Status)` and `CreatedAt` for the monitor's filters, queried directly 
+4. **Dedicated PostgreSQL `agent_workflows` table (chosen)** — a shared, structured table with
+   EF Core migrations, scoped to the tenant (`TenantId` + the global tenant query filter) and
+   indexed on `(TenantId, Status)` and `CreatedAt` for the monitor's filters, queried directly
    by all three team members' controllers.
 
 **Decision:**
-We chose a dedicated `AgentWorkflows` table with columns for Objective, PlanJson, Status, 
-CurrentStep, ToolResultsJson, ValidationResults, ApprovalStatus, and ApprovedBy, giving us ACID 
-transactional consistency with the rest of our business data and a single source of truth 
+We chose a dedicated `AgentWorkflows` table with columns for Objective, PlanJson, Status,
+CurrentStep, ToolResultsJson, ValidationResults, ApprovalStatus, and ApprovedBy, giving us ACID
+transactional consistency with the rest of our business data and a single source of truth
 queryable via standard EF Core LINQ from the Agent Workflow Monitor endpoints.
 
 **Consequences:**
-- Positive: One database technology to deploy/back up/document; relational consistency with 
-  Users/Bookings/Invoices via foreign keys; straightforward to satisfy the observability 
+- Positive: One database technology to deploy/back up/document; relational consistency with
+  Users/Bookings/Invoices via foreign keys; straightforward to satisfy the observability
   requirement (execution traces are just SQL rows).
-- Trade-off: JSON columns (PlanJson, ToolResultsJson) trade some query-ability for flexibility, 
-  since plan/tool-result shapes vary by agent — mitigated by keeping JSON schema-validated at 
+- Trade-off: JSON columns (PlanJson, ToolResultsJson) trade some query-ability for flexibility,
+  since plan/tool-result shapes vary by agent — mitigated by keeping JSON schema-validated at
   the application layer before persistence.
-- **`text`, not `jsonb`, for the JSON columns (deliberate).** Every filter the monitor applies 
-  (status, approval status, tenant, date) is a real relational column; nothing queries *inside* 
-  a plan or trace, so `jsonb`'s GIN indexes and operators would buy nothing. The trace is an 
-  audit record: `text` keeps it byte-for-byte as validated and written (`jsonb` re-orders keys 
-  and drops duplicates and whitespace), and it is validated by Pydantic in the agent service 
-  and by the C# DTOs before it is stored, which is where `jsonb` would otherwise have caught 
-  malformed JSON. If the monitor ever needs to filter on a field inside the trace, the 
+- **`text`, not `jsonb`, for the JSON columns (deliberate).** Every filter the monitor applies
+  (status, approval status, tenant, date) is a real relational column; nothing queries *inside*
+  a plan or trace, so `jsonb`'s GIN indexes and operators would buy nothing. The trace is an
+  audit record: `text` keeps it byte-for-byte as validated and written (`jsonb` re-orders keys
+  and drops duplicates and whitespace), and it is validated by Pydantic in the agent service
+  and by the C# DTOs before it is stored, which is where `jsonb` would otherwise have caught
+  malformed JSON. If the monitor ever needs to filter on a field inside the trace, the
   migration is a single `ALTER COLUMN ... TYPE jsonb USING "PlanJson"::jsonb`.
-- **`ApprovedBy` is a plain `uuid`, not a foreign key.** An audit record must outlive the 
-  account that approved it: a foreign key would force either `ON DELETE CASCADE` (deleting 
-  history) or blocking user deletion. The approver's identity comes from the JWT at the 
+- **`ApprovedBy` is a plain `uuid`, not a foreign key.** An audit record must outlive the
+  account that approved it: a foreign key would force either `ON DELETE CASCADE` (deleting
+  history) or blocking user deletion. The approver's identity comes from the JWT at the
   approve/reject endpoint, never from the request body.
 
 ---
@@ -192,34 +192,34 @@ queryable via standard EF Core LINQ from the Agent Workflow Monitor endpoints.
 **Status:** Accepted (revised August 2, 2026)
 
 **Context:**
-The assignment requires all components (ASP.NET Core API, PostgreSQL, React, Agentic AI 
-service) to run on institution-provided or genuinely free-tier services, since paid 
-subscriptions are explicitly not permitted. Our original choice (Railway for API + DB, Vercel 
-for React) needed revisiting after Railway's trial period ended and began requiring payment 
+The assignment requires all components (ASP.NET Core API, PostgreSQL, React, Agentic AI
+service) to run on institution-provided or genuinely free-tier services, since paid
+subscriptions are explicitly not permitted. Our original choice (Railway for API + DB, Vercel
+for React) needed revisiting after Railway's trial period ended and began requiring payment
 before Week 1 was complete.
 
 **Options Considered:**
-1. **Railway (original choice) + Vercel** — Railway's trial expired days into the project and 
+1. **Railway (original choice) + Vercel** — Railway's trial expired days into the project and
    now requires a paid plan to continue, which violates the assignment's no-cost requirement.
-2. **Azure Free Tier** — generous compute, but requires a credit card on file and has a steeper 
+2. **Azure Free Tier** — generous compute, but requires a credit card on file and has a steeper
    setup/configuration overhead for a 3-person team on a 9-week deadline.
-3. **AWS Free Tier** — similarly capable but overkill in complexity and configuration time for 
+3. **AWS Free Tier** — similarly capable but overkill in complexity and configuration time for
    our scope, with a higher risk of accidentally exceeding free-tier limits.
-4. **Supabase (PostgreSQL) + Render or Fly.io (API) + Vercel (React) (chosen)** — Supabase's 
-   free tier is not trial-based, Render offers a genuinely free web-service tier without a card, 
+4. **Supabase (PostgreSQL) + Render or Fly.io (API) + Vercel (React) (chosen)** — Supabase's
+   free tier is not trial-based, Render offers a genuinely free web-service tier without a card,
    and Vercel remains the best fit for instant React deployments.
 
 **Decision:**
-We chose Supabase for PostgreSQL (already provisioned and migrated successfully), Render (or 
-Fly.io, pending final team testing) for the ASP.NET Core API, and Vercel for the React 
+We chose Supabase for PostgreSQL (already provisioned and migrated successfully), Render (or
+Fly.io, pending final team testing) for the ASP.NET Core API, and Vercel for the React
 frontend — all genuinely free tiers with no card-driven trial expiry risk before submission.
 
 **Consequences:**
-- Positive: No risk of a mid-project paywall like we hit with Railway; Supabase's pooler 
+- Positive: No risk of a mid-project paywall like we hit with Railway; Supabase's pooler
   connection (used for our EF Core migrations) is already working end-to-end.
-- Trade-off: Splitting DB and API hosting across two providers instead of one adds a small 
-  amount of extra configuration (two dashboards, two sets of environment variables) versus 
-  Railway's single-platform convenience — documented clearly in our README to keep setup 
+- Trade-off: Splitting DB and API hosting across two providers instead of one adds a small
+  amount of extra configuration (two dashboards, two sets of environment variables) versus
+  Railway's single-platform convenience — documented clearly in our README to keep setup
   reproducible for evaluators.
 
 ---
@@ -229,32 +229,32 @@ frontend — all genuinely free tiers with no card-driven trial expiry risk befo
 **Status:** Accepted
 
 **Context:**
-The platform serves multiple SME business types (Clinic, Restaurant, Gym, Tuition, Real 
-Estate, Tourism, General Business) as distinct tenants sharing one deployed system, and must 
-guarantee that one tenant's data (bookings, invoices, inventory) is never visible to another, 
+The platform serves multiple SME business types (Clinic, Restaurant, Gym, Tuition, Real
+Estate, Tourism, General Business) as distinct tenants sharing one deployed system, and must
+guarantee that one tenant's data (bookings, invoices, inventory) is never visible to another,
 while keeping the assignment achievable for a 3-person team within 9 weeks.
 
 **Options Considered:**
-1. **Separate database per tenant** — the strongest isolation guarantee, but multiplies 
-   deployment, migration, and backup complexity far beyond what three students can maintain 
+1. **Separate database per tenant** — the strongest isolation guarantee, but multiplies
+   deployment, migration, and backup complexity far beyond what three students can maintain
    and demo reliably within the timeline.
-2. **Separate schema per tenant** — better isolation than shared-schema, but EF Core's tooling 
-   support for dynamic per-tenant schema switching is significantly more complex to implement 
+2. **Separate schema per tenant** — better isolation than shared-schema, but EF Core's tooling
+   support for dynamic per-tenant schema switching is significantly more complex to implement
    and test correctly than global query filters.
-3. **Shared database, shared schema with TenantId (chosen)** — every table carries a `TenantId` 
+3. **Shared database, shared schema with TenantId (chosen)** — every table carries a `TenantId`
    foreign key, with EF Core global query filters automatically scoping every query.
 
 **Decision:**
-We chose a shared database, shared schema design where every business entity (Bookings, 
-Invoices, InventoryItems, etc.) includes a `TenantId` column, enforced via EF Core global query 
-filters injected by tenant-context middleware, giving us tenant isolation without the 
+We chose a shared database, shared schema design where every business entity (Bookings,
+Invoices, InventoryItems, etc.) includes a `TenantId` column, enforced via EF Core global query
+filters injected by tenant-context middleware, giving us tenant isolation without the
 operational overhead of managing multiple databases or schemas.
 
 **Consequences:**
-- Positive: Single migration history to maintain, simple backup/restore, cost-effective for 
+- Positive: Single migration history to maintain, simple backup/restore, cost-effective for
   small-SME use cases where full physical isolation isn't a hard business requirement.
-- Trade-off: Relies entirely on correct enforcement of the global query filter in every query 
-  path — a missed filter could leak cross-tenant data, so we treat this as a security-critical 
+- Trade-off: Relies entirely on correct enforcement of the global query filter in every query
+  path — a missed filter could leak cross-tenant data, so we treat this as a security-critical
   code-review checkpoint on every pull request touching a tenant-scoped entity.
 ---
 

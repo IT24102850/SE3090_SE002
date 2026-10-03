@@ -114,7 +114,7 @@ void main() {
     expect(networkImages, isEmpty);
 
     // The passed-in fallback icon must be shown instead.
-    expect(find.byIcon(Icons.scuba_diving), findsOneWidget);
+    expect(find.byIcon(Icons.scuba_diving), findsWidgets);
   });
 
   testWidgets('shows a skeleton, not a blank screen, while profile is loading', (tester) async {

@@ -180,7 +180,7 @@ class ApiService {
               // several requests at once) only tears the session down once.
               if (!_sessionExpiring) {
                 _sessionExpiring = true;
-                await SecureStorageService.clearAll();
+                await SecureStorageService.clearSession();
                 try {
                   onUnauthorized?.call();
                 } finally {

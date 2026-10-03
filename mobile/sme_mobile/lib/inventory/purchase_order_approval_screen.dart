@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'inventory_scaffold.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -10,7 +12,8 @@ import '../widgets/ui/ui.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
 import 'inventory_panel.dart';
-import '../services/notification_stream_service.dart';
+import 'inventory_loading_state.dart';
+import 'notification_ws.dart';
 
 /// Normalized purchase order statuses matching backend workflow.
 enum PurchaseOrderStatus {
@@ -20,6 +23,7 @@ enum PurchaseOrderStatus {
   inTransit,
   partiallyReceived,
   received,
+  rejected,
   cancelled;
 
   String get label {
@@ -36,6 +40,8 @@ enum PurchaseOrderStatus {
         return 'Partially Received';
       case PurchaseOrderStatus.received:
         return 'Received';
+      case PurchaseOrderStatus.rejected:
+        return 'Rejected';
       case PurchaseOrderStatus.cancelled:
         return 'Cancelled';
     }
@@ -55,6 +61,8 @@ enum PurchaseOrderStatus {
         return 'PartiallyReceived';
       case PurchaseOrderStatus.received:
         return 'Received';
+      case PurchaseOrderStatus.rejected:
+        return 'Rejected';
       case PurchaseOrderStatus.cancelled:
         return 'Cancelled';
     }
@@ -74,6 +82,7 @@ enum PurchaseOrderStatus {
         return const Color(0xFFFBBF24);
       case PurchaseOrderStatus.received:
         return const Color(0xFF10B981); // Emerald
+      case PurchaseOrderStatus.rejected:
       case PurchaseOrderStatus.cancelled:
         return const Color(0xFFF43F5E); // Rose
     }
@@ -93,6 +102,7 @@ enum PurchaseOrderStatus {
         return Icons.inventory_rounded;
       case PurchaseOrderStatus.received:
         return Icons.check_circle_rounded;
+      case PurchaseOrderStatus.rejected:
       case PurchaseOrderStatus.cancelled:
         return Icons.cancel_rounded;
     }
@@ -124,9 +134,10 @@ enum PurchaseOrderStatus {
       case 'fulfilled':
       case 'completed':
         return PurchaseOrderStatus.received;
+      case 'rejected':
+        return PurchaseOrderStatus.rejected;
       case 'cancelled':
       case 'canceled':
-      case 'rejected':
         return PurchaseOrderStatus.cancelled;
       default:
         return PurchaseOrderStatus.draft;
@@ -135,6 +146,7 @@ enum PurchaseOrderStatus {
 
   bool get isTerminal =>
       this == PurchaseOrderStatus.received ||
+      this == PurchaseOrderStatus.rejected ||
       this == PurchaseOrderStatus.cancelled;
   bool get isOpen => !isTerminal;
   bool get needsApproval =>
@@ -159,6 +171,7 @@ enum PurchaseOrderStatus {
       case PurchaseOrderStatus.received:
         return 4;
       case PurchaseOrderStatus.cancelled:
+      case PurchaseOrderStatus.rejected:
         return -1;
     }
   }
@@ -169,12 +182,21 @@ class PurchaseOrderApprovalScreen extends StatefulWidget {
     super.key,
     required this.client,
     required this.canApprove,
+    bool? canCreate,
     bool? canReceive,
-  }) : canReceive = canReceive ?? canApprove;
+    this.canCreateMultiBranch = false,
+    this.assignedBranchId,
+    this.requiresAssignedBranch = false,
+  })  : canCreate = canCreate ?? canApprove,
+        canReceive = canReceive ?? canApprove;
 
   final AuthenticatedApiClient client;
   final bool canApprove;
+  final bool canCreate;
   final bool canReceive;
+  final bool canCreateMultiBranch;
+  final String? assignedBranchId;
+  final bool requiresAssignedBranch;
 
   @override
   State<PurchaseOrderApprovalScreen> createState() =>
@@ -197,25 +219,27 @@ class _PurchaseOrderApprovalScreenState
   void initState() {
     super.initState();
     _load();
-    // Live updates come from the deployed ASP.NET notification stream, so the
-    // list stays current without connecting directly to the agent service.
-    unawaited(NotificationStreamService().start());
-    _notifSub = NotificationStreamService().notifications.listen((n) {
-      if (!mounted) return;
-      // Purchase-order and approval traffic is what this screen is showing,
-      // so anything else is left for the notification centre.
-      const watched = {
-        'PurchaseOrderCreated',
-        'PurchaseOrderApproved',
-        'PurchaseOrderRejected',
-        'WorkflowApproval',
-        'WorkflowApproved',
-        'WorkflowApplied',
-      };
-      if (!watched.contains(n.type)) return;
-      showAppNotification(n.title, tone: AppNotificationTone.info);
-      _load();
-    });
+    NotificationService().connect();
+    try {
+      _notifSub = NotificationService().stream.listen((event) {
+        try {
+          if (event['type'] == 'workflow_update') {
+            final action = event['actionType'] as String? ?? '';
+            if (action == 'generate_purchase_order' &&
+                (event['backend_result'] != null ||
+                    event['status'] == 'approved')) {
+              if (mounted) {
+                showAppNotification(
+                  'Agent submitted or updated a purchase order.',
+                  tone: AppNotificationTone.info,
+                );
+                _load();
+              }
+            }
+          }
+        } catch (_) {}
+      });
+    } catch (_) {}
   }
 
   @override
@@ -282,15 +306,37 @@ class _PurchaseOrderApprovalScreenState
 
   String _apiError(String body, int statusCode) {
     if (statusCode == 403) {
-      return 'Access denied. You need Manager or Administrator privileges to review purchase orders.';
+      return 'Access denied. Your role or branch permissions do not allow this purchase order action.';
     }
+    Object? decoded;
     try {
-      final payload = jsonDecode(body);
-      if (payload is Map<String, dynamic>) {
-        final message = payload['message'] ?? payload['title'];
-        if (message is String && message.trim().isNotEmpty) return message;
-      }
-    } catch (_) {}
+      decoded = jsonDecode(body);
+    } on FormatException {
+      return 'Purchase orders API returned HTTP $statusCode.';
+    }
+    if (decoded is Map<String, dynamic>) {
+      final message = decoded['message'];
+      final title = decoded['title'];
+      final errors = decoded['errors'];
+      final validationMessages = errors is Map
+          ? errors.values
+              .whereType<List>()
+              .expand((messages) => messages)
+              .whereType<String>()
+              .where((text) => text.trim().isNotEmpty)
+              .toList()
+          : const <String>[];
+      final parts = <String>[
+        if (message is String && message.trim().isNotEmpty) message,
+        if (validationMessages.isNotEmpty) validationMessages.join(' '),
+        if (title is String &&
+            title.trim().isNotEmpty &&
+            title != message &&
+            validationMessages.isEmpty)
+          title,
+      ];
+      if (parts.isNotEmpty) return parts.join(' ');
+    }
     return 'Purchase orders API returned HTTP $statusCode.';
   }
 
@@ -355,14 +401,15 @@ class _PurchaseOrderApprovalScreenState
     }
   }
 
-  Future<void> _cancelOrder(_PurchaseOrder order) async {
+  Future<void> _cancelOrder(_PurchaseOrder order, {bool reject = false}) async {
     final confirmed = await showAppConfirmation(
       context: context,
-      title: 'Cancel Purchase Order?',
-      message:
-          'Are you sure you want to cancel order ${order.number}? This will abort procurement.',
-      confirmLabel: 'Cancel Order',
-      icon: Icons.cancel_outlined,
+      title: reject ? 'Reject Purchase Order?' : 'Cancel Purchase Order?',
+      message: reject
+          ? 'Reject order ${order.number}? It will be closed without placing the order.'
+          : 'Are you sure you want to cancel order ${order.number}? This will abort procurement.',
+      confirmLabel: reject ? 'Reject Request' : 'Cancel Order',
+      icon: reject ? Icons.block_outlined : Icons.cancel_outlined,
       accent: const Color(0xFFF43F5E),
       isDestructive: true,
     );
@@ -372,26 +419,35 @@ class _PurchaseOrderApprovalScreenState
     try {
       final response = await widget.client.put(
         '/api/purchase-orders/${order.id}/status',
-        body: {'status': PurchaseOrderStatus.cancelled.apiValue},
+        body: {
+          'status': (reject
+                  ? PurchaseOrderStatus.rejected
+                  : PurchaseOrderStatus.cancelled)
+              .apiValue
+        },
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(_apiError(response.body, response.statusCode));
       }
       if (!mounted) return;
       setState(() {
-        order.status = PurchaseOrderStatus.cancelled;
+        order.status = reject
+            ? PurchaseOrderStatus.rejected
+            : PurchaseOrderStatus.cancelled;
         order.updatedAt = DateTime.now().toUtc().toIso8601String();
         order.approving = false;
       });
       showAppNotification(
-        '${order.number} has been cancelled.',
-        tone: AppNotificationTone.warning,
+        reject
+            ? '${order.number} was rejected.'
+            : '${order.number} has been cancelled.',
+        tone: reject ? AppNotificationTone.error : AppNotificationTone.warning,
       );
     } catch (error) {
       if (mounted) {
         setState(() => order.approving = false);
         showAppNotification(
-          'Could not cancel order. ${error is StateError ? error.message : 'Please retry.'}',
+          '${reject ? 'Could not reject request.' : 'Could not cancel order.'} ${error is StateError ? error.message : 'Please retry.'}',
           tone: AppNotificationTone.error,
         );
       }
@@ -452,6 +508,10 @@ class _PurchaseOrderApprovalScreenState
       backgroundColor: Colors.transparent,
       builder: (ctx) => _CreateOrderBottomSheet(
         client: widget.client,
+        requiresReview: !widget.canApprove,
+        canCreateMultiBranch: widget.canCreateMultiBranch,
+        assignedBranchId: widget.assignedBranchId,
+        requiresAssignedBranch: widget.requiresAssignedBranch,
         onCreated: () => _load(showSuccess: true),
       ),
     );
@@ -482,7 +542,7 @@ class _PurchaseOrderApprovalScreenState
       }
     }
     if (!mounted) return;
-    final receiptItems = await showModalBottomSheet<List<Map<String, dynamic>>>(
+    final submission = await showModalBottomSheet<_ReceiptSubmission>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -491,27 +551,51 @@ class _PurchaseOrderApprovalScreenState
         inventoryItems: inventoryItems,
       ),
     );
-    if (receiptItems == null || receiptItems.isEmpty || !mounted) return;
+    if (submission == null || submission.items.isEmpty || !mounted) return;
 
     setState(() => order.approving = true);
+    var receiptSaved = false;
     try {
       final response = await widget.client.post(
         '/api/purchase-orders/${order.id}/receive',
-        body: {'items': receiptItems},
+        body: {'items': submission.items},
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(_apiError(response.body, response.statusCode));
       }
+      receiptSaved = true;
+      if (submission.photos.isNotEmpty) {
+        final payload = jsonDecode(response.body) as Map<String, dynamic>;
+        final receipts = (payload['receipts'] as List? ?? const [])
+            .whereType<Map<String, dynamic>>();
+        final receiptId = receipts.isEmpty ? null : '${receipts.first['id']}';
+        if (receiptId == null || receiptId.isEmpty) {
+          throw StateError(
+            'The receipt was saved, but the API did not return its receipt ID. Refresh the order and retry adding photos.',
+          );
+        }
+        for (final photo in submission.photos) {
+          final upload = await widget.client.uploadPurchaseReceiptPhoto(
+            order.id,
+            receiptId,
+            await photo.readAsBytes(),
+            photo.name,
+          );
+          if (upload.statusCode < 200 || upload.statusCode >= 300) {
+            throw StateError(_apiError(upload.body, upload.statusCode));
+          }
+        }
+      }
       await _load();
       if (!mounted) return;
       showAppNotification(
-        '${order.number} receipt saved. Accepted units were added to inventory.',
+        '${order.number} receipt saved. Accepted units were added to inventory${submission.photos.isEmpty ? '' : ' and ${submission.photos.length} photos attached'}.',
         tone: AppNotificationTone.success,
       );
     } catch (error) {
       if (mounted) {
         showAppNotification(
-          'Could not record receipt. ${error is StateError ? error.message : 'Please retry.'}',
+          '${receiptSaved ? 'Receipt saved, but photo evidence could not be attached.' : 'Could not record receipt.'} ${error is StateError ? error.message : 'Please retry.'}',
           tone: AppNotificationTone.error,
         );
       }
@@ -522,16 +606,39 @@ class _PurchaseOrderApprovalScreenState
 
   @override
   Widget build(BuildContext context) {
-    return AppBackgroundScaffold(
+    return InventoryScaffold(
       showParticles: false,
-      floatingActionButton: widget.canApprove
-          ? FloatingActionButton.extended(
-              backgroundColor: AppColors.cyan,
-              foregroundColor: const Color(0xFF0A111E),
-              icon: const Icon(Icons.add_rounded, size: 20),
-              label: const Text('New PO',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-              onPressed: _showCreateOrderModal,
+      floatingActionButton: widget.canCreate
+          ? Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF00E5FF), Color(0xFF4C6FFF)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00E5FF).withValues(alpha: 0.4),
+                    blurRadius: 18,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: FloatingActionButton.extended(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                highlightElevation: 0,
+                foregroundColor: const Color(0xFF04121A),
+                icon: const Icon(Icons.add_rounded, size: 22),
+                label: const Text(
+                  'New PO',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13.5,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                onPressed: _showCreateOrderModal,
+              ),
             )
           : null,
       appBar: GlassAppBar(
@@ -550,7 +657,10 @@ class _PurchaseOrderApprovalScreenState
           backgroundColor: AppColors.overlaySurface,
           onRefresh: () => _load(showSuccess: true),
           child: _loading
-              ? const AppLoader(message: 'Loading purchase order ledger...')
+              ? const InventoryLoadingState(
+                  message: 'Loading purchase orders',
+                  detail: 'Preparing your order queue',
+                )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
                   children: [
@@ -733,174 +843,263 @@ class _PurchaseOrderApprovalScreenState
     final receivedCount = _allOrders
         .where((o) => o.status == PurchaseOrderStatus.received)
         .length;
+    final rejectedCount = _allOrders
+        .where((o) => o.status == PurchaseOrderStatus.rejected)
+        .length;
     final cancelledCount = _allOrders
         .where((o) => o.status == PurchaseOrderStatus.cancelled)
         .length;
 
     return Container(
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F1C2B), Color(0xFF132030)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: const Color(0xFF4F46E5).withValues(alpha: 0.35),
+          width: 1.2,
         ),
-        border: Border.all(color: const Color(0xFF263C54)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x44000000),
-            blurRadius: 20,
+            color: Color(0x384F46E5),
+            blurRadius: 24,
             offset: Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Color(0x50000000),
+            blurRadius: 16,
+            offset: Offset(0, 6),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top row: badge + role chip
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            runSpacing: 8,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color(0xFF162344),
+                Color(0xFF1E1E4C),
+                Color(0xFF10192E),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Stack(
             children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B).withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+              // Ambient top-right glow orb
+              Positioned(
+                right: -25,
+                top: -35,
+                child: Container(
+                  width: 160,
+                  height: 160,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFF6366F1).withValues(alpha: 0.25),
+                        Colors.transparent,
+                      ],
+                    ),
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+              ),
+
+              Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF59E0B),
-                        shape: BoxShape.circle,
+                    // Top row: badge + role chip
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      runSpacing: 8,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color:
+                                const Color(0xFFF59E0B).withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFFF59E0B)
+                                  .withValues(alpha: 0.45),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFF59E0B)
+                                    .withValues(alpha: 0.12),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF59E0B),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Color(0xFFF59E0B),
+                                      blurRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'PROCUREMENT DESK',
+                                style: AppTextStyles.label.copyWith(
+                                  color: const Color(0xFFFCD34D),
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: widget.canApprove
+                                ? const Color(0xFF10B981)
+                                    .withValues(alpha: 0.18)
+                                : widget.canCreate
+                                    ? AppColors.cyan.withValues(alpha: 0.18)
+                                    : Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: widget.canApprove
+                                  ? const Color(0xFF10B981)
+                                      .withValues(alpha: 0.45)
+                                  : widget.canCreate
+                                      ? AppColors.cyan.withValues(alpha: 0.45)
+                                      : AppColors.glassBorder,
+                            ),
+                          ),
+                          child: Text(
+                            widget.canApprove
+                                ? 'APPROVAL PERMITTED'
+                                : widget.canCreate
+                                    ? 'REQUEST CREATION'
+                                    : 'READ ONLY AUDIT',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                              color: widget.canApprove
+                                  ? const Color(0xFF34D399)
+                                  : widget.canCreate
+                                      ? const Color(0xFF67E8F9)
+                                      : AppColors.textMuted,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Total value — all orders
+                    Text('TOTAL PORTFOLIO VALUE',
+                        style: AppTextStyles.label.copyWith(
+                          fontSize: 9.5,
+                          letterSpacing: 1.2,
+                          color: const Color(0xFF94A3B8),
+                        )),
+                    const SizedBox(height: 3),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [
+                            Colors.white,
+                            Color(0xFFE0E7FF),
+                            Color(0xFF818CF8),
+                          ],
+                        ).createShader(bounds),
+                        child: Text(
+                          'LKR ${_formatCurrency(totalValue)}',
+                          style: AppTextStyles.headline.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: -0.6,
+                            fontSize: 26,
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 6),
+
+                    // Sub-label: breakdown
+                    const SizedBox(height: 4),
                     Text(
-                      'PROCUREMENT DESK',
-                      style: AppTextStyles.label.copyWith(
-                        color: const Color(0xFFF59E0B),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
+                      '${_openOrders.length} open · $receivedCount received · $rejectedCount rejected · $cancelledCount cancelled',
+                      style: AppTextStyles.caption.copyWith(
+                        color: const Color(0xFF94A3B8),
+                        fontSize: 11,
                       ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // 4 tappable metric tiles
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildMetricTile(
+                            label: 'OPEN',
+                            value: '${_openOrders.length}',
+                            color: AppColors.cyan,
+                            icon: Icons.inventory_2_rounded,
+                            filterKey: 'all',
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _buildMetricTile(
+                            label: 'ACTION DUE',
+                            value: '$_needsActionCount',
+                            color: const Color(0xFFFBBF24),
+                            icon: Icons.pending_actions_rounded,
+                            filterKey: 'needs_action',
+                            highlight: _needsActionCount > 0,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _buildMetricTile(
+                            label: 'IN TRANSIT',
+                            value: '$_inFulfillmentCount',
+                            color: const Color(0xFF60A5FA),
+                            icon: Icons.local_shipping_rounded,
+                            filterKey: 'fulfillment',
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _buildMetricTile(
+                            label: 'PAST',
+                            value: '$_completedCount',
+                            color: const Color(0xFF10B981),
+                            icon: Icons.check_circle_outline_rounded,
+                            filterKey: 'history',
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: widget.canApprove
-                      ? const Color(0xFF10B981).withValues(alpha: 0.18)
-                      : Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: widget.canApprove
-                        ? const Color(0xFF10B981).withValues(alpha: 0.4)
-                        : AppColors.glassBorder,
-                  ),
-                ),
-                child: Text(
-                  widget.canApprove ? 'APPROVAL PERMITTED' : 'READ ONLY AUDIT',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: widget.canApprove
-                        ? const Color(0xFF10B981)
-                        : AppColors.textMuted,
-                  ),
-                ),
-              ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          // Total value — all orders
-          Text('TOTAL PORTFOLIO VALUE',
-              style: AppTextStyles.label
-                  .copyWith(fontSize: 10, letterSpacing: 1.2)),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'LKR ${_formatCurrency(totalValue)}',
-              style: AppTextStyles.headline.copyWith(
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ),
-
-          // Sub-label: breakdown
-          const SizedBox(height: 4),
-          Text(
-            '${_openOrders.length} open · $receivedCount received · $cancelledCount cancelled',
-            style: AppTextStyles.caption.copyWith(
-              color: AppColors.textMuted,
-              fontSize: 11,
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // 4 tappable metric tiles
-          Row(
-            children: [
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'OPEN',
-                  value: '${_openOrders.length}',
-                  color: AppColors.cyan,
-                  icon: Icons.inventory_2_rounded,
-                  filterKey: 'all',
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'ACTION DUE',
-                  value: '$_needsActionCount',
-                  color: const Color(0xFFFBBF24),
-                  icon: Icons.pending_actions_rounded,
-                  filterKey: 'needs_action',
-                  highlight: _needsActionCount > 0,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'IN TRANSIT',
-                  value: '$_inFulfillmentCount',
-                  color: const Color(0xFF60A5FA),
-                  icon: Icons.local_shipping_rounded,
-                  filterKey: 'fulfillment',
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'PAST',
-                  value: '$_completedCount',
-                  color: const Color(0xFF10B981),
-                  icon: Icons.check_circle_outline_rounded,
-                  filterKey: 'history',
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -922,28 +1121,53 @@ class _PurchaseOrderApprovalScreenState
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
         decoration: BoxDecoration(
-          color: isActive
-              ? color.withValues(alpha: 0.18)
-              : highlight
-                  ? color.withValues(alpha: 0.12)
-                  : Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              isActive
+                  ? color.withValues(alpha: 0.22)
+                  : highlight
+                      ? color.withValues(alpha: 0.14)
+                      : const Color(0xFF121A2C),
+              Color.lerp(
+                  const Color(0xFF0F1524), color, isActive ? 0.15 : 0.04)!,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(13),
           border: Border.all(
             color: isActive
-                ? color.withValues(alpha: 0.7)
+                ? color.withValues(alpha: 0.8)
                 : highlight
-                    ? color.withValues(alpha: 0.5)
+                    ? color.withValues(alpha: 0.55)
                     : color.withValues(alpha: 0.22),
             width: isActive || highlight ? 1.5 : 1,
           ),
+          boxShadow: [
+            if (isActive || highlight)
+              BoxShadow(
+                color: color.withValues(alpha: 0.2),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              height: 2,
+              width: 18,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 6),
             Row(
               children: [
                 Icon(icon, size: 11, color: color),
-                const SizedBox(width: 3),
+                const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     label,
@@ -951,8 +1175,8 @@ class _PurchaseOrderApprovalScreenState
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 8,
-                      fontWeight: FontWeight.w700,
-                      color: isActive ? color : AppColors.textMuted,
+                      fontWeight: FontWeight.w800,
+                      color: isActive ? color : const Color(0xFF94A3B8),
                       letterSpacing: 0.4,
                     ),
                   ),
@@ -962,22 +1186,24 @@ class _PurchaseOrderApprovalScreenState
             const SizedBox(height: 5),
             Text(
               value,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w900,
-                color: color,
+                color: Colors.white,
                 height: 1,
               ),
             ),
-            if (filterKey != null)
+            if (filterKey != null) ...[
+              const SizedBox(height: 2),
               Text(
                 'tap to view',
                 style: TextStyle(
                   fontSize: 8,
-                  color: color.withValues(alpha: isActive ? 0.9 : 0.5),
+                  color: color.withValues(alpha: isActive ? 0.95 : 0.6),
                   fontWeight: FontWeight.w600,
                 ),
               ),
+            ],
           ],
         ),
       ),
@@ -992,7 +1218,7 @@ class _PurchaseOrderApprovalScreenState
       margin: const EdgeInsets.only(bottom: 14),
       child: InventoryPanel(
         padding: const EdgeInsets.all(16),
-        borderColor: statusColor.withValues(alpha: 0.35),
+        borderColor: statusColor.withValues(alpha: 0.38),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1003,11 +1229,22 @@ class _PurchaseOrderApprovalScreenState
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.14),
+                    gradient: LinearGradient(
+                      colors: [
+                        statusColor.withValues(alpha: 0.18),
+                        statusColor.withValues(alpha: 0.06),
+                      ],
+                    ),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: statusColor.withValues(alpha: 0.3),
+                      color: statusColor.withValues(alpha: 0.4),
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: statusColor.withValues(alpha: 0.12),
+                        blurRadius: 8,
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1033,7 +1270,7 @@ class _PurchaseOrderApprovalScreenState
                         ? order.createdAt
                         : order.updatedAt),
                     style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textMuted,
+                      color: const Color(0xFF94A3B8),
                       fontSize: 11,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -1041,12 +1278,18 @@ class _PurchaseOrderApprovalScreenState
                 ),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.16),
+                    color: statusColor.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(20),
                     border:
-                        Border.all(color: statusColor.withValues(alpha: 0.45)),
+                        Border.all(color: statusColor.withValues(alpha: 0.5)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: statusColor.withValues(alpha: 0.22),
+                        blurRadius: 8,
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1057,6 +1300,12 @@ class _PurchaseOrderApprovalScreenState
                         decoration: BoxDecoration(
                           color: statusColor,
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: statusColor,
+                              blurRadius: 6,
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 5),
@@ -1064,9 +1313,9 @@ class _PurchaseOrderApprovalScreenState
                         status.label.toUpperCase(),
                         style: TextStyle(
                           color: statusColor,
-                          fontSize: 10,
+                          fontSize: 9.5,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
+                          letterSpacing: 0.6,
                         ),
                       ),
                     ],
@@ -1114,7 +1363,7 @@ class _PurchaseOrderApprovalScreenState
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: AppTextStyles.caption.copyWith(
-                                color: AppColors.textSecondary,
+                                color: const Color(0xFFCBD5E1),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -1129,14 +1378,17 @@ class _PurchaseOrderApprovalScreenState
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text('TOTAL VALUE',
-                        style: AppTextStyles.label.copyWith(fontSize: 9)),
+                        style: AppTextStyles.label.copyWith(
+                          fontSize: 9,
+                          color: const Color(0xFF94A3B8),
+                        )),
                     const SizedBox(height: 2),
                     Text(
                       'LKR ${_formatCurrency(order.amount)}',
                       style: AppTextStyles.title.copyWith(
                         color: const Color(0xFF10B981),
                         fontWeight: FontWeight.w900,
-                        fontSize: 16,
+                        fontSize: 16.5,
                       ),
                     ),
                   ],
@@ -1154,6 +1406,10 @@ class _PurchaseOrderApprovalScreenState
               _buildLineItemsSection(order),
               const SizedBox(height: 14),
             ],
+            if (order.receipts.isNotEmpty) ...[
+              _buildReceiptHistory(order),
+              const SizedBox(height: 14),
+            ],
 
             // Contextual Action Buttons
             _buildActionSection(order),
@@ -1164,7 +1420,8 @@ class _PurchaseOrderApprovalScreenState
   }
 
   Widget _buildLifecycleStepper(PurchaseOrderStatus current) {
-    if (current == PurchaseOrderStatus.cancelled) {
+    if (current == PurchaseOrderStatus.cancelled ||
+        current == PurchaseOrderStatus.rejected) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
@@ -1173,13 +1430,14 @@ class _PurchaseOrderApprovalScreenState
           border:
               Border.all(color: const Color(0xFFF43F5E).withValues(alpha: 0.3)),
         ),
-        child: const Row(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cancel_rounded, size: 14, color: Color(0xFFF43F5E)),
-            SizedBox(width: 6),
-            Text('Order Cancelled',
-                style: TextStyle(
+            const Icon(Icons.cancel_rounded,
+                size: 14, color: Color(0xFFF43F5E)),
+            const SizedBox(width: 6),
+            Text('Order ${current.label}',
+                style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFFF43F5E))),
@@ -1211,10 +1469,16 @@ class _PurchaseOrderApprovalScreenState
             final isDone = activeIndex > stepBefore;
             return Expanded(
               child: Container(
-                height: 2,
-                color: isDone
-                    ? const Color(0xFF10B981)
-                    : Colors.white.withValues(alpha: 0.1),
+                height: 2.5,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(2),
+                  gradient: isDone
+                      ? const LinearGradient(
+                          colors: [Color(0xFF059669), Color(0xFF10B981)],
+                        )
+                      : null,
+                  color: isDone ? null : Colors.white.withValues(alpha: 0.08),
+                ),
               ),
             );
           }
@@ -1233,32 +1497,38 @@ class _PurchaseOrderApprovalScreenState
           return Tooltip(
             message: step.label,
             child: Container(
-              width: 18,
-              height: 18,
+              width: 20,
+              height: 20,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: isCurrent
-                    ? dotColor.withValues(alpha: 0.25)
-                    : dotColor.withValues(alpha: 0.15),
+                    ? dotColor.withValues(alpha: 0.28)
+                    : dotColor.withValues(alpha: 0.12),
                 border: Border.all(
                   color: dotColor,
                   width: isCurrent ? 2 : 1.2,
                 ),
+                boxShadow: isCurrent
+                    ? [
+                        BoxShadow(
+                          color: dotColor.withValues(alpha: 0.55),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
               ),
               child: Center(
-                child: isPast
-                    ? const Icon(Icons.check_rounded,
-                        size: 11, color: Color(0xFF10B981))
-                    : isCurrent
-                        ? Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: dotColor,
-                            ),
-                          )
-                        : null,
+                child: isPast || isCurrent
+                    ? Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: dotColor,
+                        ),
+                      )
+                    : null,
               ),
             ),
           );
@@ -1363,13 +1633,88 @@ class _PurchaseOrderApprovalScreenState
     );
   }
 
+  Widget _buildReceiptHistory(_PurchaseOrder order) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.glassFill,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'RECEIPT HISTORY (${order.receipts.length})',
+            style: AppTextStyles.label.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 10,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...order.receipts.map((receipt) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${receipt.receivedAt.toLocal()} · ${receipt.receivedBy}',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    ...receipt.items.map((item) => Text(
+                          '${item.name}: ${item.acceptedQuantity} accepted · ${item.damagedQuantity} damaged · ${item.shortageQuantity} short',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textMuted,
+                            fontSize: 11,
+                          ),
+                        )),
+                    if (receipt.photoUrls.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: receipt.photoUrls
+                            .map((url) => ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    url,
+                                    width: 72,
+                                    height: 72,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        const SizedBox(
+                                      width: 72,
+                                      height: 72,
+                                      child: Icon(
+                                        Icons.broken_image_outlined,
+                                        color: AppColors.textMuted,
+                                      ),
+                                    ),
+                                  ),
+                                ))
+                            .toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionSection(_PurchaseOrder order) {
     final status = order.status;
 
     final canReceiveThisOrder = widget.canReceive &&
         (status == PurchaseOrderStatus.inTransit ||
             status == PurchaseOrderStatus.partiallyReceived);
-    if (!widget.canApprove && !canReceiveThisOrder) {
+    if (!widget.canApprove && !canReceiveThisOrder && !status.isTerminal) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         alignment: Alignment.center,
@@ -1419,7 +1764,9 @@ class _PurchaseOrderApprovalScreenState
               icon: Icons.close_rounded,
               color: const Color(0xFFF43F5E),
               height: 44,
-              onPressed: order.approving ? null : () => _cancelOrder(order),
+              onPressed: order.approving
+                  ? null
+                  : () => _cancelOrder(order, reject: true),
             ),
           ),
           const SizedBox(width: 10),
@@ -1545,7 +1892,7 @@ class _PurchaseOrderApprovalScreenState
           Text(
             status == PurchaseOrderStatus.received
                 ? 'Stock received & added to inventory.'
-                : 'Order cancelled.',
+                : 'Order ${status.label.toLowerCase()}.',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -1598,10 +1945,18 @@ class _PurchaseOrderApprovalScreenState
 class _CreateOrderBottomSheet extends StatefulWidget {
   const _CreateOrderBottomSheet({
     required this.client,
+    required this.requiresReview,
+    required this.canCreateMultiBranch,
+    required this.assignedBranchId,
+    required this.requiresAssignedBranch,
     required this.onCreated,
   });
 
   final AuthenticatedApiClient client;
+  final bool requiresReview;
+  final bool canCreateMultiBranch;
+  final String? assignedBranchId;
+  final bool requiresAssignedBranch;
   final VoidCallback onCreated;
 
   @override
@@ -1616,7 +1971,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
   final _branchController = TextEditingController();
 
   final _itemNameController = TextEditingController();
-  final _quantityController = TextEditingController(text: '1');
+  final _quantityControllers = <String, TextEditingController>{};
   final _unitPriceController = TextEditingController();
 
   bool _loading = false;
@@ -1624,26 +1979,27 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _suppliers = [];
   List<Map<String, dynamic>> _inventoryItems = [];
-  String? _selectedBranchId;
+  List<String> _selectedBranchIds = [];
   String? _selectedSupplierId;
   String? _selectedItemId;
   String? _optionsError;
 
   List<Map<String, dynamic>> get _supplierItems {
     final supplierId = _selectedSupplierId;
-    final branchId = _selectedBranchId;
-    if (supplierId == null || branchId == null) return const [];
+    if (supplierId == null) return const [];
     return _inventoryItems
-        .where((item) =>
-            '${item['supplierId'] ?? ''}' == supplierId &&
-            '${item['branchId'] ?? ''}' == branchId)
+        .where((item) => '${item['supplierId'] ?? ''}' == supplierId)
         .toList();
   }
 
   double get _lineTotal {
-    final quantity = double.tryParse(_quantityController.text.trim()) ?? 0;
     final unitPrice = double.tryParse(_unitPriceController.text.trim()) ?? 0;
-    return quantity * unitPrice;
+    return _selectedBranchIds.fold<double>(0, (total, branchId) {
+      final quantity =
+          double.tryParse(_quantityControllers[branchId]?.text.trim() ?? '') ??
+              0;
+      return total + quantity * unitPrice;
+    });
   }
 
   @override
@@ -1656,6 +2012,12 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
 
   Future<void> _fetchOptions() async {
     try {
+      if (widget.requiresAssignedBranch &&
+          (widget.assignedBranchId == null ||
+              widget.assignedBranchId!.trim().isEmpty)) {
+        throw StateError(
+            'Your account has no assigned branch. Purchase orders are unavailable until one is assigned.');
+      }
       final res = await widget.client.get('/api/purchase-orders/options');
       if (res.statusCode != 200) {
         throw StateError(
@@ -1663,22 +2025,44 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
         );
       }
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-      final branches = ((data['branches'] as List?) ?? const [])
+      final availableBranches = ((data['branches'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .toList();
+      final branches = widget.requiresAssignedBranch
+          ? availableBranches
+              .where((branch) => '${branch['id']}' == widget.assignedBranchId)
+              .toList()
+          : availableBranches;
+      if (widget.requiresAssignedBranch && branches.isEmpty) {
+        throw StateError('Your assigned branch could not be loaded.');
+      }
       final suppliers = ((data['suppliers'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .toList();
-      final items = ((data['items'] as List?) ?? const [])
+      final availableItems = ((data['items'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .toList();
+      final items = widget.requiresAssignedBranch
+          ? availableItems
+              .where((item) =>
+                  '${item['branchId'] ?? ''}' == widget.assignedBranchId)
+              .toList()
+          : availableItems;
       if (mounted) {
         setState(() {
           _branches = branches;
           _suppliers = suppliers;
           _inventoryItems = items;
-          _selectedBranchId =
-              branches.isNotEmpty ? '${branches.first['id']}' : null;
+          _selectedBranchIds =
+              branches.isNotEmpty ? ['${branches.first['id']}'] : [];
+          for (final branch in branches) {
+            final branchId = '${branch['id']}';
+            _quantityControllers[branchId] = TextEditingController(
+              text: branches.isNotEmpty && branchId == '${branches.first['id']}'
+                  ? '1'
+                  : '0',
+            );
+          }
           _selectedSupplierId =
               suppliers.isNotEmpty ? '${suppliers.first['id']}' : null;
           _optionsError = null;
@@ -1713,6 +2097,47 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
     _unitPriceController.text = unitCost == null ? '' : _money(unitCost);
   }
 
+  void _toggleBranch(String branchId, bool selected) {
+    if (!widget.canCreateMultiBranch &&
+        selected &&
+        _selectedBranchIds.isNotEmpty &&
+        !_selectedBranchIds.contains(branchId)) {
+      return;
+    }
+    setState(() {
+      if (selected) {
+        if (!_selectedBranchIds.contains(branchId)) {
+          _selectedBranchIds = [..._selectedBranchIds, branchId];
+          final quantity = _quantityControllers[branchId];
+          if (quantity == null) {
+            _quantityControllers[branchId] = TextEditingController(text: '1');
+          } else if (quantity.text.trim().isEmpty || quantity.text == '0') {
+            quantity.text = '1';
+          }
+        }
+      } else {
+        _selectedBranchIds =
+            _selectedBranchIds.where((id) => id != branchId).toList();
+      }
+    });
+  }
+
+  void _selectAllBranches() {
+    if (!widget.canCreateMultiBranch) return;
+    setState(() {
+      _selectedBranchIds =
+          _branches.map((branch) => '${branch['id']}').toList();
+      for (final branchId in _selectedBranchIds) {
+        final controller = _quantityControllers[branchId];
+        if (controller == null) {
+          _quantityControllers[branchId] = TextEditingController(text: '1');
+        } else if (controller.text.trim().isEmpty || controller.text == '0') {
+          controller.text = '1';
+        }
+      }
+    });
+  }
+
   String _money(double value) => value.toStringAsFixed(2);
 
   String _formatTotal(double value) => 'LKR ${_money(value)}';
@@ -1730,7 +2155,9 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
     _supplierController.dispose();
     _branchController.dispose();
     _itemNameController.dispose();
-    _quantityController.dispose();
+    for (final controller in _quantityControllers.values) {
+      controller.dispose();
+    }
     _unitPriceController.dispose();
     super.dispose();
   }
@@ -1739,6 +2166,28 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
     if (_selectedSupplierId == null) {
       showAppNotification(
         'Choose a supplier before creating a purchase order.',
+        tone: AppNotificationTone.error,
+      );
+      return;
+    }
+    if (_selectedBranchIds.isEmpty) {
+      showAppNotification(
+        'Select at least one delivery branch.',
+        tone: AppNotificationTone.error,
+      );
+      return;
+    }
+    if (!widget.canCreateMultiBranch && _selectedBranchIds.length > 1) {
+      showAppNotification(
+        'Only administrators can create purchase orders for multiple branches.',
+        tone: AppNotificationTone.error,
+      );
+      return;
+    }
+    if (widget.requiresAssignedBranch &&
+        _selectedBranchIds.any((id) => id != widget.assignedBranchId)) {
+      showAppNotification(
+        'Purchase orders are limited to your assigned branch.',
         tone: AppNotificationTone.error,
       );
       return;
@@ -1754,30 +2203,54 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
     setState(() => _loading = true);
 
     try {
-      final qty = double.tryParse(_quantityController.text) ?? 1;
       final price = double.tryParse(_unitPriceController.text) ?? 0;
+      final number = _numberController.text.trim();
+      final branchOrders = _selectedBranchIds
+          .map((branchId) => {
+                'branchId': branchId,
+                'items': [
+                  {
+                    'inventoryItemId': _selectedItemId,
+                    'description': _itemNameController.text.trim(),
+                    'quantity':
+                        double.tryParse(_quantityControllers[branchId]!.text) ??
+                            0,
+                    'unitPrice': price,
+                  }
+                ],
+              })
+          .toList();
+      final isMultiBranch = branchOrders.length > 1;
+      final generatedNumbers = List.generate(
+        branchOrders.length,
+        (index) => '$number-${(index + 1).toString().padLeft(2, '0')}',
+      );
+      final body = isMultiBranch
+          ? {
+              'number': number,
+              'supplierId': _selectedSupplierId,
+              'branchOrders': branchOrders,
+            }
+          : {
+              'number': number,
+              'branchId': _selectedBranchIds.single,
+              'supplierId': _selectedSupplierId,
+              'items': branchOrders.single['items'],
+            };
 
-      final body = {
-        'number': _numberController.text.trim(),
-        'branchId': _selectedBranchId,
-        'supplierId': _selectedSupplierId,
-        'items': [
-          {
-            'inventoryItemId': _selectedItemId,
-            'description': _itemNameController.text.trim(),
-            'quantity': qty,
-            'unitPrice': price,
-          }
-        ],
-      };
-
-      final response =
-          await widget.client.post('/api/purchase-orders', body: body);
+      final response = await widget.client.post(
+        isMultiBranch ? '/api/purchase-orders/batch' : '/api/purchase-orders',
+        body: body,
+      );
       if (response.statusCode >= 200 && response.statusCode < 300) {
         if (!mounted) return;
         Navigator.pop(context);
         showAppNotification(
-          'Purchase order ${_numberController.text} created successfully.',
+          widget.requiresReview
+              ? 'Purchase order $number submitted for Manager or Admin review.'
+              : isMultiBranch
+                  ? 'Purchase orders ${generatedNumbers.join(', ')} created successfully.'
+                  : 'Purchase order $number created successfully.',
           tone: AppNotificationTone.success,
         );
         widget.onCreated();
@@ -1788,7 +2261,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
     } catch (e) {
       if (mounted) {
         showAppNotification(
-          'Could not create purchase order. Verify branch and supplier are selected.',
+          'Could not create purchase order: ${e.toString().replaceFirst('Bad state: ', '')}',
           tone: AppNotificationTone.error,
         );
       }
@@ -1852,7 +2325,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
               if (_suppliers.isNotEmpty) ...[
                 DropdownButtonFormField<String>(
                   key: const Key('po-supplier-dropdown'),
-                  value: _selectedSupplierId,
+                  initialValue: _selectedSupplierId,
                   dropdownColor: const Color(0xFF17263C),
                   decoration: _inputDec('SUPPLIER'),
                   items: _suppliers
@@ -1878,29 +2351,72 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
               ],
               const SizedBox(height: 12),
 
-              // Branch Dropdown or Text
+              // Each selected branch receives its own order.
               if (_branches.isNotEmpty) ...[
-                DropdownButtonFormField<String>(
-                  value: _selectedBranchId,
-                  dropdownColor: const Color(0xFF17263C),
-                  decoration: _inputDec('DELIVERY BRANCH'),
-                  items: _branches
-                      .map((b) => DropdownMenuItem(
-                            value: '${b['id']}',
-                            child: Text(
-                              '${b['name']}',
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 13),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (val) => setState(() {
-                    _selectedBranchId = val;
-                    final items = _supplierItems;
-                    _selectSupplierItem(items.isEmpty ? null : items.first);
-                  }),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'DELIVERY BRANCHES',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.7,
+                    ),
+                  ),
                 ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Supplier catalog items can be ordered for any selected destination. A separate purchase order will be created for every selected branch.',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+                if (widget.canCreateMultiBranch && _branches.length > 1)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      key: const Key('po-select-all-branches'),
+                      onPressed: _loading || _loadingOptions
+                          ? null
+                          : _selectAllBranches,
+                      icon: const Icon(Icons.done_all_rounded, size: 17),
+                      label: const Text('Select all branches'),
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                ..._branches.map((branch) {
+                  final branchId = '${branch['id']}';
+                  return Material(
+                    color: Colors.transparent,
+                    child: CheckboxListTile(
+                      key: Key('po-branch-checkbox-$branchId'),
+                      value: _selectedBranchIds.contains(branchId),
+                      onChanged: _loading ||
+                              _loadingOptions ||
+                              (!widget.canCreateMultiBranch &&
+                                  !_selectedBranchIds.contains(branchId) &&
+                                  _selectedBranchIds.isNotEmpty)
+                          ? null
+                          : (selected) =>
+                              _toggleBranch(branchId, selected ?? false),
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      activeColor: AppColors.cyan,
+                      title: Text(
+                        '${branch['name']}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
               ] else ...[
                 TextFormField(
                   controller: _branchController,
@@ -1948,7 +2464,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
               else
                 DropdownButtonFormField<String>(
                   key: ValueKey('po-item-dropdown-$_selectedSupplierId'),
-                  value: _selectedItemId,
+                  initialValue: _selectedItemId,
                   isExpanded: true,
                   dropdownColor: const Color(0xFF17263C),
                   decoration: _inputDec('SUPPLIER ITEM'),
@@ -1956,7 +2472,8 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
                       .map((item) => DropdownMenuItem<String>(
                             value: '${item['id']}',
                             child: Text(
-                              '${item['name']} · ${item['sku']}',
+                              '${item['name']} · ${item['sku']}'
+                              '${(item['branchName'] as String?)?.trim().isNotEmpty == true ? ' · ${item['branchName']}' : ''}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -1976,37 +2493,45 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
                 ),
               const SizedBox(height: 10),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      key: const Key('po-quantity-field'),
-                      controller: _quantityController,
-                      keyboardType: TextInputType.number,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                      decoration: _inputDec('QTY'),
-                      validator: (val) => (double.tryParse(val ?? '') ?? 0) <= 0
-                          ? 'Must be > 0'
-                          : null,
-                      onChanged: (_) => setState(() {}),
-                    ),
+              ..._selectedBranchIds.map((branchId) {
+                final branch = _branches.firstWhere(
+                  (entry) => '${entry['id']}' == branchId,
+                  orElse: () => {'name': 'Branch'},
+                );
+                final branchName = '${branch['name']}';
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: TextFormField(
+                    key: Key('po-quantity-field-$branchId'),
+                    controller: _quantityControllers[branchId],
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    decoration: _inputDec('QTY · ${branchName.toUpperCase()}'),
+                    validator: (value) {
+                      final quantity = double.tryParse(value ?? '');
+                      if (quantity == null || quantity <= 0) {
+                        return 'Enter a quantity greater than 0';
+                      }
+                      if (quantity != quantity.truncateToDouble()) {
+                        return 'Use a whole number';
+                      }
+                      return null;
+                    },
+                    onChanged: (_) => setState(() {}),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextFormField(
-                      key: const Key('po-unit-price-field'),
-                      controller: _unitPriceController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      readOnly: true,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                      decoration: _inputDec('UNIT PRICE (LKR)'),
-                      validator: (val) => (double.tryParse(val ?? '') ?? -1) < 0
-                          ? 'Invalid'
-                          : null,
-                    ),
-                  ),
-                ],
+                );
+              }),
+              TextFormField(
+                key: const Key('po-unit-price-field'),
+                controller: _unitPriceController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                readOnly: true,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: _inputDec('UNIT PRICE (LKR)'),
+                validator: (value) =>
+                    (double.tryParse(value ?? '') ?? -1) < 0 ? 'Invalid' : null,
               ),
               const SizedBox(height: 12),
               Container(
@@ -2096,11 +2621,11 @@ class _ReceivePurchaseOrderSheet extends StatefulWidget {
 
 class _ReceivePurchaseOrderSheetState
     extends State<_ReceivePurchaseOrderSheet> {
-  final _delivered = <String, TextEditingController>{};
+  final _accepted = <String, TextEditingController>{};
   final _damaged = <String, TextEditingController>{};
   final _notes = <String, TextEditingController>{};
-  final _closedAsShort = <String>{};
   final _linkedInventoryItemIds = <String, String>{};
+  final _photos = <XFile>[];
 
   List<Map<String, dynamic>> get _branchInventoryItems => widget.inventoryItems
       .where((item) => '${item['branchId'] ?? ''}' == widget.order.branchId)
@@ -2110,7 +2635,7 @@ class _ReceivePurchaseOrderSheetState
   void initState() {
     super.initState();
     for (final item in widget.order.items) {
-      _delivered[item.id] = TextEditingController(text: '0');
+      _accepted[item.id] = TextEditingController(text: '0');
       _damaged[item.id] = TextEditingController(text: '0');
       _notes[item.id] = TextEditingController();
     }
@@ -2119,7 +2644,7 @@ class _ReceivePurchaseOrderSheetState
   @override
   void dispose() {
     for (final controller in [
-      ..._delivered.values,
+      ..._accepted.values,
       ..._damaged.values,
       ..._notes.values,
     ]) {
@@ -2132,32 +2657,25 @@ class _ReceivePurchaseOrderSheetState
     final receiptItems = <Map<String, dynamic>>[];
     for (final item in widget.order.items) {
       if (item.receivingClosed) continue;
-      final delivered = double.tryParse(_delivered[item.id]!.text.trim());
+      final accepted = double.tryParse(_accepted[item.id]!.text.trim());
       final damaged = double.tryParse(_damaged[item.id]!.text.trim());
-      if (delivered == null ||
+      final delivered = (accepted ?? 0) + (damaged ?? 0);
+      if (accepted == null ||
           damaged == null ||
-          delivered < 0 ||
+          accepted < 0 ||
           damaged < 0 ||
-          damaged > delivered) {
+          delivered > item.remainingQuantity) {
         showAppNotification(
-          'Enter valid quantities. Damaged quantity cannot exceed delivered quantity.',
-          tone: AppNotificationTone.warning,
-        );
-        return;
-      }
-      if (delivered > item.remainingQuantity) {
-        showAppNotification(
-          '${item.name} has only ${item.remainingQuantity} units remaining on this order.',
+          'Enter valid quantities. Accepted plus damaged units cannot exceed the ${item.remainingQuantity} units remaining.',
           tone: AppNotificationTone.warning,
         );
         return;
       }
 
-      final closeShort = _closedAsShort.contains(item.id);
-      if (delivered == 0 && !closeShort) continue;
+      if (delivered == 0) continue;
       final inventoryItemId =
           item.inventoryItemId ?? _linkedInventoryItemIds[item.id];
-      if (delivered > damaged && inventoryItemId == null) {
+      if (accepted > 0 && inventoryItemId == null) {
         showAppNotification(
           'Choose a destination-branch inventory item for ${item.name}.',
           tone: AppNotificationTone.warning,
@@ -2166,9 +2684,9 @@ class _ReceivePurchaseOrderSheetState
       }
       receiptItems.add({
         'purchaseOrderItemId': item.id,
-        'deliveredQuantity': delivered,
+        'acceptedQuantity': accepted,
         'damagedQuantity': damaged,
-        'closeRemainingAsShort': closeShort,
+        'closeRemainingAsShort': false,
         'notes': _notes[item.id]!.text.trim(),
         if (item.inventoryItemId == null && inventoryItemId != null)
           'inventoryItemId': inventoryItemId,
@@ -2177,12 +2695,48 @@ class _ReceivePurchaseOrderSheetState
 
     if (receiptItems.isEmpty) {
       showAppNotification(
-        'Enter a delivered quantity or mark an item’s remaining balance as short.',
+        'Enter an accepted or damaged quantity for at least one item.',
         tone: AppNotificationTone.warning,
       );
       return;
     }
-    Navigator.of(context).pop(receiptItems);
+    Navigator.of(context).pop(
+      _ReceiptSubmission(items: receiptItems, photos: List.of(_photos)),
+    );
+  }
+
+  Future<void> _pickPhotos() async {
+    if (_photos.length >= 5) {
+      showAppNotification(
+        'A receipt can have at most five photos.',
+        tone: AppNotificationTone.warning,
+      );
+      return;
+    }
+    final selected = await ImagePicker().pickMultiImage(
+      imageQuality: 80,
+      maxWidth: 1600,
+      maxHeight: 1600,
+    );
+    if (!mounted || selected.isEmpty) return;
+    final supported = selected.where((file) {
+      final extension = file.name.split('.').last.toLowerCase();
+      return const {'jpg', 'jpeg', 'png', 'webp'}.contains(extension);
+    }).toList();
+    if (supported.length != selected.length) {
+      showAppNotification(
+        'Only JPEG, PNG, or WebP photos can be attached.',
+        tone: AppNotificationTone.warning,
+      );
+    }
+    if (_photos.length + supported.length > 5) {
+      showAppNotification(
+        'Select no more than ${5 - _photos.length} additional photos.',
+        tone: AppNotificationTone.warning,
+      );
+      return;
+    }
+    setState(() => _photos.addAll(supported));
   }
 
   @override
@@ -2224,10 +2778,14 @@ class _ReceivePurchaseOrderSheetState
             ],
           ),
           const Text(
-            'Record what arrived for each item. Only accepted units are added to stock.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            'Enter the quantities delivered in this shipment. Accepted units go into stock; damaged and missing units are tracked separately.',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              height: 1.45,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Flexible(
             child: ListView.separated(
               shrinkWrap: true,
@@ -2247,11 +2805,11 @@ class _ReceivePurchaseOrderSheetState
                     ),
                   );
                 }
-                final delivered =
-                    double.tryParse(_delivered[item.id]!.text.trim()) ?? 0;
+                final accepted =
+                    double.tryParse(_accepted[item.id]!.text.trim()) ?? 0;
                 final damaged =
                     double.tryParse(_damaged[item.id]!.text.trim()) ?? 0;
-                final accepted = max(0.0, delivered - damaged);
+                final delivered = accepted + damaged;
                 final remainingAfterDelivery =
                     max(0.0, item.remainingQuantity - delivered);
                 return _receiptLineCard(
@@ -2270,7 +2828,7 @@ class _ReceivePurchaseOrderSheetState
                           )
                         else
                           DropdownButtonFormField<String>(
-                            value: _linkedInventoryItemIds[item.id],
+                            initialValue: _linkedInventoryItemIds[item.id],
                             isExpanded: true,
                             dropdownColor: const Color(0xFF17263C),
                             decoration: InputDecoration(
@@ -2304,65 +2862,95 @@ class _ReceivePurchaseOrderSheetState
                           ),
                         const SizedBox(height: 8),
                       ],
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 8,
+                      Row(
                         children: [
-                          SizedBox(
-                            width: 125,
+                          Expanded(
                             child: _receiptQuantityField(
-                              label: 'DELIVERED',
-                              controller: _delivered[item.id]!,
+                              keyValue: 'receipt-accepted-${item.id}',
+                              label: 'Accepted / good',
+                              controller: _accepted[item.id]!,
                               onChanged: (_) => setState(() {}),
                             ),
                           ),
-                          SizedBox(
-                            width: 125,
+                          const SizedBox(width: 10),
+                          Expanded(
                             child: _receiptQuantityField(
-                              label: 'DAMAGED',
+                              keyValue: 'receipt-damaged-${item.id}',
+                              label: 'Damaged',
                               controller: _damaged[item.id]!,
                               onChanged: (_) => setState(() {}),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Accepted to stock: $accepted · Remaining: $remainingAfterDelivery',
-                        style: const TextStyle(
-                          color: AppColors.cyan,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.cyan.withValues(alpha: 0.07),
+                          border: Border.all(
+                            color: AppColors.cyan.withValues(alpha: 0.18),
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _receiptQuantitySummary(
+                                'Added to stock',
+                                accepted,
+                                AppColors.cyan,
+                              ),
+                            ),
+                            Container(
+                              width: 1,
+                              height: 30,
+                              color: AppColors.glassBorder,
+                            ),
+                            Expanded(
+                              child: _receiptQuantitySummary(
+                                'Still expected',
+                                remainingAfterDelivery,
+                                AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        value: _closedAsShort.contains(item.id),
-                        onChanged: (value) => setState(() {
-                          if (value == true) {
-                            _closedAsShort.add(item.id);
-                          } else {
-                            _closedAsShort.remove(item.id);
-                          }
-                        }),
-                        title: Text(
-                          'No more delivery expected; close remaining $remainingAfterDelivery as short',
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
+                      const SizedBox(height: 8),
+                      if (remainingAfterDelivery > 0)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Text(
+                            '${_formatReceiptQuantity(remainingAfterDelivery)} units stay open for a later delivery.',
+                            style: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 11,
+                              height: 1.35,
+                            ),
                           ),
                         ),
-                      ),
+                      const SizedBox(height: 10),
                       TextField(
+                        key: Key('receipt-notes-${item.id}'),
                         controller: _notes[item.id],
+                        maxLength: 1000,
                         style:
                             const TextStyle(color: Colors.white, fontSize: 13),
                         decoration: InputDecoration(
-                          labelText: 'Condition / supplier notes',
+                          labelText: 'Condition or supplier notes (optional)',
+                          helperText:
+                              'For example: packaging damage or delivery reference.',
+                          helperMaxLines: 2,
                           labelStyle:
                               const TextStyle(color: AppColors.textMuted),
+                          helperStyle: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 10,
+                          ),
                           isDense: true,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -2373,6 +2961,83 @@ class _ReceivePurchaseOrderSheetState
                   ),
                 );
               },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.glassFill,
+              border: Border.all(color: AppColors.glassBorder),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.photo_camera_back_outlined,
+                      color: AppColors.cyan,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Receipt evidence',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Optional photos of the delivery or damaged items.',
+                            style: TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '${_photos.length}/5',
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  key: const Key('receipt-add-photos'),
+                  onPressed: _pickPhotos,
+                  icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+                  label:
+                      Text(_photos.isEmpty ? 'Add photos' : 'Add more photos'),
+                ),
+                if (_photos.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: _photos
+                        .map((photo) => InputChip(
+                              label: Text(photo.name),
+                              onDeleted: () =>
+                                  setState(() => _photos.remove(photo)),
+                            ))
+                        .toList(),
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -2408,35 +3073,176 @@ class _ReceivePurchaseOrderSheetState
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              'Ordered ${item.quantity} · Accepted ${item.receivedQuantity} · Damaged ${item.damagedQuantity} · Short ${item.shortageQuantity} · Remaining ${item.remainingQuantity}',
-              style: const TextStyle(
-                color: AppColors.textMuted,
+            const Text(
+              'Order progress',
+              style: TextStyle(
+                color: AppColors.textSecondary,
                 fontSize: 11,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 7),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _receiptStat('Ordered', item.quantity),
+                _receiptStat('Accepted', item.receivedQuantity),
+                _receiptStat('Damaged', item.damagedQuantity),
+                _receiptStat('Short', item.shortageQuantity),
+                _receiptStat('Remaining', item.remainingQuantity,
+                    emphasize: true),
+              ],
+            ),
+            const SizedBox(height: 12),
             child,
           ],
         ),
       );
 
+  Widget _receiptStat(String label, double value, {bool emphasize = false}) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: emphasize
+              ? AppColors.cyan.withValues(alpha: 0.1)
+              : Colors.white.withValues(alpha: 0.045),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: emphasize
+                ? AppColors.cyan.withValues(alpha: 0.24)
+                : AppColors.glassBorder,
+          ),
+        ),
+        child: Text.rich(
+          TextSpan(
+            style: TextStyle(
+              color: emphasize ? AppColors.cyan : AppColors.textSecondary,
+              fontSize: 10,
+            ),
+            children: [
+              TextSpan(text: '$label  '),
+              TextSpan(
+                text: _formatReceiptQuantity(value),
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  Widget _receiptQuantitySummary(String label, double value, Color color) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              _formatReceiptQuantity(value),
+              style: TextStyle(
+                color: color,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  String _formatReceiptQuantity(double value) =>
+      value == value.truncateToDouble()
+          ? value.toStringAsFixed(0)
+          : value.toStringAsFixed(2);
+
   Widget _receiptQuantityField({
+    required String keyValue,
     required String label,
     required TextEditingController controller,
     required ValueChanged<String> onChanged,
   }) =>
       TextField(
+        key: Key(keyValue),
         controller: controller,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         style: const TextStyle(color: Colors.white, fontSize: 13),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+          labelStyle: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         ),
         onChanged: onChanged,
+      );
+}
+
+class _ReceiptSubmission {
+  const _ReceiptSubmission({required this.items, required this.photos});
+
+  final List<Map<String, dynamic>> items;
+  final List<XFile> photos;
+}
+
+class _PurchaseOrderReceipt {
+  const _PurchaseOrderReceipt({
+    required this.id,
+    required this.receivedAt,
+    required this.receivedBy,
+    required this.items,
+    required this.photoUrls,
+  });
+
+  final String id;
+  final DateTime receivedAt;
+  final String receivedBy;
+  final List<_PurchaseOrderReceiptLine> items;
+  final List<String> photoUrls;
+
+  factory _PurchaseOrderReceipt.fromJson(Map<String, dynamic> json) =>
+      _PurchaseOrderReceipt(
+        id: '${json['id']}',
+        receivedAt: DateTime.tryParse(json['receivedAt'] as String? ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        receivedBy: json['receivedBy'] as String? ?? 'Authorized user',
+        items: ((json['items'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(_PurchaseOrderReceiptLine.fromJson)
+            .toList(),
+        photoUrls: ((json['photoUrls'] as List?) ?? const [])
+            .whereType<String>()
+            .toList(),
+      );
+}
+
+class _PurchaseOrderReceiptLine {
+  const _PurchaseOrderReceiptLine({
+    required this.name,
+    required this.acceptedQuantity,
+    required this.damagedQuantity,
+    required this.shortageQuantity,
+  });
+
+  final String name;
+  final double acceptedQuantity;
+  final double damagedQuantity;
+  final double shortageQuantity;
+
+  factory _PurchaseOrderReceiptLine.fromJson(Map<String, dynamic> json) =>
+      _PurchaseOrderReceiptLine(
+        name: '${json['itemName'] ?? 'Item'}',
+        acceptedQuantity: (json['acceptedQuantity'] as num?)?.toDouble() ?? 0,
+        damagedQuantity: (json['damagedQuantity'] as num?)?.toDouble() ?? 0,
+        shortageQuantity: (json['shortageQuantity'] as num?)?.toDouble() ?? 0,
       );
 }
 
@@ -2453,6 +3259,7 @@ class _PurchaseOrder {
     this.createdAt = '',
     this.updatedAt = '',
     this.items = const [],
+    this.receipts = const [],
   });
 
   final String id, number;
@@ -2464,6 +3271,7 @@ class _PurchaseOrder {
   final String createdAt;
   String updatedAt;
   final List<_PurchaseOrderLine> items;
+  final List<_PurchaseOrderReceipt> receipts;
   bool approving = false;
 
   factory _PurchaseOrder.fromJson(Map<String, dynamic> json) => _PurchaseOrder(
@@ -2486,6 +3294,10 @@ class _PurchaseOrder {
         items: ((json['items'] as List?) ?? const [])
             .whereType<Map<String, dynamic>>()
             .map(_PurchaseOrderLine.fromJson)
+            .toList(),
+        receipts: ((json['receipts'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(_PurchaseOrderReceipt.fromJson)
             .toList(),
       );
 }

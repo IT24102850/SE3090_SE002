@@ -1,10 +1,11 @@
+import { addDays, toISODate } from '../../shared/dateUtils';
 import { useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
 import Modal from '../../shared/components/Modal';
+import { useConfirmation } from '../../shared/components/ConfirmationProvider';
 import { useCreateBookingTypeMutation, useDeleteBookingTypeMutation, useGetBookingsQuery, useGetBookingTypesQuery, useUpdateBookingTypeMutation } from '../../api/bookingApi';
-import { addDays, toISODate } from '../../shared/dateUtils';
 import { BOOKING_UNITS, type BookingType, type BookingUnit } from './types';
 import './reservations.css';
 import './schedule.css';
@@ -109,6 +110,7 @@ export default function BookingTypeManagementPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const { show } = useToast();
+  const confirm = useConfirmation();
 
   const { data: types, isLoading } = useGetBookingTypesQuery({ tenantId }, { skip: !tenantId });
   /* Thirty days of bookings, purely so the catalogue can say which services
@@ -148,7 +150,12 @@ export default function BookingTypeManagementPage() {
     : Math.round(live.reduce((sum, t) => sum + t.defaultDurationMinutes, 0) / live.length);
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Archive this booking type? Existing bookings keep their history.')) return;
+    if (!await confirm({
+      title: 'Archive this booking type?',
+      message: 'It will no longer be available for new bookings.',
+      confirmLabel: 'Archive type',
+      tone: 'danger',
+    })) return;
     try {
       await deleteType(id).unwrap();
       show('Booking type archived.', 'success');

@@ -8,8 +8,8 @@ using SmeBackend.Services;
 
 namespace SmeBackend.Controllers;
 
-// FR-C11 / FR-AS21: in-app notification center. "Mine" = addressed to me
-// personally, plus tenant-wide ones (UserId == null) when I'm Admin/Manager.
+// FR-C11 / FR-AS21: in-app notification center. Customers only see updates
+// addressed to them; tenant-wide operational updates are for tenant staff.
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -27,14 +27,15 @@ public class NotificationsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetMine([FromQuery] int page = 1, [FromQuery] int pageSize = 30)
     {
-        var (userId, tenantId, isStaff) = CallerContext();
+        var (userId, tenantId, canViewTenantNotifications) = CallerContext();
         if (userId == null || tenantId == null) return Unauthorized();
 
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var query = _db.Notifications.AsNoTracking()
-            .Where(n => n.TenantId == tenantId && (n.UserId == userId || (isStaff && n.UserId == null)));
+            .Where(n => n.TenantId == tenantId &&
+                (n.UserId == userId || (canViewTenantNotifications && n.UserId == null)));
 
         var total = await query.CountAsync();
         var items = await query
@@ -50,11 +51,12 @@ public class NotificationsController : ControllerBase
     [HttpGet("unread-count")]
     public async Task<IActionResult> GetUnreadCount()
     {
-        var (userId, tenantId, isStaff) = CallerContext();
+        var (userId, tenantId, canViewTenantNotifications) = CallerContext();
         if (userId == null || tenantId == null) return Unauthorized();
 
         var count = await _db.Notifications.AsNoTracking()
-            .CountAsync(n => n.TenantId == tenantId && !n.IsRead && (n.UserId == userId || (isStaff && n.UserId == null)));
+            .CountAsync(n => n.TenantId == tenantId && !n.IsRead &&
+                (n.UserId == userId || (canViewTenantNotifications && n.UserId == null)));
 
         return Ok(new { count });
     }
@@ -62,12 +64,16 @@ public class NotificationsController : ControllerBase
     [HttpPut("{id}/read")]
     public async Task<IActionResult> MarkRead(Guid id)
     {
-        var (userId, tenantId, isStaff) = CallerContext();
+        var (userId, tenantId, canViewTenantNotifications) = CallerContext();
         if (userId == null || tenantId == null) return Unauthorized();
 
         var notification = await _db.Notifications.FirstOrDefaultAsync(n => n.Id == id && n.TenantId == tenantId);
         if (notification == null) return NotFound();
-        if (notification.UserId != userId && !(isStaff && notification.UserId == null)) return Forbid();
+        if (notification.UserId != userId &&
+            !(canViewTenantNotifications && notification.UserId == null))
+        {
+            return Forbid();
+        }
 
         notification.IsRead = true;
         notification.UpdatedAt = DateTime.UtcNow;
@@ -169,8 +175,8 @@ public class NotificationsController : ControllerBase
 
         var userId = Guid.TryParse(userIdClaim, out var uid) ? (Guid?)uid : null;
         var tenantId = Guid.TryParse(tenantIdClaim, out var tid) ? (Guid?)tid : null;
-        var isStaff = role is "Admin" or "Manager";
+        var canViewTenantNotifications = role is "Admin" or "Manager" or "Staff" or "Staff";
 
-        return (userId, tenantId, isStaff);
+        return (userId, tenantId, canViewTenantNotifications);
     }
 }

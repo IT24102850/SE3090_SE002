@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { useGetBookingsQuery, useGetNotificationsQuery, useGetTenantProfileQuery, useGetTenantQuery } from '../../api/bookingApi';
 import type { RootState } from '../../store/store';
-import { businessDescriptor, businessHeroImage } from '../../shared/businessImagery';
-import BusinessAvatar from '../../shared/components/BusinessAvatar';
 import { addDays, formatDateTime, toISODate } from '../../shared/dateUtils';
 import type { Booking } from '../booking/types';
 import { BookingCard, CheckInQr, isUpcoming } from './customerShared';
@@ -39,39 +37,51 @@ export default function CustomerHomePage() {
   const next = upcoming[0];
   const recent = items.filter((b) => !isUpcoming(b)).sort((a, b) => b.startTime.localeCompare(a.startTime)).slice(0, 4);
 
-  const heroImage = businessHeroImage({ businessType: tenant?.businessType, subType: tenant?.subType, coverImageUrl: profile?.coverImageUrl });
-  const descriptor = businessDescriptor({ businessType: tenant?.businessType, subType: tenant?.subType });
   const todayHours = profile?.businessHours.find((h) => h.dayOfWeek === DAYS[today.getDay()]);
   const firstName = (user?.fullName ?? '').split(' ')[0];
 
   return (
     <div className="cust-page">
-      <section className="hero" style={{ marginBottom: 0 }}>
-        <div className="hero-media" style={{ backgroundImage: `url(${heroImage})` }} />
-        <div className="hero-scrim" />
-        <div className="hero-body">
-          <div className="page-header" style={{ marginBottom: 0 }}>
-            <div className="hero-identity">
-              <BusinessAvatar name={tenant?.name} src={profile?.logoUrl} />
-              <div>
-                <p className="hero-eyebrow">{descriptor}</p>
-                <h1 className="hero-title">{firstName ? `Hi ${firstName}` : 'Welcome'}</h1>
-                <p className="hero-sub">{tenant?.name ?? 'Your business'}{profile?.shortTagline ? ` · ${profile.shortTagline}` : ''}</p>
-                <p className="hero-sub" style={{ marginTop: 4 }}>
-                  {todayHours ? (todayHours.isClosed ? 'Closed today' : `Open today ${todayHours.openTime} – ${todayHours.closeTime}`) : ''}
-                </p>
-              </div>
-            </div>
-            <div className="cust-hero-actions">
-              <Link className="btn btn-primary" to="/book">+ New booking</Link>
-              <Link className="btn btn-secondary" to="/my-bookings">My bookings</Link>
-            </div>
+      <section className="cust-home-hero" aria-labelledby="cust-home-title">
+        <div className="cust-home-hero-orbit" aria-hidden="true" />
+        <div className="cust-home-top">
+          <div className="cust-home-intro">
+            <span className="cust-home-eyebrow"><i aria-hidden="true" /> YOUR CUSTOMER SPACE</span>
+            <h1 id="cust-home-title">{firstName ? `Welcome back, ${firstName}` : 'Welcome back'}</h1>
+            <p>Your customer space for bookings and shopping, all in one place.</p>
+            {todayHours && (
+              <span className={`cust-home-hours${todayHours.isClosed ? ' is-closed' : ''}`}>
+                <i aria-hidden="true" />
+                {todayHours.isClosed ? 'Closed today' : `Open today ${todayHours.openTime} – ${todayHours.closeTime}`}
+              </span>
+            )}
           </div>
-          <div className="hero-tiles">
-            <div className="hero-tile"><div className="hero-tile-label">Upcoming</div><div className="hero-tile-value">{isLoading ? '…' : upcoming.length}</div><div className="hero-tile-sub">bookings ahead</div></div>
-            <div className="hero-tile"><div className="hero-tile-label">Next</div><div className="hero-tile-value" style={{ fontSize: '1.1rem' }}>{next ? formatDateTime(next.startTime) : '—'}</div><div className="hero-tile-sub">{next ? next.bookingTypeName : 'nothing booked yet'}</div></div>
-            <div className="hero-tile"><div className="hero-tile-label">Awaiting approval</div><div className="hero-tile-value">{isLoading ? '…' : upcoming.filter((b) => b.status === 'Pending').length}</div><div className="hero-tile-sub">the business decides</div></div>
-            <div className="hero-tile"><div className="hero-tile-label">Visits</div><div className="hero-tile-value">{isLoading ? '…' : items.filter((b) => b.status === 'Completed').length}</div><div className="hero-tile-sub">completed so far</div></div>
+          <div className="cust-home-actions">
+            <Link className="cust-home-action cust-home-action-primary" to="/book"><span aria-hidden="true">＋</span> Book a service</Link>
+            <Link className="cust-home-action" to="/shop"><span aria-hidden="true">🛍️</span> Browse items</Link>
+            <Link className="cust-home-action cust-home-action-quiet" to="/my-bookings">My bookings <span aria-hidden="true">→</span></Link>
+          </div>
+        </div>
+        <div className="cust-home-stats">
+          <div className="cust-home-stat">
+            <div className="cust-home-stat-label">Upcoming bookings</div>
+            <div className="cust-home-stat-value">{isLoading ? '…' : upcoming.length}</div>
+            <div className="cust-home-stat-sub">Your scheduled visits</div>
+          </div>
+          <div className="cust-home-stat">
+            <div className="cust-home-stat-label">Next appointment</div>
+            <div className="cust-home-stat-value is-date">{next ? formatDateTime(next.startTime) : '—'}</div>
+            <div className="cust-home-stat-sub">{next ? next.bookingTypeName : 'Nothing scheduled yet'}</div>
+          </div>
+          <div className="cust-home-stat">
+            <div className="cust-home-stat-label">Awaiting confirmation</div>
+            <div className="cust-home-stat-value">{isLoading ? '…' : upcoming.filter((b) => b.status === 'Pending').length}</div>
+            <div className="cust-home-stat-sub">Booking requests in progress</div>
+          </div>
+          <div className="cust-home-stat">
+            <div className="cust-home-stat-label">Completed visits</div>
+            <div className="cust-home-stat-value">{isLoading ? '…' : items.filter((b) => b.status === 'Completed').length}</div>
+            <div className="cust-home-stat-sub">Your visit history</div>
           </div>
         </div>
       </section>
@@ -79,6 +89,7 @@ export default function CustomerHomePage() {
       <div className="cust-quick">
         <Link to="/book"><span className="cust-quick-icon" aria-hidden="true">📅</span><span><strong>Book a service</strong><span>Pick a service, a time and confirm</span></span></Link>
         <Link to="/my-bookings"><span className="cust-quick-icon" aria-hidden="true">🎟️</span><span><strong>My bookings</strong><span>Check-in codes, reschedule, cancel</span></span></Link>
+        <Link to="/shop"><span className="cust-quick-icon" aria-hidden="true">🛍️</span><span><strong>Shop items</strong><span>Browse products and view your orders</span></span></Link>
         <Link to="/ai-planner"><span className="cust-quick-icon" aria-hidden="true">🤖</span><span><strong>AI planner</strong><span>“Find me the earliest slot this week”</span></span></Link>
         <Link to="/business"><span className="cust-quick-icon" aria-hidden="true">🏪</span><span><strong>{tenant?.name ?? 'The business'}</strong><span>Hours, contact, gallery</span></span></Link>
       </div>

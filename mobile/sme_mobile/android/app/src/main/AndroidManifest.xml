@@ -7,9 +7,9 @@
 
     <!-- FR-B7: camera access for the staff QR check-in scanner -->
     <uses-permission android:name="android.permission.CAMERA"/>
-    <!-- Android 13+: needed to show booking/approval notifications -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-
+    <!-- Requested only when a user explicitly attaches an order-delivery or stock-audit location. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <!-- Required by local_auth to discover and invoke Android biometrics. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>

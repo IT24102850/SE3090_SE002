@@ -1,6 +1,7 @@
-﻿import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
 import { API_BASE_URL, LOCAL_API_BASE_URL } from './apiBaseUrl';
+import type { User } from '../store/authSlice';
 import { expireSession, refreshSession } from './sessionRefresh';
 import type { CheckoutResponse } from '../features/billing/billingApi';
 import type {
@@ -113,18 +114,18 @@ const NOTIFICATION_TAGS = [
 export const bookingApi = createApi({
   reducerPath: 'bookingApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification', 'Departure', 'Sighting', 'Weather', 'Safety', 'RestaurantInventory'],
+  tagTypes: ['Booking', 'Resource', 'ResourceSchedule', 'BookingType', 'Conflicts', 'Branch', 'Staff', 'Workflow', 'Tenant', 'ScheduleException', 'Notification', 'Departure', 'Sighting', 'Weather', 'Safety', 'RestaurantInventory', 'CustomerOrder'],
   endpoints: (builder) => ({
     // ── Branches ──────────────────────────────────────────
     getBranches: builder.query<Branch[], { tenantId: string }>({
       query: (params) => ({ url: '/branches', params }),
       providesTags: [{ type: 'Branch', id: 'LIST' }],
     }),
-    createBranch: builder.mutation<Branch, { tenantId: string; name: string; address?: string; phone?: string }>({
+    createBranch: builder.mutation<Branch, { tenantId: string; name: string; address?: string; phone?: string; latitude?: number | null; longitude?: number | null }>({
       query: (body) => ({ url: '/branches', method: 'POST', body }),
       invalidatesTags: [{ type: 'Branch', id: 'LIST' }],
     }),
-    updateBranch: builder.mutation<Branch, { id: string; body: Partial<Branch> & { isActive?: boolean } }>({
+    updateBranch: builder.mutation<Branch, { id: string; body: Partial<Branch> & { isActive?: boolean; clearCoordinates?: boolean } }>({
       query: ({ id, body }) => ({ url: `/branches/${id}`, method: 'PUT', body }),
       invalidatesTags: [{ type: 'Branch', id: 'LIST' }],
     }),
@@ -197,7 +198,7 @@ export const bookingApi = createApi({
       query: (body) => ({ url: '/tenant/staff', method: 'POST', body }),
       invalidatesTags: [{ type: 'Staff', id: 'LIST' }],
     }),
-    updateStaffMember: builder.mutation<StaffUser, { id: string; branchId?: string | null; isActive?: boolean }>({
+    updateStaffMember: builder.mutation<StaffUser, { id: string; branchId?: string | null; clearBranch?: boolean; fullName?: string; phone?: string; role?: StaffUser['role']; isActive?: boolean }>({
       query: ({ id, ...body }) => ({ url: `/tenant/staff/${id}`, method: 'PUT', body }),
       invalidatesTags: [{ type: 'Staff', id: 'LIST' }],
     }),
@@ -887,8 +888,122 @@ export const bookingApi = createApi({
     askWorkspaceAssistant: builder.mutation<{ answer: string; answeredAt: string }, { message: string }>({
       query: (body) => ({ url: '/workspace-assistant/chat', method: 'POST', body }),
     }),
+    getCustomerOrderBranches: builder.query<CustomerOrderBranch[], void>({
+      query: () => '/customer-orders/branches',
+    }),
+    getPublicCustomerBusinesses: builder.query<PublicCustomerBusiness[], void>({
+      query: () => '/tenant/public',
+    }),
+    joinCustomerBusiness: builder.mutation<{ accessToken: string; user: User }, string>({
+      query: (tenantId) => ({ url: `/auth/join/${tenantId}`, method: 'POST' }),
+    }),
+    getCustomerProducts: builder.query<CustomerOrderProduct[], { branchId: string }>({
+      query: ({ branchId }) => ({ url: '/customer-orders/products', params: { branchId } }),
+      providesTags: (_result, _error, { branchId }) => [{ type: 'CustomerOrder', id: `PRODUCTS-${branchId}` }],
+    }),
+    getMyCustomerOrders: builder.query<CustomerOrder[], void>({
+      query: () => '/customer-orders',
+      providesTags: [{ type: 'CustomerOrder', id: 'LIST' }],
+    }),
+    placeCustomerOrder: builder.mutation<CustomerOrder, PlaceCustomerOrderRequest>({
+      query: (body) => ({ url: '/customer-orders', method: 'POST', body }),
+      invalidatesTags: (_result, _error, { branchId }) => [
+        { type: 'CustomerOrder', id: 'LIST' },
+        { type: 'CustomerOrder', id: `PRODUCTS-${branchId}` },
+      ],
+    }),
+    getManagedCustomerOrders: builder.query<ManagedCustomerOrder[], void>({
+      query: () => '/customer-orders/manage',
+      providesTags: [{ type: 'CustomerOrder', id: 'MANAGED' }],
+    }),
+    updateCustomerOrderStatus: builder.mutation<
+      { orderId: string; number: string; status: string; message: string },
+      { orderId: string; status: string; message?: string }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/customer-orders/manage/${orderId}/status`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: [{ type: 'CustomerOrder', id: 'MANAGED' }, { type: 'CustomerOrder', id: 'LIST' }],
+    }),
   }),
 });
+
+export interface CustomerOrderBranch {
+  id: string;
+  name: string;
+  address?: string | null;
+}
+
+export interface PublicCustomerBusiness {
+  id: string;
+  name: string;
+  businessType: string;
+  subType?: string | null;
+  logoUrl?: string | null;
+}
+
+export interface CustomerOrderProduct {
+  id: string;
+  name: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  sku: string;
+  category: string;
+  unit?: string | null;
+  quantityAvailable: number;
+  price: number;
+}
+
+export interface CustomerOrderLine {
+  inventoryItemId: string;
+  itemName: string;
+  sku: string;
+  unit?: string | null;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export interface CustomerOrder {
+  id: string;
+  branchId: string;
+  number: string;
+  status: string;
+  paymentStatus: string;
+  fulfillmentMethod: string;
+  deliveryAddress?: string | null;
+  deliveryLatitude?: number | null;
+  deliveryLongitude?: number | null;
+  notes?: string | null;
+  total: number;
+  createdAt: string;
+  items: CustomerOrderLine[];
+  statusUpdates: CustomerOrderStatusUpdate[];
+}
+
+export interface CustomerOrderStatusUpdate {
+  status: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface ManagedCustomerOrder {
+  order: CustomerOrder;
+  customerName: string;
+  branchName: string;
+}
+
+export interface PlaceCustomerOrderRequest {
+  branchId: string;
+  fulfillmentMethod: 'Pickup' | 'Delivery';
+  deliveryAddress?: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
+  notes?: string;
+  items: Array<{ inventoryItemId: string; quantity: number }>;
+}
 
 export const {
   useGetBranchesQuery,
@@ -1012,4 +1127,12 @@ export const {
   useRejectWorkflowMutation,
   useApplyWorkflowMutation,
   useAskWorkspaceAssistantMutation,
+  useGetCustomerOrderBranchesQuery,
+  useGetPublicCustomerBusinessesQuery,
+  useJoinCustomerBusinessMutation,
+  useGetCustomerProductsQuery,
+  useGetMyCustomerOrdersQuery,
+  usePlaceCustomerOrderMutation,
+  useGetManagedCustomerOrdersQuery,
+  useUpdateCustomerOrderStatusMutation,
 } = bookingApi;

@@ -90,12 +90,27 @@ public class TenantController : ControllerBase
         if (user == null) return NotFound();
         if (user.Role == UserRole.Manager && !User.IsInRole(Roles.Admin)) return Forbid();
 
-        if (dto.BranchId.HasValue) user.BranchId = dto.BranchId.Value == Guid.Empty ? null : dto.BranchId;
+        if (dto.Role != null)
+        {
+            if (!User.IsInRole(Roles.Admin)) return Forbid();
+            if (dto.Role != Roles.Staff && dto.Role != Roles.Manager)
+                return BadRequest(new { message = "Role must be Staff or Manager." });
+            user.Role = dto.Role == Roles.Manager ? UserRole.Manager : UserRole.Staff;
+        }
+        if (dto.FullName != null)
+        {
+            if (string.IsNullOrWhiteSpace(dto.FullName))
+                return BadRequest(new { message = "Full name is required." });
+            user.FullName = dto.FullName.Trim();
+        }
+        if (dto.Phone != null) user.Phone = dto.Phone;
+        if (dto.ClearBranch) user.BranchId = null;
+        else if (dto.BranchId.HasValue) user.BranchId = dto.BranchId.Value == Guid.Empty ? null : dto.BranchId;
         if (dto.IsActive.HasValue) user.IsActive = dto.IsActive.Value;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
-        return Ok(new { user.Id, user.FullName, user.BranchId, user.IsActive });
+        return Ok(new { user.Id, user.FullName, user.Email, user.Phone, user.BranchId, user.IsActive, Role = user.Role.ToString() });
     }
 
     // FR-AS4/AS11: business details + reschedule/cancellation cutoff policy.
@@ -152,5 +167,5 @@ public class TenantController : ControllerBase
 }
 
 public record CreateStaffDto(string Email, string Password, string FullName, string? Phone, Guid? BranchId, string Role);
-public record UpdateStaffDto(Guid? BranchId, bool? IsActive);
+public record UpdateStaffDto(Guid? BranchId, bool? IsActive, bool ClearBranch = false, string? FullName = null, string? Phone = null, string? Role = null);
 public record UpdateTenantDto(string? Name, string? LogoUrl, int? RescheduleCutoffHours, int? CancellationCutoffHours, string? SubType);

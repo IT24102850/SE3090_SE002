@@ -1,3 +1,4 @@
+import { ConfirmationProvider } from '../../shared/components/ConfirmationProvider';
 import { configureStore } from '@reduxjs/toolkit';
 import { render, screen, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
@@ -119,9 +120,9 @@ function renderWith(ui: React.ReactElement) {
 
   return render(
     <Provider store={store}>
-      <ToastProvider>
+      <ToastProvider><ConfirmationProvider>
         <MemoryRouter>{ui}</MemoryRouter>
-      </ToastProvider>
+      </ConfirmationProvider></ToastProvider>
     </Provider>,
   );
 }

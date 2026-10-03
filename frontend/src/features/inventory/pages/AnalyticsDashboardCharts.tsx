@@ -1,3 +1,4 @@
+import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar,
@@ -14,6 +15,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { Link } from 'react-router-dom';
 import { getStoredToken } from '../authToken';
 import { useChartTheme } from '../../../shared/useChartTheme';
 import { Badge, type BadgeTone } from '../ui/Badge';
@@ -57,6 +59,19 @@ type SalesActivityReport = {
   totalPages: number;
   recentSales: SalesActivityItem[];
 };
+type BranchCommerceReport = {
+  salesCount: number;
+  salesRevenue: number;
+  customerOrderCount: number;
+  customerOrderValue?: number;
+  pendingOrders: number;
+  confirmedOrders: number;
+  preparingOrders: number;
+  readyForPickupOrders: number;
+  outForDeliveryOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+};
 type InventoryItem = {
   id: string;
   name: string;
@@ -96,7 +111,8 @@ function compact(value: number) {
   return new Intl.NumberFormat('en-LK', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }
 
-function lkr(value: number) {
+function lkr(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
   return new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR', maximumFractionDigits: 0 }).format(value);
 }
 
@@ -249,10 +265,17 @@ function Metric({ label, value, detail, tone, icon }: {
 }) {
   return (
     <article className={`inventory-analytics-metric metric-${tone}`}>
-      <span className="inventory-analytics-metric-icon"><Icon name={icon} size={19} /></span>
-      <span className="inventory-analytics-metric-label">{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
+      <div className="inventory-analytics-metric-main">
+        <span className="inventory-analytics-metric-icon" aria-hidden="true"><Icon name={icon} size={19} /></span>
+        <span className="inventory-analytics-metric-copy">
+          <span className="inventory-analytics-metric-label">{label}</span>
+          <strong>{value}</strong>
+        </span>
+      </div>
+      <div className="inventory-analytics-metric-detail">
+        <span aria-hidden="true" />
+        <small>{detail}</small>
+      </div>
     </article>
   );
 }
@@ -364,6 +387,7 @@ export function AnalyticsDashboardPage() {
   const [usage, setUsage] = useState<Slot<InventoryUsageReport>>(loading);
   const [inventory, setInventory] = useState<Slot<InventoryListResponse>>(loading);
   const [sales, setSales] = useState<Slot<SalesActivityReport>>(loading);
+  const [commerce, setCommerce] = useState<Slot<BranchCommerceReport>>(loading);
   const [receiptSale, setReceiptSale] = useState<SalesActivityItem | null>(null);
   const [salesPageLoading, setSalesPageLoading] = useState(false);
   const [salesPageError, setSalesPageError] = useState<string | null>(null);
@@ -375,27 +399,32 @@ export function AnalyticsDashboardPage() {
     setUsage(loading);
     setInventory(loading);
     setSales(loading);
+    setCommerce(loading);
     setSalesPageLoading(false);
     setSalesPage(1);
     setSalesPageError(null);
     const dateParams = buildDateParams(range);
-    const [movementResult, inventoryResult, salesResult] = await Promise.allSettled([
+    const [movementResult, inventoryResult, salesResult, commerceResult] = await Promise.allSettled([
       apiGet<InventoryUsageReport>(`/api/reports/inventory-usage?${dateParams}`, token),
       apiGetAllInventory(token),
       apiGet<SalesActivityReport>(`/api/reports/sales-activity?${dateParams}&page=1&pageSize=${SALES_PAGE_SIZE}`, token),
+      apiGet<BranchCommerceReport>(`/api/reports/branch-commerce?${dateParams}`, token),
     ]);
     const movementSlot = settle(movementResult);
     const inventorySlot = settle(inventoryResult);
     const salesSlot = settle(salesResult);
+    const commerceSlot = settle(commerceResult);
     if (requestId !== salesRequestId.current) return;
     setUsage(movementSlot);
     setInventory(inventorySlot);
     setSales(salesSlot);
+    setCommerce(commerceSlot);
     if (showMsg) {
       if (
         movementSlot.status === 'ready' &&
         inventorySlot.status === 'ready' &&
-        salesSlot.status === 'ready'
+        salesSlot.status === 'ready' &&
+        commerceSlot.status === 'ready'
       ) {
         notify(`Analytics refreshed — ${dateRangeLabel(range)}.`, 'success');
       } else {
@@ -430,8 +459,8 @@ export function AnalyticsDashboardPage() {
   useEffect(() => { void load(); }, [load]);
 
   /* derived */
-  const anyLoading = usage.status === 'loading' || inventory.status === 'loading' || sales.status === 'loading';
-  const failedCount = [usage, inventory, sales].filter(s => s.status === 'failed').length;
+  const anyLoading = usage.status === 'loading' || inventory.status === 'loading' || sales.status === 'loading' || commerce.status === 'loading';
+  const failedCount = [usage, inventory, sales, commerce].filter(s => s.status === 'failed').length;
 
   const allRows = useMemo(() =>
     usage.status === 'ready' ? buildTableRows(usage.value) : [], [usage]);
@@ -525,6 +554,9 @@ export function AnalyticsDashboardPage() {
 
       {/* ── HERO ── */}
       <header className="inventory-analytics-hero panel">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
+        <InventoryHeroArtwork icon="chart" />
+        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="inventory-analytics-orbit" aria-hidden="true">
           <span className="inventory-analytics-orbit-inner" />
           <span className="inventory-analytics-orbit-dot" />
@@ -694,6 +726,13 @@ export function AnalyticsDashboardPage() {
           </div>
           <span>{dateRangeLabel(range)} · recorded sales</span>
         </div>
+        <div className="inventory-sales-branch-action">
+          <div>
+            <strong>Compare branch performance</strong>
+            <span>Explore branch sales, profit, stock value and health side by side.</span>
+          </div>
+          <Link to="/branch-performance" className="btn btn-secondary">View branch performance</Link>
+        </div>
         <div className="inventory-analytics-metrics">
           <Metric
             label="Sales recorded"
@@ -739,6 +778,74 @@ export function AnalyticsDashboardPage() {
             icon="inventory"
           />
         </div>
+        <section className="inventory-analytics-order-summary" aria-label={`Customer orders for ${dateRangeLabel(range)}`}>
+          <div className="inventory-analytics-section-heading">
+            <div>
+              <p className="eyebrow">CUSTOMER ORDERS</p>
+              <h2>Order pipeline</h2>
+            </div>
+            <span>Orders placed in this period · current status</span>
+          </div>
+          {commerce.status === 'failed' ? (
+            <PanelError error={commerce.error} onRetry={() => void load()} />
+          ) : commerce.status === 'loading' ? (
+            <PanelSkeleton rows={2} />
+          ) : (
+            <div className="inventory-analytics-order-metrics">
+              <Metric
+                label="Orders placed"
+                value={compact(commerce.value.customerOrderCount)}
+                detail="All statuses in this period"
+                tone="blue"
+                icon="workflow"
+              />
+              <article className="inventory-analytics-order-value">
+                <span className="inventory-analytics-order-value-icon" aria-hidden="true"><Icon name="chart" size={20} /></span>
+                <div className="inventory-analytics-order-value-copy">
+                  <span>Total order value</span>
+                  <strong>{lkr(commerce.value.customerOrderValue)}</strong>
+                  <small>{Number.isFinite(commerce.value.customerOrderValue) ? 'Excludes cancelled orders' : 'Order value is unavailable'}</small>
+                </div>
+                <span className="inventory-analytics-order-value-period">{dateRangeLabel(range)}</span>
+              </article>
+              <Metric
+                label="Awaiting review"
+                value={compact(commerce.value.pendingOrders)}
+                detail="Pending confirmation"
+                tone="amber"
+                icon="alert"
+              />
+              <Metric
+                label="In preparation"
+                value={compact(commerce.value.confirmedOrders + commerce.value.preparingOrders)}
+                detail="Confirmed or preparing"
+                tone="violet"
+                icon="inventory"
+              />
+              <Metric
+                label="Ready / delivering"
+                value={compact(commerce.value.readyForPickupOrders + commerce.value.outForDeliveryOrders)}
+                detail="Awaiting customer handoff"
+                tone="teal"
+                icon="workflow"
+              />
+              <Metric
+                label="Completed"
+                value={compact(commerce.value.completedOrders)}
+                detail="Included in sales revenue"
+                tone="green"
+                icon="chart"
+              />
+              <Metric
+                label="Cancelled"
+                value={compact(commerce.value.cancelledOrders)}
+                detail="Reserved stock returned"
+                tone="amber"
+                icon="alert"
+              />
+            </div>
+          )}
+        </section>
         <article className="panel inventory-analytics-panel inventory-sales-activity-panel">
           <div className="inventory-analytics-panel-head">
             <div>
@@ -779,7 +886,15 @@ export function AnalyticsDashboardPage() {
                           <strong>{sale.items.length ? sale.items.join(', ') : 'Recorded sale'}</strong>
                         </td>
                         <td>{sale.quantity > 0 ? compact(sale.quantity) : '—'}</td>
-                        <td><span className="cell-sub">{sale.reference}</span></td>
+                        <td>
+                          <span className="inventory-sales-reference">
+                            <span className="inventory-sales-reference-mark" aria-hidden="true">#</span>
+                            <span className="inventory-sales-reference-copy">
+                              <small>SALE REF</small>
+                              <strong>{sale.reference}</strong>
+                            </span>
+                          </span>
+                        </td>
                         <td className="inventory-sales-profit">
                           {sale.grossProfit == null ? 'Cost data missing' : lkr(sale.grossProfit)}
                         </td>

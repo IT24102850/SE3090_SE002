@@ -58,6 +58,7 @@ env/
 Thumbs.db
 .DS_Store
 .vercel
+.railway/config.json
 .env*
 tmp-edge/
 vite-start-output.txt
@@ -72,3 +73,7 @@ scripts/pass.txt
 
 # Kotlin compiler cache (Android builds)
 .kotlin/
+
+# Local Git integration worktrees
+.git-push-work/
+.integration-repair/

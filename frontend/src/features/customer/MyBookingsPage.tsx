@@ -10,6 +10,7 @@ import {
 } from '../../api/bookingApi';
 import type { RootState } from '../../store/store';
 import { apiErrorMessage, useToast } from '../../shared/components/Toast';
+import { useConfirmation } from '../../shared/components/ConfirmationProvider';
 import { addDays, formatDayLabel, formatTime, toISODate } from '../../shared/dateUtils';
 import type { AvailableSlot, Booking } from '../booking/types';
 import { AddToCalendarButton } from '../../shared/components/AddToCalendarButton';
@@ -27,6 +28,7 @@ export default function MyBookingsPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const toast = useToast();
+  const confirm = useConfirmation();
   const today = useMemo(() => new Date(), []);
   /* The business can confirm, move or cancel any of these from its own
    * side, so the list refreshes on a timer and on focus rather than only
@@ -51,7 +53,12 @@ export default function MyBookingsPage() {
   const rows = lists[tab];
 
   async function cancel(b: Booking) {
-    if (!window.confirm(`Cancel ${b.bookingTypeName} with ${b.resourceName} on ${formatDayLabel(new Date(b.startTime))}? This cannot be undone.`)) return;
+    if (!await confirm({
+      title: 'Cancel this booking?',
+      message: `Cancel ${b.bookingTypeName} with ${b.resourceName} on ${formatDayLabel(new Date(b.startTime))}? This cannot be undone.`,
+      confirmLabel: 'Cancel booking',
+      tone: 'danger',
+    })) return;
     setBusyId(b.id);
     try {
       await cancelBooking(b.id).unwrap();

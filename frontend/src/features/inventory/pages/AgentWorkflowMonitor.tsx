@@ -1,3 +1,5 @@
+import { ReorderApprovals } from '../components/ReorderApprovals';
+import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { API_BASE_URL as apiBaseUrl } from '../../../api/apiBaseUrl';
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -8,7 +10,7 @@ import { Icon } from '../ui/Icon';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
 import { getStoredToken } from '../authToken';
-import { ReorderApprovals } from '../components/ReorderApprovals';
+import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 
 
 type WorkflowItem = {
@@ -85,6 +87,7 @@ function formatWorkflowConfidence(value: unknown) {
 }
 
 export function AgentWorkflowMonitorPage() {
+  const confirm = useConfirmation();
   // Recharts takes SVG attributes, which cannot resolve var(), so the
   // sparkline reads its stroke from the theme hook rather than a literal.
   const chart = useChartTheme();
@@ -191,6 +194,11 @@ export function AgentWorkflowMonitorPage() {
   }, [statusFilter, search, token, user?.tenantId]);
 
   async function approve(id: string) {
+    if (!await confirm({
+      title: 'Approve this workflow?',
+      message: 'This will approve the proposed workflow for processing.',
+      confirmLabel: 'Approve workflow',
+    })) return;
     try {
       const resp = await fetch(`${apiBaseUrl}/agent/workflow/${id}/approve`, {
         method: 'POST',
@@ -206,7 +214,15 @@ export function AgentWorkflowMonitorPage() {
   }
 
   async function reject(id: string) {
-    const reason = prompt('Rejection reason (optional)') || 'rejected';
+    const enteredReason = prompt('Rejection reason (optional)');
+    if (enteredReason === null) return;
+    const reason = enteredReason || 'rejected';
+    if (!await confirm({
+      title: 'Reject this workflow?',
+      message: 'The proposed inventory workflow will be marked as rejected.',
+      confirmLabel: 'Reject workflow',
+      tone: 'danger',
+    })) return;
     try {
       const resp = await fetch(`${apiBaseUrl}/agent/workflow/${id}/reject`, {
         method: 'POST',
@@ -237,6 +253,9 @@ export function AgentWorkflowMonitorPage() {
   return (
     <div className="page">
       <header className="page-head workflow-page-head workflow-hero">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
+        <InventoryHeroArtwork icon="workflow" />
+        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="workflow-hero-copy">
           <p className="eyebrow">AUTOMATION / WORKFLOWS</p>
           <h1>Agent Workflow Monitor</h1>
@@ -447,7 +466,7 @@ export function AgentWorkflowMonitorPage() {
                   {selected.actionType === 'generate_purchase_order' && (
                     <div className="workflow-detail-callout workflow-detail-neutral">
                       <strong>Purchase-order approval has two steps</strong>
-                      <span>Approving this agent workflow submits the order for review. Final authorization and placement are available only in the mobile Purchase Approvals screen.</span>
+                      <span>Approving this agent workflow submits the order for review. Final authorization and placement are available only in the mobile Purchase Orders screen.</span>
                     </div>
                   )}
 

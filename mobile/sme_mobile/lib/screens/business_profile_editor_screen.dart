@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import '../inventory/app_notifications.dart';
 import '../models/tenant_profile_model.dart';
 import '../providers/api_service_provider.dart';
 import '../providers/auth_provider.dart';
@@ -427,6 +428,19 @@ class _GallerySectionState extends ConsumerState<_GallerySection> {
   }
 
   Future<void> _remove(int index) async {
+    final confirmed = await showAppConfirmation(
+      context: context,
+      title: 'Remove gallery photo?',
+      message:
+          'This photo will be permanently removed from your public business gallery.',
+      confirmLabel: 'Remove photo',
+      cancelLabel: 'Keep photo',
+      icon: Icons.delete_outline_rounded,
+      accent: AppColors.danger,
+      isDestructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
     final dio = ref.read(apiServiceProvider);
     try {
       await removeTenantGalleryImage(dio, widget.tenantId, index);

@@ -187,6 +187,12 @@ def _latest_supplier_lead_times(
     return result
 
 
+def _format_reorder_days(days: float) -> str:
+    if days < 0.05:
+        return "less than 0.1"
+    return f"{days:.1f}"
+
+
 def analyze_inventory_health(
     *, snapshot: DomainSnapshot, plan: InventoryPlan, recommendations: list[InventoryRecommendation]
 ) -> list[InventoryHealthInsight]:
@@ -287,15 +293,34 @@ def analyze_inventory_health(
             continue
         lead = supplier_lead_times.get(recommendation.sku, (plan.lead_time_days, None, ""))[0]
         if recommendation.days_until_reorder <= lead:
-            at_risk.append((recommendation.days_until_reorder, recommendation.item_name, lead))
+            at_risk.append((recommendation, lead))
     if at_risk:
-        at_risk.sort()
+        at_risk.sort(key=lambda row: row[0].days_until_reorder or 0)
+        risk_descriptions = []
+        for recommendation, lead in at_risk[:8]:
+            if recommendation.on_hand < recommendation.reorder_level:
+                risk_descriptions.append(
+                    f"{recommendation.item_name} is already below its reorder level "
+                    f"({recommendation.on_hand:g} on hand; reorder at {recommendation.reorder_level:g}; "
+                    f"supplier lead time {lead} days)"
+                )
+            elif recommendation.on_hand == recommendation.reorder_level:
+                risk_descriptions.append(
+                    f"{recommendation.item_name} is at its reorder level now "
+                    f"({recommendation.on_hand:g} on hand; supplier lead time {lead} days)"
+                )
+            else:
+                days = recommendation.days_until_reorder or 0
+                risk_descriptions.append(
+                    f"{recommendation.item_name} in about {_format_reorder_days(days)} days "
+                    f"(supplier lead time {lead} days)"
+                )
         insights.append(InventoryHealthInsight(
             category="risk", title="Reorder review may be time-sensitive",
-            detail=("These items are projected to reach their reorder level within their supplier lead time: "
-                    + "; ".join(f"{name} in about {days:.1f} days (lead time {lead} days)" for days, name, lead in at_risk[:8])
+            detail=("These items need reorder review within their supplier lead time: "
+                    + "; ".join(risk_descriptions)
                     + ". Review supplier availability and budget promptly."),
-            affected_items=[name for _, name, _ in at_risk[:8]],
+            affected_items=[recommendation.item_name for recommendation, _ in at_risk[:8]],
         ))
 
     trends = _demand_trends(movements)
@@ -390,9 +415,21 @@ def recommend_replenishment(
         if not item.get("branchId"):
             notes.append("Item has no assigned branch; choose a branch before creating a purchase order.")
             confidence = min(confidence, 0.4)
+        if on_hand < reorder:
+            timing_reason = f"Stock is already below its reorder level (on hand {on_hand:g}; reorder at {reorder:g}). "
+        elif on_hand == reorder:
+            timing_reason = f"Stock is at its reorder level now ({on_hand:g} on hand). "
+        elif daily:
+            timing_reason = (
+                f"Recent recorded outflow averages {daily:.2f} per day; stock is projected to reach "
+                f"the reorder level in {_format_reorder_days(days_until_reorder or 0)} days. "
+            )
+        else:
+            timing_reason = ""
         reason = (
             f"On hand is {on_hand:g} against reorder level {reorder:g}. "
-            + (f"Recent recorded outflow averages {daily:.2f} per day; stock is projected to reach the reorder level in {days_until_reorder:.1f} days. " if daily else "No reliable daily usage rate is recorded. ")
+            + timing_reason
+            + ("" if daily else "No reliable daily usage rate is recorded. ")
             + f"Suggested quantity {quantity:g} covers the reorder target and {lead_time_days}-day lead time plus {plan.safety_days} safety days."
         )
         recommendations.append(InventoryRecommendation(

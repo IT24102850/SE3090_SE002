@@ -70,6 +70,8 @@ void main() {
   testWidgets('empty state shows sub-type-aware text, not the old generic message', (tester) async {
     await pumpDashboard(tester, TourismSubType.diving);
 
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
+    await tester.pumpAndSettle();
     expect(find.text('No dive trips available right now.'), findsOneWidget);
     expect(find.text('Nothing available to book right now.'), findsNothing);
   });
@@ -77,6 +79,8 @@ void main() {
   testWidgets('empty state text changes for a different sub-type', (tester) async {
     await pumpDashboard(tester, TourismSubType.accommodation);
 
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
+    await tester.pumpAndSettle();
     expect(find.text('No rooms available right now.'), findsOneWidget);
   });
 
@@ -97,6 +101,8 @@ void main() {
       ],
     );
 
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
+    await tester.pumpAndSettle();
     expect(find.text('Reef Explorer'), findsOneWidget);
     expect(find.text('No dive trips available right now.'), findsNothing);
   });

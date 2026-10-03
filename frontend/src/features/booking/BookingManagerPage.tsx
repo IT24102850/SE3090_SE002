@@ -12,6 +12,7 @@ import {
   useUpdateBookingStatusMutation,
 } from '../../api/bookingApi';
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
+import { useConfirmation } from '../../shared/components/ConfirmationProvider';
 import BookingFormModal from './BookingFormModal';
 import {
   addDays, buildMonthGrid, buildWeekGrid, combineDateWithTimeOfDay, formatDayLabel, formatMonthYear, formatTime,
@@ -69,6 +70,7 @@ export default function BookingManagerPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const { show } = useToast();
+  const confirm = useConfirmation();
 
   const today = useMemo(() => startOfDay(new Date()), []);
   const [view, setView] = useState<View>('list');
@@ -229,7 +231,12 @@ export default function BookingManagerPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this booking permanently?')) return;
+    if (!await confirm({
+      title: 'Delete this booking?',
+      message: 'This permanently removes the booking and cannot be undone.',
+      confirmLabel: 'Delete booking',
+      tone: 'danger',
+    })) return;
     try { await deleteBooking(id).unwrap(); show('Booking deleted.', 'success'); }
     catch (err) { show(apiErrorMessage(err, 'Could not delete.'), 'error'); }
   };

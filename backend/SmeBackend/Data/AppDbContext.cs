@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using SmeBackend.Models;
 using SmeBackend.Services;
 
@@ -67,7 +67,11 @@ public class AppDbContext : DbContext
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; } = null!;
     public DbSet<PurchaseOrderReceipt> PurchaseOrderReceipts { get; set; } = null!;
     public DbSet<PurchaseOrderReceiptItem> PurchaseOrderReceiptItems { get; set; } = null!;
+    public DbSet<CustomerOrder> CustomerOrders { get; set; } = null!;
+    public DbSet<CustomerOrderItem> CustomerOrderItems { get; set; } = null!;
+    public DbSet<CustomerOrderStatusUpdate> CustomerOrderStatusUpdates { get; set; } = null!;
     public DbSet<StockMovement> StockMovements { get; set; } = null!;
+    public DbSet<PhysicalStockCount> PhysicalStockCounts { get; set; } = null!;
     public DbSet<Sale> Sales { get; set; } = null!;
 
     // Memberships (gym / fitness): see Models/Subscription.cs.
@@ -489,27 +493,49 @@ public class AppDbContext : DbContext
         // ==================== INVENTORY MODULE ====================
         // Tenant isolation filters apply to both booking and inventory data.
         modelBuilder.Entity<Tenant>().HasQueryFilter(t => t.IsActive);
-        modelBuilder.Entity<Branch>().HasQueryFilter(b => b.TenantId == CurrentTenantId && b.IsActive);
+        modelBuilder.Entity<Branch>(entity =>
+        {
+            entity.HasQueryFilter(b => b.TenantId == CurrentTenantId && b.IsActive);
+            entity.Property(b => b.Latitude).HasPrecision(10, 7);
+            entity.Property(b => b.Longitude).HasPrecision(10, 7);
+        });
         modelBuilder.Entity<User>().HasQueryFilter(u => u.TenantId == CurrentTenantId && u.Tenant.IsActive);
         modelBuilder.Entity<InventoryCategory>().HasQueryFilter(c => c.TenantId == CurrentTenantId && c.Tenant.IsActive && c.IsActive);
         modelBuilder.Entity<InventoryUnit>().HasQueryFilter(u => u.TenantId == CurrentTenantId && u.Tenant.IsActive && u.IsActive);
         modelBuilder.Entity<InventoryItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId && item.IsActive);
         modelBuilder.Entity<Supplier>().HasQueryFilter(supplier => supplier.TenantId == CurrentTenantId && supplier.IsActive);
-        modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(order => order.TenantId == CurrentTenantId);
+        modelBuilder.Entity<Supplier>(entity =>
+        {
+            entity.Property(supplier => supplier.ContactPerson).HasMaxLength(160);
+            entity.Property(supplier => supplier.Address).HasMaxLength(500);
+            entity.Property(supplier => supplier.PaymentTerms).HasMaxLength(160);
+            entity.Property(supplier => supplier.Notes).HasMaxLength(1000);
+        });
+        modelBuilder.Entity<PurchaseOrder>()
+            .HasQueryFilter(order => order.TenantId == CurrentTenantId)
+            .Property(order => order.UpdatedAt)
+            .IsConcurrencyToken();
         modelBuilder.Entity<PurchaseOrderItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
         modelBuilder.Entity<PurchaseOrderReceipt>().HasQueryFilter(receipt => receipt.TenantId == CurrentTenantId);
         modelBuilder.Entity<PurchaseOrderReceiptItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
+        modelBuilder.Entity<CustomerOrder>().HasQueryFilter(order => order.TenantId == CurrentTenantId);
+        modelBuilder.Entity<CustomerOrderItem>().HasQueryFilter(item => item.TenantId == CurrentTenantId);
         modelBuilder.Entity<StockMovement>().HasQueryFilter(movement => movement.TenantId == CurrentTenantId);
+        modelBuilder.Entity<PhysicalStockCount>().HasQueryFilter(count => count.TenantId == CurrentTenantId);
         modelBuilder.Entity<Sale>().HasQueryFilter(sale => sale.TenantId == CurrentTenantId);
         modelBuilder.Entity<Subscription>().HasQueryFilter(s => s.TenantId == CurrentTenantId);
 
         modelBuilder.Entity<InventoryCategory>().HasIndex(c => new { c.TenantId, c.Name }).IsUnique();
         modelBuilder.Entity<InventoryUnit>().HasIndex(u => new { u.TenantId, u.Code }).IsUnique();
-        modelBuilder.Entity<InventoryItem>().HasIndex(item => new { item.TenantId, item.Sku }).IsUnique();
+        modelBuilder.Entity<InventoryItem>().HasIndex(item => new { item.TenantId, item.BranchId, item.Sku }).IsUnique();
         modelBuilder.Entity<Supplier>().HasIndex(supplier => new { supplier.TenantId, supplier.Name }).IsUnique();
         modelBuilder.Entity<PurchaseOrder>().HasIndex(order => new { order.TenantId, order.Number }).IsUnique();
+        modelBuilder.Entity<CustomerOrder>().HasIndex(order => new { order.TenantId, order.Number }).IsUnique();
+        modelBuilder.Entity<CustomerOrder>().HasIndex(order => new { order.TenantId, order.CustomerId, order.CreatedAt });
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.TenantId, movement.BranchId });
         modelBuilder.Entity<StockMovement>().HasIndex(movement => new { movement.InventoryItemId, movement.OccurredAt });
+        modelBuilder.Entity<PhysicalStockCount>().HasIndex(count => new { count.TenantId, count.Reference }).IsUnique();
+        modelBuilder.Entity<PhysicalStockCount>().HasIndex(count => new { count.TenantId, count.BranchId, count.Status, count.CountedAt });
         modelBuilder.Entity<Notification>().HasIndex(notification => new { notification.TenantId, notification.BranchId, notification.IsRead });
         modelBuilder.Entity<Notification>().HasIndex(notification => notification.CreatedAt);
         modelBuilder.Entity<Sale>().HasIndex(sale => new { sale.TenantId, sale.BranchId, sale.OccurredAt });
@@ -519,6 +545,7 @@ public class AppDbContext : DbContext
             entity.Property(item => item.Name).HasMaxLength(150).IsRequired();
             entity.Property(item => item.Sku).HasMaxLength(64).IsRequired();
             entity.Property(item => item.Description).HasMaxLength(2000);
+            entity.Property(item => item.ImageUrl).HasMaxLength(2048);
             entity.Property(item => item.Quantity).HasPrecision(18, 3);
             entity.Property(item => item.ReorderLevel).HasPrecision(18, 3);
             entity.Property(item => item.UnitCost).HasPrecision(18, 2);
@@ -575,6 +602,37 @@ public class AppDbContext : DbContext
             entity.Property(sale => sale.Amount).HasPrecision(18, 2);
             entity.Property(sale => sale.Reference).HasMaxLength(100).IsRequired();
             entity.HasOne<Branch>().WithMany().HasForeignKey(sale => sale.BranchId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<CustomerOrder>(entity =>
+        {
+            entity.Property(order => order.Number).HasMaxLength(32).IsRequired();
+            entity.Property(order => order.Status).HasMaxLength(24).IsRequired();
+            entity.Property(order => order.PaymentStatus).HasMaxLength(24).IsRequired();
+            entity.Property(order => order.FulfillmentMethod).HasMaxLength(16).IsRequired();
+            entity.Property(order => order.DeliveryAddress).HasMaxLength(500);
+            entity.Property(order => order.DeliveryLatitude).HasPrecision(9, 6);
+            entity.Property(order => order.DeliveryLongitude).HasPrecision(9, 6);
+            entity.Property(order => order.Notes).HasMaxLength(1000);
+            entity.Property(order => order.Total).HasPrecision(18, 2);
+            entity.HasOne<User>().WithMany().HasForeignKey(order => order.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Branch>().WithMany().HasForeignKey(order => order.BranchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(order => order.Items).WithOne().HasForeignKey(item => item.CustomerOrderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(order => order.StatusUpdates).WithOne().HasForeignKey(update => update.CustomerOrderId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<CustomerOrderItem>(entity =>
+        {
+            entity.Property(item => item.ItemName).HasMaxLength(150).IsRequired();
+            entity.Property(item => item.Sku).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.UnitName).HasMaxLength(64);
+            entity.Property(item => item.Quantity).HasPrecision(18, 3);
+            entity.Property(item => item.UnitPrice).HasPrecision(18, 2);
+            entity.Property(item => item.LineTotal).HasPrecision(18, 2);
+        });
+        modelBuilder.Entity<CustomerOrderStatusUpdate>(entity =>
+        {
+            entity.Property(update => update.Status).HasMaxLength(24).IsRequired();
+            entity.Property(update => update.Message).HasMaxLength(500).IsRequired();
+            entity.HasIndex(update => new { update.CustomerOrderId, update.CreatedAt });
         });
         modelBuilder.Entity<Subscription>(entity =>
         {
@@ -834,6 +892,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<PurchaseOrderReceipt>(entity =>
         {
             entity.Property(receipt => receipt.ReceivedBy).HasMaxLength(150).IsRequired();
+            entity.Property(receipt => receipt.PhotoUrlsJson).HasColumnType("jsonb");
             entity.HasOne<PurchaseOrder>()
                 .WithMany(order => order.Receipts)
                 .HasForeignKey(receipt => receipt.PurchaseOrderId)
@@ -857,6 +916,26 @@ public class AppDbContext : DbContext
                 .HasForeignKey(item => item.PurchaseOrderItemId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(item => item.PurchaseOrderItemId);
+        });
+
+        modelBuilder.Entity<PhysicalStockCount>(entity =>
+        {
+            entity.Property(count => count.ItemName).HasMaxLength(150).IsRequired();
+            entity.Property(count => count.Sku).HasMaxLength(64).IsRequired();
+            entity.Property(count => count.SystemQuantityAtCount).HasPrecision(18, 3);
+            entity.Property(count => count.CountedQuantity).HasPrecision(18, 3);
+            entity.Property(count => count.Variance).HasPrecision(18, 3);
+            entity.Property(count => count.Reason).HasMaxLength(40).IsRequired();
+            entity.Property(count => count.ReasonNotes).HasMaxLength(1000);
+            entity.Property(count => count.CountedBy).HasMaxLength(150).IsRequired();
+            entity.Property(count => count.Reference).HasMaxLength(100).IsRequired();
+            entity.Property(count => count.Status).HasMaxLength(30).IsRequired();
+            entity.Property(count => count.PhotoUrlsJson).HasColumnType("jsonb");
+            entity.Property(count => count.PhotoUploadKeysJson).HasColumnType("jsonb");
+            entity.Property(count => count.Latitude).HasPrecision(9, 6);
+            entity.Property(count => count.Longitude).HasPrecision(9, 6);
+            entity.Property(count => count.ReviewedBy).HasMaxLength(150);
+            entity.Property(count => count.ReviewNotes).HasMaxLength(1000);
         });
 
             // ==================== BILLING ENGINE ====================

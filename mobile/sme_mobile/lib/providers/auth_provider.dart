@@ -67,6 +67,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (token != null && token.isNotEmpty && userJson != null) {
         final user =
             User.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
+        // A configured quick PIN locks the cached session between launches.
+        // Keep the credentials in secure storage; unlockWithPin restores them.
+        if (await SecureStorageService.hasPin()) {
+          state = const AuthState(isInitialized: true);
+          return;
+        }
         state = AuthState(
           user: user,
           token: token,

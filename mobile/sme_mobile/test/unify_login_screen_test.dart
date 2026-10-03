@@ -27,6 +27,8 @@ void main() {
       const ProviderScope(child: MaterialApp(home: UnifyLoginScreen())),
     );
     await tester.pump();
+    await tester.tap(find.text("Work Email"));
+    await tester.pump(const Duration(milliseconds: 250));
   }
 
   testWidgets('renders the branding, hero and form', (tester) async {

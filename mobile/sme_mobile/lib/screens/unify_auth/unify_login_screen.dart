@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../services/secure_storage_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/ui/ui.dart';
 import '../../widgets/unify_auth/orbit_hero.dart';
@@ -13,6 +14,9 @@ import '../../widgets/unify_auth/unify_wordmark.dart';
 import '../customer/book_business_list_screen.dart';
 import '../register_screen.dart';
 import '../customer/customer_register_screen.dart';
+import 'password_recovery_screen.dart';
+import '../../widgets/unify_auth/ios_lock_glyph.dart';
+import '../../widgets/unify_auth/ios_passcode_pad.dart';
 
 /// The app's first screen for a signed-out visitor: sign in to Unify —
 /// Enterprise Management System.
@@ -30,10 +34,6 @@ import '../customer/customer_register_screen.dart';
 class UnifyLoginScreen extends ConsumerStatefulWidget {
   const UnifyLoginScreen({super.key, this.onBackToWelcome});
 
-  /// Set when the welcome flow composes this screen inline rather than pushing
-  /// it: there is no route to pop, so the way back is a callback that slides
-  /// the welcome pages back in. Left null when the screen is the app's home,
-  /// and then no back affordance is drawn at all.
   final VoidCallback? onBackToWelcome;
 
   @override
@@ -44,6 +44,30 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _usePinMode = true;
+  bool _hasConfiguredPin = false;
+  bool _canQuickUnlock = false;
+  bool _isSigningIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.wait([
+      SecureStorageService.hasPin(),
+      SecureStorageService.getToken(),
+      SecureStorageService.getUser(),
+    ]).then((values) {
+      final canQuickUnlock = values[0] as bool &&
+          (values[1] as String?)?.isNotEmpty == true &&
+          values[2] != null;
+      if (mounted) {
+        setState(() {
+          _hasConfiguredPin = values[0] as bool;
+          _canQuickUnlock = canQuickUnlock;
+        });
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -56,11 +80,13 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
     FocusScope.of(context).unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
+    setState(() => _isSigningIn = true);
     // Failures surface through auth.error, which the card renders inline.
     await ref.read(authProvider.notifier).login(
           _emailController.text.trim(),
           _passwordController.text,
         );
+    if (mounted) setState(() => _isSigningIn = false);
   }
 
   void _openRegister() {
@@ -83,25 +109,14 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
     );
   }
 
-  void _showComingSoon([String? provider]) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            provider == null
-                ? 'Coming soon'
-                : '$provider sign-in — coming soon',
-          ),
-          backgroundColor: AppColors.inputFill,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadii.control),
-            side: const BorderSide(color: AppColors.glassBorder),
-          ),
+  void _openPasswordRecovery() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PasswordRecoveryScreen(
+          initialEmail: _emailController.text.trim(),
         ),
-      );
+      ),
+    );
   }
 
   String? _validateEmail(String? value) {
@@ -173,7 +188,6 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                     // cannot fit, and scrolling beats clipping the form.
                     final height = constraints.maxHeight;
                     final tooShort = height < _minFittableHeight;
-                    final showHero = !tooShort;
                     final t = ((height - 700) / 240).clamp(0.0, 1.0);
                     final m = _Metrics(
                       gap: 0.46 + 0.39 * t,
@@ -184,8 +198,35 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                     );
 
                     final column = Column(
+                      mainAxisSize:
+                          _usePinMode ? MainAxisSize.min : MainAxisSize.max,
                       children: [
-                        SizedBox(height: 24 * m.gap),
+                        if (widget.onBackToWelcome != null)
+                          GestureDetector(
+                            onTap: widget.onBackToWelcome,
+                            behavior: HitTestBehavior.opaque,
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 8, bottom: 4),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    width: 40,
+                                    height: 4.5,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.35),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Swipe down to lock',
+                                    style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        SizedBox(height: (widget.onBackToWelcome != null ? 8 : 24) * m.gap),
                         // Brand lockup: the official mark beside the
                         // wordmark, not above it - a horizontal lockup adds
                         // no height, and height is the one thing this layout
@@ -217,7 +258,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                         // The slack. Caps at the 340 design size on a tall
                         // screen, shrinks on a short one, and drops out
                         // entirely rather than forcing an overflow.
-                        if (showHero)
+                        if (!tooShort && !_usePinMode)
                           Expanded(
                             child: LayoutBuilder(
                               builder: (context, slack) {
@@ -234,7 +275,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                             ),
                           )
                         else
-                          SizedBox(height: 16 * m.gap),
+                          SizedBox(height: (_usePinMode ? 8 : 16) * m.gap),
 
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -244,16 +285,66 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                         // Customers could browse the public business list from
                         // the old landing screen without an account. This screen
                         // replaced it, so that route keeps an entry point here.
-                        _TextLink(
-                          onTap: _openBrowse,
-                          child: Text(
-                            'Browse businesses without an account',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textMuted,
-                              decoration: TextDecoration.underline,
-                              decorationColor:
-                                  Colors.white.withValues(alpha: 0.25),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(18),
+                            child: InkWell(
+                              onTap: _openBrowse,
+                              borderRadius: BorderRadius.circular(18),
+                              child: Ink(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 15,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.glassFill,
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: AppColors.cyan.withValues(alpha: 0.24),
+                                  ),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppColors.cyan.withValues(alpha: 0.08),
+                                      AppColors.violet.withValues(alpha: 0.08),
+                                    ],
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 34,
+                                      height: 34,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.cyan.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(11),
+                                      ),
+                                      child: const Icon(
+                                        Icons.explore_rounded,
+                                        size: 19,
+                                        color: AppColors.cyan,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
+                                      child: Text(
+                                        'Browse businesses without an account',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textBody,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.arrow_forward_rounded,
+                                      size: 17,
+                                      color: AppColors.cyan,
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -264,6 +355,19 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                     // The one case that still has to scroll: the keyboard eats
                     // roughly half the viewport, and no amount of compressing
                     // keeps the password field reachable under it.
+                    // The passcode pad is taller than the email form. Keep
+                    // the entire lock view reachable on compact phones rather
+                    // than letting the keypad/status banner overflow.
+                    // The PIN page has a fixed-height keypad and can exceed
+                    // the viewport even when the device reports a tall logical
+                    // height. Scroll its natural content directly; don't put
+                    // it through IntrinsicHeight or a flex spacer.
+                    if (_usePinMode) {
+                      return SingleChildScrollView(
+                        physics: const ClampingScrollPhysics(),
+                        child: column,
+                      );
+                    }
                     if (!keyboardOpen && !tooShort) {
                       return column;
                     }
@@ -285,6 +389,104 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
     );
   }
 
+  Widget _buildModeToggle() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _usePinMode = false),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: !_usePinMode
+                      ? AppColors.cyan.withValues(alpha: 0.22)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: !_usePinMode
+                      ? Border.all(color: AppColors.cyan.withValues(alpha: 0.45))
+                      : null,
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.mail_outline_rounded,
+                      size: 15,
+                      color:
+                          !_usePinMode ? AppColors.cyan : AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Work Email',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color:
+                            !_usePinMode ? Colors.white : AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _usePinMode = true),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: _usePinMode
+                      ? AppColors.cyan.withValues(alpha: 0.22)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: _usePinMode
+                      ? Border.all(color: AppColors.cyan.withValues(alpha: 0.45))
+                      : null,
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.dialpad_rounded,
+                      size: 15,
+                      color: _usePinMode ? AppColors.cyan : AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Quick PIN',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: _usePinMode ? Colors.white : AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// [m] carries the viewport-derived compression. The controls keep their
   /// real sizes - only the air between them and the display type give - so a
   /// short screen loses whitespace, not legibility or tap targets.
@@ -294,27 +496,67 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
 
     return GlassCard(
       padding: EdgeInsets.symmetric(horizontal: 24, vertical: m.cardPadding),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Welcome Back',
-              style: TextStyle(
-                fontSize: m.title,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-                height: 1.1,
-              ),
-            ),
-            SizedBox(height: 6 * gap),
-            const Text(
-              'Sign in to your workspace',
-              style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
-            ),
-            SizedBox(height: 24 * gap),
-
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildModeToggle(),
+          if (_usePinMode)
+            Column(
+              children: [
+                IosPasscodePad(
+                  title: 'Security Passcode',
+                  subtitle: _canQuickUnlock
+                      ? 'Scan Biometrics or enter your 4-digit PIN'
+                      : 'Enter your PIN, or choose Work Email if you signed out.',
+                  onPinSubmit: (pin) async =>
+                      ref.read(authProvider.notifier).unlockWithPin(pin),
+                  onBiometricSubmit: () async =>
+                      ref.read(authProvider.notifier).unlockWithBiometrics(),
+                ),
+                if (!_hasConfiguredPin) _buildPinUnavailableMessage(),
+                if (auth.error != null) ...[
+                  const SizedBox(height: 12),
+                  _ErrorBanner(message: auth.error!),
+                ],
+              ],
+            )
+          else
+            Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Welcome Back',
+                            style: TextStyle(
+                              fontSize: m.title,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                              height: 1.1,
+                            ),
+                          ),
+                          SizedBox(height: 4 * gap),
+                          const Text(
+                            'Sign in to your workspace',
+                            style: TextStyle(
+                                fontSize: 14, color: AppColors.textSecondary),
+                          ),
+                        ],
+                      )),
+                      IosLockGlyph(
+                        isUnlocked: _isSigningIn || auth.isAuthenticated,
+                        size: 26,
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 20 * gap),
             NeonInputField(
               label: 'Email',
               hintText: 'name@company.com',
@@ -326,7 +568,6 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
               validator: _validateEmail,
             ),
             SizedBox(height: 18 * gap),
-
             NeonInputField(
               label: 'Password',
               hintText: '••••••••',
@@ -338,23 +579,20 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
               validator: _validatePassword,
               onFieldSubmitted: (_) => _handleSignIn(),
             ),
-
             if (auth.error != null) ...[
               SizedBox(height: 14 * gap),
               _ErrorBanner(message: auth.error!),
             ],
             SizedBox(height: 22 * gap),
-
             NeonButton(
               label: 'Sign In',
               isLoading: auth.isLoading,
               onPressed: _handleSignIn,
             ),
             SizedBox(height: 14 * gap),
-
             Center(
               child: _TextLink(
-                onTap: () => _showComingSoon('Password reset'),
+                onTap: _openPasswordRecovery,
                 child: const Text(
                   'Forgot Password?',
                   style: TextStyle(
@@ -365,19 +603,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                 ),
               ),
             ),
-            SizedBox(height: 18 * gap),
-
-            // No social sign-in row: Apple/Google/Facebook sign-in is not
-            // implemented, and a button that only says "coming soon" is not
-            // a feature. Email and password is the one way in.
-
-            // Both ways in on one row. There are two kinds of sign-up now -
-            // a customer account, which belongs to no business, and business
-            // onboarding - but this layout compresses to fit rather than
-            // scrolling, and a second stacked line overflows a 360x740 phone
-            // (test/unify_login_screen_test.dart pins that).
-            // scaleDown keeps it to one line on a narrow phone: wrapping to
-            // two is what tips the column into overflow.
+            SizedBox(height: 20 * gap),
             Center(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
@@ -421,6 +647,37 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
           ],
         ),
       ),
+    ],
+  ),
+);
+}
+
+  Widget _buildPinUnavailableMessage() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 18, 8, 8),
+      child: Column(
+        children: [
+          const Icon(Icons.lock_outline_rounded,
+              color: AppColors.cyan, size: 34),
+          const SizedBox(height: 12),
+          Text(
+            _hasConfiguredPin
+                ? 'Your PIN is saved. Sign in with your work email to create a session; the PIN will unlock it next time.'
+                : 'No Quick PIN is set up. Sign in with your work email, then set one under Security.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: () => setState(() => _usePinMode = false),
+            child: const Text('Continue with Work Email'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -456,6 +713,7 @@ class _ErrorBanner extends StatelessWidget {
       ),
     );
   }
+
 }
 
 /// How hard the layout is squeezing, derived once per build from the viewport

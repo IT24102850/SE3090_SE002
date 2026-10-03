@@ -21,7 +21,7 @@ public class MediaController : ControllerBase
         "image/jpeg", "image/jpg", "image/png", "image/webp"
     };
     private const long MaxFileSizeBytes = 5 * 1024 * 1024;
-    private static readonly HashSet<string> AllowedPurposes = new(StringComparer.OrdinalIgnoreCase) { "logo", "cover", "gallery", "avatar" };
+    private static readonly HashSet<string> AllowedPurposes = new(StringComparer.OrdinalIgnoreCase) { "logo", "cover", "gallery", "avatar", "maintenance", "booking" };
 
     private readonly ICloudinaryImageService _images;
     public MediaController(ICloudinaryImageService images) => _images = images;
@@ -40,8 +40,12 @@ public class MediaController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest(new { message = "No file was uploaded." });
         if (!AllowedPurposes.Contains(purpose))
-            return BadRequest(new { message = "purpose must be one of: logo, cover, gallery, avatar." });
-        if (!IsAvatar(purpose) && !User.IsInRole(Roles.Admin) && !User.IsInRole(Roles.Manager))
+            return BadRequest(new { message = "purpose must be one of: logo, cover, gallery, avatar, maintenance, booking." });
+        if (IsMaintenance(purpose) && !User.IsInRole(Roles.Admin) && !User.IsInRole(Roles.Manager) && !User.IsInRole(Roles.Staff))
+            return Forbid();
+        if (IsBooking(purpose) && !User.IsInRole(Roles.Customer))
+            return Forbid();
+        if (!IsAvatar(purpose) && !IsMaintenance(purpose) && !IsBooking(purpose) && !User.IsInRole(Roles.Admin) && !User.IsInRole(Roles.Manager))
             return Forbid();
         if (!AllowedContentTypes.Contains(file.ContentType))
             return BadRequest(new { message = "Only JPG, PNG, and WEBP images are allowed." });
@@ -65,6 +69,8 @@ public class MediaController : ControllerBase
     }
 
     private static bool IsAvatar(string purpose) => string.Equals(purpose, "avatar", StringComparison.OrdinalIgnoreCase);
+    private static bool IsMaintenance(string purpose) => string.Equals(purpose, "maintenance", StringComparison.OrdinalIgnoreCase);
+    private static bool IsBooking(string purpose) => string.Equals(purpose, "booking", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Deletes an image from Cloudinary by its publicId (avoids orphaned storage when an admin removes it).</summary>
     [HttpDelete("{publicId}")]

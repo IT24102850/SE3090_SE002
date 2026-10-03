@@ -78,10 +78,20 @@ export default function LoginPage() {
   const { isAuthenticated, loading, error, user } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
-    if (isAuthenticated) { show(`Welcome${user?.fullName ? ` back, ${user.fullName}` : ' back'}!`, 'success'); navigate('/dashboard'); }
-    return () => { dispatch(clearError()); };
-  }, [isAuthenticated, navigate, dispatch, show, user?.fullName]);
-  useEffect(() => { if (error) show(error, 'error'); }, [error, show]);
+    if (isAuthenticated) {
+      navigate(user?.role === 'Customer' ? '/customer' : user?.role === 'Staff' ? '/my-schedule' : '/dashboard');
+    }
+    return () => {
+      dispatch(clearError());
+    };
+  }, [isAuthenticated, user?.role, navigate, dispatch]);
+
+  useEffect(() => {
+    if (error) {
+      show(error, 'error');
+    }
+  }, [error, show]);
+
   useEffect(() => {
     document.documentElement.dataset.unifyTheme = theme;
     localStorage.setItem('unify-home-theme', theme);

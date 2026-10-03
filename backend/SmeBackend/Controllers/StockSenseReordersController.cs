@@ -205,6 +205,7 @@ public sealed class StockSenseReordersController(
     /// </summary>
     /// <response code="409">The reorder is not awaiting approval.</response>
     [HttpPost("{id:guid}/approve")]
+    [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(ReorderWorkflowResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ReorderWorkflowResponse>> Approve(Guid id, CancellationToken ct)
@@ -270,6 +271,7 @@ public sealed class StockSenseReordersController(
 
     /// <summary>Rejects a paused reorder. The reason is recorded and sent to the requester.</summary>
     [HttpPost("{id:guid}/reject")]
+    [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(ReorderWorkflowResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public Task<ActionResult<ReorderWorkflowResponse>> Reject(Guid id, [FromBody] ReorderDecisionRequest request, CancellationToken ct) =>
@@ -277,6 +279,7 @@ public sealed class StockSenseReordersController(
 
     /// <summary>Sends a paused reorder back to the requester with what to change.</summary>
     [HttpPost("{id:guid}/revise")]
+    [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(ReorderWorkflowResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public Task<ActionResult<ReorderWorkflowResponse>> RequestRevision(Guid id, [FromBody] ReorderDecisionRequest request, CancellationToken ct) =>

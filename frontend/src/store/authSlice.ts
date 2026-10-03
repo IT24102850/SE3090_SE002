@@ -1,4 +1,4 @@
-﻿import { API_BASE_URL } from '../api/apiBaseUrl';
+import { API_BASE_URL } from '../api/apiBaseUrl';
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
 import { revokeRefreshToken } from '../api/sessionRefresh';
@@ -105,6 +105,13 @@ const authSlice = createSlice({
       state.user = { ...state.user, ...action.payload };
       localStorage.setItem('user', JSON.stringify(state.user));
     },
+    switchBusinessSession: (state, action: PayloadAction<LoginResponse>) => {
+      state.token = action.payload.accessToken;
+      state.user = action.payload.user;
+      state.isAuthenticated = true;
+      localStorage.setItem('token', action.payload.accessToken);
+      localStorage.setItem('user', JSON.stringify(action.payload.user));
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -125,7 +132,7 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearError, initializeAuth, updateCurrentUser } = authSlice.actions;
+export const { logout, clearError, initializeAuth, updateCurrentUser, switchBusinessSession } = authSlice.actions;
 
 /** Signs out on the server too: the refresh token is revoked before it is dropped locally. */
 export function signOut(dispatch: (action: ReturnType<typeof logout>) => unknown): void {
