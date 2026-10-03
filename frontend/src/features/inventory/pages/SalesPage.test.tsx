@@ -1,0 +1,350 @@
+import { configureStore } from '@reduxjs/toolkit';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import authReducer from '../../../store/authSlice';
+import { ToastProvider as AppToastProvider } from '../../../shared/components/Toast';
+import { ToastProvider } from '../ui/ToastContext';
+import { SalesPage } from './SalesPage';
+
+const inventoryItem = {
+  id: 'item-1',
+  name: 'Tea Leaves',
+  sku: 'TEA-001',
+  category: 'Tea',
+  unit: 'kg',
+  branch: 'Main branch',
+  branchId: 'branch-1',
+  quantity: 8,
+  reorderLevel: 6,
+  unitCost: 50,
+  sellingPrice: 75,
+};
+
+const northInventoryItem = {
+  ...inventoryItem,
+  id: 'item-2',
+  name: 'North Tea Leaves',
+  sku: 'TEA-002',
+  branch: 'North branch',
+  branchId: 'branch-2',
+  quantity: 5,
+};
+
+function branchesResponse() {
+  return new Response(JSON.stringify([
+    { id: 'branch-1', name: 'Main branch' },
+    { id: 'branch-2', name: 'North branch' },
+  ]), { status: 200 });
+}
+
+function renderPage(userOverrides: { role?: 'Admin' | 'Manager' | 'Staff'; branchId?: string } = {}) {
+  const store = configureStore({
+    reducer: { auth: authReducer },
+    preloadedState: {
+      auth: {
+        user: {
+          id: 'user-1',
+          email: 'manager@example.test',
+          fullName: 'Test Manager',
+          role: userOverrides.role ?? 'Manager' as const,
+          tenantId: 'tenant-1',
+          branchId: 'branch-1',
+          ...userOverrides,
+        },
+        token: 'test-token',
+        isAuthenticated: true,
+        loading: false,
+        error: null,
+      },
+    },
+  });
+
+  return render(
+    <Provider store={store}>
+      <AppToastProvider>
+        <ToastProvider>
+          <MemoryRouter><SalesPage /></MemoryRouter>
+        </ToastProvider>
+      </AppToastProvider>
+    </Provider>,
+  );
+}
+
+describe('SalesPage', () => {
+  beforeEach(() => {
+    localStorage.setItem('token', 'test-token');
+    vi.stubGlobal('crypto', { randomUUID: () => 'sale-reference-id' });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it('shows staff a friendly note explaining where sale prices come from', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/inventory/branches')) return branchesResponse();
+      if (url.includes('/api/inventory?page=')) {
+        return new Response(JSON.stringify({ items: [], totalPages: 1 }), { status: 200 });
+      }
+      if (url.includes('/api/reports/sales-activity?')) {
+        return new Response(JSON.stringify({
+          salesCount: 0,
+          totalRevenue: 0,
+          averageSale: 0,
+          costOfGoodsSold: 0,
+          grossProfit: 0,
+          recentSales: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
+    }));
+
+    renderPage({ role: 'Staff', branchId: 'branch-1' });
+
+    const pricingTip = await screen.findByRole('complementary', { name: 'Quick pricing tip' });
+    expect(pricingTip).toHaveTextContent('Sale price and cost are filled in from the item catalog');
+    expect(pricingTip).toHaveTextContent('you don’t need to enter them');
+    expect(pricingTip).toHaveTextContent('let your manager know');
+  });
+
+  it('fails closed when Staff has no assigned branch', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPage({ role: 'Staff', branchId: undefined });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('no assigned branch');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Review sale' })).toBeDisabled();
+  });
+
+  it('locks catalog prices and submits the exact expected values after confirmation', async () => {
+    let saleRequest: Record<string, unknown> | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/inventory/branches')) return branchesResponse();
+      if (url.includes('/api/inventory?page=')) {
+        return new Response(JSON.stringify({ items: [inventoryItem], totalPages: 1 }), { status: 200 });
+      }
+      if (url.includes('/api/reports/sales-activity?')) {
+        return new Response(JSON.stringify({
+          salesCount: 0,
+          totalRevenue: 0,
+          averageSale: 0,
+          costOfGoodsSold: 0,
+          grossProfit: 0,
+          recentSales: [],
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/inventory/item-1/sell')) {
+        saleRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          reference: 'SALE-WEB-sale-reference-id',
+          itemName: 'Tea Leaves',
+          quantity: 2,
+          unitPrice: 75,
+          amount: 150,
+          costOfGoodsSold: 100,
+          grossProfit: 50,
+          remainingQuantity: 6,
+          occurredAt: '2026-05-20T10:00:00Z',
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ message: `Unexpected request: ${url}` }), { status: 404 });
+    }));
+
+    renderPage();
+    expect(await screen.findByRole('article', { name: '7-day revenue' })).toHaveTextContent('LKR 0.00');
+    expect(screen.getByRole('article', { name: 'Gross profit' })).toHaveTextContent('LKR 0.00');
+    expect(screen.getByRole('article', { name: 'Sales recorded' })).toHaveTextContent('0');
+    expect(screen.getByRole('article', { name: 'Average sale' })).toHaveTextContent('LKR 0.00');
+    const itemSearch = await screen.findByRole('combobox', { name: 'Search in-stock item' });
+    fireEvent.change(itemSearch, { target: { value: 'tea-001' } });
+    fireEvent.click(await screen.findByRole('option', { name: /Tea Leaves/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selected item' }));
+    expect(itemSearch).toHaveValue('');
+    expect(screen.getByLabelText('Unit selling price')).toHaveValue('Select an item');
+    expect(screen.getByRole('button', { name: 'Review sale' })).toBeDisabled();
+    fireEvent.click(await screen.findByRole('option', { name: /Tea Leaves/ }));
+    const quantityInput = screen.getByLabelText('Quantity to sell');
+    expect(quantityInput).toHaveAttribute('step', '1');
+    expect(quantityInput).toHaveAttribute('min', '0');
+    fireEvent.change(quantityInput, { target: { value: '0.125' } });
+    expect(quantityInput).toHaveValue(0.125);
+    expect(screen.getByRole('button', { name: 'Review sale' })).toBeEnabled();
+    fireEvent.change(quantityInput, { target: { value: '2' } });
+
+    expect(screen.getByLabelText('Unit selling price')).toHaveValue('LKR 75.00');
+    expect(screen.getByLabelText('Unit selling price')).toHaveAttribute('readonly');
+    expect(screen.getByLabelText('Unit cost')).toHaveAttribute('readonly');
+    fireEvent.click(screen.getByRole('button', { name: 'Review sale' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record sale' }));
+
+    await waitFor(() => expect(saleRequest).toEqual({
+      quantity: 2,
+      expectedSellingPrice: 75,
+      expectedUnitCost: 50,
+      reference: 'SALE-WEB-sale-reference-id',
+    }));
+    expect(await screen.findByRole('heading', { name: 'Sale recorded' })).toBeInTheDocument();
+    expect(screen.getAllByText('LKR 150.00')).toHaveLength(2);
+    expect(screen.getByText('UNIFY · SALES RECEIPT')).toBeInTheDocument();
+    expect(screen.getByText('SALE RECORDED')).toBeInTheDocument();
+    expect(screen.getByText('INVENTORY UPDATE')).toBeInTheDocument();
+    expect(screen.getByText('Stock remaining: 6 kg')).toBeInTheDocument();
+    expect(screen.getByText(/Payment collection is not recorded by this receipt/i)).toBeInTheDocument();
+    expect(screen.getByText('Generated by Unify')).toBeInTheDocument();
+    expect(screen.getByText(/LOW STOCK/)).toBeInTheDocument();
+    const receiptDialog = screen.getByRole('dialog');
+    expect(within(receiptDialog).queryByText('Cost of goods')).not.toBeInTheDocument();
+    expect(within(receiptDialog).queryByText('Gross profit')).not.toBeInTheDocument();
+  });
+
+  it('shows matching items while typing and explains when there are no matches', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/inventory/branches')) return branchesResponse();
+      if (url.includes('/api/inventory?page=')) {
+        return new Response(JSON.stringify({ items: [inventoryItem], totalPages: 1 }), { status: 200 });
+      }
+      if (url.includes('/api/reports/sales-activity?')) {
+        return new Response(JSON.stringify({
+          salesCount: 0,
+          totalRevenue: 0,
+          averageSale: 0,
+          costOfGoodsSold: 0,
+          grossProfit: 0,
+          recentSales: [],
+        }), { status: 200 });
+      }
+      return new Response('Unexpected request', { status: 404 });
+    }));
+
+    renderPage();
+    const itemSearch = await screen.findByRole('combobox', { name: 'Search in-stock item' });
+    fireEvent.change(itemSearch, { target: { value: 'main branch' } });
+    expect(await screen.findByRole('option', { name: /Tea Leaves.*Main branch/ })).toBeInTheDocument();
+
+    fireEvent.change(itemSearch, { target: { value: 'not in catalog' } });
+    expect(await screen.findByText('No in-stock item matches this search.')).toBeInTheDocument();
+  });
+
+  it('limits sellable products and sales totals to the selected branch', async () => {
+    const requestedUrls: string[] = [];
+    let resolveNorthInventory: ((response: Response) => void) | undefined;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      requestedUrls.push(url);
+      if (url.includes('/api/inventory/branches')) return Promise.resolve(branchesResponse());
+      if (url.includes('/api/inventory?')) {
+        if (url.includes('branchId=branch-2')) {
+          return new Promise<Response>((resolve) => { resolveNorthInventory = resolve; });
+        }
+        const branchItems = url.includes('branchId=branch-2')
+          ? [northInventoryItem]
+          : [inventoryItem, northInventoryItem];
+        return Promise.resolve(new Response(JSON.stringify({ items: branchItems, totalPages: 1 }), { status: 200 }));
+      }
+      if (url.includes('/api/reports/sales-activity?')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          salesCount: 0,
+          totalRevenue: 0,
+          averageSale: 0,
+          costOfGoodsSold: 0,
+          grossProfit: 0,
+          recentSales: [],
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Unexpected request', { status: 404 }));
+    }));
+
+    renderPage({ role: 'Admin', branchId: 'branch-1' });
+    const branchSelect = await screen.findByRole('combobox', { name: 'Sale branch' });
+    expect(branchSelect).toBeEnabled();
+    expect(branchSelect).toHaveValue('');
+    const itemSearch = await screen.findByRole('combobox', { name: 'Search in-stock item' });
+    fireEvent.focus(itemSearch);
+    expect(await screen.findByRole('option', { name: /Tea Leaves.*Main branch/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /North Tea Leaves.*North branch/ })).toBeInTheDocument();
+
+    const branchChangeStartedAt = Date.now();
+    fireEvent.change(branchSelect, { target: { value: 'branch-2' } });
+    await waitFor(() => expect(requestedUrls.some((url) =>
+      url.includes('/api/inventory?') && url.includes('branchId=branch-2'),
+    )).toBe(true));
+    expect(await screen.findByRole('status')).toHaveTextContent('Fetching North branch stock and sales data…');
+    expect(branchSelect).toBeEnabled();
+
+    resolveNorthInventory?.(new Response(JSON.stringify({
+      items: [northInventoryItem],
+      totalPages: 1,
+    }), { status: 200 }));
+    await waitFor(() => expect(requestedUrls.some((url) =>
+      url.includes('/api/reports/sales-activity?') && url.includes('branchId=branch-2'),
+    )).toBe(true));
+    const remainingBeforeMinimum = Math.max(0, 4_900 - (Date.now() - branchChangeStartedAt));
+    await new Promise((resolve) => setTimeout(resolve, remainingBeforeMinimum));
+    expect(screen.getByRole('status')).toHaveTextContent('Fetching North branch stock and sales data…');
+    fireEvent.focus(itemSearch);
+    expect(await screen.findByRole('option', { name: /North Tea Leaves.*North branch/ })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument(), { timeout: 1_000 });
+    expect(screen.queryByRole('option', { name: /Tea Leaves.*Main branch/ })).not.toBeInTheDocument();
+  }, 10_000);
+
+  it('omits unavailable branch details from historical receipts', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/inventory/branches')) return branchesResponse();
+      if (url.includes('/api/inventory?page=')) {
+        return new Response(JSON.stringify({ items: [], totalPages: 1 }), { status: 200 });
+      }
+      if (url.includes('/api/reports/sales-activity?')) {
+        return new Response(JSON.stringify({
+          salesCount: 1,
+          totalRevenue: 750,
+          averageSale: 750,
+          costOfGoodsSold: null,
+          grossProfit: null,
+          recentSales: [{
+            id: 'sale-1',
+            reference: 'SALE-001',
+            occurredAt: '2026-09-29T10:00:00Z',
+            amount: 750,
+            quantity: 1,
+            items: ['Paper'],
+            costOfGoodsSold: null,
+            grossProfit: null,
+          }],
+        }), { status: 200 });
+      }
+      return new Response('Unexpected request', { status: 404 });
+    }));
+
+    renderPage();
+    const receiptButton = await screen.findByRole('button', { name: 'View receipt' });
+    expect(screen.getByRole('heading', { name: 'Recent sales & receipts' })).toBeInTheDocument();
+    expect(screen.getByText('1 sale')).toBeInTheDocument();
+    const heroActivity = screen.getByRole('complementary', { name: 'Latest sales activity' });
+    expect(within(heroActivity).getByText('SALE-001')).toBeInTheDocument();
+    expect(within(heroActivity).getByText('LKR 750.00')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Sale reference' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Date & time' })).toBeInTheDocument();
+    const salesTable = screen.getByRole('table');
+    const saleRow = within(salesTable).getByText('SALE-001').closest('tr');
+    expect(saleRow).not.toBeNull();
+    expect(within(saleRow!).getByText('Paper')).toBeInTheDocument();
+    expect(receiptButton).toHaveClass('sales-receipt-button');
+    fireEvent.click(receiptButton);
+
+    const receipt = screen.getByRole('dialog');
+    expect(within(receipt).getByText('UNIFY · SALES RECEIPT')).toBeInTheDocument();
+    expect(within(receipt).queryByText('BRANCH')).not.toBeInTheDocument();
+    expect(within(receipt).queryByText('Not included in the sales report')).not.toBeInTheDocument();
+    expect(within(receipt).getByText('Generated by Unify')).toBeInTheDocument();
+  });
+});

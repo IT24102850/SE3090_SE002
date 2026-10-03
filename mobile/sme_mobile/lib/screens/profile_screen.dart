@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import '../inventory/app_notifications.dart';
 import '../providers/api_service_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/tenant_profile_provider.dart';
@@ -37,9 +38,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _fullNameController = TextEditingController(text: user?.fullName ?? '');
     _phoneController = TextEditingController(text: user?.phone ?? '');
     _addressController = TextEditingController(text: user?.address ?? '');
-    _insuranceProviderController = TextEditingController(text: user?.insuranceProvider ?? '');
-    _insuranceNumberController = TextEditingController(text: user?.insuranceNumber ?? '');
-    _medicalNotesController = TextEditingController(text: user?.medicalNotes ?? '');
+    _insuranceProviderController =
+        TextEditingController(text: user?.insuranceProvider ?? '');
+    _insuranceNumberController =
+        TextEditingController(text: user?.insuranceNumber ?? '');
+    _medicalNotesController =
+        TextEditingController(text: user?.medicalNotes ?? '');
   }
 
   @override
@@ -54,7 +58,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _pickAndUploadPhoto() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final picked = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked == null) return;
 
     setState(() => _uploadingPhoto = true);
@@ -81,7 +86,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  void _removePhoto() {
+  Future<void> _removePhoto() async {
+    final confirmed = await showAppConfirmation(
+      context: context,
+      title: 'Remove profile photo?',
+      message:
+          'Your current profile photo will be removed when you save your changes.',
+      confirmLabel: 'Remove photo',
+      cancelLabel: 'Keep photo',
+      icon: Icons.delete_outline_rounded,
+      accent: AppColors.danger,
+      isDestructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
     setState(() {
       _profilePictureUrl = null;
       _photoDirty = true;
@@ -110,7 +128,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   static String _initials(String? fullName) {
-    final parts = (fullName ?? '').trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).take(2);
+    final parts = (fullName ?? '')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .take(2);
     if (parts.isEmpty) return '?';
     return parts.map((p) => p[0].toUpperCase()).join();
   }
@@ -157,7 +179,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         label: 'Full name',
                         icon: Icons.person_outline,
                         controller: _fullNameController,
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
                       ),
                       const SizedBox(height: 16),
                       NeonInputField(
@@ -189,8 +212,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SectionHeader('Medical & insurance', padding: EdgeInsets.only(bottom: 4)),
-                        Text('Shared with clinic staff only.', style: AppTextStyles.caption),
+                        const SectionHeader('Medical & insurance',
+                            padding: EdgeInsets.only(bottom: 4)),
+                        Text('Shared with clinic staff only.',
+                            style: AppTextStyles.caption),
                         const SizedBox(height: 16),
                         NeonInputField(
                           label: 'Insurance provider',
@@ -258,18 +283,25 @@ class _AvatarBlock extends StatelessWidget {
               Container(
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: AppColors.buttonGlow, blurRadius: 28, spreadRadius: -4)],
+                  boxShadow: [
+                    BoxShadow(
+                        color: AppColors.buttonGlow,
+                        blurRadius: 28,
+                        spreadRadius: -4)
+                  ],
                 ),
                 child: CircleAvatar(
                   radius: 48,
                   backgroundColor: AppColors.iconWell,
-                  backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
+                  backgroundImage:
+                      photoUrl != null ? NetworkImage(photoUrl!) : null,
                   child: uploading
                       ? const AppLoader(size: 24, strokeWidth: 2.5)
                       : (photoUrl == null
                           ? Text(
                               initials,
-                              style: AppTextStyles.headline.copyWith(color: AppColors.cyan),
+                              style: AppTextStyles.headline
+                                  .copyWith(color: AppColors.cyan),
                             )
                           : null),
                 ),
@@ -282,7 +314,8 @@ class _AvatarBlock extends StatelessWidget {
                   onTap: uploading ? null : onPick,
                   child: const Padding(
                     padding: EdgeInsets.all(8),
-                    child: Icon(Icons.photo_camera_outlined, size: 18, color: AppColors.onPrimary),
+                    child: Icon(Icons.photo_camera_outlined,
+                        size: 18, color: AppColors.onPrimary),
                   ),
                 ),
               ),

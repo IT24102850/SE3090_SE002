@@ -1,3 +1,4 @@
+import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { API_BASE_URL as apiBaseUrl } from '../../../api/apiBaseUrl';
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -8,7 +9,7 @@ import { Icon } from '../ui/Icon';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
 import { getStoredToken } from '../authToken';
-import { ReorderApprovals } from '../components/ReorderApprovals';
+import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 
 
 type WorkflowItem = {
@@ -85,6 +86,7 @@ function formatWorkflowConfidence(value: unknown) {
 }
 
 export function AgentWorkflowMonitorPage() {
+  const confirm = useConfirmation();
   // Recharts takes SVG attributes, which cannot resolve var(), so the
   // sparkline reads its stroke from the theme hook rather than a literal.
   const chart = useChartTheme();
@@ -145,9 +147,6 @@ export function AgentWorkflowMonitorPage() {
       if (!resp.ok) throw new Error(`Workflow request failed (${resp.status})`);
       const raw = await resp.json() as Array<Record<string, any>>;
       const data = raw
-        // StockSense reorders are decided in their own panel above, which
-        // re-runs the safety gate and places the purchase order.
-        .filter((workflow) => !String(workflow.objective ?? '').startsWith('[StockSense'))
         .filter((workflow) => !search || `${workflow.objective} ${workflow.id}`.toLowerCase().includes(search.toLowerCase()))
         .map((workflow): WorkflowItem => ({
           id: String(workflow.id),
@@ -206,7 +205,15 @@ export function AgentWorkflowMonitorPage() {
   }
 
   async function reject(id: string) {
-    const reason = prompt('Rejection reason (optional)') || 'rejected';
+    const enteredReason = prompt('Rejection reason (optional)');
+    if (enteredReason === null) return;
+    const reason = enteredReason || 'rejected';
+    if (!await confirm({
+      title: 'Reject this workflow?',
+      message: 'The proposed inventory workflow will be marked as rejected.',
+      confirmLabel: 'Reject workflow',
+      tone: 'danger',
+    })) return;
     try {
       const resp = await fetch(`${apiBaseUrl}/agent/workflow/${id}/reject`, {
         method: 'POST',
@@ -237,6 +244,9 @@ export function AgentWorkflowMonitorPage() {
   return (
     <div className="page">
       <header className="page-head workflow-page-head workflow-hero">
+        <span className="inventory-hero-sheen" aria-hidden="true" />
+        <InventoryHeroArtwork icon="workflow" />
+        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="workflow-hero-copy">
           <p className="eyebrow">AUTOMATION / WORKFLOWS</p>
           <h1>Agent Workflow Monitor</h1>
@@ -259,8 +269,6 @@ export function AgentWorkflowMonitorPage() {
           <button className="btn btn-secondary" onClick={() => fetchItems()}>Refresh</button>
         </div>
       </header>
-
-      <ReorderApprovals canDecide={user?.role === 'Admin' || user?.role === 'Manager'} />
       {loadError && <p className="page-notice" role="alert">⚠ {loadError}</p>}
 
       <div className="workflow-live-strip">
@@ -304,8 +312,8 @@ export function AgentWorkflowMonitorPage() {
               <div className="workflow-empty-content">
                 <div className="workflow-empty-icon">✦</div>
                 <h3>No workflows match these filters</h3>
-                <p className="hint">{search || statusFilter ? 'Try clearing a filter or refreshing the monitor.' : 'Start with Schedule Copilot to create a schedule proposal for this workspace.'}</p>
-                <Link className="btn btn-primary" to="/planner">Open Schedule Copilot</Link>
+                <p className="hint">{search || statusFilter ? 'Try clearing a filter or refreshing the monitor.' : 'Start with the AI Planner to create a schedule proposal for this workspace.'}</p>
+                <Link className="btn btn-primary" to="/planner">Open AI Planner</Link>
               </div>
             </div>
           ) : (
@@ -447,7 +455,7 @@ export function AgentWorkflowMonitorPage() {
                   {selected.actionType === 'generate_purchase_order' && (
                     <div className="workflow-detail-callout workflow-detail-neutral">
                       <strong>Purchase-order approval has two steps</strong>
-                      <span>Approving this agent workflow submits the order for review. Final authorization and placement are available only in the mobile Purchase Approvals screen.</span>
+                      <span>Approving this agent workflow submits the order for review. Final authorization and placement are available only in the mobile Purchase Orders screen.</span>
                     </div>
                   )}
 

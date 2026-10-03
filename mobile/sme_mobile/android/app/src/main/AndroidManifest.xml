@@ -1,23 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Every screen in this app talks to the API, so without this a release
-         build is a shell: Flutter injects INTERNET into the debug and profile
-         manifests only, which is why it works under `flutter run` and fails
-         the moment you install a real APK. -->
-    <uses-permission android:name="android.permission.INTERNET"/>
-
     <!-- FR-B7: camera access for the staff QR check-in scanner -->
     <uses-permission android:name="android.permission.CAMERA"/>
-    <!-- Android 13+: needed to show booking/approval notifications -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-
+    <!-- Requested only when a user explicitly attaches an order-delivery or stock-audit location. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <!-- Required by local_auth to discover and invoke Android biometrics. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="Unify"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:networkSecurityConfig="@xml/network_security_config">
+        android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"

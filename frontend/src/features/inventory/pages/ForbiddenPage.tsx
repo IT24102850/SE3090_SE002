@@ -1,12 +1,12 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { signOut } from '../../../store/authSlice';
+import { logout } from '../../../store/authSlice';
 
 export function ForbiddenPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const signInAgain = () => {
-    signOut(dispatch);
+    dispatch(logout());
     navigate('/login', { replace: true });
   };
 

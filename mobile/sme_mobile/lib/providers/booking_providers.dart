@@ -3,29 +3,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/available_slot_model.dart';
 import '../models/booking_model.dart';
 import '../models/booking_type_model.dart';
-import '../models/billing_models.dart';
 import '../models/branch_model.dart';
 import '../models/resource_model.dart';
-import '../services/api_service.dart';
 import 'api_service_provider.dart';
 import 'auth_provider.dart';
 
 // ─────────────────────────────────────────────────────────
 // Reads
 // ─────────────────────────────────────────────────────────
-final branchesProvider =
-    FutureProvider.family<List<Branch>, String>((ref, tenantId) async {
+final branchesProvider = FutureProvider.family<List<Branch>, String>((ref, tenantId) async {
   final dio = ref.watch(apiServiceProvider);
-  final response =
-      await dio.get('/branches', queryParameters: {'tenantId': tenantId});
+  final response = await dio.get('/branches', queryParameters: {'tenantId': tenantId});
   final List<dynamic> data = response.data as List<dynamic>;
   return data.map((j) => Branch.fromJson(j as Map<String, dynamic>)).toList();
 });
 
 typedef ResourcesQuery = ({String tenantId, String? branchId});
 
-final resourcesProvider =
-    FutureProvider.family<List<Resource>, ResourcesQuery>((ref, q) async {
+final resourcesProvider = FutureProvider.family<List<Resource>, ResourcesQuery>((ref, q) async {
   final dio = ref.watch(apiServiceProvider);
   final response = await dio.get('/resources', queryParameters: {
     'tenantId': q.tenantId,
@@ -34,33 +29,22 @@ final resourcesProvider =
   });
   final data = response.data as Map<String, dynamic>;
   final items = data['items'] as List<dynamic>;
-  return items
-      .map((j) => Resource.fromJson(j as Map<String, dynamic>))
-      .toList();
+  return items.map((j) => Resource.fromJson(j as Map<String, dynamic>)).toList();
 });
 
-final bookingTypesProvider =
-    FutureProvider.family<List<BookingType>, String>((ref, tenantId) async {
+final bookingTypesProvider = FutureProvider.family<List<BookingType>, String>((ref, tenantId) async {
   final dio = ref.watch(apiServiceProvider);
   final response = await dio.get('/bookingtypes', queryParameters: {
     'tenantId': tenantId,
     'status': 'Active',
   });
   final List<dynamic> data = response.data as List<dynamic>;
-  return data
-      .map((j) => BookingType.fromJson(j as Map<String, dynamic>))
-      .toList();
+  return data.map((j) => BookingType.fromJson(j as Map<String, dynamic>)).toList();
 });
 
-typedef SlotsQuery = ({
-  String resourceId,
-  String date,
-  int duration,
-  String bookingTypeId
-});
+typedef SlotsQuery = ({String resourceId, String date, int duration, String bookingTypeId});
 
-final availableSlotsProvider =
-    FutureProvider.family<SlotsResult, SlotsQuery>((ref, q) async {
+final availableSlotsProvider = FutureProvider.family<SlotsResult, SlotsQuery>((ref, q) async {
   final dio = ref.watch(apiServiceProvider);
   final response = await dio.get('/bookings/available-slots', queryParameters: {
     'resourceId': q.resourceId,
@@ -77,12 +61,9 @@ final availableSlotsProvider =
 /// Slot-specific (fixed-duration sub-day windows).
 typedef UnavailableRangesQuery = ({String resourceId, String from, String to});
 
-final unavailableRangesProvider =
-    FutureProvider.family<List<DateTimeRange>, UnavailableRangesQuery>(
-        (ref, q) async {
+final unavailableRangesProvider = FutureProvider.family<List<DateTimeRange>, UnavailableRangesQuery>((ref, q) async {
   final dio = ref.watch(apiServiceProvider);
-  final response =
-      await dio.get('/bookings/unavailable-ranges', queryParameters: {
+  final response = await dio.get('/bookings/unavailable-ranges', queryParameters: {
     'resourceId': q.resourceId,
     'from': q.from,
     'to': q.to,
@@ -90,9 +71,7 @@ final unavailableRangesProvider =
   final List<dynamic> data = response.data as List<dynamic>;
   return data.map((j) {
     final m = j as Map<String, dynamic>;
-    return DateTimeRange(
-        start: DateTime.parse(m['startTime'].toString()),
-        end: DateTime.parse(m['endTime'].toString()));
+    return DateTimeRange(start: DateTime.parse(m['startTime'].toString()), end: DateTime.parse(m['endTime'].toString()));
   }).toList();
 });
 
@@ -101,8 +80,7 @@ class DateTimeRange {
   final DateTime end;
   const DateTimeRange({required this.start, required this.end});
 
-  bool overlaps(DateTime dayStart, DateTime dayEnd) =>
-      start.isBefore(dayEnd) && end.isAfter(dayStart);
+  bool overlaps(DateTime dayStart, DateTime dayEnd) => start.isBefore(dayEnd) && end.isAfter(dayStart);
 }
 
 /// The current customer's own bookings, across every business they've
@@ -147,60 +125,12 @@ class BookingRequestException implements Exception {
   BookingRequestException(this.message);
 }
 
-class BookingCheckoutResult {
-  final String bookingId;
-  final String? invoiceId;
-  final CheckoutSession? checkout;
-
-  const BookingCheckoutResult(
-      {required this.bookingId, this.invoiceId, this.checkout});
-}
-
 String? _extractApiMessage(DioException e) {
   final data = e.response?.data;
   if (data is Map) {
     return data['message']?.toString() ?? data['title']?.toString();
   }
   return null;
-}
-
-/// What went wrong when the API itself never said.
-///
-/// A request that never arrived has no body to quote, so without this the
-/// caller falls back to blaming its own feature - "the AI planner could not
-/// complete this request" for what is really a stopped server. That sends
-/// someone to debug the wrong thing, so the transport failure is named
-/// plainly and the feature-specific fallback is kept for the case where the
-/// API really did answer and really did refuse.
-String? _transportFailureMessage(DioException e) {
-  final status = e.response?.statusCode;
-  if (status == 401) return 'Your session has expired. Please sign in again.';
-  if (status == 403) return 'This account is not allowed to do that.';
-  if (status != null && status >= 500) {
-    return 'The server hit an error handling this ($status). Please try again.';
-  }
-
-  switch (e.type) {
-    case DioExceptionType.connectionError:
-    case DioExceptionType.connectionTimeout:
-      return 'Could not reach the server. Check that the API is running and '
-          'that this device can see it.';
-    case DioExceptionType.sendTimeout:
-    case DioExceptionType.receiveTimeout:
-    case DioExceptionType.transformTimeout:
-      return 'The server took too long to answer. Please try again.';
-    case DioExceptionType.badCertificate:
-      return "The server's security certificate was rejected.";
-    case DioExceptionType.cancel:
-      return 'The request was cancelled.';
-    case DioExceptionType.badResponse:
-    case DioExceptionType.unknown:
-      // unknown covers a SocketException raised before any response.
-      return e.response == null
-          ? 'Could not reach the server. Check that the API is running and '
-              'that this device can see it.'
-          : null;
-  }
 }
 
 /// Creates a booking, echoing the exact [startTimeIso]/[endTimeIso] strings
@@ -236,58 +166,9 @@ Future<String> createBooking(
     return (response.data as Map<String, dynamic>)['id'].toString();
   } on DioException catch (e) {
     if (e.response?.statusCode == 409) {
-      throw BookingConflictException(
-          _extractApiMessage(e) ?? 'This time slot is already booked.');
+      throw BookingConflictException(_extractApiMessage(e) ?? 'This time slot is already booked.');
     }
-    throw BookingRequestException(_extractApiMessage(e) ??
-        'Could not create the booking. Please try again.');
-  }
-}
-
-Future<BookingCheckoutResult> checkoutBooking(
-  Dio dio, {
-  required String tenantId,
-  required String resourceId,
-  required String bookingTypeId,
-  required String bookedBy,
-  required String startTimeIso,
-  required String endTimeIso,
-  String? title,
-  String? notes,
-  int? attendeeCount,
-  String? formData,
-  List<Map<String, dynamic>>? ticketBreakdown,
-}) async {
-  try {
-    final response = await dio.post('/bookings/checkout', data: {
-      'tenantId': tenantId,
-      'resourceId': resourceId,
-      'bookingTypeId': bookingTypeId,
-      'bookedBy': bookedBy,
-      'startTime': startTimeIso,
-      'endTime': endTimeIso,
-      'title': title,
-      'notes': notes,
-      'priority': 'Normal',
-      'attendeeCount': attendeeCount,
-      'formData': formData,
-      if (ticketBreakdown != null && ticketBreakdown.isNotEmpty)
-        'ticketBreakdown': ticketBreakdown,
-    });
-    final data = response.data as Map<String, dynamic>;
-    final checkout = data['checkout'] as Map<String, dynamic>?;
-    return BookingCheckoutResult(
-      bookingId: data['bookingId'].toString(),
-      invoiceId: data['invoiceId']?.toString(),
-      checkout: checkout == null ? null : CheckoutSession.fromJson(checkout),
-    );
-  } on DioException catch (e) {
-    if (e.response?.statusCode == 409) {
-      throw BookingConflictException(
-          _extractApiMessage(e) ?? 'This time slot is already booked.');
-    }
-    throw BookingRequestException(_extractApiMessage(e) ??
-        'Could not create the booking or start payment.');
+    throw BookingRequestException(_extractApiMessage(e) ?? 'Could not create the booking. Please try again.');
   }
 }
 
@@ -295,8 +176,7 @@ Future<void> cancelBooking(Dio dio, String bookingId) async {
   try {
     await dio.put('/bookings/$bookingId/cancel');
   } on DioException catch (e) {
-    throw BookingRequestException(
-        _extractApiMessage(e) ?? 'Could not cancel this booking.');
+    throw BookingRequestException(_extractApiMessage(e) ?? 'Could not cancel this booking.');
   }
 }
 
@@ -313,11 +193,9 @@ Future<void> rescheduleBooking(
     });
   } on DioException catch (e) {
     if (e.response?.statusCode == 409) {
-      throw BookingConflictException(_extractApiMessage(e) ??
-          'That slot conflicts with an existing booking.');
+      throw BookingConflictException(_extractApiMessage(e) ?? 'That slot conflicts with an existing booking.');
     }
-    throw BookingRequestException(
-        _extractApiMessage(e) ?? 'Could not reschedule this booking.');
+    throw BookingRequestException(_extractApiMessage(e) ?? 'Could not reschedule this booking.');
   }
 }
 
@@ -326,19 +204,16 @@ Future<void> checkInBooking(Dio dio, String bookingId) async {
   try {
     await dio.post('/bookings/$bookingId/checkin');
   } on DioException catch (e) {
-    throw BookingRequestException(
-        _extractApiMessage(e) ?? 'Could not check in this booking.');
+    throw BookingRequestException(_extractApiMessage(e) ?? 'Could not check in this booking.');
   }
 }
 
 /// FR-B8: doctor marks an appointment's outcome from their schedule.
-Future<void> updateBookingStatus(
-    Dio dio, String bookingId, String status) async {
+Future<void> updateBookingStatus(Dio dio, String bookingId, String status) async {
   try {
     await dio.put('/bookings/$bookingId/status', data: {'status': status});
   } on DioException catch (e) {
-    throw BookingRequestException(
-        _extractApiMessage(e) ?? 'Could not update this booking.');
+    throw BookingRequestException(_extractApiMessage(e) ?? 'Could not update this booking.');
   }
 }
 
@@ -347,8 +222,7 @@ Future<void> updateBookingNotes(Dio dio, String bookingId, String notes) async {
   try {
     await dio.put('/bookings/$bookingId', data: {'notes': notes});
   } on DioException catch (e) {
-    throw BookingRequestException(
-        _extractApiMessage(e) ?? 'Could not save notes.');
+    throw BookingRequestException(_extractApiMessage(e) ?? 'Could not save notes.');
   }
 }
 
@@ -385,13 +259,10 @@ Future<RecurringBookingResult> createRecurringBooking(
     return RecurringBookingResult(
       requiresApproval: response.statusCode == 202,
       created: (data['created'] as num?)?.toInt() ?? 0,
-      totalRequested: (data['totalRequested'] as num?)?.toInt() ??
-          (data['totalOccurrences'] as num?)?.toInt() ??
-          0,
+      totalRequested: (data['totalRequested'] as num?)?.toInt() ?? (data['totalOccurrences'] as num?)?.toInt() ?? 0,
     );
   } on DioException catch (e) {
-    throw BookingRequestException(
-        _extractApiMessage(e) ?? 'Could not create the recurring series.');
+    throw BookingRequestException(_extractApiMessage(e) ?? 'Could not create the recurring series.');
   }
 }
 
@@ -404,16 +275,8 @@ class AiPlanOutcome {
   final String message;
   final String? bookingId;
   final String? workflowId;
-  final String? invoiceId;
-  final CheckoutSession? checkout;
 
-  const AiPlanOutcome(
-      {required this.status,
-      required this.message,
-      this.bookingId,
-      this.workflowId,
-      this.invoiceId,
-      this.checkout});
+  const AiPlanOutcome({required this.status, required this.message, this.bookingId, this.workflowId});
 
   bool get isBooked => status == 'Completed' && bookingId != null;
 }
@@ -430,23 +293,17 @@ Future<AiPlanOutcome> findAndBook(
   DateTime? dateTo,
 }) async {
   try {
-    final response = await dio.post(
-      '/agent/find-and-book',
-      data: {
-        'objective': objective,
-        'dateFrom': dateFrom?.toUtc().toIso8601String(),
-        'dateTo': dateTo?.toUtc().toIso8601String(),
-        'extraConstraints': {'booking_type_id': bookingTypeId},
-      },
-      // Four agents, several Gemini calls: minutes, not the CRUD default.
-      options: ApiService.aiPipelineOptions,
-    );
+    final response = await dio.post('/agent/find-and-book', data: {
+      'objective': objective,
+      'dateFrom': dateFrom?.toUtc().toIso8601String(),
+      'dateTo': dateTo?.toUtc().toIso8601String(),
+      'extraConstraints': {'booking_type_id': bookingTypeId},
+    });
     final data = response.data as Map<String, dynamic>;
     if (response.statusCode == 202) {
       return AiPlanOutcome(
         status: 'AwaitingApproval',
-        message: data['message']?.toString() ??
-            'This booking needs manager approval before it\'s confirmed.',
+        message: data['message']?.toString() ?? 'This booking needs manager approval before it\'s confirmed.',
         workflowId: data['workflowId']?.toString(),
       );
     }
@@ -455,17 +312,10 @@ Future<AiPlanOutcome> findAndBook(
       message: 'Booking confirmed!',
       bookingId: data['bookingId']?.toString(),
       workflowId: data['workflowId']?.toString(),
-      invoiceId: data['invoiceId']?.toString(),
-      checkout: data['checkout'] is Map<String, dynamic>
-          ? CheckoutSession.fromJson(data['checkout'] as Map<String, dynamic>)
-          : null,
     );
   } on DioException catch (e) {
     final data = e.response?.data;
-    final message = (data is Map ? data['message']?.toString() : null) ??
-        _extractApiMessage(e) ??
-        _transportFailureMessage(e) ??
-        'The AI planner could not complete this request.';
+    final message = (data is Map ? data['message']?.toString() : null) ?? _extractApiMessage(e) ?? 'The AI planner could not complete this request.';
     return AiPlanOutcome(
       status: 'Rejected',
       message: message,
@@ -483,8 +333,7 @@ Future<AiPlanOutcome> findAndBook(
 class MyAgentWorkflow {
   final String id;
   final String objective;
-  final String
-      status; // Pending | AwaitingApproval | Approved | Rejected | Completed | Failed
+  final String status; // Pending | AwaitingApproval | Approved | Rejected | Completed | Failed
   final String? errorLog;
   final String? finalOutcome;
   final DateTime createdAt;
@@ -500,28 +349,22 @@ class MyAgentWorkflow {
     this.completedAt,
   });
 
-  factory MyAgentWorkflow.fromJson(Map<String, dynamic> json) =>
-      MyAgentWorkflow(
+  factory MyAgentWorkflow.fromJson(Map<String, dynamic> json) => MyAgentWorkflow(
         id: json['id'].toString(),
         objective: json['objective']?.toString() ?? '',
         status: json['status']?.toString() ?? 'Pending',
         errorLog: json['errorLog']?.toString(),
         finalOutcome: json['finalOutcome']?.toString(),
         createdAt: DateTime.parse(json['createdAt'].toString()),
-        completedAt: json['completedAt'] == null
-            ? null
-            : DateTime.parse(json['completedAt'].toString()),
+        completedAt: json['completedAt'] == null ? null : DateTime.parse(json['completedAt'].toString()),
       );
 }
 
-final myAgentWorkflowsProvider =
-    FutureProvider<List<MyAgentWorkflow>>((ref) async {
+final myAgentWorkflowsProvider = FutureProvider<List<MyAgentWorkflow>>((ref) async {
   final dio = ref.watch(apiServiceProvider);
   final response = await dio.get('/agent/workflow/mine');
   final List<dynamic> items = response.data as List<dynamic>;
-  return items
-      .map((j) => MyAgentWorkflow.fromJson(j as Map<String, dynamic>))
-      .toList();
+  return items.map((j) => MyAgentWorkflow.fromJson(j as Map<String, dynamic>)).toList();
 });
 
 class RecurringBookingResult {

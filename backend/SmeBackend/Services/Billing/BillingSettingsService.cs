@@ -306,44 +306,6 @@ public sealed class BillingSettingsService : IBillingSettingsService
         if (request.WebhookSecret is not null)
             gateway.WebhookSecretEncrypted = request.WebhookSecret.Trim().Length == 0 ? null : _protector.Protect(request.WebhookSecret.Trim());
 
-        // The settlement currency and its rate live in ConfigurationJson so
-        // the gateway table does not grow a column per provider quirk; the
-        // shape is read back by Shared/PaymentSettlement.cs. Clearing the
-        // currency removes the conversion and charges the invoice currency.
-        if (request.SettlementCurrency is not null || request.SettlementRate is not null)
-        {
-            var settlementCurrency = request.SettlementCurrency?.Trim().ToUpperInvariant();
-            if (string.IsNullOrEmpty(settlementCurrency))
-            {
-                gateway.ConfigurationJson = null;
-            }
-            else if (settlementCurrency.Length != 3)
-            {
-                return BillingResult<PaymentGatewayResponse>.BadRequest("SettlementCurrency must be a 3-letter code, such as USD.");
-            }
-            else if (request.SettlementRate is not > 0)
-            {
-                return BillingResult<PaymentGatewayResponse>.BadRequest(
-                    "A settlement currency needs a rate above zero - how many units of the invoice currency make one unit of it.");
-            }
-            else
-            {
-                // Keyed by this gateway's own Currency, which is the currency
-                // its invoices are written in - LKR for a Sri Lankan operator
-                // settling to Stripe in USD. Currency is what the books say;
-                // settlement.currency is what the card is charged.
-                var invoiceCurrency = gateway.Currency;
-                gateway.ConfigurationJson = System.Text.Json.JsonSerializer.Serialize(new
-                {
-                    settlement = new
-                    {
-                        currency = settlementCurrency,
-                        rates = new Dictionary<string, decimal> { [invoiceCurrency] = request.SettlementRate!.Value },
-                    },
-                });
-            }
-        }
-
         gateway.WebhookUrl = provider == PaymentProviders.Manual || string.IsNullOrWhiteSpace(publicBaseUrl)
             ? null
             : $"{publicBaseUrl.TrimEnd('/')}/api/payments/webhooks/{provider.ToLowerInvariant()}/{tenantId}";

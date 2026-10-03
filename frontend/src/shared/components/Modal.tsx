@@ -6,11 +6,13 @@ export default function Modal({
   onClose,
   children,
   footer,
+  className,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  className?: string;
 }) {
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -26,7 +28,7 @@ export default function Modal({
 
   return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div className={`modal${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div className="modal-header">
           <div className="modal-title-group">
             <span className="modal-title-mark" aria-hidden="true">✦</span>

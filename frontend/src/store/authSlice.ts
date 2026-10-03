@@ -1,7 +1,6 @@
 ﻿import { API_BASE_URL } from '../api/apiBaseUrl';
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
-import { revokeRefreshToken } from '../api/sessionRefresh';
 
 
 export interface User {
@@ -29,9 +28,15 @@ interface LoginCredentials {
 
 interface LoginResponse {
   accessToken: string;
-  refreshToken?: string;
   user: User;
 }
+
+const friendlyLoginMessage = (message?: string): string => {
+  if (!message || /invalid email or password|incorrect email or password|invalid credentials/i.test(message)) {
+    return 'No worries — please check your email and password, then try again.';
+  }
+  return message;
+};
 
 const initialState: AuthState = {
   user: JSON.parse(localStorage.getItem('user') || 'null'),
@@ -51,10 +56,9 @@ export const loginUser = createAsyncThunk<
       `${API_BASE_URL}/auth/login`,
       credentials
     );
-    const { accessToken, refreshToken, user } = response.data;
+    const { accessToken, user } = response.data;
 
     localStorage.setItem('token', accessToken);
-    if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('user', JSON.stringify(user));
 
     return { accessToken, user };
@@ -70,7 +74,7 @@ export const loginUser = createAsyncThunk<
     const message = axios.isAxiosError(error)
       ? error.response?.data?.message
       : undefined;
-    return rejectWithValue(message || 'Invalid email or password');
+    return rejectWithValue(friendlyLoginMessage(message));
   }
 });
 
@@ -83,7 +87,6 @@ const authSlice = createSlice({
       state.token = null;
       state.isAuthenticated = false;
       localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
     },
     clearError: (state) => {
@@ -105,6 +108,13 @@ const authSlice = createSlice({
       state.user = { ...state.user, ...action.payload };
       localStorage.setItem('user', JSON.stringify(state.user));
     },
+    switchBusinessSession: (state, action: PayloadAction<LoginResponse>) => {
+      state.token = action.payload.accessToken;
+      state.user = action.payload.user;
+      state.isAuthenticated = true;
+      localStorage.setItem('token', action.payload.accessToken);
+      localStorage.setItem('user', JSON.stringify(action.payload.user));
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -125,11 +135,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearError, initializeAuth, updateCurrentUser } = authSlice.actions;
-
-/** Signs out on the server too: the refresh token is revoked before it is dropped locally. */
-export function signOut(dispatch: (action: ReturnType<typeof logout>) => unknown): void {
-  revokeRefreshToken();
-  dispatch(logout());
-}
+export const { logout, clearError, initializeAuth, updateCurrentUser, switchBusinessSession } = authSlice.actions;
 export default authSlice.reducer;

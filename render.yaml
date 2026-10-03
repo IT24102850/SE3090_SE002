@@ -1,10 +1,10 @@
-# Render Blueprint - deploys the ASP.NET Core backend from this repo.
+# Render Blueprint - deploys the ASP.NET Core backend and Python agent service.
 # Postgres is already hosted on Supabase (see backend user-secrets), so no
 # Render-managed database is declared here.
 #
 # One-time manual step (Render's CLI can't create new services, only manage
 # existing ones): Render Dashboard -> New + -> Blueprint -> connect this
-# repo -> it detects this file -> fill in the `sync: false` secrets below ->
+# repo -> it detects this file -> fill in the `sync: false` values below ->
 # Deploy.
 services:
   - type: web
@@ -24,7 +24,7 @@ services:
       - key: Jwt__Audience
         value: SmeBackendUsers
       - key: AgentService__BaseUrl
-        value: https://sme-agentic-ai.onrender.com
+        sync: false
       - key: AgentService__InternalToken
         sync: false
       - key: Cloudinary__CloudName
@@ -33,36 +33,23 @@ services:
         sync: false
       - key: Cloudinary__ApiSecret
         sync: false
-      # Unify's own subscription billing - what tenants pay US for the
-      # platform. These are the platform's merchant credentials and are
-      # deliberately separate from anything a tenant configures for charging
-      # their own customers. With the Stripe key unset the API falls back to
-      # its sandbox provider: the whole flow still runs and says plainly that
-      # it was simulated.
-      - key: Platform__Billing__Currency
-        value: LKR
-      - key: Platform__Billing__TestMode
-        value: "true"
-      # Stripe will not accept LKR, so an LKR invoice settles on its own
-      # amount while the card is charged the equivalent at this rate.
-      - key: Platform__Billing__SettlementCurrency
-        value: USD
-      - key: Platform__Billing__Rates__LKR
-        value: "300"
-      - key: Platform__Billing__Stripe__SecretKey
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
         sync: false
-      - key: Platform__Billing__Stripe__PublicKey
+      - key: SMTP_PASSWORD
         sync: false
-      # Only this deployment can receive webhooks - it has a public URL,
-      # which a laptop does not. Point Stripe at
-      # https://<this-service>/api/subscription/webhooks/stripe
-      - key: Platform__Billing__Stripe__WebhookSecret
+      - key: SMTP_FROM
         sync: false
+
   - type: web
-    name: sme-agentic-ai
-    runtime: docker
+    name: sme-agent-service
+    runtime: python
     rootDir: agentic-ai-service
-    dockerfilePath: ./Dockerfile
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     plan: free
     healthCheckPath: /health
     envVars:
@@ -71,4 +58,10 @@ services:
       - key: AGENT_SERVICE_INTERNAL_TOKEN
         sync: false
       - key: BACKEND_API_BASE_URL
-        value: https://sme-backend-lxsp.onrender.com/api
+        sync: false
+      - key: GEMINI_MODEL_DEFAULT
+        value: gemini-flash-latest
+      - key: GEMINI_MODEL_PLANNER
+        value: gemini-flash-latest
+      - key: LLM_PROVIDER
+        value: gemini

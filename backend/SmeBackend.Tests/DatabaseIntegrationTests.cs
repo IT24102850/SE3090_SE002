@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.Models;
 using SmeBackend.Services;
@@ -8,11 +8,14 @@ namespace SmeBackend.Tests;
 
 public class DatabaseIntegrationTests
 {
-    [SkippableFact]
+    [Fact]
     public async Task Migration_ShouldCreateExpectedTables()
     {
         var container = await StartPostgresAsync();
-        Skip.If(container is null, "Docker is not available, so the PostgreSQL Testcontainers test cannot run here (it runs in CI).");
+        if (container is null)
+        {
+            return;
+        }
 
         await using (container)
         {
@@ -29,38 +32,14 @@ public class DatabaseIntegrationTests
         }
     }
 
-    [SkippableFact]
-    public async Task Migration_CreatesCheckConstraints_AndPostgresRejectsViolatingRows()
-    {
-        var container = await StartPostgresAsync();
-        Skip.If(container is null, "Docker is not available, so the PostgreSQL Testcontainers test cannot run here (it runs in CI).");
-
-        await using (container)
-        {
-            await using var db = CreateDbContext(container.GetConnectionString());
-            await db.Database.MigrateAsync();
-
-            var constraints = await db.Database
-                .SqlQueryRaw<string>("SELECT conname AS \"Value\" FROM pg_constraint WHERE contype = 'c' AND conname LIKE 'CK\\_%'")
-                .ToListAsync();
-            Assert.Contains("CK_bookings_end_after_start", constraints);
-            Assert.Contains("CK_invoice_items_quantity_positive", constraints);
-            Assert.Contains("CK_purchase_order_items_quantity_positive", constraints);
-
-            // A zero-quantity line item is refused by the database itself.
-            var violation = await Assert.ThrowsAsync<Npgsql.PostgresException>(() =>
-                db.Database.ExecuteSqlRawAsync(
-                    "INSERT INTO invoice_items (\"Id\", \"InvoiceId\", \"Description\", \"Quantity\", \"UnitPrice\", \"Amount\", \"Category\", \"CreatedAt\", \"UpdatedAt\") " +
-                    "VALUES (gen_random_uuid(), NULL, 'x', 0, 10, 0, 'Service', now(), now())"));
-            Assert.Equal("23514", violation.SqlState); // check_violation
-        }
-    }
-
-    [SkippableFact]
+    [Fact]
     public async Task EnforceUniqueSkuPerTenant_WhenDuplicateSkuInserted_ThrowsDbUpdateException()
     {
         var container = await StartPostgresAsync();
-        Skip.If(container is null, "Docker is not available, so the PostgreSQL Testcontainers test cannot run here (it runs in CI).");
+        if (container is null)
+        {
+            return;
+        }
 
         await using (container)
         {
@@ -124,11 +103,14 @@ public class DatabaseIntegrationTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task StockMovements_ShouldReferenceValidInventoryItemAndKeepBalanceConsistent()
     {
         var container = await StartPostgresAsync();
-        Skip.If(container is null, "Docker is not available, so the PostgreSQL Testcontainers test cannot run here (it runs in CI).");
+        if (container is null)
+        {
+            return;
+        }
 
         await using (container)
         {

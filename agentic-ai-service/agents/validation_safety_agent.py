@@ -159,6 +159,4 @@ def run(
         requires_human_approval=False,
         validation_notes=notes,
         booking_id=str(result.get("booking", {}).get("id")) if result.get("booking") else None,
-        invoice_id=result.get("booking", {}).get("invoiceId") if result.get("booking") else None,
-        checkout=result.get("checkout"),
     )
