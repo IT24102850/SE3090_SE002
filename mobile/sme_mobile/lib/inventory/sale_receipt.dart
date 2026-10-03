@@ -106,7 +106,7 @@ class SaleReceiptPdfGenerator {
                     children: [
                       pw.Text(
                         'SALES RECEIPT',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: PdfColors.white,
                           fontSize: 10,
                           fontWeight: pw.FontWeight.bold,
@@ -116,7 +116,7 @@ class SaleReceiptPdfGenerator {
                       pw.SizedBox(height: 7),
                       pw.Text(
                         'Sale recorded',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: PdfColors.white,
                           fontSize: 23,
                           fontWeight: pw.FontWeight.bold,
