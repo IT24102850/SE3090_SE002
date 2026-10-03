@@ -1,6 +1,7 @@
-﻿import { API_BASE_URL } from '../api/apiBaseUrl';
+import { API_BASE_URL } from '../api/apiBaseUrl';
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
+import { revokeRefreshToken } from '../api/sessionRefresh';
 
 
 export interface User {
@@ -28,15 +29,9 @@ interface LoginCredentials {
 
 interface LoginResponse {
   accessToken: string;
+  refreshToken?: string;
   user: User;
 }
-
-const friendlyLoginMessage = (message?: string): string => {
-  if (!message || /invalid email or password|incorrect email or password|invalid credentials/i.test(message)) {
-    return 'No worries — please check your email and password, then try again.';
-  }
-  return message;
-};
 
 const initialState: AuthState = {
   user: JSON.parse(localStorage.getItem('user') || 'null'),
@@ -56,9 +51,10 @@ export const loginUser = createAsyncThunk<
       `${API_BASE_URL}/auth/login`,
       credentials
     );
-    const { accessToken, user } = response.data;
+    const { accessToken, refreshToken, user } = response.data;
 
     localStorage.setItem('token', accessToken);
+    if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('user', JSON.stringify(user));
 
     return { accessToken, user };
@@ -74,7 +70,7 @@ export const loginUser = createAsyncThunk<
     const message = axios.isAxiosError(error)
       ? error.response?.data?.message
       : undefined;
-    return rejectWithValue(friendlyLoginMessage(message));
+    return rejectWithValue(message || 'Invalid email or password');
   }
 });
 
@@ -87,6 +83,7 @@ const authSlice = createSlice({
       state.token = null;
       state.isAuthenticated = false;
       localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
     },
     clearError: (state) => {
@@ -136,4 +133,10 @@ const authSlice = createSlice({
 });
 
 export const { logout, clearError, initializeAuth, updateCurrentUser, switchBusinessSession } = authSlice.actions;
+
+/** Signs out on the server too: the refresh token is revoked before it is dropped locally. */
+export function signOut(dispatch: (action: ReturnType<typeof logout>) => unknown): void {
+  revokeRefreshToken();
+  dispatch(logout());
+}
 export default authSlice.reducer;

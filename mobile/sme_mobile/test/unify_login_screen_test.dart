@@ -27,6 +27,8 @@ void main() {
       const ProviderScope(child: MaterialApp(home: UnifyLoginScreen())),
     );
     await tester.pump();
+    await tester.tap(find.text("Work Email"));
+    await tester.pump(const Duration(milliseconds: 250));
   }
 
   testWidgets('renders the branding, hero and form', (tester) async {
@@ -38,9 +40,6 @@ void main() {
     expect(find.text('PASSWORD'), findsOneWidget);
     expect(find.text('Sign In'), findsOneWidget);
     expect(find.text('Forgot Password?'), findsOneWidget);
-    expect(find.text('Or continue with'), findsNothing);
-    expect(find.text('Google'), findsNothing);
-    expect(find.text('Apple'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -129,4 +128,10 @@ void main() {
     expect(passwordField().obscureText, isFalse);
   });
 
+  testWidgets('offers no unimplemented social sign-in buttons', (tester) async {
+    await pumpLogin(tester);
+
+    expect(find.byIcon(Icons.apple), findsNothing);
+    expect(find.text('Or continue with'), findsNothing);
+  });
 }

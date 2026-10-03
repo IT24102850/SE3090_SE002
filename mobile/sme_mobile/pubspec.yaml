@@ -25,6 +25,9 @@ dependencies:
   # files are added - see services/push_notification_service.dart.
   firebase_core: ^3.6.0
   firebase_messaging: ^15.1.3
+  # Device notifications without Firebase: the API's live notification
+  # stream raised as Android notifications - services/device_notification_service.dart
+  flutter_local_notifications: ^17.2.3
   # Business Profile: tap-to-call/email/website/social links.
   url_launcher: ^6.3.1
   # Business Profile editor (Admin/Manager): pick logo/cover/gallery images.

@@ -8,7 +8,8 @@ import 'models/notification_model.dart';
 import 'providers/auth_provider.dart';
 import 'providers/notification_providers.dart';
 import 'screens/unify_auth/welcome_flow_screen.dart';
-import 'screens/dashboard_screen.dart';
+import 'screens/role_home.dart';
+import 'services/device_notification_service.dart';
 import 'screens/profile_setup_screen.dart';
 import 'services/push_notification_service.dart';
 import 'theme/app_theme.dart';
@@ -42,6 +43,13 @@ class _MyAppState extends ConsumerState<MyApp> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    ref.listen(authProvider.select((state) => state.isAuthenticated), (was, now) {
+      if (now) {
+        unawaited(DeviceNotificationService.instance.start());
+      } else if (was == true) {
+        unawaited(DeviceNotificationService.instance.stop());
+      }
+    });
     ref.listen<AuthState>(authProvider, (previous, next) {
       final signedIn = previous?.isAuthenticated != true &&
           next.isAuthenticated &&
@@ -79,7 +87,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     } else if (!auth.isProfileComplete) {
       home = const ProfileSetupScreen();
     } else {
-      home = const DashboardEntryAnimation(child: DashboardScreen());
+      home = DashboardEntryAnimation(child: roleHome(auth.user?.role));
     }
 
     final homeKey = ValueKey<String>(

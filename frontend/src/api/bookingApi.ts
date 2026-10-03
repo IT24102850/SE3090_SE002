@@ -2,10 +2,14 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
 import { API_BASE_URL, LOCAL_API_BASE_URL } from './apiBaseUrl';
 import type { User } from '../store/authSlice';
+import { expireSession, refreshSession } from './sessionRefresh';
+import type { CheckoutResponse } from '../features/billing/billingApi';
 import type {
   AgentWorkflow,
+  BookingEvent,
   AvailabilityDay,
   DepartureBoard,
+  DepartureForecast,
   DepartureManifest,
   ExcursionKpis,
   RescheduleOption,
@@ -68,8 +72,9 @@ const localBackendQuery = fetchBaseQuery({
   },
 });
 
-// Access tokens live 2 hours (JwtService.GenerateAccessToken) and there is no
-// refresh endpoint to renew them, so a session simply dies mid-use. Without
+// Access tokens live 2 hours (JwtService.GenerateAccessToken). On the first
+// 401 the refresh token is traded for a new pair (api/sessionRefresh.ts) and
+// the query is replayed; only when that fails is the session over. Without
 // this wrapper RTK Query swallowed the resulting 401s: every page kept
 // rendering the logged-in shell off the stale `user` object in localStorage
 // while each table showed its "nothing found" empty state, which reads as
@@ -89,12 +94,22 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
   // fires several queries at once) only redirect once, and so a genuine 401
   // while already logged out can't loop us back into /login.
   if (result.error?.status === 401 && localStorage.getItem('token')) {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
+    if (await refreshSession()) {
+      result = await rawBaseQuery(args, api, extraOptions);
+    }
+    if (result.error?.status === 401) expireSession();
   }
   return result;
 };
+
+/* Every booking write also leaves a trail in the notification centre - the
+ * customer's confirmation and the desk's tenant-wide copy - so a write that
+ * does not invalidate these leaves the bell showing a stale count until its
+ * next poll. Spread into each booking mutation's invalidatesTags. */
+const NOTIFICATION_TAGS = [
+  { type: 'Notification' as const, id: 'LIST' },
+  { type: 'Notification' as const, id: 'COUNT' },
+];
 
 export const bookingApi = createApi({
   reducerPath: 'bookingApi',
@@ -231,6 +246,13 @@ export const bookingApi = createApi({
       query: (id) => `/bookings/${id}`,
       providesTags: (_r, _e, id) => [{ type: 'Booking', id }],
     }),
+    // The booking's timeline - every status change, reschedule and resource
+    // move, with who did it (backend BookingsController.GetHistory). Tagged
+    // on the booking, so cancelling or rescheduling refetches it.
+    getBookingHistory: builder.query<BookingEvent[], string>({
+      query: (id) => `/bookings/${id}/history`,
+      providesTags: (_r, _e, id) => [{ type: 'Booking', id }],
+    }),
     // ticketBreakdown is asymmetric on purpose: the client POSTs an array
     // of { type, qty } and the server returns the priced jsonb *string* it
     // stored, so Booking's own string-typed field is omitted here rather
@@ -246,7 +268,26 @@ export const bookingApi = createApi({
       }
     >({
       query: (body) => ({ url: '/bookings', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }, ...NOTIFICATION_TAGS],
+    }),
+    checkoutBooking: builder.mutation<{
+      bookingId: string;
+      status: string;
+      amountDue: number;
+      amountPayableNow: number;
+      currency: string;
+      paymentMode: string;
+      holdExpiresAt: string | null;
+      invoiceId: string | null;
+      checkout: CheckoutResponse | null;
+    }, {
+      tenantId: string; resourceId: string; bookingTypeId: string; bookedBy: string;
+      startTime: string; endTime: string; priority: string;
+      attendeeCount?: number; title?: string; notes?: string; source?: string;
+      ticketBreakdown?: TicketLine[]; departureId?: string; formData?: string; waiver?: string;
+    }>({
+      query: (body) => ({ url: '/bookings/checkout', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     updateBooking: builder.mutation<unknown, { id: string; body: Partial<Booking> }>({
       query: ({ id, body }) => ({ url: `/bookings/${id}`, method: 'PUT', body }),
@@ -258,15 +299,15 @@ export const bookingApi = createApi({
     }),
     rescheduleBooking: builder.mutation<unknown, { id: string; newStartTime: string; newEndTime: string }>({
       query: ({ id, ...body }) => ({ url: `/bookings/${id}/reschedule`, method: 'PUT', body }),
-      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }],
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Conflicts', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     cancelBooking: builder.mutation<void, string>({
       query: (id) => ({ url: `/bookings/${id}/cancel`, method: 'PUT' }),
-      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     updateBookingStatus: builder.mutation<unknown, { id: string; status: string }>({
       query: ({ id, status }) => ({ url: `/bookings/${id}/status`, method: 'PUT', body: { status } }),
-      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Booking', id: 'MINE' }],
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, { type: 'Booking', id: 'MINE' }, ...NOTIFICATION_TAGS],
     }),
     sendReminder: builder.mutation<{ message: string }, { id: string; channel: string }>({
       query: ({ id, channel }) => ({ url: `/bookings/${id}/remind`, method: 'POST', body: { channel } }),
@@ -283,7 +324,7 @@ export const bookingApi = createApi({
     }),
     bulkSchedule: builder.mutation<any, { tenantId: string; bookings: any[] }>({
       query: (body) => ({ url: '/bookings/bulk-schedule', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     createRecurringBooking: builder.mutation<
       | { totalRequested: number; created: number; skippedConflicts: number }
@@ -295,7 +336,7 @@ export const bookingApi = createApi({
       }
     >({
       query: (body) => ({ url: '/bookings/recurring', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Booking', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     // FR-AS8: the logged-in doctor/staff member's own schedule.
     getMySchedule: builder.query<Booking[], { date?: string } | void>({
@@ -304,7 +345,67 @@ export const bookingApi = createApi({
     }),
     checkInBooking: builder.mutation<{ message: string }, string>({
       query: (id) => ({ url: `/bookings/${id}/checkin`, method: 'POST' }),
-      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: (_r, _e, id) => [{ type: 'Booking', id }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
+    }),
+    /* Spec 2.5's "revenue per slot": which hour of the day earns, not which
+       resource earns. `tz` is minutes east of UTC so the hours are the
+       operator's own clock, matching the dashboards' convention. */
+    getRevenuePerSlot: builder.query<
+      {
+        totalRevenue: number; totalBookings: number; averagePerBooking: number; forgoneRevenue: number;
+        busiestHour: number | null; richestHour: number | null;
+        slots: { hour: number; label: string; bookings: number; earnedBookings: number; lostBookings: number; guests: number; revenue: number; averageValue: number; forgoneRevenue: number }[];
+      },
+      { tenantId: string; from: string; to: string; branchId?: string; tz?: number }
+    >({
+      query: (params) => ({ url: '/bookings/reports/revenue-per-slot', params }),
+    }),
+    /* Spec 2.3's AvailabilitySlots, made real: a business can now hold its
+       capacity rather than only compute it. */
+    getAvailabilitySlots: builder.query<
+      {
+        total: number; booked: number; free: number; utilisationPercent: number;
+        days: { date: string; total: number; booked: number;
+          slots: { id: string; date: string; startTime: string; endTime: string; isBooked: boolean; bookingId: string | null }[] }[];
+      },
+      { id: string; from: string; to: string; onlyFree?: boolean }
+    >({
+      query: ({ id, ...params }) => ({ url: `/resources/${id}/availability-slots`, params }),
+      providesTags: (_r, _e, { id }) => [{ type: 'ResourceSchedule', id: `slots-${id}` }],
+    }),
+    generateAvailabilitySlots: builder.mutation<
+      { created: number; skipped: number; days: number },
+      { id: string; from: string; to: string; slotMinutes: number }
+    >({
+      query: ({ id, ...body }) => ({ url: `/resources/${id}/availability-slots/generate`, method: 'POST', body }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'ResourceSchedule', id: `slots-${id}` }],
+    }),
+    deleteAvailabilitySlots: builder.mutation<
+      { removed: number; keptBecauseBooked: number },
+      { id: string; from: string; to: string }
+    >({
+      query: ({ id, ...params }) => ({ url: `/resources/${id}/availability-slots`, method: 'DELETE', params }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'ResourceSchedule', id: `slots-${id}` }],
+    }),
+
+    /* Spec 2.3's RecurringPatterns, previously write-only. */
+    getRecurringSeries: builder.query<
+      {
+        items: {
+          patternId: string; anchorBookingId: string; title: string | null;
+          resourceName: string | null; bookingTypeName: string | null; colorHex: string | null;
+          frequency: string; daysOfWeek: number[]; endDate: string; startTime: string;
+          total: number; remaining: number; cancelled: number; isActive: boolean;
+        }[];
+      },
+      { tenantId: string }
+    >({
+      query: (params) => ({ url: '/bookings/series', params }),
+      providesTags: [{ type: 'Booking', id: 'SERIES' }],
+    }),
+    cancelRecurringSeries: builder.mutation<{ cancelled: number }, string>({
+      query: (patternId) => ({ url: `/bookings/series/${patternId}`, method: 'DELETE' }),
+      invalidatesTags: [{ type: 'Booking', id: 'SERIES' }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     getNoShowStats: builder.query<
       { total: number; noShows: number; completed: number; cancelled: number; noShowRate: number; utilizationRate: number },
@@ -390,6 +491,13 @@ export const bookingApi = createApi({
     >({
       query: (params) => ({ url: '/departures/weather', params: params ?? undefined }),
       providesTags: [{ type: 'Weather', id: 'LIST' }],
+    }),
+    // Open-Meteo forecast for one departure. Fetched on demand rather than
+    // polled: it is a third-party call, and a board showing twelve sailings
+    // should not make twelve of them on a timer.
+    getDepartureForecast: builder.query<DepartureForecast, string>({
+      query: (departureId) => ({ url: `/departures/${departureId}/forecast` }),
+      providesTags: (_r, _e, id) => [{ type: 'Weather', id }],
     }),
     recordWeather: builder.mutation<
       WeatherObservation,
@@ -721,7 +829,7 @@ export const bookingApi = createApi({
       { objective: string; dateFrom?: string; dateTo?: string; extraConstraints?: Record<string, unknown> }
     >({
       query: (body) => ({ url: '/agent/find-and-book', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Workflow', id: 'MINE' }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Workflow', id: 'MINE' }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     getUnavailableRanges: builder.query<{ startTime: string; endTime: string }[], { resourceId: string; from: string; to: string }>({
       query: (params) => ({ url: '/bookings/unavailable-ranges', params }),
@@ -742,6 +850,25 @@ export const bookingApi = createApi({
       query: (body) => ({ url: '/agent/workflow/propose', method: 'POST', body }),
       invalidatesTags: [{ type: 'Workflow', id: 'LIST' }],
     }),
+    // Schedule Copilot (spec 2.7): runs the four-agent workflow and returns
+    // the stored workflow together with the agents' full trace.
+    planSchedule: builder.mutation<
+      { workflow: AgentWorkflow; trace: unknown },
+      {
+        tenantId: string;
+        objective: string;
+        bookingTypeId: string;
+        dateFrom: string;
+        dateTo: string;
+        targetCount: number;
+        resourceIds?: string[];
+        priorityRules?: string[];
+        branchId?: string;
+      }
+    >({
+      query: (body) => ({ url: '/agent/workflow/plan-schedule', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Workflow', id: 'LIST' }, ...NOTIFICATION_TAGS],
+    }),
     approveWorkflow: builder.mutation<{ message: string }, string>({
       query: (id) => ({ url: `/agent/workflow/${id}/approve`, method: 'POST' }),
       invalidatesTags: (_r, _e, id) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }],
@@ -752,7 +879,7 @@ export const bookingApi = createApi({
     }),
     applyWorkflow: builder.mutation<{ message: string; created: number; skipped: number }, string>({
       query: (id) => ({ url: `/agent/workflow/${id}/apply`, method: 'POST' }),
-      invalidatesTags: (_r, _e, id) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }, { type: 'Booking', id: 'LIST' }],
+      invalidatesTags: (_r, _e, id) => [{ type: 'Workflow', id }, { type: 'Workflow', id: 'LIST' }, { type: 'Booking', id: 'LIST' }, ...NOTIFICATION_TAGS],
     }),
     reviseWorkflow: builder.mutation<AgentWorkflow, { id: string; plan: { steps: unknown[]; estimatedRevenueImpact: number } }>({
       query: ({ id, plan }) => ({ url: `/agent/workflow/${id}/revise`, method: 'POST', body: { plan } }),
@@ -908,7 +1035,9 @@ export const {
   useUpdateMyProfileMutation,
   useGetBookingsQuery,
   useGetBookingQuery,
+  useGetBookingHistoryQuery,
   useCreateBookingMutation,
+  useCheckoutBookingMutation,
   useUpdateBookingMutation,
   useDeleteBookingMutation,
   useRescheduleBookingMutation,
@@ -919,7 +1048,13 @@ export const {
   useLazyGetAvailableSlotsQuery,
   useGetConflictsQuery,
   useBulkScheduleMutation,
+  useGetAvailabilitySlotsQuery,
+  useGenerateAvailabilitySlotsMutation,
+  useDeleteAvailabilitySlotsMutation,
+  useGetRecurringSeriesQuery,
+  useCancelRecurringSeriesMutation,
   useGetNoShowStatsQuery,
+  useGetRevenuePerSlotQuery,
   useGetDepartureBoardQuery,
   useGetDepartureManifestQuery,
   useCreateDepartureMutation,
@@ -930,6 +1065,8 @@ export const {
   useGetRescheduleOptionsQuery,
   useBulkRescheduleDepartureMutation,
   useGetWeatherQuery,
+  useGetDepartureForecastQuery,
+  useLazyGetDepartureForecastQuery,
   useRecordWeatherMutation,
   useGetSafetyPanelQuery,
   useGetSightingsQuery,
@@ -985,6 +1122,7 @@ export const {
   useGetStaffUsersQuery,
   useGetWorkflowsQuery,
   useProposeScheduleMutation,
+  usePlanScheduleMutation,
   useApproveWorkflowMutation,
   useRejectWorkflowMutation,
   useApplyWorkflowMutation,

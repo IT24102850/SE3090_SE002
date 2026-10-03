@@ -9,8 +9,8 @@ namespace SmeBackend.Services;
 /// of relying on staff to click "send reminder" (BookingsController's
 /// /remind endpoint, which stays available for on-demand/last-minute sends).
 /// Channel dispatch goes through the same IReminderChannelSender the manual
-/// endpoint uses, so both places log the same stubbed "would send" output
-/// until a real SMS/WhatsApp/Email gateway is configured.
+/// endpoint uses, so both places send over the same Twilio/SendGrid path and
+/// record the same honest status - Sent, Simulated, Failed or Skipped.
 public class ReminderDispatchService : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(5);
@@ -71,17 +71,30 @@ public class ReminderDispatchService : BackgroundService
 
         foreach (var booking in due)
         {
-            await reminderSender.SendAsync(booking, "Email");
+            var result = await reminderSender.SendAsync(booking, "Email", stoppingToken);
 
             db.BookingReminders.Add(new BookingReminder
             {
                 BookingId = booking.Id,
                 Channel = "Email",
-                Status = "Sent",
-                SentAt = now
+                Status = result.Status,
+                // Only stamp a time when something actually left the building;
+                // a Failed row with a SentAt reads as delivered in reports.
+                SentAt = result.Status == "Sent" ? now : null
             });
-            booking.ReminderSent = true;
-            booking.UpdatedAt = now;
+
+            // Do not mark the booking reminded unless it was. Leaving the flag
+            // clear means the next pass retries after a transient outage,
+            // which is the behaviour a guest would want.
+            if (result.DeliveredOrSimulated)
+            {
+                booking.ReminderSent = true;
+                booking.UpdatedAt = now;
+            }
+            else
+            {
+                _logger.LogWarning("Reminder for booking {BookingId} was not sent: {Detail}", booking.Id, result.Detail);
+            }
 
             var reminderMessage = $"Reminder: you have an appointment on {booking.StartTime:MMM d, h:mm tt}.";
             NotificationHelper.Queue(db, booking.TenantId, booking.BookedBy, "BookingReminder",

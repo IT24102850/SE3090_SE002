@@ -1659,6 +1659,13 @@ public class InventoryControllerTests
         Assert.IsType<ForbidResult>(result);
     }
 
+    /// The inventory AI is a separate service over HTTP. These tests are about
+    /// the controller's own listing and authorisation, so it is stubbed rather
+    /// than reached.
+    private static Mock<IInventoryAgentService> CreateAgentService() => new();
+
+    private static Mock<IJwtService> CreateJwtService() => new();
+
     private static Mock<IAuthorizationService> CreateAuthorizationService()
     {
         var authorizationService = new Mock<IAuthorizationService>();

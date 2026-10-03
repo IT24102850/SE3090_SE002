@@ -26,9 +26,15 @@ import 'booking_success_screen.dart';
 /// Unifies Slot's [AvailableSlot] and Night/DateRange/Package's picked
 /// start/end dates into one shape [_ConfirmStep]/[_confirmBooking] work
 /// with, so neither has to branch on booking unit internally.
-typedef BookingWindow = ({DateTime startLocal, DateTime endLocal, String startIso, String endIso});
+typedef BookingWindow = ({
+  DateTime startLocal,
+  DateTime endLocal,
+  String startIso,
+  String endIso
+});
 
-({int hour, int minute}) _parseTimeOfDay(String? value, {required int fallbackHour, required int fallbackMinute}) {
+({int hour, int minute}) _parseTimeOfDay(String? value,
+    {required int fallbackHour, required int fallbackMinute}) {
   if (value != null) {
     final parts = value.split(':');
     final h = int.tryParse(parts.elementAt(0));
@@ -41,15 +47,29 @@ typedef BookingWindow = ({DateTime startLocal, DateTime endLocal, String startIs
 BookingWindow _rangeToWindow(DateTime start, DateTime end, BookingType type) {
   final config = type.config;
   if (type.bookingUnit == 'Night') {
-    final checkIn = _parseTimeOfDay(config?['checkInTime'] as String?, fallbackHour: 14, fallbackMinute: 0);
-    final checkOut = _parseTimeOfDay(config?['checkOutTime'] as String?, fallbackHour: 11, fallbackMinute: 0);
-    final startLocal = DateTime(start.year, start.month, start.day, checkIn.hour, checkIn.minute);
-    final endLocal = DateTime(end.year, end.month, end.day, checkOut.hour, checkOut.minute);
-    return (startLocal: startLocal, endLocal: endLocal, startIso: startLocal.toUtc().toIso8601String(), endIso: endLocal.toUtc().toIso8601String());
+    final checkIn = _parseTimeOfDay(config?['checkInTime'] as String?,
+        fallbackHour: 14, fallbackMinute: 0);
+    final checkOut = _parseTimeOfDay(config?['checkOutTime'] as String?,
+        fallbackHour: 11, fallbackMinute: 0);
+    final startLocal = DateTime(
+        start.year, start.month, start.day, checkIn.hour, checkIn.minute);
+    final endLocal =
+        DateTime(end.year, end.month, end.day, checkOut.hour, checkOut.minute);
+    return (
+      startLocal: startLocal,
+      endLocal: endLocal,
+      startIso: startLocal.toUtc().toIso8601String(),
+      endIso: endLocal.toUtc().toIso8601String()
+    );
   }
   final startLocal = DateTime(start.year, start.month, start.day);
   final endLocal = DateTime(end.year, end.month, end.day, 23, 59);
-  return (startLocal: startLocal, endLocal: endLocal, startIso: startLocal.toUtc().toIso8601String(), endIso: endLocal.toUtc().toIso8601String());
+  return (
+    startLocal: startLocal,
+    endLocal: endLocal,
+    startIso: startLocal.toUtc().toIso8601String(),
+    endIso: endLocal.toUtc().toIso8601String()
+  );
 }
 
 class BookingFlowScreen extends ConsumerStatefulWidget {
@@ -60,7 +80,8 @@ class BookingFlowScreen extends ConsumerStatefulWidget {
   // cases the wizard behaves exactly as before (no extra step).
   final TourismSubType? subType;
 
-  const BookingFlowScreen({super.key, required this.tenant, required this.resource, this.subType});
+  const BookingFlowScreen(
+      {super.key, required this.tenant, required this.resource, this.subType});
 
   @override
   ConsumerState<BookingFlowScreen> createState() => _BookingFlowScreenState();
@@ -82,8 +103,9 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
 
   Color get _accent => BusinessTypeVisual.of(widget.tenant.businessType).color;
 
-  List<BookingFormField> get _extraFields =>
-      widget.subType == null ? const [] : TourismDashboardRegistry.configFor(widget.subType!).bookingFormFields;
+  List<BookingFormField> get _extraFields => widget.subType == null
+      ? const []
+      : TourismDashboardRegistry.configFor(widget.subType!).bookingFormFields;
 
   bool get _hasExtraStep => _extraFields.isNotEmpty;
 
@@ -107,7 +129,12 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
     if (type.bookingUnit == 'Slot') {
       final s = _selectedSlot;
       if (s == null) return null;
-      return (startLocal: s.startLocal, endLocal: s.endLocal, startIso: s.startTime, endIso: s.endTime);
+      return (
+        startLocal: s.startLocal,
+        endLocal: s.endLocal,
+        startIso: s.startTime,
+        endIso: s.endTime
+      );
     }
     if (_rangeStart == null || _rangeEnd == null) return null;
     return _rangeToWindow(_rangeStart!, _rangeEnd!, type);
@@ -135,7 +162,8 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
 
     if (_repeatWeekly && _repeatUntil == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pick an end date for the recurring series.')),
+        const SnackBar(
+            content: Text('Pick an end date for the recurring series.')),
       );
       return;
     }
@@ -154,7 +182,9 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
           durationMinutes: type.defaultDurationMinutes,
           endDate: toApiDateString(_repeatUntil!),
           title: '${type.name} — ${widget.resource.name}',
-          notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+          notes: _notesController.text.trim().isEmpty
+              ? null
+              : _notesController.text.trim(),
         );
 
         if (!mounted) return;
@@ -162,7 +192,8 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
         final message = result.requiresApproval
             ? 'This recurring series affects ${result.totalRequested} bookings and requires approval from ${widget.tenant.businessName}.'
             : 'Recurring series created: ${result.created} of ${result.totalRequested} booking(s).';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
         Navigator.of(context).popUntil((route) => route.isFirst);
         return;
       }
@@ -176,9 +207,13 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
         startTimeIso: window.startIso,
         endTimeIso: window.endIso,
         title: '${type.name} — ${widget.resource.name}',
-        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-        attendeeCount: (widget.resource.capacity ?? 1) > 1 ? _attendeeCount : null,
-        formData: _extraFieldValues.isEmpty ? null : jsonEncode(_extraFieldValues),
+        notes: _notesController.text.trim().isEmpty
+            ? null
+            : _notesController.text.trim(),
+        attendeeCount:
+            (widget.resource.capacity ?? 1) > 1 ? _attendeeCount : null,
+        formData:
+            _extraFieldValues.isEmpty ? null : jsonEncode(_extraFieldValues),
       );
 
       if (!mounted) return;
@@ -208,7 +243,8 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
         ref.invalidate(unavailableRangesProvider((
           resourceId: widget.resource.id,
           from: toApiDateString(DateTime(today.year, today.month, today.day)),
-          to: toApiDateString(DateTime(today.year, today.month, today.day).add(const Duration(days: 365))),
+          to: toApiDateString(DateTime(today.year, today.month, today.day)
+              .add(const Duration(days: 365))),
         )));
       }
       setState(() {
@@ -217,10 +253,12 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
         _rangeEnd = null;
         _step = 1;
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     } on BookingRequestException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -238,7 +276,9 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
               accent: _accent,
               onBack: _goBack,
               resourceName: widget.resource.name,
-              labels: _hasExtraStep ? const ['Type', 'Date & time', 'Details', 'Confirm'] : const ['Type', 'Date & time', 'Confirm'],
+              labels: _hasExtraStep
+                  ? const ['Type', 'Date & time', 'Details', 'Confirm']
+                  : const ['Type', 'Date & time', 'Confirm'],
             ),
             Expanded(
               child: AnimatedSwitcher(
@@ -280,8 +320,10 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
                                 accent: _accent,
                                 values: _extraFieldValues,
                                 onUpload: _uploadBookingImage,
-                                onChanged: (key, value) => setState(() => _extraFieldValues[key] = value),
-                                onContinue: () => setState(() => _step = _confirmStepIndex),
+                                onChanged: (key, value) => setState(
+                                    () => _extraFieldValues[key] = value),
+                                onContinue: () =>
+                                    setState(() => _step = _confirmStepIndex),
                               )
                             : _ConfirmStep(
                                 key: const ValueKey('confirm'),
@@ -292,11 +334,14 @@ class _BookingFlowScreenState extends ConsumerState<BookingFlowScreen> {
                                 accent: _accent,
                                 notesController: _notesController,
                                 attendeeCount: _attendeeCount,
-                                onAttendeeChanged: (v) => setState(() => _attendeeCount = v),
+                                onAttendeeChanged: (v) =>
+                                    setState(() => _attendeeCount = v),
                                 repeatWeekly: _repeatWeekly,
-                                onRepeatWeeklyChanged: (v) => setState(() => _repeatWeekly = v),
+                                onRepeatWeeklyChanged: (v) =>
+                                    setState(() => _repeatWeekly = v),
                                 repeatUntil: _repeatUntil,
-                                onRepeatUntilChanged: (v) => setState(() => _repeatUntil = v),
+                                onRepeatUntilChanged: (v) =>
+                                    setState(() => _repeatUntil = v),
                                 submitting: _submitting,
                                 onConfirm: _confirmBooking,
                               ),
@@ -335,11 +380,14 @@ class _WizardHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: onBack),
+              IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: onBack),
               Expanded(
                 child: Text(
                   resourceName,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w700),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -372,14 +420,29 @@ class _WizardHeader extends StatelessWidget {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: isDone || isCurrent ? accent : Colors.white,
-                        border: Border.all(color: isDone || isCurrent ? accent : AppColors.border),
+                        border: Border.all(
+                            color: isDone || isCurrent
+                                ? accent
+                                : AppColors.border),
                       ),
                       child: isDone
-                          ? const Icon(Icons.check, size: 14, color: Colors.white)
-                          : Text('${idx + 1}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isCurrent ? Colors.white : Colors.grey.shade500)),
+                          ? const Icon(Icons.check,
+                              size: 14, color: Colors.white)
+                          : Text('${idx + 1}',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: isCurrent
+                                      ? Colors.white
+                                      : Colors.grey.shade500)),
                     ),
                     const SizedBox(height: 4),
-                    Text(_labels[idx], style: TextStyle(fontSize: 10, color: isCurrent ? accent : Colors.grey.shade500, fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500)),
+                    Text(_labels[idx],
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: isCurrent ? accent : Colors.grey.shade500,
+                            fontWeight:
+                                isCurrent ? FontWeight.w700 : FontWeight.w500)),
                   ],
                 );
               }),
@@ -396,7 +459,11 @@ class _TypeStep extends ConsumerWidget {
   final Color accent;
   final void Function(BookingType) onSelected;
 
-  const _TypeStep({super.key, required this.tenantId, required this.accent, required this.onSelected});
+  const _TypeStep(
+      {super.key,
+      required this.tenantId,
+      required this.accent,
+      required this.onSelected});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -409,7 +476,9 @@ class _TypeStep extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('Could not load booking types.'),
-            TextButton(onPressed: () => ref.invalidate(bookingTypesProvider(tenantId)), child: const Text('Retry')),
+            TextButton(
+                onPressed: () => ref.invalidate(bookingTypesProvider(tenantId)),
+                child: const Text('Retry')),
           ],
         ),
       ),
@@ -427,18 +496,29 @@ class _TypeStep extends ConsumerWidget {
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
           children: [
-            Text('What would you like to book?', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text('What would you like to book?',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             // Falls back to every type when nothing is categorised, so a
             // tenant that never set `category` sees exactly what it saw
             // before this grouping existed.
             ...(tours.isEmpty ? types : tours).map((type) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: _TypeCard(type: type, accent: accent, onTap: () => onSelected(type)),
+                  child: _TypeCard(
+                      type: type,
+                      accent: accent,
+                      onTap: () => onSelected(type)),
                 )),
             if (tours.isNotEmpty && addons.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text('Add-ons & services', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+              Text('Add-ons & services',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(
                 'Extras you can book alongside a trip.',
@@ -447,7 +527,10 @@ class _TypeStep extends ConsumerWidget {
               const SizedBox(height: 12),
               ...addons.map((type) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _TypeCard(type: type, accent: accent, onTap: () => onSelected(type)),
+                    child: _TypeCard(
+                        type: type,
+                        accent: accent,
+                        onTap: () => onSelected(type)),
                   )),
             ],
           ],
@@ -477,7 +560,11 @@ class _TicketTier extends StatelessWidget {
   final String price;
   final Color color;
 
-  const _TicketTier({required this.label, required this.band, required this.price, required this.color});
+  const _TicketTier(
+      {required this.label,
+      required this.band,
+      required this.price,
+      required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -492,12 +579,17 @@ class _TicketTier extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: color)),
           const SizedBox(height: 2),
-          Text(price, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+          Text(price,
+              style:
+                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
           if (band != null) ...[
             const SizedBox(height: 1),
-            Text(band!, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+            Text(band!,
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
           ],
         ],
       ),
@@ -510,7 +602,8 @@ class _TypeCard extends StatelessWidget {
   final Color accent;
   final VoidCallback onTap;
 
-  const _TypeCard({required this.type, required this.accent, required this.onTap});
+  const _TypeCard(
+      {required this.type, required this.accent, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -537,7 +630,8 @@ class _TypeCard extends StatelessWidget {
                   Container(
                     width: 8,
                     height: 40,
-                    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+                    decoration: BoxDecoration(
+                        color: color, borderRadius: BorderRadius.circular(4)),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -545,35 +639,49 @@ class _TypeCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          type.icon == null ? type.name : '${type.icon} ${type.name}',
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                          type.icon == null
+                              ? type.name
+                              : '${type.icon} ${type.name}',
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w700),
                         ),
-                        if (type.description != null && type.description!.isNotEmpty) ...[
+                        if (type.description != null &&
+                            type.description!.isNotEmpty) ...[
                           const SizedBox(height: 3),
                           Text(
                             type.description!,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.3),
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                                height: 1.3),
                           ),
                         ],
                         const SizedBox(height: 5),
                         Row(
                           children: [
-                            Icon(Icons.schedule, size: 13, color: Colors.grey.shade500),
+                            Icon(Icons.schedule,
+                                size: 13, color: Colors.grey.shade500),
                             const SizedBox(width: 4),
                             Text('${type.defaultDurationMinutes} min',
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey.shade600)),
                             if (type.requiresApproval) ...[
                               const SizedBox(width: 10),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: AppColors.amber.withValues(alpha: 0.12),
+                                  color:
+                                      AppColors.amber.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: const Text('Needs approval',
-                                    style: TextStyle(fontSize: 10, color: AppColors.amber, fontWeight: FontWeight.w700)),
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: AppColors.amber,
+                                        fontWeight: FontWeight.w700)),
                               ),
                             ],
                           ],
@@ -594,17 +702,22 @@ class _TypeCard extends StatelessWidget {
                       Expanded(
                         child: _TicketTier(
                           label: 'ADULT',
-                          band: type.adultFromAge == null ? null : 'Above ${type.adultFromAge} years',
+                          band: type.adultFromAge == null
+                              ? null
+                              : 'Above ${type.adultFromAge} years',
                           price: adult,
                           color: color,
                         ),
                       ),
-                    if (adult != null && child != null) const SizedBox(width: 8),
+                    if (adult != null && child != null)
+                      const SizedBox(width: 8),
                     if (child != null)
                       Expanded(
                         child: _TicketTier(
                           label: 'CHILD',
-                          band: type.childUnderAge == null ? null : 'Below ${type.childUnderAge} years',
+                          band: type.childUnderAge == null
+                              ? null
+                              : 'Below ${type.childUnderAge} years',
                           price: child,
                           color: color,
                         ),
@@ -626,7 +739,10 @@ class _TypeCard extends StatelessWidget {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(inc,
-                                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, height: 1.3)),
+                                style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: Colors.grey.shade700,
+                                    height: 1.3)),
                           ),
                         ],
                       ),
@@ -674,7 +790,11 @@ class _DateTimeStep extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
       children: [
-        Text(_titles[type.bookingUnit] ?? _titles['Slot']!, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        Text(_titles[type.bookingUnit] ?? _titles['Slot']!,
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         if (type.bookingUnit == 'Slot')
           DateSlotPicker(
@@ -727,7 +847,11 @@ class _ExtraFieldsStep extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
       children: [
-        Text('A few more details', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        Text('A few more details',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         ...fields.map((f) => Padding(
               padding: const EdgeInsets.only(bottom: 16),
@@ -743,8 +867,13 @@ class _ExtraFieldsStep extends StatelessWidget {
           height: 52,
           child: ElevatedButton(
             onPressed: onContinue,
-            style: ElevatedButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-            child: const Text('Continue', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14))),
+            child: const Text('Continue',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
       ],
@@ -791,38 +920,64 @@ class _ConfirmStep extends StatelessWidget {
     final start = window.startLocal;
     final end = window.endLocal;
     final isSlot = type.bookingUnit == 'Slot';
-    final unitCount = isSlot ? null : DateTime(end.year, end.month, end.day).difference(DateTime(start.year, start.month, start.day)).inDays;
+    final unitCount = isSlot
+        ? null
+        : DateTime(end.year, end.month, end.day)
+            .difference(DateTime(start.year, start.month, start.day))
+            .inDays;
     final price = resource.hourlyRate == null
         ? null
-        : resource.hourlyRate! * (isSlot ? (end.difference(start).inMinutes / 60) : unitCount!);
+        : resource.hourlyRate! *
+            (isSlot ? (end.difference(start).inMinutes / 60) : unitCount!);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
       children: [
-        Text('Confirm your booking', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Confirm your booking',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         Container(
-          decoration: BoxDecoration(gradient: AppColors.heroGradientFor(accent), borderRadius: BorderRadius.circular(20)),
+          decoration: BoxDecoration(
+              gradient: AppColors.heroGradientFor(accent),
+              borderRadius: BorderRadius.circular(20)),
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(tenant.businessName, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+              Text(tenant.businessName,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
-              Text('${resource.name} · ${type.name}', style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13)),
+              Text('${resource.name} · ${type.name}',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 13)),
               const Divider(color: Colors.white24, height: 28),
               if (isSlot) ...[
-                _SummaryRow(icon: Icons.calendar_today_outlined, label: formatFullDate(start)),
+                _SummaryRow(
+                    icon: Icons.calendar_today_outlined,
+                    label: formatFullDate(start)),
                 const SizedBox(height: 8),
-                _SummaryRow(icon: Icons.access_time_rounded, label: '${formatTimeOfDay(start)} – ${formatTimeOfDay(end)}'),
+                _SummaryRow(
+                    icon: Icons.access_time_rounded,
+                    label:
+                        '${formatTimeOfDay(start)} – ${formatTimeOfDay(end)}'),
               ] else
                 _SummaryRow(
                   icon: Icons.calendar_today_outlined,
-                  label: formatDateRangeSummary(start, end, nights: type.bookingUnit == 'Night'),
+                  label: formatDateRangeSummary(start, end,
+                      nights: type.bookingUnit == 'Night'),
                 ),
               if (price != null) ...[
                 const SizedBox(height: 8),
-                _SummaryRow(icon: Icons.payments_outlined, label: 'LKR ${price.toStringAsFixed(0)}'),
+                _SummaryRow(
+                    icon: Icons.payments_outlined,
+                    label: 'LKR ${price.toStringAsFixed(0)}'),
               ],
             ],
           ),
@@ -831,36 +986,57 @@ class _ConfirmStep extends StatelessWidget {
           const SizedBox(height: 14),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: AppColors.amber.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+                color: AppColors.amber.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12)),
             child: const Row(
               children: [
                 Icon(Icons.info_outline, color: AppColors.amber, size: 18),
                 SizedBox(width: 8),
-                Expanded(child: Text('This booking type requires approval from the business before it is confirmed.', style: TextStyle(fontSize: 12.5))),
+                Expanded(
+                    child: Text(
+                        'This booking type requires approval from the business before it is confirmed.',
+                        style: TextStyle(fontSize: 12.5))),
               ],
             ),
           ),
         ],
         if ((resource.capacity ?? 1) > 1) ...[
           const SizedBox(height: 20),
-          Text('Attendees', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Attendees',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleSmall
+                  ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Row(
             children: [
-              _StepperButton(icon: Icons.remove, onTap: attendeeCount > 1 ? () => onAttendeeChanged(attendeeCount - 1) : null),
+              _StepperButton(
+                  icon: Icons.remove,
+                  onTap: attendeeCount > 1
+                      ? () => onAttendeeChanged(attendeeCount - 1)
+                      : null),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text('$attendeeCount', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: Text('$attendeeCount',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
               ),
               _StepperButton(
                 icon: Icons.add,
-                onTap: attendeeCount < resource.capacity! ? () => onAttendeeChanged(attendeeCount + 1) : null,
+                onTap: attendeeCount < resource.capacity!
+                    ? () => onAttendeeChanged(attendeeCount + 1)
+                    : null,
               ),
             ],
           ),
         ],
         const SizedBox(height: 20),
-        Text('Notes (optional)', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Notes (optional)',
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 10),
         TextField(
           controller: notesController,
@@ -876,9 +1052,11 @@ class _ConfirmStep extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             value: repeatWeekly,
             onChanged: onRepeatWeeklyChanged,
-            activeThumbColor: accent,
-            title: const Text('Repeat weekly', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-            subtitle: const Text('e.g. weekly physiotherapy sessions', style: TextStyle(fontSize: 12)),
+            activeColor: accent,
+            title: const Text('Repeat weekly',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            subtitle: const Text('e.g. weekly physiotherapy sessions',
+                style: TextStyle(fontSize: 12)),
           ),
           if (repeatWeekly) ...[
             const SizedBox(height: 8),
@@ -887,7 +1065,8 @@ class _ConfirmStep extends StatelessWidget {
               onTap: () async {
                 final picked = await showDatePicker(
                   context: context,
-                  initialDate: repeatUntil ?? start.add(const Duration(days: 28)),
+                  initialDate:
+                      repeatUntil ?? start.add(const Duration(days: 28)),
                   firstDate: start,
                   lastDate: start.add(const Duration(days: 365)),
                 );
@@ -897,9 +1076,12 @@ class _ConfirmStep extends StatelessWidget {
                 decoration: InputDecoration(
                   labelText: 'Repeat until',
                   prefixIcon: const Icon(Icons.event_repeat_outlined),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text(repeatUntil == null ? 'Select a date' : formatFullDate(repeatUntil!)),
+                child: Text(repeatUntil == null
+                    ? 'Select a date'
+                    : formatFullDate(repeatUntil!)),
               ),
             ),
           ],
@@ -909,10 +1091,20 @@ class _ConfirmStep extends StatelessWidget {
           height: 52,
           child: ElevatedButton(
             onPressed: submitting ? null : onConfirm,
-            style: ElevatedButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14))),
             child: submitting
-                ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                : Text(repeatWeekly ? 'Confirm Series' : 'Confirm Booking', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                ? const SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: Colors.white))
+                : Text(repeatWeekly ? 'Confirm Series' : 'Confirm Booking',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
       ],
@@ -931,7 +1123,11 @@ class _SummaryRow extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: Colors.white70),
         const SizedBox(width: 8),
-        Text(label, style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
+        Text(label,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600)),
       ],
     );
   }
@@ -956,7 +1152,9 @@ class _StepperButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppColors.border),
         ),
-        child: Icon(icon, size: 18, color: onTap == null ? AppColors.textMuted : AppColors.textPrimary),
+        child: Icon(icon,
+            size: 18,
+            color: onTap == null ? AppColors.textMuted : AppColors.textPrimary),
       ),
     );
   }

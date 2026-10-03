@@ -747,7 +747,9 @@ class _IosPasscodePadState extends State<IosPasscodePad>
   }
 
   Widget _buildKeypad() {
-    return Column(
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: SizedBox(width: 248, child: Column(
       children: [
         _buildKeyRow(['1', '2', '3'], ['', 'ABC', 'DEF']),
         const SizedBox(height: 12),
@@ -776,6 +778,7 @@ class _IosPasscodePadState extends State<IosPasscodePad>
           ],
         ),
       ],
+    )),
     );
   }
 

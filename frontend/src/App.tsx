@@ -9,6 +9,7 @@ import AppLayout from './shared/components/AppLayout';
 import InventoryWorkspaceNav from './features/inventory/ui/InventoryWorkspaceNav';
 import { ToastProvider } from './shared/components/Toast';
 import { ConfirmationProvider } from './shared/components/ConfirmationProvider';
+import { PaywallProvider } from './features/subscription/PaywallProvider';
 import './features/inventory/inventory.css';
 import './features/inventory/inventory-refresh.css';
 import { ToastProvider as InventoryToastProvider } from './features/inventory/ui/ToastContext';
@@ -22,6 +23,11 @@ import { ToastProvider as InventoryToastProvider } from './features/inventory/ui
  * navigation that actually needs them, which is behind a login.
  */
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+/* Unify's own plan: the public price list and the tenant admin's console for
+ * what their business pays us. Distinct from /subscriptions, which is the
+ * memberships a tenant sells to its own customers. */
+const PricingPage = lazy(() => import('./features/subscription/PricingPage'));
+const SubscriptionPage = lazy(() => import('./features/subscription/SubscriptionPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 // Public, chrome-less: the booking widget a business embeds on its own site.
@@ -33,8 +39,12 @@ const DashboardRouter = lazy(() => import('./features/dashboard/DashboardRouter'
 const BookingManagerPage = lazy(() => import('./features/booking/BookingManagerPage'));
 const ResourceManagerPage = lazy(() => import('./features/booking/ResourceManagerPage'));
 const MultiBranchSchedulePage = lazy(() => import('./features/booking/MultiBranchSchedulePage'));
+const CalendarDashboardPage = lazy(() => import('./features/booking/CalendarDashboardPage'));
+const DisruptionRecoveryPage = lazy(() => import('./features/booking/DisruptionRecoveryPage'));
+const AvailabilitySlotsPage = lazy(() => import('./features/booking/AvailabilitySlotsPage'));
+const RecurringSeriesPage = lazy(() => import('./features/booking/RecurringSeriesPage'));
 const ReportsPage = lazy(() => import('./features/booking/ReportsPage'));
-const AgentPlannerPage = lazy(() => import('./features/booking/AgentPlannerPage'));
+const ScheduleCopilotPage = lazy(() => import('./features/booking/copilot/ScheduleCopilotPage'));
 const BookingTypeManagementPage = lazy(() => import('./features/booking/BookingTypeManagementPage'));
 const MySchedulePage = lazy(() => import('./features/staff/MySchedulePage'));
 const StaffManagementPage = lazy(() => import('./features/staff/StaffManagementPage'));
@@ -50,6 +60,8 @@ const CustomerShopPage = lazy(() => import('./features/customer/CustomerShopPage
 const CustomerOrderManagementPage = lazy(() => import('./features/customer/CustomerOrderManagementPage'));
 const InventoryManagerPage = lazy(() => import('./features/inventory/pages/InventoryManagerPage').then((m) => ({ default: m.InventoryManagerPage })));
 const SuppliersPage = lazy(() => import('./features/inventory/pages/SuppliersPage').then((m) => ({ default: m.SuppliersPage })));
+// Uses the inventory toast context, so it is mounted inside InventoryShell
+// like its siblings rather than the shared one.
 const StockMovementLogPage = lazy(() => import('./features/inventory/pages/StockMovementLogPage').then((m) => ({ default: m.StockMovementLogPage })));
 const PurchaseOrderManagerPage = lazy(() => import('./features/inventory/pages/PurchaseOrderManagerPage').then((m) => ({ default: m.PurchaseOrderManagerPage })));
 const SalesPage = lazy(() => import('./features/inventory/pages/SalesPage').then((m) => ({ default: m.SalesPage })));
@@ -80,6 +92,8 @@ const PlatformTenantsPage = lazy(() => import('./features/platform/PlatformTenan
 const PlatformUsersPage = lazy(() => import('./features/platform/PlatformUsersPage'));
 const PlatformAuditPage = lazy(() => import('./features/platform/PlatformAuditPage'));
 const PlatformSecurityPage = lazy(() => import('./features/platform/PlatformSecurityPage'));
+const PlatformRevenuePage = lazy(() => import('./features/platform/PlatformRevenuePage'));
+const PlatformCopilotPage = lazy(() => import('./features/platform/PlatformCopilotPage'));
 
 /* Deliberately near-empty. This shows for the length of one chunk fetch on a
  * local network, and a spinner that appears and vanishes inside 100ms reads
@@ -122,9 +136,11 @@ function App() {
         <ConfirmationProvider>
           <AuthInitializer>
             <BrowserRouter>
+              <PaywallProvider>
               <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ForgotPasswordPage />} />
@@ -224,12 +240,49 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/disruption-recovery"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><DisruptionRecoveryPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
 
               <Route
                 path="/multi-branch"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
                     <Shell><MultiBranchSchedulePage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Spec 2.5's calendar dashboard. The page existed but was
+                  never routed, so nobody could reach it. */}
+              <Route
+                path="/calendar"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><CalendarDashboardPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/availability"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><AvailabilitySlotsPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/recurring"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><RecurringSeriesPage /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -247,7 +300,7 @@ function App() {
                 path="/planner"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
-                    <Shell><AgentPlannerPage /></Shell>
+                    <Shell><ScheduleCopilotPage /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -273,7 +326,7 @@ function App() {
               <Route
                 path="/staff"
                 element={
-                  <ProtectedRoute allowedRoles={['Manager']}>
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
                     <Shell><StaffManagementPage /></Shell>
                   </ProtectedRoute>
                 }
@@ -296,11 +349,23 @@ function App() {
                 }
               />
 
+
               <Route
                 path="/settings"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
                     <Shell><BusinessSettingsPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* The business's own Unify plan. Managers can see why a screen
+                  is locked; only an Admin can change what is paid. */}
+              <Route
+                path="/subscription"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><SubscriptionPage /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -510,11 +575,14 @@ function App() {
               <Route path="/platform/users" element={<PlatformUsersPage />} />
               <Route path="/platform/audit" element={<PlatformAuditPage />} />
               <Route path="/platform/security" element={<PlatformSecurityPage />} />
+              <Route path="/platform/revenue" element={<PlatformRevenuePage />} />
+              <Route path="/platform/copilot" element={<PlatformCopilotPage />} />
 
               <Route path="/" element={<LandingPage />} />
               <Route path="*" element={<div style={{ padding: '2rem' }}><h1>404 - Page Not Found</h1></div>} />
             </Routes>
               </Suspense>
+              </PaywallProvider>
             </BrowserRouter>
           </AuthInitializer>
         </ConfirmationProvider>

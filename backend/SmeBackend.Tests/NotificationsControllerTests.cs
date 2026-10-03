@@ -19,7 +19,7 @@ public class NotificationsControllerTests
             CreateNotification(tenantId, otherUserId, "PrivateNotification"));
         await db.SaveChangesAsync();
 
-        var controller = new NotificationsController(db);
+        var controller = new NotificationsController(db, Moq.Mock.Of<SmeBackend.Services.INotificationStream>());
         TestHelpers.SetUser(controller, userId, tenantId, "Staff");
 
         var result = Assert.IsType<OkObjectResult>(await controller.GetMine());
@@ -40,7 +40,7 @@ public class NotificationsControllerTests
             CreateNotification(tenantId, userId, "BookingConfirmation"));
         await db.SaveChangesAsync();
 
-        var controller = new NotificationsController(db);
+        var controller = new NotificationsController(db, Moq.Mock.Of<SmeBackend.Services.INotificationStream>());
         TestHelpers.SetUser(controller, userId, tenantId, "Customer");
 
         var result = Assert.IsType<OkObjectResult>(await controller.GetMine());
@@ -62,7 +62,7 @@ public class NotificationsControllerTests
             CreateNotification(tenantId, userId, "ReadNotification", isRead: true));
         await db.SaveChangesAsync();
 
-        var controller = new NotificationsController(db);
+        var controller = new NotificationsController(db, Moq.Mock.Of<SmeBackend.Services.INotificationStream>());
         TestHelpers.SetUser(controller, userId, tenantId, "Customer");
 
         var result = Assert.IsType<OkObjectResult>(await controller.GetUnreadCount());
@@ -81,7 +81,7 @@ public class NotificationsControllerTests
         db.Notifications.Add(notification);
         await db.SaveChangesAsync();
 
-        var controller = new NotificationsController(db);
+        var controller = new NotificationsController(db, Moq.Mock.Of<SmeBackend.Services.INotificationStream>());
         TestHelpers.SetUser(controller, userId, tenantId, "Customer");
 
         var result = await controller.MarkRead(notification.Id);
@@ -102,7 +102,7 @@ public class NotificationsControllerTests
             CreateNotification(tenantId, userId, "ReadNotification", isRead: true));
         await db.SaveChangesAsync();
 
-        var controller = new NotificationsController(db);
+        var controller = new NotificationsController(db, Moq.Mock.Of<SmeBackend.Services.INotificationStream>());
         TestHelpers.SetUser(controller, userId, tenantId, "Staff");
 
         var result = Assert.IsType<OkObjectResult>(await controller.GetUnreadCount());
@@ -121,7 +121,7 @@ public class NotificationsControllerTests
         db.Notifications.Add(notification);
         await db.SaveChangesAsync();
 
-        var controller = new NotificationsController(db);
+        var controller = new NotificationsController(db, Moq.Mock.Of<SmeBackend.Services.INotificationStream>());
         TestHelpers.SetUser(controller, userId, tenantId, "Staff");
 
         var result = await controller.MarkRead(notification.Id);

@@ -38,6 +38,16 @@ public sealed class BillingWorkflowPlan
     public int AnomalyCount { get; set; }
     public double? ConfidenceScore { get; set; }
 
+    // Billing Copilot rows only: what the manager asked for in their own
+    // words, the plan the language-model planner produced from it, and the
+    // narrative read back over the findings. Kept verbatim so the audit trail
+    // shows the request as well as the run - including the cases where the
+    // guard had to correct the planner, which is what PlannerWarnings holds.
+    public string? PlannerObjective { get; set; }
+    public BillingPlannerOutputDto? Planner { get; set; }
+    public List<string>? PlannerWarnings { get; set; }
+    public BillingNarrativeDto? Narrative { get; set; }
+
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

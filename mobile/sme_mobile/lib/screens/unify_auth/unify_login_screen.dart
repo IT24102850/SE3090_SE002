@@ -160,6 +160,20 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
             fit: StackFit.expand,
             children: [
               const Positioned.fill(child: AppBackground(showParticles: true)),
+              // Positioned rather than a column child: this screen fits its
+              // content to the viewport with no height to spare, so the back
+              // affordance floats over the backdrop instead of taking a row.
+              if (widget.onBackToWelcome != null)
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 4,
+                  left: 4,
+                  child: IconButton(
+                    onPressed: widget.onBackToWelcome,
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                    color: AppColors.textSecondary,
+                    tooltip: 'Back',
+                  ),
+                ),
               SafeArea(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -218,14 +232,17 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                         // no height, and height is the one thing this layout
                         // has none to spare. The tile matches the wordmark's
                         // cap height so the two read as one unit.
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            UnifyLogoMark(size: m.wordmark * 0.98),
-                            SizedBox(width: m.wordmark * 0.3),
-                            UnifyWordmark(fontSize: m.wordmark),
-                          ],
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              UnifyLogoMark(size: m.wordmark * 0.98),
+                              SizedBox(width: m.wordmark * 0.3),
+                              UnifyWordmark(fontSize: m.wordmark),
+                            ],
+                          ),
                         ),
                         SizedBox(height: 8 * m.gap),
                         Text(
@@ -398,7 +415,9 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                       ? Border.all(color: AppColors.cyan.withValues(alpha: 0.45))
                       : null,
                 ),
-                child: Row(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
@@ -419,6 +438,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                     ),
                   ],
                 ),
+                ),
               ),
             ),
           ),
@@ -437,7 +457,9 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                       ? Border.all(color: AppColors.cyan.withValues(alpha: 0.45))
                       : null,
                 ),
-                child: Row(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
@@ -455,6 +477,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                       ),
                     ),
                   ],
+                ),
                 ),
               ),
             ),
@@ -507,7 +530,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Column(
+                      Expanded(child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
@@ -526,7 +549,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                                 fontSize: 14, color: AppColors.textSecondary),
                           ),
                         ],
-                      ),
+                      )),
                       IosLockGlyph(
                         isUnlocked: _isSigningIn || auth.isAuthenticated,
                         size: 26,
@@ -582,49 +605,42 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
             ),
             SizedBox(height: 20 * gap),
             Center(
-              child: _TextLink(
-                onTap: _openRegister,
-                child: const Text.rich(
-                  TextSpan(
-                    text: 'New to Unify? ',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: 'Register a business',
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _TextLink(
+                      onTap: _openCustomerRegister,
+                      child: const Text(
+                        'Sign up to book',
                         style: TextStyle(
+                          fontSize: 14,
                           color: AppColors.cyan,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(height: 8 * gap),
-            Center(
-              child: _TextLink(
-                onTap: _openCustomerRegister,
-                child: const Text.rich(
-                  TextSpan(
-                    text: 'Here to book? ',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
                     ),
-                    children: [
-                      TextSpan(
-                        text: 'Create a customer account',
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(
+                        '·',
+                        style:
+                            TextStyle(fontSize: 14, color: AppColors.textMuted),
+                      ),
+                    ),
+                    _TextLink(
+                      onTap: _openRegister,
+                      child: const Text(
+                        'Register a business',
                         style: TextStyle(
+                          fontSize: 14,
                           color: AppColors.cyan,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),

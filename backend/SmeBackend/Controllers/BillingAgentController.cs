@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SmeBackend.DTOs;
 using SmeBackend.Services.Billing;
+using SmeBackend.Authorization;
+using SmeBackend.Models;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
@@ -11,6 +14,9 @@ namespace SmeBackend.Controllers;
 [Route("api/billing-agent")]
 [Authorize(Policy = "ManagerPlus")]
 [Produces("application/json")]
+// The billing copilot is an AI surface: gated by plan, and each model
+// call counted against the monthly allowance.
+[RequiresPlanFeature(PlanFeatures.AiAgents)]
 public class BillingAgentController : BillingControllerBase
 {
     private readonly IBillingAgentService _agent;
@@ -30,6 +36,7 @@ public class BillingAgentController : BillingControllerBase
     /// Every run is recorded in AgentWorkflows; actionable recommendations
     /// become approval requests.</remarks>
     [HttpPost("analyze")]
+    [MetersPlanQuota(UsageMetrics.AiRuns)]
     [ProducesResponseType(typeof(BillingAnalysisResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BillingAnalysisResponse>> Analyze([FromBody] BillingAnalysisRequest request, CancellationToken ct = default)
@@ -37,6 +44,38 @@ public class BillingAgentController : BillingControllerBase
         if (Actor is not { } actor) return MissingTenant();
         if (!ModelState.IsValid) return BadRequest(ModelState);
         return FromResult(await _agent.AnalyzeAsync(actor, request, ct));
+    }
+
+    /// <summary>
+    /// Billing Copilot: runs an analysis from a plain-English objective
+    /// instead of a filled-in form.
+    /// </summary>
+    /// <remarks>
+    /// A language-model planner turns the objective into the same
+    /// { analysisType, dataRange, thresholds } request /analyze takes, then the
+    /// deterministic agent runs, then a narrator reads the pattern back across
+    /// the findings. The planner may only ever *narrow* the request: it can
+    /// shorten the window and tighten the discount cap, and it cannot loosen a
+    /// threshold, approve anything, or reach a tool outside the allow-list.
+    /// Anything it tried and was not allowed comes back in plannerWarnings.
+    /// </remarks>
+    [HttpPost("plan-analysis")]
+    [MetersPlanQuota(UsageMetrics.AiRuns)]
+    [ProducesResponseType(typeof(BillingPlannedAnalysisResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<BillingPlannedAnalysisResponse>> PlanAnalysis([FromBody] PlanAnalysisRequest request, CancellationToken ct = default)
+    {
+        if (Actor is not { } actor) return MissingTenant();
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        // The agent service reads with the caller's own identity, never a
+        // minted super-token, so its view is exactly this manager's view.
+        var bearer = Request.Headers.Authorization.ToString();
+        var callerToken = bearer.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? bearer[7..].Trim() : string.Empty;
+        if (string.IsNullOrEmpty(callerToken)) return Unauthorized();
+
+        return FromResult(await _agent.PlanAnalysisAsync(actor, request, callerToken, ct));
     }
 
     /// <summary>The agent's allow-listed tools.</summary>

@@ -99,11 +99,11 @@ public class BillingDatabaseIntegrationTests
         return (tenant.Id, staff, customer);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Migrations_CreateEveryBillingTable()
     {
         await using var database = await TestDatabase.CreateAsync();
-        if (database is null) return;
+        Skip.If(database is null, "Docker is not available, so the PostgreSQL Testcontainers test cannot run here (it runs in CI).");
 
         await using var db = database.NewContext();
         await db.Database.MigrateAsync();
@@ -127,11 +127,11 @@ public class BillingDatabaseIntegrationTests
         Assert.Contains("Succeeded", (string)(await def.ExecuteScalarAsync())!);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task InvoiceNumbers_AreUniquePerTenant_ButMayRepeatAcrossTenants()
     {
         await using var database = await TestDatabase.CreateAsync();
-        if (database is null) return;
+        Skip.If(database is null, "Docker is not available, so the PostgreSQL Testcontainers test cannot run here (it runs in CI).");
 
         await using var db = database.NewContext();
         await db.Database.MigrateAsync();
@@ -153,11 +153,11 @@ public class BillingDatabaseIntegrationTests
         Assert.Contains("23505", (ex.InnerException as PostgresException)?.SqlState ?? "");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DeletingAnInvoice_CascadesItems_AndKeepsPaymentsForTheLedger()
     {
         await using var database = await TestDatabase.CreateAsync();
-        if (database is null) return;
+        Skip.If(database is null, "Docker is not available, so the PostgreSQL Testcontainers test cannot run here (it runs in CI).");
 
         await using var db = database.NewContext();
         await db.Database.MigrateAsync();
@@ -183,11 +183,11 @@ public class BillingDatabaseIntegrationTests
         Assert.Equal("Succeeded", payment.Status);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task FailedTransaction_LeavesNoPartialInvoice()
     {
         await using var database = await TestDatabase.CreateAsync();
-        if (database is null) return;
+        Skip.If(database is null, "Docker is not available, so the PostgreSQL Testcontainers test cannot run here (it runs in CI).");
 
         await using var db = database.NewContext();
         await db.Database.MigrateAsync();
@@ -211,11 +211,11 @@ public class BillingDatabaseIntegrationTests
         Assert.Equal(0, await fresh.InvoiceItems.CountAsync());
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task EveryBillingQuery_TranslatesAndRunsOnPostgres()
     {
         await using var database = await TestDatabase.CreateAsync();
-        if (database is null) return;
+        Skip.If(database is null, "Docker is not available, so the PostgreSQL Testcontainers test cannot run here (it runs in CI).");
 
         Guid tenantId;
         User staff, customer;

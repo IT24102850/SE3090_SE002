@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SmeBackend.DTOs;
 using SmeBackend.Services;
+using SmeBackend.Authorization;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
@@ -10,6 +12,9 @@ namespace SmeBackend.Controllers;
 [Route("api/insurance-claims")]
 [Authorize]
 [Produces("application/json")]
+// Paid feature: the tenant's Unify plan decides whether this module is
+// available at all (Authorization/RequiresPlanAttribute.cs).
+[RequiresPlanFeature(PlanFeatures.AdvancedBilling)]
 public class InsuranceClaimsController : BillingControllerBase
 {
     private static readonly HashSet<string> AllowedDocumentTypes = new(StringComparer.OrdinalIgnoreCase)

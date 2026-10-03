@@ -5,12 +5,16 @@ using SmeBackend.Authorization;
 using SmeBackend.Data;
 using SmeBackend.Models;
 using SmeBackend.Shared;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
 [ApiController]
 [Authorize]
 [Route("api/purchase-orders")]
+// Paid feature: the tenant's Unify plan decides whether this module is
+// available at all (Authorization/RequiresPlanAttribute.cs).
+[RequiresPlanFeature(PlanFeatures.InventoryPro)]
 public sealed class PurchaseOrdersController(
     AppDbContext db,
     IAuthorizationService authorizationService) : ControllerBase

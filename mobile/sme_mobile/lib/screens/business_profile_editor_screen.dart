@@ -7,17 +7,8 @@ import '../providers/api_service_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/tenant_profile_provider.dart';
 import '../theme/app_theme.dart';
-import '../theme/app_text_styles.dart';
-import '../widgets/ui/ui.dart';
 
-const _suggestedAmenities = [
-  'Free WiFi',
-  'Parking',
-  'Beginner Friendly',
-  'Equipment Rental',
-  'Air Conditioning',
-  'Wheelchair Accessible'
-];
+const _suggestedAmenities = ['Free WiFi', 'Parking', 'Beginner Friendly', 'Equipment Rental', 'Air Conditioning', 'Wheelchair Accessible'];
 
 /// Admin/Manager Business Profile editor - the Flutter counterpart to
 /// frontend/src/features/settings/BusinessProfilePage.tsx, hitting the same
@@ -27,12 +18,10 @@ class BusinessProfileEditorScreen extends ConsumerStatefulWidget {
   const BusinessProfileEditorScreen({super.key});
 
   @override
-  ConsumerState<BusinessProfileEditorScreen> createState() =>
-      _BusinessProfileEditorScreenState();
+  ConsumerState<BusinessProfileEditorScreen> createState() => _BusinessProfileEditorScreenState();
 }
 
-class _BusinessProfileEditorScreenState
-    extends ConsumerState<BusinessProfileEditorScreen> {
+class _BusinessProfileEditorScreenState extends ConsumerState<BusinessProfileEditorScreen> {
   String? _logoUrl;
   String? _coverImageUrl;
   final _taglineController = TextEditingController();
@@ -52,25 +41,11 @@ class _BusinessProfileEditorScreenState
   bool _uploadingCover = false;
   bool _saving = false;
   bool _initialized = false;
-  final _profileScrollController = ScrollController();
 
-  static const _days = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday'
-  ];
+  static const _days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-  List<BusinessHourEntry> _defaultHours() => _days
-      .map((d) => BusinessHourEntry(
-          dayOfWeek: d,
-          openTime: '09:00',
-          closeTime: '17:00',
-          isClosed: d == 'Sunday'))
-      .toList();
+  List<BusinessHourEntry> _defaultHours() =>
+      _days.map((d) => BusinessHourEntry(dayOfWeek: d, openTime: '09:00', closeTime: '17:00', isClosed: d == 'Sunday')).toList();
 
   void _hydrate(TenantProfile profile) {
     if (_initialized) return;
@@ -85,9 +60,7 @@ class _BusinessProfileEditorScreenState
     _websiteController.text = profile.website ?? '';
     _instagramController.text = profile.socialLinks['instagram'] ?? '';
     _facebookController.text = profile.socialLinks['facebook'] ?? '';
-    _hours = profile.businessHours.isNotEmpty
-        ? List.of(profile.businessHours)
-        : _defaultHours();
+    _hours = profile.businessHours.isNotEmpty ? List.of(profile.businessHours) : _defaultHours();
   }
 
   @override
@@ -99,16 +72,12 @@ class _BusinessProfileEditorScreenState
     _websiteController.dispose();
     _instagramController.dispose();
     _facebookController.dispose();
-    _profileScrollController.dispose();
     super.dispose();
   }
 
   BusinessHourEntry? get _hoursError {
     for (final h in _hours) {
-      if (!h.isClosed &&
-          h.openTime != null &&
-          h.closeTime != null &&
-          h.openTime!.compareTo(h.closeTime!) >= 0) {
+      if (!h.isClosed && h.openTime != null && h.closeTime != null && h.openTime!.compareTo(h.closeTime!) >= 0) {
         return h;
       }
     }
@@ -119,8 +88,7 @@ class _BusinessProfileEditorScreenState
 
   Future<void> _pickAndUpload(String purpose, bool isLogo) async {
     final picker = ImagePicker();
-    final XFile? picked =
-        await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final XFile? picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked == null) return;
 
     setState(() {
@@ -133,8 +101,7 @@ class _BusinessProfileEditorScreenState
     try {
       final bytes = await picked.readAsBytes();
       final dio = ref.read(apiServiceProvider);
-      final result = await uploadTenantMedia(dio,
-          bytes: bytes, fileName: picked.name, purpose: purpose);
+      final result = await uploadTenantMedia(dio, bytes: bytes, fileName: picked.name, purpose: purpose);
       setState(() {
         if (isLogo) {
           _logoUrl = result.url;
@@ -165,9 +132,7 @@ class _BusinessProfileEditorScreenState
   void _addAmenity(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
-    if (_amenities.any((a) => a.toLowerCase() == trimmed.toLowerCase())) {
-      return; // no duplicates
-    }
+    if (_amenities.any((a) => a.toLowerCase() == trimmed.toLowerCase())) return; // no duplicates
     setState(() => _amenities.add(trimmed));
     _markProfileDirty();
   }
@@ -178,25 +143,18 @@ class _BusinessProfileEditorScreenState
   }
 
   void _copyMondayToWeekdays() {
-    final monday = _hours.firstWhere((h) => h.dayOfWeek == 'Monday',
-        orElse: () => _hours.first);
+    final monday = _hours.firstWhere((h) => h.dayOfWeek == 'Monday', orElse: () => _hours.first);
     setState(() {
       _hours = _hours
-          .map((h) => ['Tuesday', 'Wednesday', 'Thursday', 'Friday']
-                  .contains(h.dayOfWeek)
-              ? BusinessHourEntry(
-                  dayOfWeek: h.dayOfWeek,
-                  openTime: monday.openTime,
-                  closeTime: monday.closeTime,
-                  isClosed: monday.isClosed)
+          .map((h) => ['Tuesday', 'Wednesday', 'Thursday', 'Friday'].contains(h.dayOfWeek)
+              ? BusinessHourEntry(dayOfWeek: h.dayOfWeek, openTime: monday.openTime, closeTime: monday.closeTime, isClosed: monday.isClosed)
               : h)
           .toList();
     });
     _markProfileDirty();
   }
 
-  void _updateHour(String day,
-      {String? openTime, String? closeTime, bool? isClosed}) {
+  void _updateHour(String day, {String? openTime, String? closeTime, bool? isClosed}) {
     setState(() {
       _hours = _hours
           .map((h) => h.dayOfWeek == day
@@ -215,28 +173,20 @@ class _BusinessProfileEditorScreenState
   void _showSnack(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content: Text(message),
-          backgroundColor: isError ? AppColors.danger : null),
+      SnackBar(content: Text(message), backgroundColor: isError ? AppColors.danger : null),
     );
   }
 
   Future<void> _save(String tenantId) async {
     if (_hoursError != null) {
-      _showSnack(
-          '${_hoursError!.dayOfWeek}: open time must be before close time.',
-          isError: true);
+      _showSnack('${_hoursError!.dayOfWeek}: open time must be before close time.', isError: true);
       return;
     }
     setState(() => _saving = true);
     final dio = ref.read(apiServiceProvider);
     try {
-      if (_logoDirty && _logoUrl != null) {
-        await setTenantLogo(dio, tenantId, _logoUrl!);
-      }
-      if (_coverDirty && _coverImageUrl != null) {
-        await setTenantCoverImage(dio, tenantId, _coverImageUrl!);
-      }
+      if (_logoDirty && _logoUrl != null) await setTenantLogo(dio, tenantId, _logoUrl!);
+      if (_coverDirty && _coverImageUrl != null) await setTenantCoverImage(dio, tenantId, _coverImageUrl!);
       if (_profileDirty) {
         await updateTenantProfileFields(
           dio,
@@ -248,10 +198,8 @@ class _BusinessProfileEditorScreenState
           contactEmail: _emailController.text,
           website: _websiteController.text,
           socialLinks: {
-            if (_instagramController.text.trim().isNotEmpty)
-              'instagram': _instagramController.text.trim(),
-            if (_facebookController.text.trim().isNotEmpty)
-              'facebook': _facebookController.text.trim(),
+            if (_instagramController.text.trim().isNotEmpty) 'instagram': _instagramController.text.trim(),
+            if (_facebookController.text.trim().isNotEmpty) 'facebook': _facebookController.text.trim(),
           },
           businessHours: _hours,
         );
@@ -277,34 +225,19 @@ class _BusinessProfileEditorScreenState
     final anyDirty = _profileDirty || _logoDirty || _coverDirty;
     final anyUploading = _uploadingLogo || _uploadingCover;
 
-    return AppBackgroundScaffold(
-      showParticles: true,
-      extendBodyBehindAppBar: false,
-      appBar: const GlassAppBar(title: 'Business Profile'),
-      child: profileAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: AppColors.cyan),
-        ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Business Profile')),
+      body: profileAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'Your business profile is taking a moment to load.',
-                  style: AppTextStyles.subtitle,
-                  textAlign: TextAlign.center,
-                ),
+                const Text('Could not load your business profile.'),
                 const SizedBox(height: 12),
-                NeonButton(
-                  label: 'Try again',
-                  icon: Icons.refresh_rounded,
-                  expand: false,
-                  height: 46,
-                  onPressed: () =>
-                      ref.invalidate(tenantProfileProvider(tenantId)),
-                ),
+                OutlinedButton(onPressed: () => ref.invalidate(tenantProfileProvider(tenantId)), child: const Text('Retry')),
               ],
             ),
           ),
@@ -312,9 +245,7 @@ class _BusinessProfileEditorScreenState
         data: (profile) {
           _hydrate(profile);
           return ListView(
-            controller: _profileScrollController,
-            primary: false,
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 100),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
             children: [
               _sectionCard(
                 title: 'Logo & Cover image',
@@ -342,9 +273,7 @@ class _BusinessProfileEditorScreenState
                   ],
                 ),
               ),
-              _GallerySection(
-                  tenantId: tenantId,
-                  galleryImageUrls: profile.galleryImageUrls),
+              _GallerySection(tenantId: tenantId, galleryImageUrls: profile.galleryImageUrls),
               _sectionCard(
                 title: 'About',
                 child: Column(
@@ -353,9 +282,7 @@ class _BusinessProfileEditorScreenState
                     TextField(
                       controller: _taglineController,
                       maxLength: 100,
-                      decoration: const InputDecoration(
-                          labelText: 'Tagline',
-                          hintText: 'e.g. PADI 5-Star Dive Center'),
+                      decoration: const InputDecoration(labelText: 'Tagline', hintText: 'e.g. PADI 5-Star Dive Center'),
                       onChanged: (_) => _markProfileDirty(),
                     ),
                     const SizedBox(height: 8),
@@ -363,8 +290,7 @@ class _BusinessProfileEditorScreenState
                       controller: _descriptionController,
                       maxLength: 5000,
                       maxLines: 5,
-                      decoration:
-                          const InputDecoration(labelText: 'Description'),
+                      decoration: const InputDecoration(labelText: 'Description'),
                       onChanged: (_) => _markProfileDirty(),
                     ),
                   ],
@@ -372,66 +298,41 @@ class _BusinessProfileEditorScreenState
               ),
               _sectionCard(
                 title: 'Amenities',
-                child: _AmenityInput(
-                    amenities: _amenities,
-                    onAdd: _addAmenity,
-                    onRemove: _removeAmenity),
+                child: _AmenityInput(amenities: _amenities, onAdd: _addAmenity, onRemove: _removeAmenity),
               ),
               _sectionCard(
                 title: 'Contact & Hours',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextField(
-                        controller: _phoneController,
-                        decoration: const InputDecoration(labelText: 'Phone'),
-                        onChanged: (_) => _markProfileDirty()),
+                    TextField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Phone'), onChanged: (_) => _markProfileDirty()),
                     const SizedBox(height: 8),
-                    TextField(
-                        controller: _emailController,
-                        decoration: const InputDecoration(labelText: 'Email'),
-                        onChanged: (_) => _markProfileDirty()),
+                    TextField(controller: _emailController, decoration: const InputDecoration(labelText: 'Email'), onChanged: (_) => _markProfileDirty()),
                     const SizedBox(height: 8),
-                    TextField(
-                        controller: _websiteController,
-                        decoration: const InputDecoration(labelText: 'Website'),
-                        onChanged: (_) => _markProfileDirty()),
+                    TextField(controller: _websiteController, decoration: const InputDecoration(labelText: 'Website'), onChanged: (_) => _markProfileDirty()),
                     const SizedBox(height: 8),
-                    TextField(
-                        controller: _instagramController,
-                        decoration:
-                            const InputDecoration(labelText: 'Instagram'),
-                        onChanged: (_) => _markProfileDirty()),
+                    TextField(controller: _instagramController, decoration: const InputDecoration(labelText: 'Instagram'), onChanged: (_) => _markProfileDirty()),
                     const SizedBox(height: 8),
-                    TextField(
-                        controller: _facebookController,
-                        decoration:
-                            const InputDecoration(labelText: 'Facebook'),
-                        onChanged: (_) => _markProfileDirty()),
+                    TextField(controller: _facebookController, decoration: const InputDecoration(labelText: 'Facebook'), onChanged: (_) => _markProfileDirty()),
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Business hours',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                        TextButton(
-                            onPressed: _copyMondayToWeekdays,
-                            child: const Text('Copy Monday to weekdays')),
+                        const Text('Business hours', style: TextStyle(fontWeight: FontWeight.bold)),
+                        TextButton(onPressed: _copyMondayToWeekdays, child: const Text('Copy Monday to weekdays')),
                       ],
                     ),
-                    ..._hours.map(
-                        (h) => _HourEditorRow(entry: h, onChange: _updateHour)),
+                    ..._hours.map((h) => _HourEditorRow(entry: h, onChange: _updateHour)),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              NeonButton(
-                label: _saving ? 'Saving profile...' : 'Save changes',
-                icon: Icons.check_circle_outline_rounded,
-                isLoading: _saving,
-                onPressed: (!anyDirty || _saving || anyUploading)
-                    ? null
-                    : () => _save(tenantId),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: (!anyDirty || _saving || anyUploading) ? null : () => _save(tenantId),
+                  child: _saving ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2) : const Text('Save changes'),
+                ),
               ),
             ],
           );
@@ -441,38 +342,17 @@ class _BusinessProfileEditorScreenState
   }
 
   Widget _sectionCard({required String title, required Widget child}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: GlassCard(
-        padding: const EdgeInsets.all(16),
-        borderColor: AppColors.glassBorder,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 4,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: AppColors.cyan,
-                    borderRadius: BorderRadius.circular(4),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.cyan.withValues(alpha: 0.45),
-                        blurRadius: 10,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(title, style: AppTextStyles.subtitle),
-              ],
-            ),
-            const SizedBox(height: 12),
-            child,
-          ],
-        ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: GlassStyle.elevatedCard(radius: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          child,
+        ],
       ),
     );
   }
@@ -485,19 +365,14 @@ class _UploadZone extends StatelessWidget {
   final bool round;
   final VoidCallback onTap;
 
-  const _UploadZone(
-      {required this.label,
-      required this.imageUrl,
-      required this.uploading,
-      required this.round,
-      required this.onTap});
+  const _UploadZone({required this.label, required this.imageUrl, required this.uploading, required this.round, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label.toUpperCase(), style: AppTextStyles.label),
+        Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
         const SizedBox(height: 6),
         GestureDetector(
           onTap: uploading ? null : onTap,
@@ -505,30 +380,13 @@ class _UploadZone extends StatelessWidget {
             height: 100,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(round ? 50 : 12),
-              border: Border.all(
-                color: AppColors.cyan.withValues(alpha: 0.42),
-                width: 1.4,
-              ),
-              color: AppColors.glassFill,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.cyan.withValues(alpha: 0.08),
-                  blurRadius: 14,
-                ),
-              ],
-              image: imageUrl != null
-                  ? DecorationImage(
-                      image: NetworkImage(imageUrl!), fit: BoxFit.cover)
-                  : null,
+              border: Border.all(color: Colors.grey.shade300, width: 2, style: BorderStyle.solid),
+              color: Colors.grey.shade100,
+              image: imageUrl != null ? DecorationImage(image: NetworkImage(imageUrl!), fit: BoxFit.cover) : null,
             ),
             child: uploading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                        color: AppColors.cyan, strokeWidth: 2))
-                : (imageUrl == null
-                    ? const Icon(Icons.add_photo_alternate_outlined,
-                        color: AppColors.cyan, size: 28)
-                    : null),
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                : (imageUrl == null ? Icon(Icons.add_photo_alternate_outlined, color: Colors.grey.shade500) : null),
           ),
         ),
       ],
@@ -539,8 +397,7 @@ class _UploadZone extends StatelessWidget {
 class _GallerySection extends ConsumerStatefulWidget {
   final String tenantId;
   final List<String> galleryImageUrls;
-  const _GallerySection(
-      {required this.tenantId, required this.galleryImageUrls});
+  const _GallerySection({required this.tenantId, required this.galleryImageUrls});
 
   @override
   ConsumerState<_GallerySection> createState() => _GallerySectionState();
@@ -559,16 +416,12 @@ class _GallerySectionState extends ConsumerState<_GallerySection> {
     try {
       for (final file in picked) {
         final bytes = await file.readAsBytes();
-        final result = await uploadTenantMedia(dio,
-            bytes: bytes, fileName: file.name, purpose: 'gallery');
+        final result = await uploadTenantMedia(dio, bytes: bytes, fileName: file.name, purpose: 'gallery');
         await addTenantGalleryImage(dio, widget.tenantId, result.url);
       }
       ref.invalidate(tenantProfileProvider(widget.tenantId));
     } on TenantProfileRequestException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -593,10 +446,7 @@ class _GallerySectionState extends ConsumerState<_GallerySection> {
       await removeTenantGalleryImage(dio, widget.tenantId, index);
       ref.invalidate(tenantProfileProvider(widget.tenantId));
     } on TenantProfileRequestException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -613,103 +463,72 @@ class _GallerySectionState extends ConsumerState<_GallerySection> {
       await reorderTenantGalleryImages(dio, widget.tenantId, reordered);
       ref.invalidate(tenantProfileProvider(widget.tenantId));
     } on TenantProfileRequestException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: GlassCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.photo_library_outlined,
-                        color: AppColors.cyan, size: 19),
-                    const SizedBox(width: 8),
-                    Text('Gallery', style: AppTextStyles.subtitle),
-                  ],
-                ),
-                TextButton.icon(
-                  onPressed: _uploading ? null : _addPhotos,
-                  icon: _uploading
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.add, size: 18),
-                  label: const Text('Add photos'),
-                ),
-              ],
-            ),
-            if (widget.galleryImageUrls.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'No photos yet. Add a few images to make your profile stand out.',
-                  style: AppTextStyles.caption,
-                ),
-              )
-            else
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8),
-                itemCount: widget.galleryImageUrls.length,
-                itemBuilder: (context, i) {
-                  return Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.network(widget.galleryImageUrls[i],
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity),
-                      ),
-                      Positioned(
-                        top: 2,
-                        right: 2,
-                        child: GestureDetector(
-                          onTap: () => _remove(i),
-                          child: const CircleAvatar(
-                              radius: 11,
-                              backgroundColor: Colors.black54,
-                              child: Icon(Icons.close,
-                                  size: 13, color: Colors.white)),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 2,
-                        left: 2,
-                        child: Row(
-                          children: [
-                            _arrowButton(
-                                Icons.arrow_upward, i > 0, () => _move(i, -1)),
-                            const SizedBox(width: 2),
-                            _arrowButton(
-                                Icons.arrow_downward,
-                                i < widget.galleryImageUrls.length - 1,
-                                () => _move(i, 1)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                },
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: GlassStyle.elevatedCard(radius: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Gallery', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              TextButton.icon(
+                onPressed: _uploading ? null : _addPhotos,
+                icon: _uploading ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.add, size: 18),
+                label: const Text('Add photos'),
               ),
-          ],
-        ),
+            ],
+          ),
+          if (widget.galleryImageUrls.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text('No photos yet.', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+            )
+          else
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8),
+              itemCount: widget.galleryImageUrls.length,
+              itemBuilder: (context, i) {
+                return Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(widget.galleryImageUrls[i], fit: BoxFit.cover, width: double.infinity, height: double.infinity),
+                    ),
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: GestureDetector(
+                        onTap: () => _remove(i),
+                        child: const CircleAvatar(radius: 11, backgroundColor: Colors.black54, child: Icon(Icons.close, size: 13, color: Colors.white)),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 2,
+                      left: 2,
+                      child: Row(
+                        children: [
+                          _arrowButton(Icons.arrow_upward, i > 0, () => _move(i, -1)),
+                          const SizedBox(width: 2),
+                          _arrowButton(Icons.arrow_downward, i < widget.galleryImageUrls.length - 1, () => _move(i, 1)),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+        ],
       ),
     );
   }
@@ -730,8 +549,7 @@ class _AmenityInput extends StatefulWidget {
   final List<String> amenities;
   final ValueChanged<String> onAdd;
   final ValueChanged<String> onRemove;
-  const _AmenityInput(
-      {required this.amenities, required this.onAdd, required this.onRemove});
+  const _AmenityInput({required this.amenities, required this.onAdd, required this.onRemove});
 
   @override
   State<_AmenityInput> createState() => _AmenityInputState();
@@ -765,8 +583,7 @@ class _AmenityInputState extends State<_AmenityInput> {
         const SizedBox(height: 8),
         TextField(
           controller: _controller,
-          decoration: const InputDecoration(
-              hintText: 'Type an amenity and press enter…'),
+          decoration: const InputDecoration(hintText: 'Type an amenity and press enter…'),
           onSubmitted: (value) {
             widget.onAdd(value);
             _controller.clear();
@@ -778,9 +595,7 @@ class _AmenityInputState extends State<_AmenityInput> {
           runSpacing: 6,
           children: _suggestedAmenities
               .where((s) => !widget.amenities.contains(s))
-              .map((s) => ActionChip(
-                  label: Text('+ $s', style: const TextStyle(fontSize: 11)),
-                  onPressed: () => widget.onAdd(s)))
+              .map((s) => ActionChip(label: Text('+ $s', style: const TextStyle(fontSize: 11)), onPressed: () => widget.onAdd(s)))
               .toList(),
         ),
       ],
@@ -790,23 +605,17 @@ class _AmenityInputState extends State<_AmenityInput> {
 
 class _HourEditorRow extends StatelessWidget {
   final BusinessHourEntry entry;
-  final void Function(String day,
-      {String? openTime, String? closeTime, bool? isClosed}) onChange;
+  final void Function(String day, {String? openTime, String? closeTime, bool? isClosed}) onChange;
   const _HourEditorRow({required this.entry, required this.onChange});
 
   Future<void> _pickTime(BuildContext context, bool isOpen) async {
     final current = (isOpen ? entry.openTime : entry.closeTime) ?? '09:00';
     final parts = current.split(':');
-    final initial = TimeOfDay(
-        hour: int.tryParse(parts[0]) ?? 9,
-        minute: int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0);
+    final initial = TimeOfDay(hour: int.tryParse(parts[0]) ?? 9, minute: int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0);
     final picked = await showTimePicker(context: context, initialTime: initial);
     if (picked == null) return;
-    final formatted =
-        '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
-    onChange(entry.dayOfWeek,
-        openTime: isOpen ? formatted : null,
-        closeTime: isOpen ? null : formatted);
+    final formatted = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+    onChange(entry.dayOfWeek, openTime: isOpen ? formatted : null, closeTime: isOpen ? null : formatted);
   }
 
   @override
@@ -815,26 +624,14 @@ class _HourEditorRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          SizedBox(
-              width: 80,
-              child: Text(entry.dayOfWeek,
-                  style: const TextStyle(fontSize: 12.5))),
-          Checkbox(
-              value: entry.isClosed,
-              onChanged: (v) => onChange(entry.dayOfWeek, isClosed: v ?? false),
-              visualDensity: VisualDensity.compact),
+          SizedBox(width: 80, child: Text(entry.dayOfWeek, style: const TextStyle(fontSize: 12.5))),
+          Checkbox(value: entry.isClosed, onChanged: (v) => onChange(entry.dayOfWeek, isClosed: v ?? false), visualDensity: VisualDensity.compact),
           const Text('Closed', style: TextStyle(fontSize: 11)),
           const Spacer(),
           if (!entry.isClosed) ...[
-            TextButton(
-                onPressed: () => _pickTime(context, true),
-                child: Text(entry.openTime ?? '09:00',
-                    style: const TextStyle(fontSize: 12))),
+            TextButton(onPressed: () => _pickTime(context, true), child: Text(entry.openTime ?? '09:00', style: const TextStyle(fontSize: 12))),
             const Text('–', style: TextStyle(fontSize: 12)),
-            TextButton(
-                onPressed: () => _pickTime(context, false),
-                child: Text(entry.closeTime ?? '17:00',
-                    style: const TextStyle(fontSize: 12))),
+            TextButton(onPressed: () => _pickTime(context, false), child: Text(entry.closeTime ?? '17:00', style: const TextStyle(fontSize: 12))),
           ],
         ],
       ),

@@ -408,6 +408,13 @@ function ItemModal({
                 {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}{supplier.leadTimeDays ? ` (${supplier.leadTimeDays} days)` : ' (lead time not set)'}</option>)}
               </select>
             </label>
+            <label className="form-field form-field-wide">
+              Preferred supplier for AI planning
+              <select value={form.supplierId ?? ''} onChange={(event) => update('supplierId', event.target.value || undefined)}>
+                <option value="">No supplier assigned</option>
+                {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}{supplier.leadTimeDays ? ` (${supplier.leadTimeDays} days)` : ' (lead time not set)'}</option>)}
+              </select>
+            </label>
           </div>
           {form.costPrice != null &&
             form.sellingPrice != null &&

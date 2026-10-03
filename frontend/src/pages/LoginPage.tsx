@@ -75,16 +75,16 @@ export default function LoginPage() {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { show } = useToast();
-  const { isAuthenticated, loading, error } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, loading, error, user } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/dashboard');
+      navigate(user?.role === 'Customer' ? '/customer' : user?.role === 'Staff' ? '/my-schedule' : '/dashboard');
     }
     return () => {
       dispatch(clearError());
     };
-  }, [isAuthenticated, navigate, dispatch]);
+  }, [isAuthenticated, user?.role, navigate, dispatch]);
 
   useEffect(() => {
     if (error) {

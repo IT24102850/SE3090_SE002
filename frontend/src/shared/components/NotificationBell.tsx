@@ -1,3 +1,4 @@
+import { useNotificationStream } from '../useNotificationStream';
 import { useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import {
@@ -31,6 +32,7 @@ function notificationIcon(type: string) {
 }
 
 export default function NotificationBell() {
+  useNotificationStream();
   const { user } = useSelector((state: RootState) => state.auth);
   const isCustomer = user?.role === 'Customer';
   const [open, setOpen] = useState(false);

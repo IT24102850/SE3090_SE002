@@ -1,3 +1,4 @@
+import { ReorderApprovals } from '../components/ReorderApprovals';
 import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { API_BASE_URL as apiBaseUrl } from '../../../api/apiBaseUrl';
 import { useEffect, useState, useRef } from 'react';
@@ -147,6 +148,9 @@ export function AgentWorkflowMonitorPage() {
       if (!resp.ok) throw new Error(`Workflow request failed (${resp.status})`);
       const raw = await resp.json() as Array<Record<string, any>>;
       const data = raw
+        // StockSense reorders are decided in their own panel above, which
+        // re-runs the safety gate and places the purchase order.
+        .filter((workflow) => !String(workflow.objective ?? '').startsWith('[StockSense'))
         .filter((workflow) => !search || `${workflow.objective} ${workflow.id}`.toLowerCase().includes(search.toLowerCase()))
         .map((workflow): WorkflowItem => ({
           id: String(workflow.id),
@@ -274,6 +278,8 @@ export function AgentWorkflowMonitorPage() {
           <button className="btn btn-secondary" onClick={() => fetchItems()}>Refresh</button>
         </div>
       </header>
+
+      <ReorderApprovals canDecide={user?.role === 'Admin' || user?.role === 'Manager'} />
       {loadError && <p className="page-notice" role="alert">⚠ {loadError}</p>}
 
       <div className="workflow-live-strip">
@@ -317,8 +323,8 @@ export function AgentWorkflowMonitorPage() {
               <div className="workflow-empty-content">
                 <div className="workflow-empty-icon">✦</div>
                 <h3>No workflows match these filters</h3>
-                <p className="hint">{search || statusFilter ? 'Try clearing a filter or refreshing the monitor.' : 'Start with the AI Planner to create a schedule proposal for this workspace.'}</p>
-                <Link className="btn btn-primary" to="/planner">Open AI Planner</Link>
+                <p className="hint">{search || statusFilter ? 'Try clearing a filter or refreshing the monitor.' : 'Start with Schedule Copilot to create a schedule proposal for this workspace.'}</p>
+                <Link className="btn btn-primary" to="/planner">Open Schedule Copilot</Link>
               </div>
             </div>
           ) : (

@@ -1,3 +1,4 @@
+import { ConfirmationProvider } from '../../shared/components/ConfirmationProvider';
 import { configureStore } from '@reduxjs/toolkit';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Provider } from 'react-redux';
@@ -117,9 +118,9 @@ async function openCopilot() {
   });
   const view = render(
     <Provider store={store}>
-      <ToastProvider>
+      <ToastProvider><ConfirmationProvider>
         <MemoryRouter><Page /></MemoryRouter>
-      </ToastProvider>
+      </ConfirmationProvider></ToastProvider>
     </Provider>,
   );
   fireEvent.click(screen.getByRole('tab', { name: /ask the copilot/i }));

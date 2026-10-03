@@ -94,7 +94,9 @@ void main() {
 
     expect(find.text('8 businesses'), findsOneWidget);
 
-    await tester.tap(find.text('Healthcare').first);
+    await tester.tap(find.byType(DropdownButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Healthcare').last);
     await tester.pumpAndSettle();
 
     // Four of the eight are Healthcare; the count has to show that a filter

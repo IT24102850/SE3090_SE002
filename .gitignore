@@ -47,8 +47,6 @@ ios/Pods/
 # Python
 __pycache__/
 *.py[cod]
-.agents/*.db
-agents/*.db
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -72,3 +70,10 @@ design/unify-ui-kit/unify-design-system.html
 
 # Local scratch file holding a plaintext password - never commit.
 scripts/pass.txt
+
+# Kotlin compiler cache (Android builds)
+.kotlin/
+
+# Local Git integration worktrees
+.git-push-work/
+.integration-repair/

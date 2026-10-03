@@ -14,7 +14,7 @@ public class BranchesControllerTests
     {
         var tenantId = Guid.NewGuid();
         await using var db = CreateDbContext(tenantId);
-        var controller = new BranchesController(db);
+        var controller = new BranchesController(db, Moq.Mock.Of<SmeBackend.Services.PlatformBilling.IEntitlementService>());
 
         var result = await controller.Create(new CreateBranchDto(
             tenantId,
@@ -22,7 +22,7 @@ public class BranchesControllerTests
             null,
             null,
             6.9271m,
-            null));
+            null), default);
 
         Assert.IsType<BadRequestObjectResult>(result);
         Assert.Empty(db.Branches);
@@ -38,7 +38,7 @@ public class BranchesControllerTests
     {
         var tenantId = Guid.NewGuid();
         await using var db = CreateDbContext(tenantId);
-        var controller = new BranchesController(db);
+        var controller = new BranchesController(db, Moq.Mock.Of<SmeBackend.Services.PlatformBilling.IEntitlementService>());
 
         var result = await controller.Create(new CreateBranchDto(
             tenantId,
@@ -46,7 +46,7 @@ public class BranchesControllerTests
             null,
             null,
             latitude,
-            longitude));
+            longitude), default);
 
         Assert.IsType<BadRequestObjectResult>(result);
         Assert.Empty(db.Branches);
@@ -57,7 +57,7 @@ public class BranchesControllerTests
     {
         var tenantId = Guid.NewGuid();
         await using var db = CreateDbContext(tenantId);
-        var controller = new BranchesController(db);
+        var controller = new BranchesController(db, Moq.Mock.Of<SmeBackend.Services.PlatformBilling.IEntitlementService>());
         var latitude = 6.9271m;
         var longitude = 79.8612m;
 
@@ -67,7 +67,7 @@ public class BranchesControllerTests
             null,
             null,
             latitude,
-            longitude));
+            longitude), default);
 
         Assert.IsType<OkObjectResult>(result);
         var branch = Assert.Single(db.Branches);

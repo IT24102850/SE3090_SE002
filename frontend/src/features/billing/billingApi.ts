@@ -485,6 +485,64 @@ export interface BillingAnalysis {
   approvalWorkflowIds: string[];
 }
 
+/* ── Billing copilot ──────────────────────────────────────────────────────
+ * A language-model planner at the input edge of the deterministic agent, and
+ * a narrator at its output edge. The planner may only ever *narrow* a run: it
+ * can shorten the window and tighten the discount cap, and it cannot loosen a
+ * threshold, approve anything, or reach a tool outside the allow-list.
+ * Anything it tried and was not allowed comes back in `plannerWarnings`. */
+
+export interface BillingIntent {
+  analysisType: string;
+  daysBack: number;
+  /** Set only when the planner asked for a *stricter* cap than the configured one. */
+  tightenDiscountCapTo: number | null;
+  dealAmount: number | null;
+  focus: string;
+  rationale: string;
+}
+
+export interface BillingPlanStep {
+  order: number;
+  action: string;
+  assignedAgent: 'BillingDomainAnalysisAgent' | 'BillingApprovalGate';
+  description: string;
+  tools: string[];
+}
+
+export interface PredictedFinding { kind: string; likelihood: number; description: string }
+
+export interface BillingPlannerOutput {
+  plan: BillingPlanStep[];
+  assignedAgents: string[];
+  predictedFindings: PredictedFinding[];
+  confidenceScore: number;
+  intent: BillingIntent;
+  summary: string;
+  /** True when the model was unavailable and the deterministic planner ran. */
+  usedFallback: boolean;
+}
+
+export interface FindingTheme { title: string; detail: string; anomalyIds: string[]; severity: string }
+
+export interface BillingNarrative {
+  headline: string;
+  themes: FindingTheme[];
+  suggestedNextSteps: string[];
+  usedFallback: boolean;
+}
+
+export interface BillingPlannedAnalysis {
+  objective: string;
+  planner: BillingPlannerOutput;
+  /** Every value the guard had to correct, in plain English. */
+  plannerWarnings: string[];
+  effectiveThresholds: ThresholdConfig;
+  analysis: BillingAnalysis;
+  narrative: BillingNarrative | null;
+  narrativeError: string | null;
+}
+
 export interface BillingWorkflow {
   id: string;
   objective: string;
@@ -611,6 +669,9 @@ export const billingApi = {
   // agent
   analyze: (body: { analysisType: string; dataRange?: { from: string; to: string }; thresholds?: Partial<ThresholdConfig>; dealAmount?: number }) =>
     api.post<BillingAnalysis>('/billing-agent/analyze', body).then((r) => r.data),
+  /** Copilot: plan an analysis from a plain-English objective, run it, narrate it. */
+  planAnalysis: (body: { objective: string; thresholds?: Partial<ThresholdConfig> }) =>
+    api.post<BillingPlannedAnalysis>('/billing-agent/plan-analysis', body).then((r) => r.data),
   agentTools: () =>
     api.get<{ tools: string[]; analysisTypes: Record<string, string[]>; defaultThresholds: ThresholdConfig }>('/billing-agent/tools').then((r) => r.data),
   workflows: (q: { kind?: string; status?: string; take?: number } = {}) =>

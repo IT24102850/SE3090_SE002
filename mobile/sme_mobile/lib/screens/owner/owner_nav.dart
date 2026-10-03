@@ -1,3 +1,8 @@
+import '../../inventory/authenticated_api_client.dart';
+import '../../inventory/stock_activity_history_screen.dart';
+import '../../inventory/sales_screen.dart';
+import '../customer/customer_order_management_screen.dart';
+import 'inventory/branch_performance_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -220,6 +225,10 @@ const List<OwnerSection> ownerSections = [
         build: BranchesScreen.new),
   ]),
   OwnerSection(label: 'Inventory', items: [
+    OwnerDestination(label: 'Physical Counts & Activity', icon: Icons.fact_check_outlined, roles: _staffUp, build: _UpdatedStockActivity.new),
+    OwnerDestination(label: 'Customer orders', icon: Icons.shopping_bag_outlined, roles: _staffUp, build: CustomerOrderManagementScreen.new),
+    OwnerDestination(label: 'Sales', icon: Icons.point_of_sale_outlined, roles: _staffUp, build: _UpdatedSales.new),
+    OwnerDestination(label: 'Branch Performance', icon: Icons.bar_chart_outlined, roles: _adminManager, build: BranchPerformanceScreen.new),
     OwnerDestination(
         label: 'Inventory Manager',
         icon: Icons.inventory_2_outlined,
@@ -390,5 +399,21 @@ class OwnerDrawer extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+class _UpdatedStockActivity extends StatelessWidget {
+  const _UpdatedStockActivity();
+  @override
+  Widget build(BuildContext context) => StockActivityHistoryScreen(client: AuthenticatedApiClient());
+}
+
+class _UpdatedSales extends ConsumerWidget {
+  const _UpdatedSales();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authProvider).user;
+    return SalesScreen(client: AuthenticatedApiClient(), assignedBranchId: user?.branchId,
+      requiresAssignedBranch: user?.role != 'Admin');
   }
 }

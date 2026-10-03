@@ -270,7 +270,11 @@ class _BookBusinessListScreenState
                     );
                   }
 
-                  return RefreshIndicator(
+                  return Column(children: [
+                    Text(filtered.length == tenants.length
+                      ? "${tenants.length} businesses"
+                      : "${filtered.length} of ${tenants.length} businesses"),
+                    Expanded(child: RefreshIndicator(
                     color: AppColors.cyan,
                     backgroundColor: AppColors.overlaySurface,
                     onRefresh: () async =>
@@ -299,7 +303,8 @@ class _BookBusinessListScreenState
                         );
                       },
                     ),
-                  );
+                  )),
+                  ]);
                 },
               ),
             ),

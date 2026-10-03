@@ -10,6 +10,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The integration services keep their pure decision logic internal:
+         thresholds, phone normalisation and the iCalendar reader are not
+         public API, but they are the parts that have to be right, so the
+         test project is allowed to see them. -->
+    <InternalsVisibleTo Include="SmeBackend.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="CloudinaryDotNet" Version="1.27.1" />
     <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />

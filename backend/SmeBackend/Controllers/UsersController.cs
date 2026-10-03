@@ -4,13 +4,15 @@ using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Authorization;
+using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
 [ApiController]
 [Authorize(Roles = "Admin")]
 [Route("api/users")]
-public sealed class UsersController(AppDbContext db) : ControllerBase
+public sealed class UsersController(AppDbContext db, IEntitlementService entitlements) : ControllerBase
 {
     [HttpGet("branches")]
     public async Task<ActionResult<IReadOnlyList<BranchResponse>>> GetBranches(CancellationToken cancellationToken)
@@ -69,6 +71,14 @@ public sealed class UsersController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = "The selected branch does not belong to your tenant." });
         }
 
+        // Seats are a plan limit. Customers are not seats - they are the
+        // tenant's own clientele, and charging a business per customer would
+        // punish exactly the growth we are selling.
+        var seatsUsed = await db.Users.IgnoreQueryFilters()
+            .CountAsync(u => u.TenantId == tenantId && u.Role != UserRole.Customer && u.IsActive, cancellationToken);
+        if (await entitlements.CheckCapAsync(tenantId, EntitlementService.CapStaffSeats, seatsUsed, cancellationToken) is { } paywall)
+            return PlanGate.PaymentRequired(paywall);
+
         var user = new User
         {
             TenantId = tenantId,
@@ -82,6 +92,7 @@ public sealed class UsersController(AppDbContext db) : ControllerBase
         };
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken);
+        entitlements.Invalidate(tenantId);
         return CreatedAtAction(nameof(GetUsers), new { }, new UserResponse(user.Id, user.FullName, user.Email, user.Phone, user.Role.ToString(), user.BranchId, user.IsApproved));
     }
 

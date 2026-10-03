@@ -165,8 +165,8 @@ Tracked against three requirement sets:
 
 | Controller | Responsibility |
 |---|---|
-| `Services/AuthController` | Login, register (global customer account), `/auth/join/{tenantId}`, `/auth/me` |
-| `Services/TenantController` | Tenant onboarding (`/tenant/onboard`), business settings, staff list |
+| `Controllers/AuthController` | Login, register (global customer account), `/auth/join/{tenantId}`, `/auth/me` |
+| `Controllers/TenantController` | Tenant onboarding (`/tenant/onboard`), business settings, staff list |
 | `TenantPublicController` | Public tenant directory for the mobile "Find a Business" list |
 | `BranchesController` | Branch CRUD |
 | `ResourcesController` | Resource CRUD, weekly schedule, schedule exceptions |
@@ -220,14 +220,6 @@ the only place allowed to create a booking. Converges on the same `AgentWorkflow
 table and `/approve`/`/reject`/`/apply` endpoints as the older deterministic bulk
 scheduler, rather than replacing it. Requires a `GEMINI_API_KEY` in
 `agentic-ai-service/.env` to exercise live (test suite mocks Gemini entirely).
-
-The inventory area also includes a separate read-only agent workflow at
-`POST /api/inventory/agent/plan` → `POST /inventory/plan`. It uses the signed-in
-inventory user's authorization to read stock and recent movements, then recommends
-replenishment quantities with a deterministic safety check. It never changes stock
-or creates an order; a staff member reviews any recommendation in the existing
-purchase-order flow. The Low Stock Alerts page explains limited history and lower
-confidence when no explicit usage movements exist.
 
 ## Data & deployment
 
