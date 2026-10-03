@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+﻿import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { Suspense, lazy, useEffect } from 'react';
 import { store } from './store/store';
@@ -6,11 +6,9 @@ import { initializeAuth } from './store/authSlice';
 import LandingPage from './features/marketing/LandingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './shared/components/AppLayout';
-import InventoryWorkspaceNav from './features/inventory/ui/InventoryWorkspaceNav';
 import { ToastProvider } from './shared/components/Toast';
-import { ConfirmationProvider } from './shared/components/ConfirmationProvider';
+import { PaywallProvider } from './features/subscription/PaywallProvider';
 import './features/inventory/inventory.css';
-import './features/inventory/inventory-refresh.css';
 import { ToastProvider as InventoryToastProvider } from './features/inventory/ui/ToastContext';
 
 /* Everything past the landing page is split out of the initial bundle.
@@ -22,19 +20,27 @@ import { ToastProvider as InventoryToastProvider } from './features/inventory/ui
  * navigation that actually needs them, which is behind a login.
  */
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+/* Unify's own plan: the public price list and the tenant admin's console for
+ * what their business pays us. Distinct from /subscriptions, which is the
+ * memberships a tenant sells to its own customers. */
+const PricingPage = lazy(() => import('./features/subscription/PricingPage'));
+const SubscriptionPage = lazy(() => import('./features/subscription/SubscriptionPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 // Public, chrome-less: the booking widget a business embeds on its own site.
 const EmbedBookingPage = lazy(() => import('./features/embed/EmbedBookingPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
-const ManageUsersPage = lazy(() => import('./pages/ManageUsersPage').then((module) => ({ default: module.ManageUsersPage })));
 const DashboardRouter = lazy(() => import('./features/dashboard/DashboardRouter'));
 const BookingManagerPage = lazy(() => import('./features/booking/BookingManagerPage'));
 const ResourceManagerPage = lazy(() => import('./features/booking/ResourceManagerPage'));
 const MultiBranchSchedulePage = lazy(() => import('./features/booking/MultiBranchSchedulePage'));
+const CalendarDashboardPage = lazy(() => import('./features/booking/CalendarDashboardPage'));
+const DisruptionRecoveryPage = lazy(() => import('./features/booking/DisruptionRecoveryPage'));
+const AvailabilitySlotsPage = lazy(() => import('./features/booking/AvailabilitySlotsPage'));
+const RecurringSeriesPage = lazy(() => import('./features/booking/RecurringSeriesPage'));
 const ReportsPage = lazy(() => import('./features/booking/ReportsPage'));
-const AgentPlannerPage = lazy(() => import('./features/booking/AgentPlannerPage'));
+const ScheduleCopilotPage = lazy(() => import('./features/booking/copilot/ScheduleCopilotPage'));
 const BookingTypeManagementPage = lazy(() => import('./features/booking/BookingTypeManagementPage'));
 const MySchedulePage = lazy(() => import('./features/staff/MySchedulePage'));
 const StaffManagementPage = lazy(() => import('./features/staff/StaffManagementPage'));
@@ -46,18 +52,17 @@ const CustomerBookPage = lazy(() => import('./features/customer/CustomerBookPage
 const MyBookingsPage = lazy(() => import('./features/customer/MyBookingsPage'));
 const CustomerAiPlannerPage = lazy(() => import('./features/customer/CustomerAiPlannerPage'));
 const BusinessInfoPage = lazy(() => import('./features/customer/BusinessInfoPage'));
-const CustomerShopPage = lazy(() => import('./features/customer/CustomerShopPage'));
-const CustomerOrderManagementPage = lazy(() => import('./features/customer/CustomerOrderManagementPage'));
 const InventoryManagerPage = lazy(() => import('./features/inventory/pages/InventoryManagerPage').then((m) => ({ default: m.InventoryManagerPage })));
 const SuppliersPage = lazy(() => import('./features/inventory/pages/SuppliersPage').then((m) => ({ default: m.SuppliersPage })));
+// Uses the inventory toast context, so it is mounted inside InventoryShell
+// like its siblings rather than the shared one.
+const ManageUsersPage = lazy(() => import('./pages/ManageUsersPage').then((m) => ({ default: m.ManageUsersPage })));
 const StockMovementLogPage = lazy(() => import('./features/inventory/pages/StockMovementLogPage').then((m) => ({ default: m.StockMovementLogPage })));
 const PurchaseOrderManagerPage = lazy(() => import('./features/inventory/pages/PurchaseOrderManagerPage').then((m) => ({ default: m.PurchaseOrderManagerPage })));
-const SalesPage = lazy(() => import('./features/inventory/pages/SalesPage').then((m) => ({ default: m.SalesPage })));
 const AgentWorkflowMonitorPage = lazy(() => import('./features/inventory/pages/AgentWorkflowMonitor').then((m) => ({ default: m.AgentWorkflowMonitorPage })));
 const LowStockAlertsPage = lazy(() => import('./features/inventory/pages/LowStockAlertsPage').then((m) => ({ default: m.LowStockAlertsPage })));
 const BranchOverviewPage = lazy(() => import('./features/inventory/pages/BranchOverviewPage').then((m) => ({ default: m.BranchOverviewPage })));
 const AnalyticsDashboardPage = lazy(() => import('./features/inventory/pages/AnalyticsDashboardCharts').then((m) => ({ default: m.AnalyticsDashboardPage })));
-const BranchPerformancePage = lazy(() => import('./features/inventory/pages/BranchPerformancePage').then((m) => ({ default: m.BranchPerformancePage })));
 /* Billing & payments (component 3). */
 const BillingDashboardPage = lazy(() => import('./features/billing/pages/BillingDashboardPage'));
 const InvoicesPage = lazy(() => import('./features/billing/pages/InvoicesPage'));
@@ -80,6 +85,8 @@ const PlatformTenantsPage = lazy(() => import('./features/platform/PlatformTenan
 const PlatformUsersPage = lazy(() => import('./features/platform/PlatformUsersPage'));
 const PlatformAuditPage = lazy(() => import('./features/platform/PlatformAuditPage'));
 const PlatformSecurityPage = lazy(() => import('./features/platform/PlatformSecurityPage'));
+const PlatformRevenuePage = lazy(() => import('./features/platform/PlatformRevenuePage'));
+const PlatformCopilotPage = lazy(() => import('./features/platform/PlatformCopilotPage'));
 
 /* Deliberately near-empty. This shows for the length of one chunk fetch on a
  * local network, and a spinner that appears and vanishes inside 100ms reads
@@ -107,7 +114,6 @@ function InventoryShell({ children }: { children: React.ReactNode }) {
     <div className="inventory-scope">
       <InventoryToastProvider>
         <AppLayout>
-          <InventoryWorkspaceNav />
           {children}
         </AppLayout>
       </InventoryToastProvider>
@@ -119,12 +125,13 @@ function App() {
   return (
     <Provider store={store}>
       <ToastProvider>
-        <ConfirmationProvider>
-          <AuthInitializer>
-            <BrowserRouter>
-              <Suspense fallback={<RouteFallback />}>
+        <AuthInitializer>
+          <BrowserRouter>
+            <PaywallProvider>
+            <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ForgotPasswordPage />} />
@@ -175,22 +182,6 @@ function App() {
                 }
               />
               <Route
-                path="/shop"
-                element={
-                  <ProtectedRoute allowedRoles={['Customer']}>
-                    <Shell><CustomerShopPage /></Shell>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/customer-orders"
-                element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
-                    <InventoryShell><CustomerOrderManagementPage /></InventoryShell>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="/ai-planner"
                 element={
                   <ProtectedRoute allowedRoles={['Customer']}>
@@ -224,12 +215,49 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/disruption-recovery"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><DisruptionRecoveryPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
 
               <Route
                 path="/multi-branch"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
                     <Shell><MultiBranchSchedulePage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Spec 2.5's calendar dashboard. The page existed but was
+                  never routed, so nobody could reach it. */}
+              <Route
+                path="/calendar"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><CalendarDashboardPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/availability"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><AvailabilitySlotsPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/recurring"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><RecurringSeriesPage /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -247,7 +275,7 @@ function App() {
                 path="/planner"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
-                    <Shell><AgentPlannerPage /></Shell>
+                    <Shell><ScheduleCopilotPage /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -273,8 +301,17 @@ function App() {
               <Route
                 path="/staff"
                 element={
-                  <ProtectedRoute allowedRoles={['Manager']}>
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
                     <Shell><StaffManagementPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/branches"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin']}>
+                    <Shell><BranchesPage /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -288,19 +325,21 @@ function App() {
               />
 
               <Route
-                path="/branches"
-                element={
-                  <ProtectedRoute allowedRoles={['Admin']}>
-                    <Shell><BranchesPage /></Shell>
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
                 path="/settings"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
                     <Shell><BusinessSettingsPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* The business's own Unify plan. Managers can see why a screen
+                  is locked; only an Admin can change what is paid. */}
+              <Route
+                path="/subscription"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><SubscriptionPage /></Shell>
                   </ProtectedRoute>
                 }
               />
@@ -417,7 +456,7 @@ function App() {
               <Route
                 path="/suppliers"
                 element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Staff']}>
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
                     <InventoryShell><SuppliersPage /></InventoryShell>
                   </ProtectedRoute>
                 }
@@ -439,14 +478,6 @@ function App() {
                 }
               />
               <Route
-                path="/sales"
-                element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
-                    <InventoryShell><SalesPage /></InventoryShell>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="/agent-workflows"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
@@ -455,20 +486,12 @@ function App() {
                 }
               />
               <Route
-                path="/stocksense-ai"
+                path="/low-stock-alerts"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
                     <InventoryShell><LowStockAlertsPage /></InventoryShell>
                   </ProtectedRoute>
                 }
-              />
-              <Route
-                path="/inventory-ai"
-                element={<Navigate to="/stocksense-ai" replace />}
-              />
-              <Route
-                path="/low-stock-alerts"
-                element={<Navigate to="/stocksense-ai" replace />}
               />
               <Route
                 path="/branch-overview"
@@ -483,14 +506,6 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
                     <InventoryShell><AnalyticsDashboardPage /></InventoryShell>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/branch-performance"
-                element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
-                    <InventoryShell><BranchPerformancePage /></InventoryShell>
                   </ProtectedRoute>
                 }
               />
@@ -510,14 +525,16 @@ function App() {
               <Route path="/platform/users" element={<PlatformUsersPage />} />
               <Route path="/platform/audit" element={<PlatformAuditPage />} />
               <Route path="/platform/security" element={<PlatformSecurityPage />} />
+              <Route path="/platform/revenue" element={<PlatformRevenuePage />} />
+              <Route path="/platform/copilot" element={<PlatformCopilotPage />} />
 
               <Route path="/" element={<LandingPage />} />
               <Route path="*" element={<div style={{ padding: '2rem' }}><h1>404 - Page Not Found</h1></div>} />
             </Routes>
-              </Suspense>
-            </BrowserRouter>
-          </AuthInitializer>
-        </ConfirmationProvider>
+            </Suspense>
+            </PaywallProvider>
+          </BrowserRouter>
+        </AuthInitializer>
       </ToastProvider>
     </Provider>
   );

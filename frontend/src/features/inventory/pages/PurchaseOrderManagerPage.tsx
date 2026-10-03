@@ -1,4 +1,3 @@
-import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { API_BASE_URL } from '../../../api/apiBaseUrl';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -9,7 +8,7 @@ import { Badge, type BadgeTone } from '../ui/Badge';
 import { useToast } from '../ui/ToastContext';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
 
-type POStatus = 'Draft' | 'InReview' | 'Placed' | 'InTransit' | 'PartiallyReceived' | 'Received' | 'Rejected' | 'Cancelled';
+type POStatus = 'Draft' | 'InReview' | 'Placed' | 'InTransit' | 'PartiallyReceived' | 'Received' | 'Cancelled';
 
 type TimelineEvent = {
   status: POStatus;
@@ -82,10 +81,8 @@ type PurchaseOrderReceiptResponse = {
   id: string;
   receivedAt: string;
   receivedBy: string;
-  photoUrls?: string[];
   items: Array<{
     purchaseOrderItemId: string;
-    itemName?: string;
     deliveredQuantity: number;
     acceptedQuantity: number;
     damagedQuantity: number;
@@ -99,10 +96,8 @@ type PurchaseOrderItemOption = {
   id: string;
   name: string;
   sku: string;
-  unitCost?: number | null;
+  unitCost?: number;
   branchId?: string | null;
-  branchName?: string | null;
-  supplierId?: string | null;
 };
 
 type PurchaseOrderOptionsResponse = {
@@ -130,7 +125,6 @@ const statusLabels: Record<POStatus, string> = {
   InTransit: 'In transit',
   PartiallyReceived: 'Partially received',
   Received: 'Received',
-  Rejected: 'Rejected',
   Cancelled: 'Cancelled',
 };
 
@@ -141,12 +135,11 @@ const statusTone: Record<POStatus, BadgeTone> = {
   InTransit: 'blue',
   PartiallyReceived: 'amber',
   Received: 'green',
-  Rejected: 'red',
   Cancelled: 'red',
 };
 
 
-const statusFilters = ['All statuses', ...lifecycleSteps.map((step) => statusLabels[step]), statusLabels.PartiallyReceived, statusLabels.Rejected, 'Cancelled'] as const;
+const statusFilters = ['All statuses', ...lifecycleSteps.map((step) => statusLabels[step]), statusLabels.PartiallyReceived, 'Cancelled'] as const;
 type StatusFilter = (typeof statusFilters)[number];
 
 const fallbackOrders: PurchaseOrder[] = [
@@ -280,18 +273,6 @@ async function apiPost<T>(path: string, token: string | null, body: unknown): Pr
   return response.json() as Promise<T>;
 }
 
-async function apiUpload<T>(path: string, token: string | null, file: File): Promise<T> {
-  const form = new FormData();
-  form.append('file', file);
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: form,
-  });
-  if (!response.ok) throw new Error(await apiErrorMessage(response, path));
-  return response.json() as Promise<T>;
-}
-
 async function apiErrorMessage(response: Response, path: string): Promise<string> {
   const fallback = `Request failed (${response.status}): ${path}`;
   try {
@@ -299,7 +280,7 @@ async function apiErrorMessage(response: Response, path: string): Promise<string
     const validation = body.errors
       ? Object.values(body.errors).flat().filter(Boolean).join(' ')
       : '';
-    return [body.message, validation].filter(Boolean).join(' ') || body.title || fallback;
+    return body.message || body.title || validation || fallback;
   } catch {
     return fallback;
   }
@@ -307,7 +288,7 @@ async function apiErrorMessage(response: Response, path: string): Promise<string
 
 function normalizeStatus(raw: string): POStatus {
   const cleaned = raw.replace(/\s|-/g, '');
-  const match = (['Draft', 'InReview', 'Placed', 'InTransit', 'PartiallyReceived', 'Received', 'Rejected', 'Cancelled'] as const)
+  const match = (['Draft', 'InReview', 'Placed', 'InTransit', 'PartiallyReceived', 'Received', 'Cancelled'] as const)
     .find((status) => status.toLowerCase() === cleaned.toLowerCase());
   return match ?? 'Draft';
 }
@@ -340,7 +321,7 @@ function nextPoNumber(orders: PurchaseOrder[]) {
 }
 
 function nextStatus(current: POStatus): POStatus | null {
-  if (current === 'Cancelled' || current === 'Rejected' || current === 'Received') return null;
+  if (current === 'Cancelled' || current === 'Received') return null;
   if (current === 'InTransit' || current === 'PartiallyReceived') return null;
   const index = lifecycleSteps.indexOf(current);
   if (index === -1 || index >= lifecycleSteps.length - 1) return null;
@@ -366,23 +347,9 @@ function responseToOrder(response: PurchaseOrderResponse, existing?: PurchaseOrd
   };
 }
 
-function batchOrderBase(number: string) {
-  return number.match(/^(.*)-(\d{2})$/)?.[1] ?? null;
-}
-
-function PurchaseOrderTimestamp({ value, dateOnly = false }: { value: string; dateOnly?: boolean }) {
-  const label = dateOnly ? formatDate(value) : formatDateTime(value);
-  return (
-    <time className="purchase-order-timestamp" dateTime={value}>
-      <span aria-hidden="true">{dateOnly ? '▦' : '◷'}</span>
-      {label}
-    </time>
-  );
-}
-
 function LifecycleTracker({ status, compact = false }: { status: POStatus; compact?: boolean }) {
-  if (status === 'Cancelled' || status === 'Rejected') {
-    return <span className="lifecycle-cancelled">{statusLabels[status]}</span>;
+  if (status === 'Cancelled') {
+    return <span className="lifecycle-cancelled">Cancelled</span>;
   }
 
   const activeIndex = lifecycleSteps.indexOf(status === 'PartiallyReceived' ? 'InTransit' : status);
@@ -410,15 +377,13 @@ function LifecycleTracker({ status, compact = false }: { status: POStatus; compa
 type PoItemDraft = {
   inventoryItemId: string;
   description: string;
-  quantities: Record<string, number>;
+  quantity: number;
   unitPrice: number;
 };
 
 function CreatePoModal({
   onClose,
   onCreate,
-  canCreateMultiBranch,
-  requiresReview,
   branches,
   suppliers,
   inventoryItems,
@@ -429,15 +394,11 @@ function CreatePoModal({
   creating,
 }: {
   onClose: () => void;
-  canCreateMultiBranch: boolean;
-  requiresReview: boolean;
   onCreate: (draft: {
-    branchOrders: Array<{
-      branchId: string;
-      items: Array<{ inventoryItemId?: string; description?: string; quantity: number; unitPrice: number }>;
-    }>;
+    branchId: string;
     supplierId: string;
     number: string;
+    items: Array<{ inventoryItemId?: string; description?: string; quantity: number; unitPrice: number }>;
   }) => Promise<void>;
   branches: PurchaseOrderOption[];
   suppliers: PurchaseOrderOption[];
@@ -448,32 +409,21 @@ function CreatePoModal({
   initialQuantity?: number;
   creating: boolean;
 }) {
-  const initialBranchId = defaultBranchId && branches.some((branch) => branch.id === defaultBranchId)
+  const [branchId, setBranchId] = useState(defaultBranchId && branches.some((branch) => branch.id === defaultBranchId)
     ? defaultBranchId
-    : branches[0]?.id ?? '';
-  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(initialBranchId ? [initialBranchId] : []);
-  const itemForReorder = inventoryItems.find((item) => item.id === initialInventoryItemId);
-  const initialSupplierId = suppliers.some((supplier) => supplier.id === itemForReorder?.supplierId)
-    ? itemForReorder!.supplierId!
-    : suppliers[0]?.id ?? '';
-  const [supplierId, setSupplierId] = useState(initialSupplierId);
+    : branches[0]?.id ?? '');
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '');
   const [poNumber, setPoNumber] = useState(defaultNumber);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const supplierCatalogItems = inventoryItems.filter(
-    (item) => item.supplierId === supplierId,
-  );
-  const initialItem = supplierCatalogItems.find((item) => item.id === initialInventoryItemId) ??
-    supplierCatalogItems[0];
+  const branchInventoryItems = inventoryItems.filter((item) => item.branchId === branchId);
+  const initialItem = branchInventoryItems.find((item) => item.id === initialInventoryItemId) ?? branchInventoryItems[0];
   const [items, setItems] = useState<PoItemDraft[]>([
     {
       inventoryItemId: initialItem?.id ?? '',
       description: initialItem?.name ?? '',
-      quantities: Object.fromEntries(selectedBranchIds.map((id) => [
-        id,
-        initialQuantity && initialQuantity > 0 ? initialQuantity : 1,
-      ])),
+      quantity: initialQuantity && initialQuantity > 0 ? initialQuantity : 1,
       unitPrice: initialItem?.unitCost ?? 0,
     },
   ]);
@@ -484,7 +434,7 @@ function CreatePoModal({
       if (val === 'custom') {
         copy[index] = { ...copy[index], inventoryItemId: '', description: copy[index].description || '' };
       } else {
-        const found = supplierCatalogItems.find((inv) => inv.id === val);
+        const found = branchInventoryItems.find((inv) => inv.id === val);
         copy[index] = {
           ...copy[index],
           inventoryItemId: val,
@@ -505,43 +455,26 @@ function CreatePoModal({
   }
 
   function addItem() {
-    const nextItem = supplierCatalogItems[0];
+    const nextItem = branchInventoryItems[0];
     setItems((prev) => [
       ...prev,
       {
         inventoryItemId: nextItem?.id ?? '',
         description: nextItem?.name ?? '',
-        quantities: Object.fromEntries(selectedBranchIds.map((id) => [id, 0])),
+        quantity: 1,
         unitPrice: nextItem?.unitCost ?? 0,
       },
     ]);
   }
 
-  function changeBranches(branchId: string, checked: boolean) {
-    setSelectedBranchIds((current) => checked
-      ? current.includes(branchId) ? current : [...current, branchId]
-      : current.filter((id) => id !== branchId));
-  }
-
-  function selectAllBranches() {
-    setSelectedBranchIds(branches.map((branch) => branch.id));
-    setItems((current) => current.map((item) => ({
-      ...item,
-      quantities: Object.fromEntries(branches.map((branch) => [
-        branch.id,
-        item.quantities[branch.id] || 1,
-      ])),
-    })));
-  }
-
-  function changeSupplier(nextSupplierId: string) {
-    const nextSupplierItems = inventoryItems.filter(
-      (item) => item.supplierId === nextSupplierId,
-    );
-    setSupplierId(nextSupplierId);
+  function changeBranch(nextBranchId: string) {
+    const nextBranchItems = inventoryItems.filter((item) => item.branchId === nextBranchId);
+    setBranchId(nextBranchId);
     setItems((current) => current.map((row) => {
-      if (!row.inventoryItemId) return row;
-      const replacement = nextSupplierItems[0];
+      if (!row.inventoryItemId || inventoryItems.some((item) => item.id === row.inventoryItemId && item.branchId === nextBranchId)) {
+        return row;
+      }
+      const replacement = nextBranchItems[0];
       return {
         ...row,
         inventoryItemId: replacement?.id ?? '',
@@ -556,17 +489,14 @@ function CreatePoModal({
     setItems((prev) => prev.filter((_, i) => i !== index));
   }
 
-  const grandTotal = items.reduce((sum, item) => {
-    const quantity = selectedBranchIds.reduce((total, id) => total + (Number(item.quantities[id]) || 0), 0);
-    return sum + quantity * (Number(item.unitPrice) || 0);
-  }, 0);
+  const grandTotal = items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
 
-    if (selectedBranchIds.length === 0) {
-      setError('Select at least one destination branch.');
+    if (!branchId) {
+      setError('Branch is required.');
       return;
     }
     if (!supplierId) {
@@ -588,50 +518,14 @@ function CreatePoModal({
         setError(`Item #${i + 1} requires an inventory item or custom description.`);
         return;
       }
-      if (item.inventoryItemId) {
-        const catalogItem = supplierCatalogItems.find((candidate) => candidate.id === item.inventoryItemId);
-        if (!catalogItem || catalogItem.unitCost == null) {
-          setError(`Item #${i + 1} is not linked to this supplier or has no catalog unit cost.`);
-          return;
-        }
-        if (Number(item.unitPrice) !== catalogItem.unitCost) {
-          setError(`Item #${i + 1} price must match its catalog unit cost.`);
-          return;
-        }
-      }
-      for (const id of selectedBranchIds) {
-        const quantity = Number(item.quantities[id]) || 0;
-        if (quantity < 0) {
-          setError(`Item #${i + 1} quantity cannot be negative.`);
-          return;
-        }
-        if (!Number.isInteger(quantity)) {
-          setError(`Item #${i + 1} quantity must be a whole number.`);
-          return;
-        }
+      if (Number(item.quantity) <= 0) {
+        setError(`Item #${i + 1} quantity must be greater than 0.`);
+        return;
       }
       if (Number(item.unitPrice) < 0) {
         setError(`Item #${i + 1} unit price cannot be negative.`);
         return;
       }
-    }
-
-    const branchOrders = selectedBranchIds.map((id) => ({
-      branchId: id,
-      items: items
-        .filter((item) => (Number(item.quantities[id]) || 0) > 0)
-        .map((item) => ({
-          inventoryItemId: item.inventoryItemId || undefined,
-          description: item.description.trim() || undefined,
-          quantity: Number(item.quantities[id]),
-          unitPrice: Number(item.unitPrice),
-        })),
-    }));
-    const branchWithoutItems = branchOrders.find((order) => order.items.length === 0);
-    if (branchWithoutItems) {
-      const branchName = branches.find((branch) => branch.id === branchWithoutItems.branchId)?.name ?? 'Selected branch';
-      setError(`Enter a quantity for at least one item for ${branchName}.`);
-      return;
     }
 
     setConfirmOpen(true);
@@ -640,25 +534,21 @@ function CreatePoModal({
   async function confirmCreate() {
     setConfirmOpen(false);
     await onCreate({
-      branchOrders: selectedBranchIds.map((id) => ({
-        branchId: id,
-        items: items
-          .filter((item) => (Number(item.quantities[id]) || 0) > 0)
-          .map((item) => ({
-            inventoryItemId: item.inventoryItemId || undefined,
-            description: item.description.trim() || undefined,
-            quantity: Number(item.quantities[id]),
-            unitPrice: Number(item.unitPrice),
-          })),
-      })),
+      branchId,
       supplierId,
       number: poNumber.trim(),
+      items: items.map((i) => ({
+        inventoryItemId: i.inventoryItemId ? i.inventoryItemId : undefined,
+        description: i.description.trim() || undefined,
+        quantity: Number(i.quantity),
+        unitPrice: Number(i.unitPrice),
+      })),
     });
   }
 
   return (
     <div className="modal-overlay" onClick={onClose} role="presentation">
-      <div className="modal modal-lg po-create-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-po-title">
+      <div className="modal modal-lg" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-po-title">
         <div className="modal-head">
           <h2 id="create-po-title">Create Purchase Order</h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
@@ -676,40 +566,15 @@ function CreatePoModal({
                 required
               />
             </label>
-            <div className="form-field form-field-wide">
-              Destination branches
-              <div className="po-branch-options" role="group" aria-label="Destination branches">
-                {branches.map((branch) => (
-                  <label key={branch.id} className={`po-branch-option${selectedBranchIds.includes(branch.id) ? ' is-selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={selectedBranchIds.includes(branch.id)}
-                      onChange={(event) => changeBranches(branch.id, event.target.checked)}
-                      aria-label={`Order for ${branch.name}`}
-                      disabled={!canCreateMultiBranch}
-                    />
-                    <span>{branch.name}</span>
-                  </label>
-                ))}
-              </div>
-              <small className="po-branch-help">
-                Any supplier catalog item can be ordered to the selected destinations. Each selected branch gets its own purchase order and stock receipt.
-                {selectedBranchIds.length > 1 && ` Generated numbers: ${selectedBranchIds.map((_, index) => `${poNumber.trim() || 'PO'}-${String(index + 1).padStart(2, '0')}`).join(', ')}.`}
-              </small>
-              {canCreateMultiBranch && branches.length > 1 && (
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={selectAllBranches}
-                  aria-label="Select all branches"
-                >
-                  Select all branches
-                </button>
-              )}
-            </div>
+            <label className="form-field">
+              Destination Branch
+              <select value={branchId} onChange={(event) => changeBranch(event.target.value)} required>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </label>
             <label className="form-field form-field-wide">
               Supplier
-              <select value={supplierId} onChange={(event) => changeSupplier(event.target.value)} required>
+              <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </label>
@@ -723,107 +588,86 @@ function CreatePoModal({
               </button>
             </div>
 
-            <div className="po-items-table-wrap">
-              <table className="po-items-table">
-                <thead>
-                  <tr>
-                    <th>Item / Description</th>
-                    {selectedBranchIds.map((id) => (
-                      <th key={id}>{branches.find((branch) => branch.id === id)?.name ?? 'Branch'} qty</th>
-                    ))}
-                    <th>Unit Price (LKR)</th>
-                    <th>Subtotal</th>
-                    <th className="cell-action"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((row, idx) => {
-                    const lineQuantity = selectedBranchIds.reduce((sum, id) => sum + (Number(row.quantities[id]) || 0), 0);
-                    const lineSubtotal = lineQuantity * (Number(row.unitPrice) || 0);
-                    const isCustom = !row.inventoryItemId;
+            <table className="po-items-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '38%' }}>Item / Description</th>
+                  <th style={{ width: '18%' }}>Quantity</th>
+                  <th style={{ width: '22%' }}>Unit Price (LKR)</th>
+                  <th style={{ width: '18%', textAlign: 'right' }}>Subtotal</th>
+                  <th className="cell-action"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((row, idx) => {
+                  const lineSubtotal = (Number(row.quantity) || 0) * (Number(row.unitPrice) || 0);
+                  const isCustom = !row.inventoryItemId;
 
-                    return (
-                      <tr key={idx}>
-                        <td>
-                          <select
-                            value={row.inventoryItemId || 'custom'}
-                            onChange={(e) => handleItemSelect(idx, e.target.value)}
-                            aria-label={`Inventory item for line ${idx + 1}`}
-                            style={{ marginBottom: isCustom ? '0.35rem' : '0' }}
-                          >
-                            <option value="custom">-- Custom Description --</option>
-                            {supplierCatalogItems.map((inv) => (
-                              <option key={inv.id} value={inv.id}>
-                                {inv.name} ({inv.sku})
-                                {inv.branchName ? ` · from ${inv.branchName}` : ''}
-                                {inv.unitCost == null ? ' · cost not set' : ''}
-                              </option>
-                            ))}
-                          </select>
-                          {isCustom && (
-                            <input
-                              type="text"
-                              placeholder="Enter custom item description"
-                              value={row.description}
-                              onChange={(e) => handleFieldChange(idx, 'description', e.target.value)}
-                              required
-                            />
-                          )}
-                        </td>
-                        {selectedBranchIds.map((id) => {
-                          const branchName = branches.find((branch) => branch.id === id)?.name ?? 'branch';
-                          return (
-                            <td key={id}>
-                              <input
-                                type="number"
-                                min="0"
-                                step="1"
-                                value={row.quantities[id] ?? 0}
-                                onChange={(event) => {
-                                  const value = event.target.value;
-                                  if (value !== '' && !/^\d+$/.test(value)) return;
-                                  const quantity = Number(value) || 0;
-                                  setItems((prev) => prev.map((item, itemIndex) => itemIndex === idx
-                                    ? { ...item, quantities: { ...item.quantities, [id]: quantity } }
-                                    : item));
-                                }}
-                                aria-label={`Quantity for ${branchName}, line ${idx + 1}`}
-                              />
-                            </td>
-                          );
-                        })}
-                        <td>
+                  return (
+                    <tr key={idx}>
+                      <td>
+                        <select
+                          value={row.inventoryItemId || 'custom'}
+                          onChange={(e) => handleItemSelect(idx, e.target.value)}
+                          style={{ marginBottom: isCustom ? '0.35rem' : '0' }}
+                        >
+                          <option value="custom">-- Custom Description --</option>
+                          {branchInventoryItems.map((inv) => (
+                            <option key={inv.id} value={inv.id}>
+                              {inv.name} ({inv.sku})
+                            </option>
+                          ))}
+                        </select>
+                        {isCustom && (
                           <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={row.unitPrice}
-                            onChange={(e) => handleFieldChange(idx, 'unitPrice', Number(e.target.value))}
-                            readOnly={!isCustom}
-                            aria-label={`Unit price for line ${idx + 1}${isCustom ? '' : ' (catalog locked)'}`}
-                            title={isCustom ? 'Custom line price' : 'Catalog unit cost is locked'}
+                            type="text"
+                            placeholder="Enter custom item description"
+                            value={row.description}
+                            onChange={(e) => handleFieldChange(idx, 'description', e.target.value)}
                             required
                           />
-                        </td>
-                        <td className="po-line-subtotal">LKR {lineSubtotal.toLocaleString()}</td>
-                        <td className="cell-action">
-                          {items.length > 1 && (
-                            <button
-                              type="button"
-                              className="po-item-delete-btn"
-                              title="Remove item"
-                              onClick={() => removeItem(idx)}
-                            >
-                              ×
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        )}
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={row.quantity}
+                          onChange={(e) => handleFieldChange(idx, 'quantity', Number(e.target.value))}
+                          required
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={row.unitPrice}
+                          onChange={(e) => handleFieldChange(idx, 'unitPrice', Number(e.target.value))}
+                          required
+                        />
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        LKR {lineSubtotal.toLocaleString()}
+                      </td>
+                      <td className="cell-action">
+                        {items.length > 1 && (
+                          <button
+                            type="button"
+                            className="po-item-delete-btn"
+                            title="Remove item"
+                            onClick={() => removeItem(idx)}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
 
             <div className="po-total-row">
               <span>Total Order Value ({items.length} {items.length === 1 ? 'item' : 'items'}):</span>
@@ -833,13 +677,9 @@ function CreatePoModal({
             </div>
             {confirmOpen && (
               <ConfirmDialog
-                title={`Create ${selectedBranchIds.length} purchase order${selectedBranchIds.length === 1 ? '' : 's'}?`}
-                message={requiresReview
-                  ? `Submit ${poNumber.trim()} for ${formatPrice(grandTotal)} to Manager or Admin review?`
-                  : `Create separate branch orders from ${poNumber.trim()} for ${formatPrice(grandTotal)} across ${selectedBranchIds.length} branch${selectedBranchIds.length === 1 ? '' : 'es'}? Each branch order will be saved as Draft.`}
-                confirmLabel={requiresReview
-                  ? `Submit ${selectedBranchIds.length} order${selectedBranchIds.length === 1 ? '' : 's'}`
-                  : `Create ${selectedBranchIds.length} order${selectedBranchIds.length === 1 ? '' : 's'}`}
+                title={`Create ${poNumber.trim()}?`}
+                message={`Create this purchase order for ${formatPrice(grandTotal)} with ${items.length} line item${items.length === 1 ? '' : 's'}? The order will be saved to the database as Draft.`}
+                confirmLabel="Create purchase order"
                 onConfirm={() => { void confirmCreate(); }}
                 onCancel={() => setConfirmOpen(false)}
               />
@@ -861,8 +701,9 @@ function CreatePoModal({
 }
 
 type ReceiptDraft = {
-  acceptedQuantity: string;
+  deliveredQuantity: string;
   damagedQuantity: string;
+  closeRemainingAsShort: boolean;
   notes: string;
   inventoryItemId?: string;
 };
@@ -880,20 +721,20 @@ function ReceivePoModal({
   onClose: () => void;
   onReceive: (items: Array<{
     purchaseOrderItemId: string;
-    acceptedQuantity: number;
+    deliveredQuantity: number;
     damagedQuantity: number;
     closeRemainingAsShort: boolean;
     notes: string;
     inventoryItemId?: string;
-  }>, photos: File[]) => Promise<void>;
+  }>) => Promise<void>;
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [photos, setPhotos] = useState<File[]>([]);
   const branchInventoryItems = inventoryItems.filter((item) => item.branchId === order.branchId);
   const [lines, setLines] = useState<Record<string, ReceiptDraft>>(() =>
     Object.fromEntries((order.items ?? []).map((item) => [item.id, {
-      acceptedQuantity: '',
+      deliveredQuantity: '',
       damagedQuantity: '',
+      closeRemainingAsShort: false,
       notes: '',
       inventoryItemId: undefined,
     }])),
@@ -917,45 +758,43 @@ function ReceivePoModal({
     }
     const payload = order.items.map((item) => ({
       purchaseOrderItemId: item.id,
-      acceptedQuantity: Number(lines[item.id]?.acceptedQuantity || 0),
+      deliveredQuantity: Number(lines[item.id]?.deliveredQuantity || 0),
       damagedQuantity: Number(lines[item.id]?.damagedQuantity || 0),
-      closeRemainingAsShort: false,
+      closeRemainingAsShort: lines[item.id]?.closeRemainingAsShort ?? false,
       notes: lines[item.id]?.notes.trim() ?? '',
       inventoryItemId: item.inventoryItemId ?? lines[item.id]?.inventoryItemId,
     }));
     const changed = payload.some((line) =>
-      line.acceptedQuantity > 0 || line.damagedQuantity > 0,
+      line.deliveredQuantity > 0 || line.closeRemainingAsShort,
     );
     if (!changed) {
-      setError('Enter an accepted or damaged quantity, or confirm a remaining shortage for at least one item.');
+      setError('Enter a delivered quantity or confirm a remaining shortage for at least one item.');
       return;
     }
-    if (payload.some((line) =>
-      !Number.isInteger(line.acceptedQuantity) ||
-      !Number.isInteger(line.damagedQuantity),
-    )) {
-      setError('Accepted and damaged quantities must be whole numbers.');
-      return;
-    }
-    const invalid = payload.find((line) => {
-      const item = order.items?.find((candidate) => candidate.id === line.purchaseOrderItemId);
-      return line.acceptedQuantity < 0 ||
-        line.damagedQuantity < 0 ||
-        !item ||
-        line.acceptedQuantity + line.damagedQuantity > remaining(item);
-    });
+    const invalid = payload.find((line) =>
+      line.deliveredQuantity < 0 ||
+      line.damagedQuantity < 0 ||
+      line.damagedQuantity > line.deliveredQuantity,
+    );
     if (invalid) {
-      setError('Accepted plus damaged units cannot exceed the remaining ordered quantity.');
+      setError('Quantities must be zero or greater, and damaged units cannot exceed delivered units.');
       return;
     }
     const unlinkedAcceptedLine = payload.find((line) =>
-      line.acceptedQuantity > 0 && !line.inventoryItemId,
+      line.deliveredQuantity > line.damagedQuantity && !line.inventoryItemId,
     );
     if (unlinkedAcceptedLine) {
       setError('Choose a destination-branch inventory item for each accepted custom line.');
       return;
     }
-    await onReceive(payload, photos);
+    const exceeds = order.items.find((item) =>
+      payload.find((line) => line.purchaseOrderItemId === item.id)!.deliveredQuantity > remaining(item),
+    );
+    if (exceeds) {
+      setError(`Delivered quantity for ${exceeds.itemName ?? exceeds.description ?? 'an item'} exceeds its ${remaining(exceeds)} remaining units.`);
+      return;
+    }
+    await onReceive(payload);
   }
 
   return (
@@ -964,7 +803,7 @@ function ReceivePoModal({
         <div className="modal-head">
           <div>
             <h2 id="receive-po-title">Receive {order.number}</h2>
-            <p>Only accepted units are added to inventory. Any remaining units stay open for a later delivery.</p>
+            <p>Only accepted units are added to inventory. Record shortages to close a line when no more delivery is expected.</p>
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close" disabled={saving}>×</button>
         </div>
@@ -973,45 +812,32 @@ function ReceivePoModal({
           <div className="po-items-section">
             <table className="po-items-table">
               <thead>
-                <tr><th>Item</th><th>Ordered</th><th>Accepted so far</th><th>Still due after this delivery</th><th>Accepted now (good)</th><th>Damaged now</th></tr>
+                <tr><th>Item</th><th>Ordered</th><th>Accepted so far</th><th>Remaining</th><th>Delivered now</th><th>Damaged now</th></tr>
               </thead>
               <tbody>
                 {(order.items ?? []).map((item) => {
                   const left = remaining(item);
                   const line = lines[item.id] ?? {
-                    acceptedQuantity: '',
+                    deliveredQuantity: '',
                     damagedQuantity: '',
+                    closeRemainingAsShort: false,
                     notes: '',
                   };
-                  const remainingAfterDelivery = Math.max(
-                    0,
-                    left -
-                      (Number(line.acceptedQuantity) || 0) -
-                      (Number(line.damagedQuantity) || 0),
-                  );
                   return (
                     <tr key={item.id}>
                       <td>{item.itemName ?? item.description ?? 'Unnamed item'}</td>
                       <td>{item.quantity}</td>
                       <td>{item.receivedQuantity}</td>
-                      <td className="po-receiving-remaining" aria-label={`Remaining after this delivery for ${item.itemName ?? item.description ?? 'item'}`}>
-                        <strong>{remainingAfterDelivery}</strong>
-                        <small>of {left} remaining before this delivery</small>
-                      </td>
+                      <td>{left}</td>
                       <td>
                         <input
-                          aria-label={`Accepted now ${item.itemName ?? item.description ?? ''}`}
+                          aria-label={`Delivered now ${item.itemName ?? item.description ?? ''}`}
                           type="number"
                           min="0"
-                          max={Math.max(0, left - Number(line.damagedQuantity || 0))}
-                          step="1"
-                          value={line.acceptedQuantity}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            if (value === '' || /^\d+$/.test(value)) {
-                              updateLine(item.id, { acceptedQuantity: value });
-                            }
-                          }}
+                          max={left}
+                          step="0.001"
+                          value={line.deliveredQuantity}
+                          onChange={(event) => updateLine(item.id, { deliveredQuantity: event.target.value })}
                           disabled={saving || item.receivingClosed}
                         />
                       </td>
@@ -1020,15 +846,9 @@ function ReceivePoModal({
                           aria-label={`Damaged now ${item.itemName ?? item.description ?? ''}`}
                           type="number"
                           min="0"
-                          max={Math.max(0, left - Number(line.acceptedQuantity || 0))}
-                          step="1"
+                          step="0.001"
                           value={line.damagedQuantity}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            if (value === '' || /^\d+$/.test(value)) {
-                              updateLine(item.id, { damagedQuantity: value });
-                            }
-                          }}
+                          onChange={(event) => updateLine(item.id, { damagedQuantity: event.target.value })}
                           disabled={saving || item.receivingClosed}
                         />
                       </td>
@@ -1049,7 +869,7 @@ function ReceivePoModal({
                         value={line.inventoryItemId ?? ''}
                         onChange={(event) => updateLine(item.id, { inventoryItemId: event.target.value || undefined })}
                         disabled={saving}
-                        required={Number(line.acceptedQuantity) > 0}
+                        required={Number(line.deliveredQuantity) > Number(line.damagedQuantity)}
                       >
                         <option value="">Select destination-branch item</option>
                         {branchInventoryItems.map((inventoryItem) => (
@@ -1064,43 +884,25 @@ function ReceivePoModal({
                     Notes for {item.itemName ?? item.description ?? 'item'}
                     <input
                       value={line.notes}
-                      maxLength={1000}
                       onChange={(event) => updateLine(item.id, { notes: event.target.value })}
                       placeholder="Optional condition / supplier notes"
                       disabled={saving}
                     />
                   </label>
+                  <label className="form-field form-field-wide">
+                    <span>
+                      <input
+                        type="checkbox"
+                        checked={line.closeRemainingAsShort}
+                        onChange={(event) => updateLine(item.id, { closeRemainingAsShort: event.target.checked })}
+                        disabled={saving}
+                      />{' '}
+                      No more delivery expected; record the remaining {Math.max(0, remaining(item) - Number(line.deliveredQuantity || 0))} units as short
+                    </span>
+                  </label>
                 </div>
               );
             })}
-            <label className="form-field form-field-wide">
-              Optional delivery photos (up to 5, JPEG/PNG/WebP, 5 MB each)
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                onChange={(event) => {
-                  const selected = Array.from(event.target.files ?? []);
-                  if (selected.length + photos.length > 5) {
-                    setError('A receipt can have at most five photos.');
-                    event.target.value = '';
-                    return;
-                  }
-                  if (selected.some((file) => file.size > 5 * 1024 * 1024)) {
-                    setError('Each receipt photo must be 5 MB or smaller.');
-                    event.target.value = '';
-                    return;
-                  }
-                  setError(null);
-                  setPhotos((current) => [...current, ...selected]);
-                  event.target.value = '';
-                }}
-                disabled={saving || photos.length >= 5}
-              />
-              {photos.length > 0 && (
-                <span>{photos.map((photo) => photo.name).join(', ')}</span>
-              )}
-            </label>
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
@@ -1119,8 +921,6 @@ export function PurchaseOrderManagerPage() {
   const token = getStoredToken();
   const { user } = useSelector((state: RootState) => state.auth);
   const canManagePurchaseOrders = user?.role === 'Admin' || user?.role === 'Manager';
-  const canCreatePurchaseOrders = canManagePurchaseOrders || user?.role === 'Staff';
-  const canCreateMultiBranchPurchaseOrders = user?.role === 'Admin';
   const canReceivePurchaseOrders = canManagePurchaseOrders || user?.role === 'Staff';
   const [searchParams] = useSearchParams();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -1161,7 +961,7 @@ export function PurchaseOrderManagerPage() {
       setOrders(loadedOrders);
       setOptions(referenceData);
       setSelectedId((current) => current && loadedOrders.some((order) => order.id === current) ? current : loadedOrders[0]?.id ?? null);
-      if (canCreatePurchaseOrders && reorderItemId && referenceData.items?.some((item) => item.id === reorderItemId)) setShowCreate(true);
+      if (canManagePurchaseOrders && reorderItemId && referenceData.items?.some((item) => item.id === reorderItemId)) setShowCreate(true);
       if (!referenceData.branches.length || !referenceData.suppliers.length) {
         setLoadError('Orders loaded, but branches or suppliers are unavailable. Refresh the data or add the missing records before creating an order.');
       }
@@ -1175,7 +975,7 @@ export function PurchaseOrderManagerPage() {
     } finally {
       if (isActive()) setLoading(false);
     }
-  }, [canCreatePurchaseOrders, canManagePurchaseOrders, notify, reorderItemId, token]);
+  }, [canManagePurchaseOrders, notify, reorderItemId, token]);
 
   useEffect(() => {
     let active = true;
@@ -1222,31 +1022,13 @@ export function PurchaseOrderManagerPage() {
   }, [filtered, selectedId]);
 
   const selected = orders.find((order) => order.id === selectedId) ?? null;
-  const groupedOrdersById = useMemo(() => {
-    const groups = new Map<string, PurchaseOrder[]>();
-    for (const order of orders) {
-      const base = batchOrderBase(order.number);
-      if (!base) continue;
-      const key = `${base}|${order.supplier}|${order.createdAt.slice(0, 10)}`;
-      groups.set(key, [...(groups.get(key) ?? []), order]);
-    }
-    const grouped = new Map<string, PurchaseOrder[]>();
-    for (const group of groups.values()) {
-      if (group.length < 2) continue;
-      const orderedGroup = [...group].sort((left, right) =>
-        left.number.localeCompare(right.number, undefined, { numeric: true }));
-      for (const order of orderedGroup) grouped.set(order.id, orderedGroup);
-    }
-    return grouped;
-  }, [orders]);
-  const selectedOrderGroup = selected ? groupedOrdersById.get(selected.id) ?? [] : [];
 
   const stats = useMemo(() => ({
     total: orders.length,
-    open: orders.filter((order) => !['Received', 'Rejected', 'Cancelled'].includes(order.status)).length,
+    open: orders.filter((order) => order.status !== 'Received' && order.status !== 'Cancelled').length,
     inTransit: orders.filter((order) => order.status === 'InTransit' || order.status === 'PartiallyReceived').length,
     received: orders.filter((order) => order.status === 'Received').length,
-    value: orders.filter((order) => !['Received', 'Rejected', 'Cancelled'].includes(order.status)).reduce((sum, order) => sum + order.amount, 0),
+    value: orders.filter((order) => order.status !== 'Received' && order.status !== 'Cancelled').reduce((sum, order) => sum + order.amount, 0),
   }), [orders]);
 
   async function advanceStatus(order: PurchaseOrder) {
@@ -1278,7 +1060,7 @@ export function PurchaseOrderManagerPage() {
   }
 
   async function cancelOrder(order: PurchaseOrder) {
-    if (!canManagePurchaseOrders || statusSavingId || order.status === 'Received' || order.status === 'Rejected' || order.status === 'Cancelled') return;
+    if (!canManagePurchaseOrders || statusSavingId || order.status === 'Received' || order.status === 'Cancelled') return;
     const now = new Date().toISOString();
     const timelineEvent: TimelineEvent = { status: 'Cancelled', at: now, by: performer, note: 'Cancelled by user' };
     setOrders((prev) => prev.map((candidate) => (
@@ -1300,85 +1082,30 @@ export function PurchaseOrderManagerPage() {
     notify(`${order.number} was cancelled.`, 'info');
   }
 
-  async function rejectOrder(order: PurchaseOrder) {
-    if (!canManagePurchaseOrders || statusSavingId || order.status !== 'InReview') return;
-    setStatusSavingId(order.id);
-    try {
-      const updated = await apiPut<PurchaseOrderResponse>(
-        `/purchase-orders/${order.id}/status`,
-        token,
-        { status: 'Rejected' },
-      );
-      setOrders((prev) => prev.map((candidate) =>
-        candidate.id === order.id
-          ? responseToOrder(updated, {
-            ...candidate,
-            timeline: [...candidate.timeline, {
-              status: 'Rejected',
-              at: updated.updatedAt,
-              by: performer,
-              note: 'Rejected by reviewer',
-            }],
-          })
-          : candidate,
-      ));
-      notify(`${order.number} was rejected.`, 'success');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'The purchase order could not be rejected.';
-      notify(message, 'error');
-    } finally {
-      setStatusSavingId(null);
-    }
-  }
-
   async function recordReceipt(order: PurchaseOrder, items: Array<{
     purchaseOrderItemId: string;
-    acceptedQuantity: number;
+    deliveredQuantity: number;
     damagedQuantity: number;
     closeRemainingAsShort: boolean;
     notes: string;
     inventoryItemId?: string;
-  }>, photos: File[]) {
+  }>) {
     if (!canReceivePurchaseOrders) return;
     setStatusSavingId(order.id);
-    let receiptSaved = false;
     try {
       const updated = await apiPost<PurchaseOrderResponse>(
         `/purchase-orders/${order.id}/receive`,
         token,
         { items },
       );
-      receiptSaved = true;
-      let updatedWithPhotos = updated;
-      if (photos.length > 0) {
-        const receiptId = updated.receipts?.[0]?.id;
-        if (!receiptId) {
-          throw new Error('The receipt was saved, but the API did not return a receipt ID for its photos.');
-        }
-        let photoUrls: string[] = [];
-        for (const photo of photos) {
-          const uploaded = await apiUpload<{ photoUrls: string[] }>(
-            `/purchase-orders/${order.id}/receipts/${receiptId}/photos`,
-            token,
-            photo,
-          );
-          photoUrls = uploaded.photoUrls;
-        }
-        updatedWithPhotos = {
-          ...updated,
-          receipts: (updated.receipts ?? []).map((receipt) =>
-            receipt.id === receiptId ? { ...receipt, photoUrls } : receipt,
-          ),
-        };
-      }
       setOrders((current) => current.map((candidate) =>
-        candidate.id === order.id ? responseToOrder(updatedWithPhotos, candidate) : candidate,
+        candidate.id === order.id ? responseToOrder(updated, candidate) : candidate,
       ));
       setReceivingOrder(null);
-      notify(`${order.number} receipt recorded. Accepted quantities were added to stock${photos.length === 0 ? '' : ` and ${photos.length} photos attached`}.`, 'success');
+      notify(`${order.number} receipt recorded. Accepted quantities were added to stock.`, 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'The receipt could not be recorded.';
-      notify(receiptSaved ? `Receipt saved, but photo evidence could not be attached. ${message}` : message, 'error');
+      notify(message, 'error');
     } finally {
       setStatusSavingId(null);
     }
@@ -1387,81 +1114,60 @@ export function PurchaseOrderManagerPage() {
   const [creating, setCreating] = useState(false);
 
   async function createOrder(draft: {
-    branchOrders: Array<{
-      branchId: string;
-      items: Array<{ inventoryItemId?: string; description?: string; quantity: number; unitPrice: number }>;
-    }>;
+    branchId: string;
     supplierId: string;
     number: string;
+    items: Array<{ inventoryItemId?: string; description?: string; quantity: number; unitPrice: number }>;
   }) {
-    if (!canCreatePurchaseOrders || (!canCreateMultiBranchPurchaseOrders && draft.branchOrders.length !== 1)) return;
+    if (!canManagePurchaseOrders) return;
     const supplier = options.suppliers.find((option) => option.id === draft.supplierId);
-    const selectedBranches = draft.branchOrders.map((order) =>
-      options.branches.find((option) => option.id === order.branchId));
-    if (!supplier || selectedBranches.some((branch) => !branch)) {
-      notify('Select valid destination branches and a supplier before creating purchase orders.', 'error');
+    const branch = options.branches.find((option) => option.id === draft.branchId);
+    if (!supplier || !branch) {
+      notify('Select a valid branch and supplier before creating a purchase order.', 'error');
       return;
     }
     const now = new Date().toISOString();
-    const fallbacks = draft.branchOrders.map((branchOrder, branchIndex): PurchaseOrder => {
-      const branch = selectedBranches[branchIndex]!;
-      const totalAmount = branchOrder.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-      return {
-        id: '',
-        number: draft.branchOrders.length === 1 ? draft.number : `${draft.number}-${String(branchIndex + 1).padStart(2, '0')}`,
-        supplier: supplier.name,
-        branchId: branch.id,
-        branch: branch.name,
-        status: canManagePurchaseOrders ? 'Draft' : 'InReview',
-        amount: totalAmount,
-        lineItems: branchOrder.items.length,
-        createdAt: now,
-        updatedAt: now,
-        timeline: [{ status: canManagePurchaseOrders ? 'Draft' : 'InReview', at: now, by: performer }],
-        items: branchOrder.items.map((item, itemIndex) => ({
-          id: `temp-${branchIndex}-${itemIndex}`,
-          inventoryItemId: item.inventoryItemId,
-          itemName: options.items?.find((inventoryItem) => inventoryItem.id === item.inventoryItemId)?.name ?? item.description,
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          lineTotal: item.quantity * item.unitPrice,
-          receivedQuantity: 0,
-          damagedQuantity: 0,
-          shortageQuantity: 0,
-          receivingClosed: false,
-        })),
-      };
-    });
+    const totalAmount = draft.items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+    const created: PurchaseOrder = {
+      id: '',
+      number: draft.number,
+      supplier: supplier.name,
+      branchId: branch.id,
+      branch: branch.name,
+      status: 'Draft',
+      amount: totalAmount,
+      lineItems: draft.items.length,
+      createdAt: now,
+      updatedAt: now,
+      timeline: [{ status: 'Draft', at: now, by: performer }],
+      items: draft.items.map((i, idx) => ({
+        id: `temp-${idx}`,
+        inventoryItemId: i.inventoryItemId,
+        itemName: options.items?.find((inv) => inv.id === i.inventoryItemId)?.name ?? i.description,
+        description: i.description,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        lineTotal: i.quantity * i.unitPrice,
+        receivedQuantity: 0,
+        damagedQuantity: 0,
+        shortageQuantity: 0,
+        receivingClosed: false,
+      })),
+    };
     setCreating(true);
     try {
-      const responses = draft.branchOrders.length === 1
-        ? [await apiPost<PurchaseOrderResponse>('/purchase-orders', token, {
-          branchId: draft.branchOrders[0].branchId,
-          supplierId: draft.supplierId,
-          number: draft.number,
-          status: 'Draft',
-          items: draft.branchOrders[0].items,
-        })]
-        : await apiPost<PurchaseOrderResponse[]>('/purchase-orders/batch', token, {
-          number: draft.number,
-          supplierId: draft.supplierId,
-          branchOrders: draft.branchOrders,
-        });
-      if (responses.length !== draft.branchOrders.length) {
-        throw new Error('The server did not return an order for every selected branch.');
-      }
-      const liveOrders = responses.map((response, index) => responseToOrder(response, fallbacks[index]));
-      setOrders((prev) => [...liveOrders, ...prev]);
-      setSelectedId(liveOrders[0]?.id ?? null);
+      const response = await apiPost<PurchaseOrderResponse>('/purchase-orders', token, {
+        branchId: draft.branchId,
+        supplierId: draft.supplierId,
+        number: draft.number,
+        status: 'Draft',
+        items: draft.items,
+      });
+      const liveOrder = responseToOrder(response, created);
+      setOrders((prev) => [liveOrder, ...prev]);
+      setSelectedId(liveOrder.id);
       setShowCreate(false);
-      const totalAmount = liveOrders.reduce((sum, order) => sum + order.amount, 0);
-      notify(
-        user?.role === 'Staff'
-          ? `${liveOrders[0].number} submitted for Manager or Admin review.`
-          : `${liveOrders.length} purchase order${liveOrders.length === 1 ? '' : 's'} created successfully for ${selectedBranches.map((branch) => branch!.name).join(', ')} (Total: ${formatPrice(totalAmount)}).`,
-        'success',
-      );
+      notify(`Purchase order ${draft.number} was created successfully with ${draft.items.length} line items (Total: ${formatPrice(totalAmount)}).`, 'success');
     } catch (err: any) {
       console.error(err);
       notify(`Could not create ${draft.number}: ${err?.message || 'Check connection'}`, 'error');
@@ -1476,19 +1182,16 @@ export function PurchaseOrderManagerPage() {
   return (
     <div className="page purchase-orders-page">
       <header className="purchase-orders-hero">
-        <span className="inventory-hero-sheen" aria-hidden="true" />
-        <InventoryHeroArtwork icon="po" />
-        <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="purchase-orders-hero-copy">
-          <p className="purchase-orders-eyebrow"><span aria-hidden="true">◈</span> INVENTORY / PROCUREMENT</p>
+          <p className="purchase-orders-eyebrow"><span aria-hidden="true">↗</span> INVENTORY / PROCUREMENT</p>
           <h1>Purchase orders</h1>
           <p>Coordinate suppliers, branches, and incoming stock from one order workspace.</p>
           <div className="purchase-orders-live"><span className={loading ? 'is-loading' : ''} aria-hidden="true" />{loading ? 'Syncing purchase orders…' : `${stats.open} open orders · ${stats.received} received`}</div>
         </div>
-        <div className="purchase-orders-hero-art" aria-hidden="true"><span className="purchase-orders-art-ring" /><span className="purchase-orders-art-icon">◈</span><i /><i /><i /></div>
+        <div className="purchase-orders-hero-art" aria-hidden="true"><span className="purchase-orders-art-ring" /><span className="purchase-orders-art-icon">▤</span><i /><i /><i /></div>
         <div className="purchase-orders-hero-actions">
           <button className="btn purchase-orders-refresh" type="button" onClick={() => { void loadOrders().then((ok) => { if (ok) notify('Purchase order data refreshed.', 'success'); }); }} disabled={loading}><span aria-hidden="true">↻</span>{loading ? 'Refreshing…' : 'Refresh data'}</button>
-          {canCreatePurchaseOrders && <button className="btn purchase-orders-create" type="button" onClick={() => setShowCreate(true)} disabled={!options.branches.length || !options.suppliers.length}>＋ Create order</button>}
+          {canManagePurchaseOrders && <button className="btn purchase-orders-create" type="button" onClick={() => setShowCreate(true)} disabled={!options.branches.length || !options.suppliers.length}>＋ Create order</button>}
         </div>
       </header>
 
@@ -1499,13 +1202,13 @@ export function PurchaseOrderManagerPage() {
       <section className="stat-strip purchase-orders-stat-strip" aria-label="Purchase order summary">
         <article className="stat metric-card purchase-order-metric purchase-order-metric-total"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">▤</span><div><span className="purchase-order-kicker">ORDER BOOK</span><strong>{stats.total}</strong><small>Total purchase orders</small></div></div><div className="purchase-order-metric-detail">{stats.received} completed and received</div></article>
         <article className="stat metric-card purchase-order-metric purchase-order-metric-open"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">◷</span><div><span className="purchase-order-kicker">IN PROGRESS</span><strong>{stats.open}</strong><small>Open orders</small></div></div><div className="purchase-order-metric-detail">Draft through in transit</div></article>
-        <article className="stat metric-card purchase-order-metric purchase-order-metric-transit"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">→</span><div><span className="purchase-order-kicker">ON THE WAY</span><strong>{stats.inTransit}</strong><small>In transit</small></div></div><div className="purchase-order-metric-detail">Awaiting branch receipt</div></article>
+        <article className="stat metric-card purchase-order-metric purchase-order-metric-transit"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">⇢</span><div><span className="purchase-order-kicker">ON THE WAY</span><strong>{stats.inTransit}</strong><small>In transit</small></div></div><div className="purchase-order-metric-detail">Awaiting branch receipt</div></article>
         <article className="stat metric-card purchase-order-metric purchase-order-metric-value"><div className="purchase-order-metric-main"><span className="purchase-order-metric-icon" aria-hidden="true">LKR</span><div><span className="purchase-order-kicker">OPEN COMMITMENT</span><strong className="purchase-order-value">{formatPrice(stats.value)}</strong><small>Open order value</small></div></div><div className="purchase-order-metric-detail">Excludes received and cancelled orders</div></article>
       </section>
 
       <div className="po-layout purchase-orders-layout">
         <section className="panel po-list-panel">
-          <div className="purchase-orders-panel-head"><div><span className="purchase-orders-panel-icon" aria-hidden="true">◈</span><div><h2>Order register</h2><p>Search orders, filter status, and select one to see its details.</p></div></div><span className="purchase-orders-count">{filtered.length} shown</span></div>
+          <div className="purchase-orders-panel-head"><div><span className="purchase-orders-panel-icon" aria-hidden="true">▤</span><div><h2>Order register</h2><p>Search orders, filter status, and select one to see its details.</p></div></div><span className="purchase-orders-count">{filtered.length} shown</span></div>
           <div className="toolbar toolbar-wrap">
             <div className="search-field">
               <span className="search-icon" aria-hidden="true">⌕</span>
@@ -1527,19 +1230,16 @@ export function PurchaseOrderManagerPage() {
             {hasActiveFilters && <button className="btn purchase-orders-clear" type="button" onClick={() => { setQuery(''); setStatusFilter('All statuses'); setSupplierFilter('All suppliers'); }}>Clear filters</button>}
           </div>
 
-          <div className="table-wrap purchase-orders-register-wrap">
-            <table className="data-table purchase-orders-register-table">
+          <div className="table-wrap">
+            <table className="data-table">
               <thead>
                 <tr><th>PO</th><th>Supplier</th><th>Amount</th><th>Status</th><th>Lifecycle</th></tr>
               </thead>
               <tbody>
-                {paged.map((order) => {
-                  const group = groupedOrdersById.get(order.id) ?? [];
-                  const groupBase = batchOrderBase(order.number);
-                  return (
+                {paged.map((order) => (
                   <tr
                     key={order.id}
-                    className={`${order.id === selectedId ? 'row-selected ' : ''}${group.length > 1 ? 'purchase-order-grouped-row' : ''}`}
+                    className={order.id === selectedId ? 'row-selected' : undefined}
                     onClick={() => setSelectedId(order.id)}
                     onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(order.id); } }}
                     tabIndex={0}
@@ -1547,10 +1247,7 @@ export function PurchaseOrderManagerPage() {
                   >
                     <td>
                       <p className="po-number">{order.number}</p>
-                      <div className="purchase-order-register-meta">
-                        {group.length > 1 && <span>Group {groupBase}</span>}
-                        <PurchaseOrderTimestamp value={order.createdAt} dateOnly />
-                      </div>
+                      <p className="cell-sub">{formatDate(order.createdAt)}</p>
                     </td>
                     <td>
                       <p className="cell-title">{order.supplier}</p>
@@ -1560,8 +1257,7 @@ export function PurchaseOrderManagerPage() {
                     <td><Badge tone={statusTone[order.status]}>{statusLabels[order.status]}</Badge></td>
                     <td><LifecycleTracker status={order.status} compact /></td>
                   </tr>
-                  );
-                })}
+                ))}
                 {loading && orders.length === 0 && <tr><td colSpan={5} className="empty-state">Loading purchase orders…</td></tr>}
                 {paged.length === 0 && !loading && (
                   <tr><td colSpan={5} className="empty-state">No purchase orders match your filters.</td></tr>
@@ -1615,43 +1311,13 @@ export function PurchaseOrderManagerPage() {
               </div>
 
               <div className="po-detail-body">
-                {selectedOrderGroup.length > 1 && (
-                  <section
-                    className="purchase-order-group-card"
-                    aria-label={`Grouped purchase request ${batchOrderBase(selected.number)}`}
-                  >
-                    <div className="purchase-order-group-heading">
-                      <div>
-                        <span className="purchase-order-group-kicker">ONE REQUEST · BRANCH-SPECIFIC ORDERS</span>
-                        <h3>{batchOrderBase(selected.number)}</h3>
-                      </div>
-                      <strong>{formatPrice(selectedOrderGroup.reduce((sum, order) => sum + order.amount, 0))}</strong>
-                    </div>
-                    <p>Each branch order has its own status and receipt, so record each delivery separately.</p>
-                    <div className="purchase-order-group-branches" aria-label="Branch orders in this request">
-                      {selectedOrderGroup.map((order, index) => (
-                        <button
-                          key={order.id}
-                          type="button"
-                          className={`purchase-order-group-branch${order.id === selected.id ? ' is-selected' : ''}`}
-                          aria-pressed={order.id === selected.id}
-                          onClick={() => setSelectedId(order.id)}
-                        >
-                          <span>{order.branch ?? `Branch ${index + 1}`}</span>
-                          <strong>{statusLabels[order.status]}</strong>
-                          <small>{formatPrice(order.amount)}</small>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                )}
                 <LifecycleTracker status={selected.status} />
 
                 <dl className="detail-grid">
                   <div><dt>Amount</dt><dd>{formatPrice(selected.amount)}</dd></div>
                   <div><dt>Branch</dt><dd>{selected.branch ?? '—'}</dd></div>
-                  <div><dt>Created</dt><dd><PurchaseOrderTimestamp value={selected.createdAt} dateOnly /></dd></div>
-                  <div><dt>Last updated</dt><dd><PurchaseOrderTimestamp value={selected.updatedAt} /></dd></div>
+                  <div><dt>Created</dt><dd>{formatDate(selected.createdAt)}</dd></div>
+                  <div><dt>Last updated</dt><dd>{formatDateTime(selected.updatedAt)}</dd></div>
                 </dl>
 
                 <div className="po-actions">
@@ -1668,11 +1334,6 @@ export function PurchaseOrderManagerPage() {
                           : `Advance to ${statusLabels[nextStatus(selected.status)!]}`}
                     </button>
                   ) : null}
-                  {canManagePurchaseOrders && selected.status === 'InReview' && (
-                    <button type="button" className="btn btn-secondary" onClick={() => rejectOrder(selected)} disabled={statusSavingId !== null}>
-                      {statusSavingId === selected.id ? 'Saving…' : 'Reject request'}
-                    </button>
-                  )}
                   <button
                     type="button"
                     className="btn btn-secondary"
@@ -1691,7 +1352,7 @@ export function PurchaseOrderManagerPage() {
                       {statusSavingId === selected.id ? 'Saving…' : 'Receive items'}
                     </button>
                   )}
-                  {canManagePurchaseOrders && selected.status !== 'Received' && selected.status !== 'Rejected' && selected.status !== 'Cancelled' && (
+                  {canManagePurchaseOrders && selected.status !== 'Received' && selected.status !== 'Cancelled' && (
                     <button type="button" className="btn btn-secondary" onClick={() => cancelOrder(selected)} disabled={statusSavingId !== null}>{statusSavingId === selected.id ? 'Saving…' : 'Cancel PO'}</button>
                   )}
                 </div>
@@ -1705,38 +1366,15 @@ export function PurchaseOrderManagerPage() {
                           <div className="timeline-content">
                             <div className="timeline-head">
                               <Badge tone="green">Receipt</Badge>
-                              <PurchaseOrderTimestamp value={receipt.receivedAt} />
+                              <span className="cell-sub">{formatDateTime(receipt.receivedAt)}</span>
                             </div>
                             <p className="timeline-user">Recorded by {receipt.receivedBy}</p>
-                            <div className="receipt-line-summaries">
-                              {receipt.items.map((item) => (
-                                <div className="receipt-line-summary" key={`${receipt.id}-${item.purchaseOrderItemId}`}>
-                                  <span>{item.itemName ?? 'Received item'}</span>
-                                  <div className="receipt-line-quantities">
-                                    <span><small>Delivered</small><strong>{item.deliveredQuantity}</strong></span>
-                                    <span><small>Accepted</small><strong>{item.acceptedQuantity}</strong></span>
-                                    <span><small>Damaged</small><strong>{item.damagedQuantity}</strong></span>
-                                    <span><small>Short</small><strong>{item.shortageQuantity}</strong></span>
-                                  </div>
-                                  {item.notes && <p>{item.notes}</p>}
-                                </div>
-                              ))}
-                            </div>
-                            {!!receipt.photoUrls?.length && (
-                              <div className="po-receipt-photos">
-                                {receipt.photoUrls.map((url) => (
-                                  <a
-                                    key={url}
-                                    href={url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    aria-label="Open receipt photo"
-                                  >
-                                    <img src={url} alt="Purchase order receipt evidence" loading="lazy" />
-                                  </a>
-                                ))}
-                              </div>
-                            )}
+                            {receipt.items.map((item) => (
+                              <p className="timeline-note" key={`${receipt.id}-${item.purchaseOrderItemId}`}>
+                                Delivered {item.deliveredQuantity}; accepted {item.acceptedQuantity}; damaged {item.damagedQuantity}; short {item.shortageQuantity}
+                                {item.notes ? ` · ${item.notes}` : ''}
+                              </p>
+                            ))}
                           </div>
                         </li>
                       ))}
@@ -1753,7 +1391,7 @@ export function PurchaseOrderManagerPage() {
                         <div className="timeline-content">
                           <div className="timeline-head">
                             <Badge tone={statusTone[event.status]}>{statusLabels[event.status]}</Badge>
-                            <PurchaseOrderTimestamp value={event.at} />
+                            <span className="cell-sub">{formatDateTime(event.at)}</span>
                           </div>
                           <p className="timeline-user">By {event.by}</p>
                           {event.note && <p className="timeline-note">{event.note}</p>}
@@ -1804,13 +1442,11 @@ export function PurchaseOrderManagerPage() {
         <CreatePoModal
           onClose={() => setShowCreate(false)}
           onCreate={createOrder}
-          canCreateMultiBranch={canCreateMultiBranchPurchaseOrders}
-          requiresReview={user?.role === 'Staff'}
           branches={options.branches}
           suppliers={options.suppliers}
           inventoryItems={options.items ?? []}
           defaultNumber={nextPoNumber(orders)}
-          defaultBranchId={user?.role === 'Staff' ? user.branchId : reorderBranchId ?? user?.branchId}
+          defaultBranchId={reorderBranchId ?? user?.branchId}
           initialInventoryItemId={reorderItemId}
           initialQuantity={reorderQuantity}
           creating={creating}
@@ -1822,7 +1458,7 @@ export function PurchaseOrderManagerPage() {
           inventoryItems={options.items ?? []}
           saving={statusSavingId === receivingOrder.id}
           onClose={() => setReceivingOrder(null)}
-          onReceive={(items, photos) => recordReceipt(receivingOrder, items, photos)}
+          onReceive={(items) => recordReceipt(receivingOrder, items)}
         />
       )}
     </div>

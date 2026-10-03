@@ -14,11 +14,10 @@ The auth/login implementation must issue tokens with these claims:
   mapper; issue role names (`Admin`, `Manager`, or `Staff`) to match endpoint
   authorization. The API explicitly validates this claim type, so do not issue a
   custom claim named `role` unless the token issuer maps it to `ClaimTypes.Role`.
-- `tenantId`: the authenticated user's tenant ID. Inventory queries and writes
+- `tenant_id`: the authenticated user's tenant ID. Inventory queries and writes
   must scope data to this claim; role authorization alone does not provide tenant
   isolation.
-- `branchId`: the authenticated user's assigned branch ID. It is required for
-  branch-scoped Manager and Staff operations.
+- `branch_id`: required for Managers and set to their assigned branch ID.
 - `component`: zero or more Staff grants, such as `inventory.read`,
   `inventory.write`, `purchase-orders.read`, or `purchase-orders.write`.
 
@@ -48,15 +47,12 @@ public async Task<IActionResult> Update(Guid id, UpdateInventoryItemRequest requ
 
 The policies enforce this scope:
 
-- `Admin`: all inventory and PO components within the `tenantId` claim.
+- `Admin`: all inventory and PO components within the `tenant_id` claim.
 - `Manager`: any component, but only where resource `BranchId` equals their
-  `branchId` claim. Tenant-wide items must be actioned by an Admin or explicitly
+  `branch_id` claim. Tenant-wide items must be actioned by an Admin or explicitly
   modeled as a branch operation.
 - `Staff`: only components granted as repeated `component` claims, such as
-  `inventory.read` or `purchase-orders.write`, within their tenant. Purchase
-  order reads and creation must also match the staff member's assigned
-  `branchId`. Staff-created orders enter `InReview` immediately; only Admins
-  and Managers can approve, reject, or otherwise change purchase-order status.
+  `inventory.read` or `purchase-orders.write`, within their tenant.
 
 Do not apply the following broad role attribute by itself: it grants Managers
 cross-branch access and Staff all inventory components. Resource-based checks

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import Modal from '../../../shared/components/Modal';
 import { useToast } from '../../../shared/components/Toast';
-import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 import { billingApi, errorMessage, type PaymentGateway, type UpsertGatewayRequest } from '../billingApi';
 import { date } from '../format';
 import { useAsync } from '../useAsync';
@@ -25,7 +24,6 @@ const PROVIDER_HELP: Record<string, { publicLabel: string; secretLabel: string; 
 
 export default function PaymentGatewaySettingsPage() {
   const toast = useToast();
-  const confirm = useConfirmation();
   const { data, loading, error, reload } = useAsync(() => billingApi.listGateways(), []);
   const [editing, setEditing] = useState<PaymentGateway | 'new' | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
@@ -43,12 +41,7 @@ export default function PaymentGatewaySettingsPage() {
   };
 
   const remove = async (g: PaymentGateway) => {
-    if (!await confirm({
-      title: 'Remove this payment gateway?',
-      message: `Remove ${g.name}? Customers will no longer be able to pay through it.`,
-      confirmLabel: 'Remove gateway',
-      tone: 'danger',
-    })) return;
+    if (!window.confirm(`Remove ${g.name}? Customers will no longer be able to pay through it.`)) return;
     try {
       await billingApi.deleteGateway(g.id);
       reload();

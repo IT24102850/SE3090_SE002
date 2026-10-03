@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using SmeBackend.Models;
 
 namespace SmeBackend.DTOs;
@@ -90,6 +90,14 @@ public class LoginDto
     public string Password { get; set; } = string.Empty;
 }
 
+public class RefreshRequestDto
+{
+    [Required, MaxLength(200)]
+    public string RefreshToken { get; set; } = string.Empty;
+}
+
+/// Social sign-in from the phone. The provider's token is verified
+/// server-side; the client never asserts who it is.
 public class MobileExternalLoginDto
 {
     [Required]

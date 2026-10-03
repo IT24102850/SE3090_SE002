@@ -46,9 +46,7 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Staff use the camera to scan booking and inventory codes or attach evidence photos.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Location is requested only when you choose to attach a GPS pin to a customer delivery order or physical stock audit.</string>
+	<string>Staff use the camera to scan a patient's booking QR code at check-in.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unify uses Face ID to securely unlock your saved session on this device.</string>
 	<key>CFBundleURLTypes</key>

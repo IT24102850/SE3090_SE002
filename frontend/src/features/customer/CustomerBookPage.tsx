@@ -53,6 +53,7 @@ export default function CustomerBookPage() {
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatUntil, setRepeatUntil] = useState(() => toISODate(addDays(new Date(), 56)));
   const [done, setDone] = useState<{ id: string; totalCost?: number | null; count?: number } | null>(null);
+  const [createBooking, { isLoading: creating }] = useCreateBookingMutation();
 
   // A prefilled type + resource skips straight to the calendar.
   useEffect(() => {
@@ -76,7 +77,6 @@ export default function CustomerBookPage() {
     { skip: !resourceId || !isRange || step !== 2 },
   );
 
-  const [createBooking, { isLoading: creating }] = useCreateBookingMutation();
   const [createRecurring, { isLoading: creatingSeries }] = useCreateRecurringBookingMutation();
 
   // The window the booking occupies: the chosen slot for slot types, or a
@@ -116,7 +116,6 @@ export default function CustomerBookPage() {
         title: `${type.name} - ${user.fullName}`, notes: notes.trim() || undefined, attendeeCount: attendees, source: 'Online',
       }).unwrap();
       setDone({ id: result.id, totalCost: result.totalCost });
-      if (result.capacityWarning) toast.show(result.capacityWarning, 'info');
     } catch (error) {
       toast.show(apiErrorMessage(error, 'Could not make the booking.'), 'error');
     }
@@ -298,7 +297,7 @@ export default function CustomerBookPage() {
           </span>
           {step < 3
             ? <button type="button" className="btn btn-primary" disabled={!canNext} onClick={next}>Continue ›</button>
-            : <button type="button" className="btn btn-primary" disabled={creating || creatingSeries || !window} onClick={confirm}>{creating || creatingSeries ? 'Booking…' : type?.requiresApproval ? 'Send request' : 'Confirm booking'}</button>}
+            : <button type="button" className="btn btn-primary" disabled={creating || creatingSeries || !window} onClick={confirm}>{creating || creatingSeries ? 'Booking…' : 'Confirm booking'}</button>}
         </div>
       </section>
     </div>

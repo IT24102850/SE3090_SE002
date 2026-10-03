@@ -755,11 +755,12 @@ public class ClinicReportsController : ControllerBase
     private bool TryTenant(out Guid tenantId) =>
         Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out tenantId);
 
-    // Admins may choose any tenant branch; all other roles are limited to the
-    // branch in their authenticated token.
+    // Same rule as ReportsController: an Admin sees the whole tenant unless
+    // they pick a branch; a Manager/Staff defaults to their own branch but
+    // may still ask for another one explicitly.
     private Guid? ResolveBranchScope(Guid? requested)
     {
-        if (User.IsInRole(UserRole.Admin.ToString())) return requested;
+        if (User.IsInRole(UserRole.Admin.ToString()) || requested.HasValue) return requested;
         return Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var branchId) ? branchId : null;
     }
 }

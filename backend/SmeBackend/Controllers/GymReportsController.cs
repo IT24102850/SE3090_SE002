@@ -861,7 +861,7 @@ public class GymReportsController : ControllerBase
 
     private Guid? ResolveBranchScope(Guid? requested)
     {
-        if (User.IsInRole(UserRole.Admin.ToString())) return requested;
+        if (User.IsInRole(UserRole.Admin.ToString()) || requested.HasValue) return requested;
         return Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var branchId) ? branchId : null;
     }
 }

@@ -56,12 +56,21 @@ const baseProfile = {
   address: null,
 };
 
+/* RTK Query's fetchBaseQuery calls fetch(new Request(url, config)), and
+ * Request.toString() is "[object Request]" rather than the URL - so matching
+ * on toString() routed nothing and every query received the {} fallback. */
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
 describe('BusinessProfilePage', () => {
   beforeEach(() => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
-        const url = input.toString();
+        const url = urlOf(input);
         if (url.includes('/profile') && !url.includes('/media')) {
           return new Response(JSON.stringify(baseProfile), { status: 200 });
         }
@@ -75,9 +84,17 @@ describe('BusinessProfilePage', () => {
   });
 
   it('shows upload progress and a failed upload does not clear the already-saved logo', async () => {
+    // Hold the upload open so the in-flight state is observable. Against a
+    // stub that resolves immediately the spinner has already unmounted by the
+    // time the assertion runs, which makes the check meaningless rather than
+    // merely flaky.
+    let releaseUpload!: () => void;
+    const uploadInFlight = new Promise<void>((resolve) => { releaseUpload = resolve; });
+
     (global.fetch as any).mockImplementation(async (input: RequestInfo | URL) => {
-      const url = input.toString();
+      const url = urlOf(input);
       if (url.includes('/media/upload')) {
+        await uploadInFlight;
         return new Response(JSON.stringify({ message: 'Image upload failed: network error' }), { status: 502 });
       }
       if (url.includes('/profile')) {
@@ -100,9 +117,14 @@ describe('BusinessProfilePage', () => {
     await userEvent.upload(fileInput, file);
 
     // Progress indicator shown while the upload is in flight.
-    expect(within(logoSection).queryByTestId('upload-spinner')).toBeTruthy();
+    await waitFor(() => expect(within(logoSection).queryByTestId('upload-spinner')).toBeTruthy());
 
-    await waitFor(() => expect(screen.getByText(/could not upload image/i)).toBeInTheDocument());
+    releaseUpload();
+    // The server's own message is surfaced, not swallowed by the generic
+    // fallback - apiErrorMessage only falls back when the body has none.
+    await waitFor(() => expect(screen.getByText(/image upload failed/i)).toBeInTheDocument());
+    // ...and it clears once the request settles.
+    await waitFor(() => expect(within(logoSection).queryByTestId('upload-spinner')).toBeNull());
 
     // The original, already-saved logo must still be there - not cleared by the failed upload.
     const logoImgAfter = screen.getByAltText('Logo') as HTMLImageElement;
@@ -123,22 +145,30 @@ describe('BusinessProfilePage', () => {
     const saveButton = screen.getByRole('button', { name: /save changes/i });
     fireEvent.click(saveButton);
 
-    // The invalid state must be caught client-side and surfaced, not silently sent.
-    await waitFor(() => expect(screen.getByText(/open time must be before close time/i)).toBeInTheDocument());
+    // The invalid state must be caught client-side and surfaced, not silently
+    // sent. Two surfaces report it once save is attempted: the inline row
+    // error, which was already showing, and the save-blocked toast.
+    await waitFor(() => expect(
+      screen.getAllByText(/open time must be before close time/i).length,
+    ).toBeGreaterThan(1));
   });
 
   it('amenities chip input rejects a duplicate entry', async () => {
     renderPage();
     const input = await screen.findByPlaceholderText(/type an amenity/i);
 
+    // Every amenity renders twice - once as an editable chip, once in the live
+    // preview panel beside it - so the count that matters is whether adding a
+    // duplicate changes it, not what it happens to be.
     await userEvent.type(input, 'Free WiFi{enter}');
-    expect(screen.getAllByText('Free WiFi')).toHaveLength(1);
+    const afterFirstAdd = screen.getAllByText('Free WiFi').length;
+    expect(afterFirstAdd).toBeGreaterThan(0);
 
     await userEvent.type(input, 'Free WiFi{enter}');
-    // Still exactly one chip - the duplicate was silently rejected, not added twice.
-    expect(screen.getAllByText('Free WiFi')).toHaveLength(1);
+    // The duplicate was silently rejected, not added again.
+    expect(screen.getAllByText('Free WiFi')).toHaveLength(afterFirstAdd);
 
     await userEvent.type(input, '  free wifi  {enter}'); // case/whitespace variant
-    expect(screen.getAllByText(/free wifi/i)).toHaveLength(1);
+    expect(screen.getAllByText(/free wifi/i)).toHaveLength(afterFirstAdd);
   });
 });

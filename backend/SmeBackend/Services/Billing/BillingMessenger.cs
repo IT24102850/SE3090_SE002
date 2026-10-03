@@ -98,11 +98,6 @@ public sealed class BillingMessenger : IBillingMessenger
             _logger.LogWarning(ex, "SendGrid unreachable");
             return new MessageDeliveryResponse(MessageChannels.Email, to, false, false, null, "SendGrid could not be reached.");
         }
-        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
-        {
-            _logger.LogWarning(ex, "SendGrid timed out while emailing {To}", to);
-            return new MessageDeliveryResponse(MessageChannels.Email, to, false, false, null, "SendGrid timed out.");
-        }
     }
 
     public async Task<MessageDeliveryResponse> SendTextAsync(string channel, string to, string body, CancellationToken ct = default)

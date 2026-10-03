@@ -49,7 +49,7 @@ def mock_planner(monkeypatch):
             {"order": 3, "action": "Validate", "assigned_agent": "ValidationSafetyAgent", "description": "..."},
         ],
         assigned_agents=["DomainAnalysisAgent", "ActionToolAgent", "ValidationSafetyAgent"],
-        confidence=0.9,
+        confidence_score=0.9,
     )
     mock = MagicMock(return_value=output)
     monkeypatch.setattr(planner_agent, "run", mock)
@@ -113,3 +113,13 @@ def mock_booking_tools_success(monkeypatch):
     monkeypatch.setattr(BookingToolsClient, "create_booking", create)
     monkeypatch.setattr(BookingToolsClient, "predict_no_show_probability", no_show)
     return {"detect_conflicts": detect, "create_booking": create, "predict_no_show_probability": no_show}
+
+
+@pytest.fixture(autouse=True)
+def _fresh_model_breakers():
+    """The Gemini circuit breaker is process-wide; a model one test trips
+    must not be skipped in the next."""
+    import gemini_client
+    gemini_client.reset_breakers()
+    yield
+    gemini_client.reset_breakers()

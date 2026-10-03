@@ -3,22 +3,22 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'inventory_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/ui/ui.dart';
+import 'analytics_screen.dart';
 import 'app_notifications.dart';
 import 'authenticated_api_client.dart';
 import 'inventory_panel.dart';
-import 'inventory_loading_state.dart';
 import 'equipment_maintenance_screen.dart';
 import 'inventory_models.dart';
 import 'purchase_order_approval_screen.dart';
-import 'stock_activity_history_screen.dart';
+import 'stock_check_screen.dart';
 import 'stock_count_screen.dart';
+import 'stocksense_reorder.dart';
 
 String _formatQuantity(double value) =>
     value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
@@ -41,58 +41,100 @@ class InventoryDashboard extends StatefulWidget {
     super.key,
     required this.client,
     required this.canApprove,
-    this.role,
     this.canReceive = false,
-    this.assignedBranchId,
+    this.onOpenStockOperations,
   });
 
   final AuthenticatedApiClient client;
   final bool canApprove;
-  final String? role;
   final bool canReceive;
-  final String? assignedBranchId;
+  final VoidCallback? onOpenStockOperations;
 
   @override
   State<InventoryDashboard> createState() => _InventoryDashboardState();
 }
 
 class _InventoryDashboardState extends State<InventoryDashboard>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const _previewLimit = 100;
   late final _repository = InventoryDashboardRepository(widget.client);
+  late final _reorders = StockSenseReorderRepository(widget.client);
   DashboardSummary? _summary;
   List<InventoryItem> _allItems = const [];
   List<InventoryItem> _filteredItems = const [];
   final TextEditingController _searchController = TextEditingController();
-  final GlobalKey _ledgerSectionKey = GlobalKey();
   String? _error;
+  Map<String, dynamic>? _inventoryAiPlan;
+  String? _inventoryAiError;
+  bool _inventoryAiLoading = false;
+  int _inventoryAiStep = 0;
+  Timer? _inventoryAiStepTimer;
   bool _loading = true;
   bool _requestInFlight = false;
+  bool _showInventoryAiPage = false;
+  late final AnimationController _aiGlowController;
+  late final AnimationController _aiSweepController;
+  late final AnimationController _aiPageEntryController;
+  late final Animation<double> _aiSweep;
+  bool _aiMotionDisabled = false;
   String _searchQuery = '';
   String _selectedFilter = 'All';
   String _sortMode = 'Stock health';
 
-  late final AnimationController _enterCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  );
-  late final CurvedAnimation _enterAnim = CurvedAnimation(
-    parent: _enterCtrl,
-    curve: Curves.easeOutCubic,
-  );
-
   @override
   void initState() {
     super.initState();
+    _aiGlowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat(reverse: true);
+    _aiPageEntryController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _aiSweepController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3200),
+    )..repeat();
+    _aiSweep = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: ConstantTween(-1.5),
+        weight: 68,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: -1.5, end: 2.5)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 32,
+      ),
+    ]).animate(_aiSweepController);
     _load();
-    _enterCtrl.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableMotion = MediaQuery.of(context).disableAnimations;
+    if (disableMotion == _aiMotionDisabled) return;
+    _aiMotionDisabled = disableMotion;
+    if (disableMotion) {
+      _aiGlowController.stop();
+      _aiSweepController.stop();
+      _aiPageEntryController
+        ..stop()
+        ..value = 1;
+    } else {
+      _aiGlowController.repeat(reverse: true);
+      _aiSweepController.repeat();
+    }
   }
 
   @override
   void dispose() {
+    _aiGlowController.dispose();
+    _aiSweepController.dispose();
+    _aiPageEntryController.dispose();
+    _inventoryAiStepTimer?.cancel();
     _searchController.dispose();
-    _enterCtrl.dispose();
-    _enterAnim.dispose();
     super.dispose();
   }
 
@@ -134,22 +176,6 @@ class _InventoryDashboardState extends State<InventoryDashboard>
 
   void _applyFilter() {
     setState(() => _filteredItems = _filterItems());
-  }
-
-  void _selectDashboardFilter(String filter) {
-    setState(() {
-      _selectedFilter = filter;
-      _filteredItems = _filterItems();
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ledgerContext = _ledgerSectionKey.currentContext;
-      if (!mounted || ledgerContext == null) return;
-      Scrollable.ensureVisible(
-        ledgerContext,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutCubic,
-      );
-    });
   }
 
   List<InventoryItem> _filterItems() {
@@ -205,29 +231,6 @@ class _InventoryDashboardState extends State<InventoryDashboard>
         });
     }
     return list;
-  }
-
-  List<List<InventoryItem>> get _visibleStockGroups {
-    final groups = <List<InventoryItem>>[];
-    final seen = <String>{};
-    for (final item in _filteredItems) {
-      final key = _stockGroupKey(item);
-      if (!seen.add(key)) continue;
-      final group = _allItems
-          .where((candidate) => _stockGroupKey(candidate) == key)
-          .toList()
-        ..sort(
-            (a, b) => a.branch.toLowerCase().compareTo(b.branch.toLowerCase()));
-      groups.add(group);
-    }
-    return groups;
-  }
-
-  String _stockGroupKey(InventoryItem item) {
-    final sku = item.sku.trim().toLowerCase();
-    return sku.isNotEmpty
-        ? 'sku:$sku'
-        : 'name:${item.name.trim().toLowerCase()}|${item.category.trim().toLowerCase()}';
   }
 
   void _fail(String message) {
@@ -447,7 +450,7 @@ class _InventoryDashboardState extends State<InventoryDashboard>
     try {
       final endpoint = isAdd
           ? '/api/inventory/${item.id}/receive'
-          : '/api/inventory/${item.id}/issue';
+          : '/api/inventory/${item.id}/adjust';
       final body = isAdd
           ? {
               'quantity': qty,
@@ -455,9 +458,9 @@ class _InventoryDashboardState extends State<InventoryDashboard>
               'notes': 'Recorded via SME Mobile Dashboard'
             }
           : {
-              'quantity': qty,
+              'quantity': -qty,
               'reference': 'DASHBOARD-QUICK-ISSUE',
-              'notes': 'Issued via SME Mobile Dashboard'
+              'notes': 'Adjusted via SME Mobile Dashboard'
             };
 
       final res = await widget.client.post(endpoint, body: body);
@@ -477,261 +480,1320 @@ class _InventoryDashboardState extends State<InventoryDashboard>
 
   @override
   Widget build(BuildContext context) {
-    return InventoryScaffold(
-      showParticles: false,
-      appBar: GlassAppBar(
-        title: 'Inventory Operations',
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: _requestInFlight
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.cyan,
-                    ),
-                  )
-                : const Icon(Icons.refresh_rounded, color: AppColors.cyan),
-            onPressed: _requestInFlight ? null : () => _load(showSuccess: true),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: RefreshIndicator(
-          color: AppColors.cyan,
-          backgroundColor: AppColors.overlaySurface,
-          onRefresh: () => _load(showSuccess: true),
-          child: _loading && _summary == null
-              ? const InventoryLoadingState(
-                  message: 'Loading inventory hub',
-                  detail: 'Preparing your inventory overview',
+    return PopScope<Object?>(
+      canPop: !_showInventoryAiPage,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _showInventoryAiPage) {
+          setState(() => _showInventoryAiPage = false);
+        }
+      },
+      child: AppBackgroundScaffold(
+        showParticles: false,
+        appBar: GlassAppBar(
+          title:
+              _showInventoryAiPage ? 'StockSense AI' : 'Inventory Operations',
+          automaticallyImplyLeading: !_showInventoryAiPage,
+          leading: _showInventoryAiPage
+              ? IconButton(
+                  tooltip: 'Back to inventory',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => setState(() => _showInventoryAiPage = false),
                 )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                  children: [
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 360),
-                      reverseDuration: const Duration(milliseconds: 240),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (child, animation) {
-                        final slide = Tween<Offset>(
-                          begin: const Offset(0, .035),
-                          end: Offset.zero,
-                        ).animate(CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOutCubic,
-                        ));
-                        return FadeTransition(
-                          opacity: animation,
-                          child: SlideTransition(
-                            position: slide,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: Column(
-                        key: const ValueKey('inventory-home-page'),
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_loading)
-                            const Padding(
-                              padding: EdgeInsets.only(bottom: 10),
-                              child: LinearProgressIndicator(
-                                minHeight: 2,
-                                color: AppColors.cyan,
-                                backgroundColor: AppColors.glassBorder,
-                              ),
-                            ),
-                          // High-tech Hero Banner
-                          FadeTransition(
-                            opacity: CurvedAnimation(
-                              parent: _enterCtrl,
-                              curve: const Interval(0.0, 0.6,
-                                  curve: Curves.easeOut),
-                            ),
+              : null,
+          actions: [
+            if (!_showInventoryAiPage)
+              IconButton(
+                tooltip: 'Refresh',
+                icon: _requestInFlight
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.cyan,
+                        ),
+                      )
+                    : const Icon(Icons.refresh_rounded, color: AppColors.cyan),
+                onPressed:
+                    _requestInFlight ? null : () => _load(showSuccess: true),
+              ),
+          ],
+        ),
+        child: SafeArea(
+          child: RefreshIndicator(
+            color: AppColors.cyan,
+            backgroundColor: AppColors.overlaySurface,
+            onRefresh: () => _load(showSuccess: true),
+            child: _loading && _summary == null
+                ? const AppLoader(message: 'Loading inventory hub...')
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                    children: [
+                      AnimatedSwitcher(
+                        duration: _aiMotionDisabled
+                            ? Duration.zero
+                            : const Duration(milliseconds: 520),
+                        reverseDuration: _aiMotionDisabled
+                            ? Duration.zero
+                            : const Duration(milliseconds: 360),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        transitionBuilder: (child, animation) {
+                          final slide = Tween<Offset>(
+                            begin: const Offset(0, .035),
+                            end: Offset.zero,
+                          ).animate(CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeOutCubic,
+                          ));
+                          return FadeTransition(
+                            opacity: animation,
                             child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0, .06),
-                                end: Offset.zero,
-                              ).animate(CurvedAnimation(
-                                parent: _enterCtrl,
-                                curve: const Interval(0.0, 0.6,
-                                    curve: Curves.easeOutCubic),
-                              )),
-                              child: _buildHeroBanner(),
+                              position: slide,
+                              child: child,
                             ),
-                          ),
-                          const SizedBox(height: 18),
-
-                          if (_error != null) ...[
-                            ErrorState(message: _error!, onRetry: _load),
-                            const SizedBox(height: 18),
-                          ],
-
-                          // Inventory health at a glance.
-                          if (_summary != null) ...[
-                            FadeTransition(
-                              opacity: CurvedAnimation(
-                                parent: _enterCtrl,
-                                curve: const Interval(0.2, 0.75,
-                                    curve: Curves.easeOut),
-                              ),
-                              child: SlideTransition(
-                                position: Tween<Offset>(
-                                  begin: const Offset(0, .05),
-                                  end: Offset.zero,
-                                ).animate(CurvedAnimation(
-                                  parent: _enterCtrl,
-                                  curve: const Interval(0.2, 0.75,
-                                      curve: Curves.easeOutCubic),
-                                )),
-                                child: _buildMetricCards(_summary!),
-                              ),
-                            ),
-                            const SizedBox(height: 22),
-                          ],
-
-                          // Quick Action Launchpad
-                          SectionHeader(
-                            'OPERATIONAL ACTIONS',
-                            trailing: Text('Shortcuts',
-                                style: AppTextStyles.caption
-                                    .copyWith(color: AppColors.cyan)),
-                          ),
-                          const SizedBox(height: 12),
-                          FadeTransition(
-                            opacity: CurvedAnimation(
-                              parent: _enterCtrl,
-                              curve: const Interval(0.4, 0.85,
-                                  curve: Curves.easeOut),
-                            ),
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0, .04),
-                                end: Offset.zero,
-                              ).animate(CurvedAnimation(
-                                parent: _enterCtrl,
-                                curve: const Interval(0.4, 0.85,
-                                    curve: Curves.easeOutCubic),
-                              )),
-                              child: _buildQuickActionGrid(),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Stock Health Overview & Search
-                          KeyedSubtree(
-                            key: _ledgerSectionKey,
-                            child: SectionHeader(
-                              'STOCK LEDGER',
-                              trailing: Text(
-                                  '${_filteredItems.length} shown · ${_summary?.totalItems ?? _allItems.length} total',
-                                  style: AppTextStyles.caption
-                                      .copyWith(color: AppColors.cyan)),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          if ((_summary?.totalItems ?? _allItems.length) >
-                              _allItems.length) ...[
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 9),
-                              decoration: BoxDecoration(
-                                color: AppColors.cyan.withValues(alpha: .08),
-                                borderRadius: BorderRadius.circular(11),
-                                border: Border.all(
-                                    color:
-                                        AppColors.cyan.withValues(alpha: .2)),
-                              ),
-                              child: Row(children: [
-                                const Icon(Icons.info_outline_rounded,
-                                    size: 16, color: AppColors.cyan),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Showing the first ${_allItems.length} of ${_summary!.totalItems} items. Search and filters apply to this preview.',
-                                    style: AppTextStyles.caption.copyWith(
-                                        color: AppColors.textSecondary,
-                                        height: 1.35),
+                          );
+                        },
+                        child: _showInventoryAiPage
+                            ? Column(
+                                key: const ValueKey('stocksense-page'),
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _buildAiPageEntrance(
+                                    _buildInventoryAiCard(),
+                                    start: 0,
+                                    end: .9,
                                   ),
-                                ),
-                              ]),
-                            ),
-                          ],
-
-                          // Search and Filter Bar
-                          _buildSearchAndFilterBar(),
-                          const SizedBox(height: 14),
-
-                          // Items List
-                          if (_filteredItems.isEmpty && _error == null)
-                            _allItems.isEmpty
-                                ? const EmptyState(
-                                    icon: Icons.inventory_2_outlined,
-                                    title: 'Your inventory is ready to begin',
-                                    message:
-                                        'Items will appear here once your catalog has stock records.',
-                                  )
-                                : InventoryPanel(
-                                    child: Column(
-                                      children: [
-                                        const Icon(Icons.filter_alt_off_rounded,
-                                            color: AppColors.textMuted,
-                                            size: 30),
-                                        const SizedBox(height: 9),
-                                        Text('No items match this view',
-                                            style: AppTextStyles.subtitle
-                                                .copyWith(
-                                                    fontWeight:
-                                                        FontWeight.w800)),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Try another filter or clear your search.',
-                                          textAlign: TextAlign.center,
-                                          style: AppTextStyles.caption.copyWith(
-                                              color: AppColors.textSecondary),
-                                        ),
-                                        const SizedBox(height: 11),
-                                        TextButton.icon(
-                                          onPressed: () {
-                                            _searchController.clear();
-                                            setState(() {
-                                              _searchQuery = '';
-                                              _selectedFilter = 'All';
-                                              _filteredItems = _filterItems();
-                                            });
-                                          },
-                                          icon: const Icon(
-                                              Icons.restart_alt_rounded),
-                                          label: const Text('Reset filters'),
-                                        ),
-                                      ],
+                                  if (!_inventoryAiLoading &&
+                                      _inventoryAiPlan == null &&
+                                      _inventoryAiError == null) ...[
+                                    const SizedBox(height: 18),
+                                    _buildAiReviewSteps(),
+                                  ],
+                                ],
+                              )
+                            : Column(
+                                key: const ValueKey('inventory-home-page'),
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (_loading)
+                                    const Padding(
+                                      padding: EdgeInsets.only(bottom: 10),
+                                      child: LinearProgressIndicator(
+                                        minHeight: 2,
+                                        color: AppColors.cyan,
+                                        backgroundColor: AppColors.glassBorder,
+                                      ),
                                     ),
-                                  )
-                          else
-                            ..._visibleStockGroups
-                                .map((items) => _buildItemCard(items)),
-                        ],
+                                  // High-tech Hero Banner
+                                  _buildHeroBanner(),
+                                  const SizedBox(height: 18),
+
+                                  if (_error != null) ...[
+                                    ErrorState(
+                                        message: _error!, onRetry: _load),
+                                    const SizedBox(height: 18),
+                                  ],
+
+                                  // Inventory health at a glance.
+                                  if (_summary != null) ...[
+                                    _buildMetricCards(_summary!),
+                                    const SizedBox(height: 22),
+                                  ],
+
+                                  _buildInventoryAiTeaser(),
+                                  const SizedBox(height: 22),
+
+                                  // Quick Action Launchpad
+                                  SectionHeader(
+                                    'OPERATIONAL ACTIONS',
+                                    trailing: Text('Shortcuts',
+                                        style: AppTextStyles.caption
+                                            .copyWith(color: AppColors.cyan)),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _buildQuickActionGrid(),
+                                  const SizedBox(height: 24),
+
+                                  // Stock Health Overview & Search
+                                  SectionHeader(
+                                    'STOCK LEDGER',
+                                    trailing: Text(
+                                        '${_filteredItems.length} shown · ${_summary?.totalItems ?? _allItems.length} total',
+                                        style: AppTextStyles.caption
+                                            .copyWith(color: AppColors.cyan)),
+                                  ),
+                                  const SizedBox(height: 12),
+
+                                  if ((_summary?.totalItems ??
+                                          _allItems.length) >
+                                      _allItems.length) ...[
+                                    Container(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 9),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.cyan
+                                            .withValues(alpha: .08),
+                                        borderRadius: BorderRadius.circular(11),
+                                        border: Border.all(
+                                            color: AppColors.cyan
+                                                .withValues(alpha: .2)),
+                                      ),
+                                      child: Row(children: [
+                                        const Icon(Icons.info_outline_rounded,
+                                            size: 16, color: AppColors.cyan),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Showing the first ${_allItems.length} of ${_summary!.totalItems} items. Search and filters apply to this preview.',
+                                            style: AppTextStyles.caption
+                                                .copyWith(
+                                                    color:
+                                                        AppColors.textSecondary,
+                                                    height: 1.35),
+                                          ),
+                                        ),
+                                      ]),
+                                    ),
+                                  ],
+
+                                  // Search and Filter Bar
+                                  _buildSearchAndFilterBar(),
+                                  const SizedBox(height: 14),
+
+                                  // Items List
+                                  if (_filteredItems.isEmpty && _error == null)
+                                    _allItems.isEmpty
+                                        ? const EmptyState(
+                                            icon: Icons.inventory_2_outlined,
+                                            title:
+                                                'Your inventory is ready to begin',
+                                            message:
+                                                'Items will appear here once your catalog has stock records.',
+                                          )
+                                        : InventoryPanel(
+                                            child: Column(
+                                              children: [
+                                                const Icon(
+                                                    Icons
+                                                        .filter_alt_off_rounded,
+                                                    color: AppColors.textMuted,
+                                                    size: 30),
+                                                const SizedBox(height: 9),
+                                                Text('No items match this view',
+                                                    style: AppTextStyles
+                                                        .subtitle
+                                                        .copyWith(
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .w800)),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  'Try another filter or clear your search.',
+                                                  textAlign: TextAlign.center,
+                                                  style: AppTextStyles.caption
+                                                      .copyWith(
+                                                          color: AppColors
+                                                              .textSecondary),
+                                                ),
+                                                const SizedBox(height: 11),
+                                                TextButton.icon(
+                                                  onPressed: () {
+                                                    _searchController.clear();
+                                                    setState(() {
+                                                      _searchQuery = '';
+                                                      _selectedFilter = 'All';
+                                                      _filteredItems =
+                                                          _filterItems();
+                                                    });
+                                                  },
+                                                  icon: const Icon(Icons
+                                                      .restart_alt_rounded),
+                                                  label: const Text(
+                                                      'Reset filters'),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                  else
+                                    ..._filteredItems
+                                        .map((item) => _buildItemCard(item)),
+                                ],
+                              ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );
   }
 
+  Widget _buildAiPageEntrance(
+    Widget child, {
+    required double start,
+    required double end,
+  }) {
+    if (_aiMotionDisabled) return child;
+    final animation = CurvedAnimation(
+      parent: _aiPageEntryController,
+      curve: Interval(start, end, curve: Curves.easeOutCubic),
+    );
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) {
+        final progress = animation.value;
+        return Opacity(
+          opacity: progress,
+          child: Transform.translate(
+            offset: Offset(0, 18 * (1 - progress)),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAiReviewSteps() {
+    const steps = [
+      (
+        icon: Icons.inventory_2_outlined,
+        title: 'Stock levels',
+        detail: 'On hand & reorder points',
+        color: AppColors.cyan,
+      ),
+      (
+        icon: Icons.swap_vert_rounded,
+        title: 'Movement',
+        detail: 'Recorded usage history',
+        color: AppColors.violet,
+      ),
+      (
+        icon: Icons.delete_sweep_outlined,
+        title: 'Waste',
+        detail: 'Losses & data gaps',
+        color: AppColors.warning,
+      ),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'WHAT THE REVIEW COVERS',
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 9,
+                  letterSpacing: .9,
+                ),
+              ),
+            ),
+            const Icon(Icons.auto_awesome_rounded,
+                size: 15, color: AppColors.cyan),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ...steps.indexed.map((entry) {
+          final index = entry.$1;
+          final step = entry.$2;
+          return Padding(
+            padding: EdgeInsets.only(bottom: index == steps.length - 1 ? 0 : 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF101D34).withValues(alpha: .82),
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: AppColors.glassBorder),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: step.color.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(step.icon, size: 17, color: step.color),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Text(
+                      step.title,
+                      style: AppTextStyles.subtitle.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    step.detail,
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textMuted,
+                      fontSize: 10,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.check_rounded,
+                      size: 15, color: AppColors.success),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  void _openInventoryAiPage() {
+    setState(() => _showInventoryAiPage = true);
+    if (_aiMotionDisabled) {
+      _aiPageEntryController.value = 1;
+    } else {
+      _aiPageEntryController.forward(from: 0);
+    }
+  }
+
+  Widget _buildInventoryAiTeaser() {
+    final atRisk = _summary?.lowStock;
+    final outOfStock = _summary?.outOfStock;
+    final content = Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _AiPulseMark(size: 46),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'MEET YOUR INVENTORY CO-PILOT',
+                      style: AppTextStyles.label.copyWith(
+                        color: AppColors.cyan,
+                        fontSize: 9,
+                        letterSpacing: .8,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'StockSense AI',
+                      style: AppTextStyles.title.copyWith(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  color: AppColors.cyan, size: 16),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Turn stock, usage and waste data into clear next steps.',
+            style: AppTextStyles.body.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 13),
+          Wrap(
+            spacing: 8,
+            runSpacing: 7,
+            children: [
+              _AiMetricPill(
+                icon: Icons.warning_amber_rounded,
+                label: atRisk == null ? 'Stock health' : '$atRisk low',
+                color: AppColors.warning,
+              ),
+              _AiMetricPill(
+                icon: Icons.remove_shopping_cart_outlined,
+                label: outOfStock == null ? 'Coverage' : '$outOfStock out',
+                color: AppColors.danger,
+              ),
+              const _AiMetricPill(
+                icon: Icons.lock_outline_rounded,
+                label: 'Read-only',
+                color: AppColors.success,
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _openInventoryAiPage,
+              icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+              label: const Text('Explore AI stock insights'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.cyan,
+                foregroundColor: AppColors.onPrimary,
+                minimumSize: const Size.fromHeight(46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                textStyle: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return AnimatedBuilder(
+      animation: Listenable.merge([_aiGlowController, _aiSweepController]),
+      builder: (context, child) {
+        final pulse = _aiMotionDisabled ? .5 : _aiGlowController.value;
+        return InventoryPanel(
+          padding: EdgeInsets.zero,
+          fill: const Color(0xFF13283A),
+          borderColor: AppColors.cyan.withValues(alpha: .24 + (.28 * pulse)),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Stack(
+              children: [
+                Positioned(
+                  right: -38 - (pulse * 14),
+                  top: -52 + (pulse * 12),
+                  child: Container(
+                    width: 145,
+                    height: 145,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.violet
+                          .withValues(alpha: .08 + (.08 * pulse)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.cyan
+                              .withValues(alpha: .08 + (.12 * pulse)),
+                          blurRadius: 30 + (18 * pulse),
+                          spreadRadius: 10 + (10 * pulse),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (!_aiMotionDisabled)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Align(
+                        alignment: Alignment(_aiSweep.value, 0),
+                        child: FractionallySizedBox(
+                          widthFactor: .24,
+                          heightFactor: 1.8,
+                          child: Transform.rotate(
+                            angle: -.28,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.transparent,
+                                    AppColors.cyan.withValues(alpha: .13),
+                                    Colors.white.withValues(alpha: .07),
+                                    Colors.transparent,
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                child!,
+              ],
+            ),
+          ),
+        );
+      },
+      child: content,
+    );
+  }
+
+  Future<void> _analyzeInventory() async {
+    setState(() {
+      _inventoryAiLoading = true;
+      _inventoryAiError = null;
+      _inventoryAiPlan = null;
+      _inventoryAiStep = 0;
+    });
+    _inventoryAiStepTimer?.cancel();
+    _inventoryAiStepTimer =
+        Timer.periodic(const Duration(milliseconds: 2300), (_) {
+      if (mounted) {
+        setState(() => _inventoryAiStep = (_inventoryAiStep + 1) % 5);
+      }
+    });
+    try {
+      final response = await widget.client.post(
+        '/api/inventory/agent/plan',
+        body: {
+          'objective':
+              'Review overall inventory health, not only low stock. Identify stock coverage risks from recorded issue/sale/consumption, summarize items without recorded outflow and recent waste movements, and explain uncertainty. Do not infer demand from missing history.',
+        },
+      );
+      if (response.body.trim().isEmpty) {
+        if (response.statusCode == 401) {
+          throw Exception(
+              'Your session has expired. Sign in again and retry inventory analysis.');
+        }
+        if (response.statusCode == 403) {
+          throw Exception(
+              'Your account does not have permission to read inventory for this branch.');
+        }
+        if (response.statusCode == 404) {
+          throw Exception(
+              'The backend does not have the inventory AI endpoint yet. Restart the ASP.NET backend and retry.');
+        }
+        throw Exception(
+          'Inventory AI API returned an empty response (${response.statusCode}). Check the backend endpoint and agent service configuration.',
+        );
+      }
+      final decoded = jsonDecode(response.body);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final body = decoded is Map ? decoded : const <String, dynamic>{};
+        final warnings = body['warnings'];
+        throw Exception(body['message'] ??
+            (warnings is List && warnings.isNotEmpty
+                ? warnings.first
+                : 'Inventory AI could not complete the analysis.'));
+      }
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Unexpected inventory plan response.');
+      }
+      if (mounted) {
+        setState(() => _inventoryAiPlan = decoded);
+        if (_aiMotionDisabled) {
+          _aiPageEntryController.value = 1;
+        } else {
+          _aiPageEntryController.forward(from: 0);
+        }
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _inventoryAiError =
+            error.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      _inventoryAiStepTimer?.cancel();
+      _inventoryAiStepTimer = null;
+      if (mounted) setState(() => _inventoryAiLoading = false);
+    }
+  }
+
+  Widget _buildInventoryAiCard() {
+    final recommendations = _inventoryAiPlan?['recommendations'];
+    final lowStock = _summary?.lowStock;
+    final outOfStock = _summary?.outOfStock;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InventoryPanel(
+          padding: EdgeInsets.zero,
+          fill: const Color(0xFF101D34),
+          borderColor: AppColors.cyan.withValues(alpha: .3),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+            child: Stack(
+              children: [
+                AnimatedBuilder(
+                  animation: _aiGlowController,
+                  builder: (context, child) {
+                    final pulse =
+                        _aiMotionDisabled ? .5 : _aiGlowController.value;
+                    return Positioned(
+                      top: -78 + (pulse * 10),
+                      right: -35 - (pulse * 12),
+                      child: Container(
+                        width: 230,
+                        height: 230,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.cyan
+                              .withValues(alpha: .05 + (.04 * pulse)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.violet
+                                  .withValues(alpha: .08 + (.1 * pulse)),
+                              blurRadius: 58 + (24 * pulse),
+                              spreadRadius: 12 + (12 * pulse),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                if (!_aiMotionDisabled)
+                  AnimatedBuilder(
+                    animation: _aiSweepController,
+                    builder: (context, child) => Positioned.fill(
+                      child: IgnorePointer(
+                        child: Align(
+                          alignment: Alignment(_aiSweep.value, 0),
+                          child: FractionallySizedBox(
+                            widthFactor: .22,
+                            heightFactor: 1.7,
+                            child: Transform.rotate(
+                              angle: -.28,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.transparent,
+                                      AppColors.cyan.withValues(alpha: .1),
+                                      Colors.white.withValues(alpha: .045),
+                                      Colors.transparent,
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const _AiPulseMark(size: 52),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'STOCKSENSE  /  AI',
+                                  style: AppTextStyles.label.copyWith(
+                                    color: AppColors.cyan,
+                                    fontSize: 9,
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Inventory intelligence',
+                                  style: AppTextStyles.title.copyWith(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_inventoryAiPlan != null)
+                            IconButton(
+                              tooltip: 'Run analysis again',
+                              onPressed: _inventoryAiLoading
+                                  ? null
+                                  : _analyzeInventory,
+                              icon: const Icon(Icons.refresh_rounded,
+                                  color: AppColors.textSecondary),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 22),
+                      Text(
+                        'Know what needs attention.',
+                        style: AppTextStyles.title.copyWith(
+                          fontSize: 24,
+                          height: 1.12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -.45,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Get a clear view of stock coverage, recorded usage and waste—then decide what to do.',
+                        style: AppTextStyles.body.copyWith(
+                          fontSize: 13,
+                          height: 1.45,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'STOCK AT A GLANCE',
+                        style: AppTextStyles.label.copyWith(
+                          color: AppColors.textSecondary,
+                          fontSize: 9,
+                          letterSpacing: .8,
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _AiScopeTile(
+                              icon: Icons.inventory_2_outlined,
+                              label: 'LOW STOCK',
+                              value: lowStock?.toString() ?? '—',
+                              accent: AppColors.warning,
+                            ),
+                          ),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: _AiScopeTile(
+                              icon: Icons.remove_shopping_cart_outlined,
+                              label: 'OUT OF STOCK',
+                              value: outOfStock?.toString() ?? '—',
+                              accent: AppColors.danger,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 54,
+                        child: FilledButton.icon(
+                          onPressed:
+                              _inventoryAiLoading ? null : _analyzeInventory,
+                          icon: _inventoryAiLoading
+                              ? const SizedBox(
+                                  width: 19,
+                                  height: 19,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.onPrimary,
+                                  ),
+                                )
+                              : const Icon(Icons.auto_awesome_rounded,
+                                  size: 19),
+                          label: Text(
+                            _inventoryAiLoading
+                                ? 'Reviewing your stock…'
+                                : _inventoryAiPlan == null
+                                    ? 'Generate stock review'
+                                    : 'Run analysis again',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 14),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.cyan,
+                            foregroundColor: AppColors.onPrimary,
+                            disabledBackgroundColor: const Color(0xFF355061),
+                            disabledForegroundColor: AppColors.textSecondary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 11),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.lock_outline_rounded,
+                              size: 13, color: AppColors.success),
+                          const SizedBox(width: 6),
+                          Text(
+                            'READ-ONLY REVIEW  ·  YOU STAY IN CONTROL',
+                            style: AppTextStyles.label.copyWith(
+                              color: AppColors.textSecondary,
+                              fontSize: 8,
+                              letterSpacing: .55,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_inventoryAiLoading) ...[
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(13),
+            decoration: BoxDecoration(
+              color: const Color(0xFF19283A),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: AppColors.cyan.withValues(alpha: 0.35)),
+            ),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: AppColors.cyan,
+                        backgroundColor: AppColors.glassBorder)),
+                const SizedBox(width: 11),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text('STOCKSENSE IS THINKING',
+                          style: AppTextStyles.label
+                              .copyWith(color: AppColors.cyan, fontSize: 10)),
+                      const SizedBox(height: 4),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 450),
+                        transitionBuilder: (child, animation) => FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                                position: Tween<Offset>(
+                                        begin: const Offset(0, 0.18),
+                                        end: Offset.zero)
+                                    .animate(animation),
+                                child: child)),
+                        child: Text(
+                          const [
+                            'Reading your stock snapshot…',
+                            'Matching issues, sales and usage…',
+                            'Calculating stock coverage…',
+                            'Reviewing waste and movement gaps…',
+                            'Preparing findings for your review…',
+                          ][_inventoryAiStep],
+                          key: ValueKey(_inventoryAiStep),
+                          style: AppTextStyles.body.copyWith(fontSize: 12),
+                        ),
+                      ),
+                    ])),
+                Text('${_inventoryAiStep + 1}/5',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.textMuted)),
+              ]),
+              const SizedBox(height: 11),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: const LinearProgressIndicator(
+                    minHeight: 4,
+                    color: AppColors.cyan,
+                    backgroundColor: AppColors.glassBorder),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                  'Analysis can take a little while. Your stock remains unchanged.',
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textMuted)),
+            ]),
+          ),
+        ],
+        if (_inventoryAiError != null) ...[
+          const SizedBox(height: 14),
+          _AiResultNote(
+            icon: Icons.error_outline_rounded,
+            title: 'Could not complete the review',
+            detail: _inventoryAiError!,
+            color: AppColors.error,
+          ),
+        ],
+        if (_inventoryAiPlan != null) ...[
+          const SizedBox(height: 16),
+          InventoryPanel(
+            padding: const EdgeInsets.all(16),
+            fill: const Color(0xFF0E192D),
+            borderColor: AppColors.glassBorder,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.cyan.withValues(alpha: .12),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: const Icon(Icons.auto_awesome_rounded,
+                          color: AppColors.cyan, size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'AI STOCK REVIEW',
+                            style: AppTextStyles.label.copyWith(
+                              color: AppColors.cyan,
+                              fontSize: 9,
+                              letterSpacing: .8,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Key findings',
+                            style: AppTextStyles.subtitle.copyWith(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const _AiMetricPill(
+                      icon: Icons.check_circle_outline_rounded,
+                      label: 'READY',
+                      color: AppColors.success,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(13),
+                  decoration: BoxDecoration(
+                    color: AppColors.cyan.withValues(alpha: .055),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(
+                        color: AppColors.cyan.withValues(alpha: .18)),
+                  ),
+                  child: Text(
+                    '${_inventoryAiPlan!['planner_summary'] ?? ''}',
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textBody,
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                if (_inventoryAiPlan!['insights'] is List &&
+                    (_inventoryAiPlan!['insights'] as List).isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _buildAiPageEntrance(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('INVENTORY HEALTH INSIGHTS',
+                            style: AppTextStyles.label
+                                .copyWith(color: AppColors.cyan)),
+                        ...(_inventoryAiPlan!['insights'] as List).map((entry) {
+                          if (entry is! Map) return const SizedBox.shrink();
+                          final insight = Map<String, dynamic>.from(entry);
+                          final affected = insight['affected_items'];
+                          final category =
+                              '${insight['category'] ?? 'overview'}';
+                          final insightColor = switch (category) {
+                            'coverage' => AppColors.cyan,
+                            'movement' => AppColors.magenta,
+                            'data_quality' => AppColors.warning,
+                            'cost' => AppColors.success,
+                            _ => AppColors.violet,
+                          };
+                          final insightIcon = switch (category) {
+                            'coverage' => Icons.speed_rounded,
+                            'movement' => Icons.swap_vert_rounded,
+                            'data_quality' => Icons.fact_check_rounded,
+                            'cost' => Icons.account_balance_wallet_rounded,
+                            _ => Icons.inventory_2_rounded,
+                          };
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.inputFill,
+                                borderRadius: BorderRadius.circular(12),
+                                border:
+                                    Border.all(color: const Color(0xFF2A4058)),
+                              ),
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(children: [
+                                      Container(
+                                          width: 32,
+                                          height: 32,
+                                          decoration: BoxDecoration(
+                                              color: insightColor.withValues(
+                                                  alpha: 0.14),
+                                              borderRadius:
+                                                  BorderRadius.circular(10)),
+                                          child: Icon(insightIcon,
+                                              size: 18, color: insightColor)),
+                                      const SizedBox(width: 9),
+                                      Expanded(
+                                          child: Text(
+                                              category
+                                                  .replaceAll('_', ' ')
+                                                  .toUpperCase(),
+                                              style: AppTextStyles.label
+                                                  .copyWith(
+                                                      color: insightColor,
+                                                      fontSize: 10))),
+                                    ]),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                        '${insight['title'] ?? 'Inventory insight'}',
+                                        style: AppTextStyles.subtitle),
+                                    const SizedBox(height: 4),
+                                    Text('${insight['detail'] ?? ''}',
+                                        style: AppTextStyles.bodyMuted
+                                            .copyWith(fontSize: 12)),
+                                    if (affected is List &&
+                                        affected.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                          spacing: 6,
+                                          runSpacing: 6,
+                                          children: affected
+                                              .take(5)
+                                              .map((name) => Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                        color: insightColor
+                                                            .withValues(
+                                                                alpha: 0.1),
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(20),
+                                                        border: Border.all(
+                                                            color: const Color(
+                                                                0xFF2A4058))),
+                                                    child: Text('$name',
+                                                        style: AppTextStyles
+                                                            .caption
+                                                            .copyWith(
+                                                                color: AppColors
+                                                                    .textBody)),
+                                                  ))
+                                              .toList()),
+                                    ],
+                                  ]),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                    start: .12,
+                    end: .72,
+                  ),
+                ],
+                if (recommendations is List && recommendations.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 12),
+                    child: _AiResultNote(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'No replenishment recommendations',
+                      detail:
+                          'No replenishment recommendations from the available stock data.',
+                      color: AppColors.cyan,
+                    ),
+                  ),
+                if (recommendations is List && recommendations.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text('REPLENISHMENT RECOMMENDATIONS',
+                      style:
+                          AppTextStyles.label.copyWith(color: AppColors.cyan)),
+                  ...recommendations.map((entry) {
+                    if (entry is! Map) return const SizedBox.shrink();
+                    final item = Map<String, dynamic>.from(entry);
+                    final daily = item['avg_daily_outflow'];
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.inputFill,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.glassBorder),
+                        ),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  '${item['item_name']}  ·  Reorder ${item['recommended_quantity']}',
+                                  style: AppTextStyles.subtitle),
+                              const SizedBox(height: 4),
+                              Text(
+                                  'On hand ${item['on_hand']} / reorder at ${item['reorder_level']}  ·  ${daily == null ? 'No usage history' : '$daily per day'}',
+                                  style: AppTextStyles.caption),
+                              const SizedBox(height: 4),
+                              Text('${item['reason']}',
+                                  style: AppTextStyles.bodyMuted
+                                      .copyWith(fontSize: 12)),
+                            ]),
+                      ),
+                    );
+                  }),
+                ],
+                // Merged in from main: the port restructured this panel while
+                // main added the StockSense reorder workflow to it. Taking the
+                // port's layout alone silently dropped the feature - the
+                // analyzer caught it as an unused `_reorders` field.
+                if (recommendations is List && recommendations.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  FilledButton.icon(
+                    key: const Key('stocksense-request-reorder'),
+                    icon: const Icon(Icons.add_shopping_cart),
+                    label: const Text('Request reorder'),
+                    onPressed: () => showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: AppColors.overlaySurface,
+                      builder: (_) => StockSenseReorderSheet(
+                        repository: _reorders,
+                        recommendations: recommendations
+                            .whereType<Map<String, dynamic>>()
+                            .toList(),
+                        analysisWorkflowId:
+                            _inventoryAiPlan?['persisted_workflow_id']
+                                as String?,
+                      ),
+                    ),
+                  ),
+                ],
+                TextButton.icon(
+                  key: const Key('stocksense-my-reorders'),
+                  icon: const Icon(Icons.receipt_long),
+                  label: const Text('My reorder requests'),
+                  onPressed: () =>
+                      Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => MyReordersScreen(repository: _reorders),
+                  )),
+                ),
+                if (_inventoryAiPlan!['warnings'] is List)
+                  ...(_inventoryAiPlan!['warnings'] as List)
+                      .where((warning) => warning.toString().trim().isNotEmpty)
+                      .map((warning) => Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: _AiResultNote(
+                              icon: Icons.info_outline_rounded,
+                              title: 'Estimation note',
+                              detail: '$warning',
+                              color: AppColors.warning,
+                            ),
+                          )),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildHeroBanner() {
-    return _AnimatedHeroBanner(
-      summary: _summary,
-      allItemsLength: _allItems.length,
-      loading: _loading,
-      role: widget.role,
+    return InventoryPanel(
+      padding: EdgeInsets.zero,
+      borderColor: const Color(0xFF344A70),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1C2B4A), Color(0xFF17233A), Color(0xFF142C3A)],
+            ),
+          ),
+          child: Stack(children: [
+            Positioned(
+              right: -45,
+              top: -68,
+              child: Container(
+                width: 190,
+                height: 190,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: .06)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.violet.withValues(alpha: .1),
+                      blurRadius: 45,
+                      spreadRadius: 24,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [
+                          AppColors.cyan.withValues(alpha: .24),
+                          AppColors.violet.withValues(alpha: .18),
+                        ]),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: AppColors.cyan.withValues(alpha: .24)),
+                      ),
+                      child: const Icon(Icons.inventory_2_rounded,
+                          color: AppColors.cyan, size: 23),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('INVENTORY CONTROL CENTER',
+                              style: AppTextStyles.label.copyWith(
+                                color: const Color(0xFF9FE8F2),
+                                fontSize: 9,
+                                letterSpacing: 1.05,
+                              )),
+                          const SizedBox(height: 4),
+                          Text('Stock, made simple',
+                              style: AppTextStyles.title.copyWith(
+                                fontSize: 21,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -.3,
+                              )),
+                        ],
+                      ),
+                    ),
+                    if (widget.canApprove) const _RoleBadge(label: 'MANAGER'),
+                  ]),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Keep products, counts, orders and equipment moving from one clear workspace.',
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 12.5,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    _HeroPill(
+                      icon: Icons.inventory_2_outlined,
+                      label: '${_summary?.totalItems ?? _allItems.length} SKUs',
+                    ),
+                    _HeroPill(
+                      icon: Icons.schedule_rounded,
+                      label: _loading ? 'Updating stock' : 'Live stock view',
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          ]),
+        ),
+      ),
     );
   }
 
@@ -742,19 +1804,17 @@ class _InventoryDashboardState extends State<InventoryDashboard>
           children: [
             Expanded(
               child: _CyberStatCard(
-                key: const Key('dashboard-metric-valuation'),
                 label: 'TOTAL VALUATION',
                 value: _compactLkr(summary.totalValue),
                 icon: Icons.account_balance_wallet_rounded,
-                accentColor: const Color(0xFF8AE8C7),
-                subLabel: 'Tap to review all inventory',
-                onTap: () => _selectDashboardFilter('All'),
+                accentColor: const Color(0xFF7C8CFF),
+                subLabel:
+                    'LKR ${summary.totalValue.toStringAsFixed(2)} on hand',
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _CyberStatCard(
-                key: const Key('dashboard-metric-low-stock'),
                 label: 'LOW STOCK',
                 value: '${summary.lowStock}',
                 icon: Icons.warning_amber_rounded,
@@ -762,9 +1822,8 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                     ? const Color(0xFFF59E0B)
                     : const Color(0xFF55D6C2),
                 subLabel: summary.lowStock > 0
-                    ? 'Tap to review low stock'
+                    ? 'At or below reorder level'
                     : 'Reorder levels healthy',
-                onTap: () => _selectDashboardFilter('Low stock'),
               ),
             ),
           ],
@@ -774,7 +1833,6 @@ class _InventoryDashboardState extends State<InventoryDashboard>
           children: [
             Expanded(
               child: _CyberStatCard(
-                key: const Key('dashboard-metric-out-of-stock'),
                 label: 'OUT OF STOCK',
                 value: '${summary.outOfStock}',
                 icon: Icons.remove_shopping_cart_rounded,
@@ -782,34 +1840,18 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                     ? const Color(0xFFF16D83)
                     : const Color(0xFF55D6C2),
                 subLabel: summary.outOfStock > 0
-                    ? 'Tap to review empty items'
+                    ? 'Needs replenishment'
                     : 'Nothing empty',
-                onTap: () => _selectDashboardFilter('Out of stock'),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _CyberStatCard(
-                key: const Key('dashboard-metric-pending-orders'),
                 label: 'PENDING PO QUEUE',
                 value: '${summary.pendingOrders}',
                 icon: Icons.assignment_late_rounded,
                 accentColor: const Color(0xFFB28CFF),
-                subLabel: 'Tap to review orders',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PurchaseOrderApprovalScreen(
-                      client: widget.client,
-                      canApprove: widget.canApprove,
-                      canCreate: widget.canApprove || widget.role == 'Staff',
-                      canCreateMultiBranch: widget.role == 'Admin',
-                      canReceive: widget.canReceive,
-                      assignedBranchId: widget.assignedBranchId,
-                      requiresAssignedBranch: widget.role != 'Admin',
-                    ),
-                  ),
-                ),
+                subLabel: 'Open orders',
               ),
             ),
           ],
@@ -819,61 +1861,51 @@ class _InventoryDashboardState extends State<InventoryDashboard>
   }
 
   Widget _buildQuickActionGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compactWidth = (constraints.maxWidth - 12) / 2;
-        return Wrap(
-          spacing: 12,
-          runSpacing: 12,
+    return Column(
+      children: [
+        Row(
           children: [
-            SizedBox(
-              width: compactWidth,
+            Expanded(
               child: _ActionTile(
-                key: const Key('dashboard-action-stock-activity'),
-                icon: Icons.history_rounded,
-                title: 'Stock Activity',
-                subtitle: 'Review or record stock movements',
+                icon: Icons.qr_code_scanner_rounded,
+                title: 'Scan Movements',
+                subtitle: 'Check in / check out',
                 color: AppColors.cyan,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        StockActivityHistoryScreen(client: widget.client),
-                  ),
+                      builder: (_) => StockCheckScreen(client: widget.client)),
                 ),
               ),
             ),
-            SizedBox(
-              width: compactWidth,
+            const SizedBox(width: 12),
+            Expanded(
               child: _ActionTile(
-                key: const Key('dashboard-action-stock-audit'),
-                compact: true,
                 icon: Icons.fact_check_rounded,
                 title: 'Stock Audit',
-                subtitle: 'Record a physical count',
+                subtitle: 'Physical count',
                 color: const Color(0xFF38BDF8),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => StockCountScreen(client: widget.client),
-                  ),
+                      builder: (_) => StockCountScreen(client: widget.client)),
                 ),
               ),
             ),
-            SizedBox(
-              width: compactWidth,
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
               child: _ActionTile(
-                key: const Key('dashboard-action-purchase-orders'),
-                compact: true,
-                icon: Icons.receipt_long_rounded,
-                title: 'Purchase Orders',
+                icon: Icons.approval_rounded,
+                title: 'PO Approvals',
                 subtitle: widget.canApprove
                     ? 'Review & place'
-                    : widget.role == 'Staff'
-                        ? 'Create a branch request'
-                        : widget.canReceive
-                            ? 'View & receive'
-                            : 'View queue',
+                    : widget.canReceive
+                        ? 'View & receive'
+                        : 'View queue',
                 color: const Color(0xFF10B981),
                 onTap: () => Navigator.push(
                   context,
@@ -881,37 +1913,43 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                     builder: (_) => PurchaseOrderApprovalScreen(
                       client: widget.client,
                       canApprove: widget.canApprove,
-                      canCreate: widget.canApprove || widget.role == 'Staff',
-                      canCreateMultiBranch: widget.role == 'Admin',
                       canReceive: widget.canReceive,
-                      assignedBranchId: widget.assignedBranchId,
-                      requiresAssignedBranch: widget.role != 'Admin',
                     ),
                   ),
                 ),
               ),
             ),
-            SizedBox(
-              width: compactWidth,
+            const SizedBox(width: 12),
+            Expanded(
               child: _ActionTile(
-                key: const Key('dashboard-action-maintenance'),
-                compact: true,
-                icon: Icons.build_circle_outlined,
-                title: 'Maintenance',
-                subtitle: 'Inspections & service records',
-                color: const Color(0xFFF59E0B),
+                icon: Icons.insights_rounded,
+                title: 'Analytics',
+                subtitle: 'Trends & usage',
+                color: const Color(0xFFA855F7),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        EquipmentMaintenanceScreen(client: widget.client),
-                  ),
+                      builder: (_) => InsightsScreen(client: widget.client)),
                 ),
               ),
             ),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 12),
+        _ActionTile(
+          icon: Icons.build_circle_outlined,
+          title: 'Equipment Maintenance',
+          subtitle:
+              'Schedule inspections, record service tasks & track photo logs',
+          color: const Color(0xFFF59E0B),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) =>
+                    EquipmentMaintenanceScreen(client: widget.client)),
+          ),
+        ),
+      ],
     );
   }
 
@@ -991,7 +2029,7 @@ class _InventoryDashboardState extends State<InventoryDashboard>
           const SizedBox(width: 10),
           Expanded(
             child: DropdownButtonFormField<String>(
-              initialValue: _sortMode,
+              value: _sortMode,
               isExpanded: true,
               dropdownColor: const Color(0xFF172235),
               style: AppTextStyles.caption.copyWith(color: Colors.white),
@@ -1049,7 +2087,6 @@ class _InventoryDashboardState extends State<InventoryDashboard>
   Widget _buildFilterPill(String label, int count) {
     final isSelected = _selectedFilter == label;
     return InkWell(
-      key: Key('dashboard-filter-${label.toLowerCase().replaceAll(' ', '-')}'),
       borderRadius: BorderRadius.circular(20),
       onTap: () {
         setState(() {
@@ -1149,7 +2186,7 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Scan this QR from Physical Stock Count.',
+                    'Scan this QR from Stock Movements or Physical Stock Count.',
                     textAlign: TextAlign.center,
                     style: AppTextStyles.caption.copyWith(
                       color: AppColors.textSecondary,
@@ -1193,29 +2230,22 @@ class _InventoryDashboardState extends State<InventoryDashboard>
     );
   }
 
-  Widget _buildItemCard(List<InventoryItem> items) {
-    final item = items.first;
-    final outOfStockBranches =
-        items.where((stock) => stock.quantity <= 0).length;
-    final lowStockBranches =
-        items.where((stock) => stock.quantity > 0 && stock.isLowStock).length;
-    final totalQuantity =
-        items.fold<double>(0, (total, stock) => total + stock.quantity);
-    final totalReorderLevel =
-        items.fold<double>(0, (total, stock) => total + stock.reorderLevel);
-    final statusColor = outOfStockBranches > 0
+  Widget _buildItemCard(InventoryItem item) {
+    final isOutOfStock = item.quantity <= 0;
+    final isLow = item.isLowStock;
+    final statusColor = isOutOfStock
         ? const Color(0xFFF16D83)
-        : lowStockBranches > 0
+        : isLow
             ? const Color(0xFFF3B64D)
             : const Color(0xFF55D6C2);
-    final statusText = outOfStockBranches > 0
-        ? 'OUT AT $outOfStockBranches'
-        : lowStockBranches > 0
-            ? 'LOW AT $lowStockBranches'
-            : '${items.length} ${items.length == 1 ? 'BRANCH' : 'BRANCHES'}';
-    final progress = totalReorderLevel > 0
-        ? (totalQuantity / totalReorderLevel).clamp(0.0, 1.0)
-        : (totalQuantity > 0 ? 1.0 : 0.0);
+    final statusText = isOutOfStock
+        ? 'OUT OF STOCK'
+        : isLow
+            ? 'LOW STOCK'
+            : 'IN STOCK';
+    final progress = item.reorderLevel > 0
+        ? (item.quantity / item.reorderLevel).clamp(0.0, 1.0)
+        : (item.quantity > 0 ? 1.0 : 0.0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 11),
@@ -1240,12 +2270,12 @@ class _InventoryDashboardState extends State<InventoryDashboard>
               ),
               const SizedBox(width: 8),
               _InventoryStatusBadge(
-                key: ValueKey('${item.sku}:$statusText'),
+                key: ValueKey('${item.id}:$statusText'),
                 label: statusText,
                 color: statusColor,
-                icon: outOfStockBranches > 0
+                icon: isOutOfStock
                     ? Icons.remove_shopping_cart_rounded
-                    : lowStockBranches > 0
+                    : isLow
                         ? Icons.warning_amber_rounded
                         : Icons.check_circle_outline_rounded,
               ),
@@ -1258,6 +2288,9 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                 _ItemInfoChip(label: item.sku, icon: Icons.qr_code_2_rounded),
                 _ItemInfoChip(
                     label: item.category, icon: Icons.category_outlined),
+                if (item.branch.isNotEmpty)
+                  _ItemInfoChip(
+                      label: item.branch, icon: Icons.storefront_outlined),
               ],
             ),
             const SizedBox(height: 15),
@@ -1272,7 +2305,7 @@ class _InventoryDashboardState extends State<InventoryDashboard>
                       letterSpacing: .7)),
               const Spacer(),
               Text(
-                '${_formatQuantity(totalQuantity)} ${item.unit}',
+                '${_formatQuantity(item.quantity)} ${item.unit}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.subtitle
@@ -1280,8 +2313,6 @@ class _InventoryDashboardState extends State<InventoryDashboard>
               ),
             ]),
             const SizedBox(height: 8),
-            ...items.map((stock) => _buildBranchStockRow(stock)),
-            const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
@@ -1292,108 +2323,61 @@ class _InventoryDashboardState extends State<InventoryDashboard>
               ),
             ),
             const SizedBox(height: 6),
-            Text(
-              '${item.unitCost == null ? 'Unit cost not set' : 'LKR ${item.unitCost!.toStringAsFixed(2)}'} / ${item.unit}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.caption
-                  .copyWith(color: AppColors.textMuted, fontSize: 10),
-            ),
+            Row(children: [
+              Expanded(
+                child: Text(
+                  item.reorderLevel > 0
+                      ? 'Reorder at ${_formatQuantity(item.reorderLevel)} ${item.unit}'
+                      : 'No reorder level set',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textSecondary),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${item.unitCost == null ? 'Unit cost not set' : 'LKR ${item.unitCost!.toStringAsFixed(2)}'} / ${item.unit}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.textMuted, fontSize: 10),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showItemQrLabel(item),
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 17),
+                  label: const Text('Item label'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    minimumSize: const Size(0, 40),
+                    side: const BorderSide(color: AppColors.glassBorder),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(11)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: () => _quickAdjustItem(item),
+                  icon: const Icon(Icons.tune_rounded, size: 17),
+                  label: const Text('Adjust stock'),
+                  style: FilledButton.styleFrom(
+                    foregroundColor: AppColors.cyan,
+                    backgroundColor: AppColors.cyan.withValues(alpha: .12),
+                    minimumSize: const Size(0, 40),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(11)),
+                  ),
+                ),
+              ),
+            ]),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildBranchStockRow(InventoryItem item) {
-    final outOfStock = item.quantity <= 0;
-    final lowStock = item.isLowStock;
-    final statusColor = outOfStock
-        ? const Color(0xFFF16D83)
-        : lowStock
-            ? const Color(0xFFF3B64D)
-            : const Color(0xFF55D6C2);
-    final statusLabel = outOfStock
-        ? 'OUT'
-        : lowStock
-            ? 'LOW'
-            : 'OK';
-
-    return Container(
-      key: ValueKey('dashboard-branch-stock-${item.id}'),
-      margin: const EdgeInsets.only(top: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .035),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.storefront_outlined,
-              color: AppColors.cyan, size: 15),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.branch.isEmpty ? 'Unassigned branch' : item.branch,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.caption.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  'Reorder at ${_formatQuantity(item.reorderLevel)} ${item.unit}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textMuted,
-                    fontSize: 9,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            '${_formatQuantity(item.quantity)} ${item.unit}',
-            style: AppTextStyles.caption.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            statusLabel,
-            style: AppTextStyles.caption.copyWith(
-              color: statusColor,
-              fontWeight: FontWeight.w800,
-              fontSize: 9,
-            ),
-          ),
-          IconButton(
-            tooltip: 'Adjust stock at ${item.branch}',
-            onPressed: () => _quickAdjustItem(item),
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-            padding: EdgeInsets.zero,
-            icon:
-                const Icon(Icons.tune_rounded, color: AppColors.cyan, size: 17),
-          ),
-          IconButton(
-            tooltip: 'Item label for ${item.branch}',
-            onPressed: () => _showItemQrLabel(item),
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-            padding: EdgeInsets.zero,
-            icon: const Icon(Icons.qr_code_2_rounded,
-                color: AppColors.textSecondary, size: 17),
-          ),
-        ],
       ),
     );
   }
@@ -1580,15 +2564,13 @@ class _ItemInfoChip extends StatelessWidget {
       );
 }
 
-class _CyberStatCard extends StatefulWidget {
+class _CyberStatCard extends StatelessWidget {
   const _CyberStatCard({
-    super.key,
     required this.label,
     required this.value,
     required this.icon,
     required this.accentColor,
     required this.subLabel,
-    this.onTap,
   });
 
   final String label;
@@ -1596,181 +2578,81 @@ class _CyberStatCard extends StatefulWidget {
   final IconData icon;
   final Color accentColor;
   final String subLabel;
-  final VoidCallback? onTap;
-
-  @override
-  State<_CyberStatCard> createState() => _CyberStatCardState();
-}
-
-class _CyberStatCardState extends State<_CyberStatCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _glowCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2200),
-  )..repeat(reverse: true);
-
-  bool _pressed = false;
-
-  @override
-  void dispose() {
-    _glowCtrl.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _glowCtrl,
-      builder: (context, _) {
-        final pulse = Curves.easeInOut.transform(_glowCtrl.value);
-        return GestureDetector(
-          onTapDown: (_) => setState(() => _pressed = true),
-          onTapUp: (_) {
-            setState(() => _pressed = false);
-            widget.onTap?.call();
-          },
-          onTapCancel: () => setState(() => _pressed = false),
-          child: AnimatedScale(
-            scale: _pressed ? 0.96 : 1.0,
-            duration: const Duration(milliseconds: 120),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFF1A3540),
-                    Color.lerp(
-                        const Color(0xFF122630), widget.accentColor, 0.09)!,
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color:
-                      widget.accentColor.withValues(alpha: 0.2 + 0.15 * pulse),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: widget.accentColor
-                        .withValues(alpha: 0.08 + 0.1 * pulse),
-                    blurRadius: 16 + 10 * pulse,
-                    spreadRadius: pulse,
-                    offset: const Offset(0, 4),
-                  ),
-                  const BoxShadow(
-                    color: Color(0x30000000),
-                    blurRadius: 12,
-                    offset: Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Animated top accent bar
-                  Container(
-                    height: 3,
-                    width: 38 + 10 * pulse,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(3),
-                      gradient: LinearGradient(colors: [
-                        widget.accentColor,
-                        widget.accentColor.withValues(alpha: .3),
-                      ]),
-                      boxShadow: [
-                        BoxShadow(
-                          color: widget.accentColor.withValues(alpha: 0.5),
-                          blurRadius: 6 + 4 * pulse,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      // Glowing icon box
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          gradient: RadialGradient(colors: [
-                            widget.accentColor
-                                .withValues(alpha: 0.22 + 0.1 * pulse),
-                            widget.accentColor.withValues(alpha: 0.06),
-                          ]),
-                          borderRadius: BorderRadius.circular(11),
-                          border: Border.all(
-                            color: widget.accentColor
-                                .withValues(alpha: 0.25 + 0.1 * pulse),
-                          ),
-                        ),
-                        child: Icon(widget.icon,
-                            size: 18, color: widget.accentColor),
-                      ),
-                      const Spacer(),
-                      if (widget.onTap != null)
-                        Icon(
-                          Icons.arrow_forward_rounded,
-                          size: 14,
-                          color: widget.accentColor.withValues(alpha: 0.5),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    widget.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.label.copyWith(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.9,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    widget.value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.headlineSmall.copyWith(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.8,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    widget.subLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.caption.copyWith(
-                      fontSize: 10,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
+    return InventoryPanel(
+      padding: const EdgeInsets.all(14),
+      borderColor: const Color(0xFF29394D),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 3,
+            width: 38,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(3),
+              gradient: LinearGradient(colors: [
+                accentColor,
+                accentColor.withValues(alpha: .28),
+              ]),
             ),
           ),
-        );
-      },
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.label.copyWith(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(icon, size: 17, color: accentColor),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.headlineSmall.copyWith(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.caption.copyWith(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _ActionTile extends StatefulWidget {
+class _ActionTile extends StatelessWidget {
   const _ActionTile({
-    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.color,
     required this.onTap,
-    this.compact = false,
   });
 
   final IconData icon;
@@ -1778,159 +2660,290 @@ class _ActionTile extends StatefulWidget {
   final String subtitle;
   final Color color;
   final VoidCallback onTap;
-  final bool compact;
-
-  @override
-  State<_ActionTile> createState() => _ActionTileState();
-}
-
-class _ActionTileState extends State<_ActionTile> {
-  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.95 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: EdgeInsets.all(widget.compact ? 13 : 15),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF1A3540),
-                Color.lerp(const Color(0xFF122630), widget.color, 0.1)!,
+    return InventoryPanel(
+      padding: const EdgeInsets.all(14),
+      borderColor: const Color(0xFF29394D),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.11),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: AppTextStyles.subtitle.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
               ],
             ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: _pressed
-                  ? widget.color.withValues(alpha: 0.55)
-                  : widget.color.withValues(alpha: 0.2),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: _pressed
-                    ? widget.color.withValues(alpha: 0.22)
-                    : widget.color.withValues(alpha: 0.08),
-                blurRadius: _pressed ? 20 : 10,
-                offset: const Offset(0, 5),
-              ),
-              const BoxShadow(
-                color: Color(0x30000000),
-                blurRadius: 12,
-                offset: Offset(0, 5),
-              ),
-            ],
           ),
-          child: widget.compact
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        _buildIcon(size: 40),
-                        const Spacer(),
-                        Icon(
-                          Icons.arrow_forward_rounded,
-                          size: 14,
-                          color: widget.color.withValues(alpha: 0.55),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      widget.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.subtitle.copyWith(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                        letterSpacing: -.2,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      widget.subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: 10,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    _buildIcon(),
-                    const SizedBox(width: 13),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            widget.title,
-                            style: AppTextStyles.subtitle.copyWith(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 14,
-                              letterSpacing: -.2,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            widget.subtitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.caption.copyWith(
-                              color: AppColors.textSecondary,
-                              fontSize: 11,
-                              height: 1.35,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 12,
-                      color: widget.color.withValues(alpha: 0.55),
-                    ),
-                  ],
-                ),
-        ),
+          const Icon(Icons.arrow_forward_ios_rounded,
+              size: 12, color: AppColors.textMuted),
+        ],
       ),
     );
+  }
+}
+
+class _AiResultNote extends StatelessWidget {
+  const _AiResultNote({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .07),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: .24)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 17),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTextStyles.subtitle.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    detail,
+                    style: AppTextStyles.bodyMuted.copyWith(
+                      fontSize: 12,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _AiMetricPill extends StatelessWidget {
+  const _AiMetricPill({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .09),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: .24)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 10,
+            ),
+          ),
+        ]),
+      );
+}
+
+class _AiScopeTile extends StatelessWidget {
+  const _AiScopeTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.accent,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 11),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0E192D).withValues(alpha: .72),
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: accent.withValues(alpha: .2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 16, color: accent),
+            const SizedBox(height: 10),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: AppTextStyles.subtitle.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: AppTextStyles.label.copyWith(
+                  color: AppColors.textMuted,
+                  fontSize: 7,
+                  letterSpacing: .35,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _AiPulseMark extends StatefulWidget {
+  const _AiPulseMark({required this.size});
+
+  final double size;
+
+  @override
+  State<_AiPulseMark> createState() => _AiPulseMarkState();
+}
+
+class _AiPulseMarkState extends State<_AiPulseMark>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  );
+  bool? _motionDisabled;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableMotion = MediaQuery.of(context).disableAnimations;
+    if (disableMotion == _motionDisabled) return;
+    _motionDisabled = disableMotion;
+    if (disableMotion) {
+      _controller
+        ..stop()
+        ..value = .5;
+    } else {
+      _controller.repeat(reverse: true);
+    }
   }
 
-  Widget _buildIcon({double size = 44}) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        gradient: RadialGradient(colors: [
-          widget.color.withValues(alpha: 0.22),
-          widget.color.withValues(alpha: 0.06),
-        ]),
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: widget.color.withValues(alpha: 0.28)),
-      ),
-      child: Icon(widget.icon, color: widget.color, size: size * .48),
-    );
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final pulse = Curves.easeInOut.transform(_controller.value);
+          return Transform.translate(
+            offset: Offset(0, -1.5 + (pulse * 3)),
+            child: Container(
+              width: widget.size,
+              height: widget.size,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.cyan.withValues(alpha: .24 + (.13 * pulse)),
+                    AppColors.violet.withValues(alpha: .18 + (.12 * pulse)),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(
+                  color: AppColors.cyan.withValues(alpha: .24 + (.2 * pulse)),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color:
+                        AppColors.cyan.withValues(alpha: .07 + (.11 * pulse)),
+                    blurRadius: 8 + (8 * pulse),
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                size: widget.size * .48,
+                color: AppColors.cyan,
+              ),
+            ),
+          );
+        },
+      );
 }
 
 class InventoryDashboardRepository {
@@ -1984,30 +2997,17 @@ class InventoryDashboardRepository {
   }
 
   Future<int> _loadPendingOrders() async {
-    var page = 1;
-    var totalPages = 1;
-    var pending = 0;
-    const terminal = {'received', 'cancelled'};
-    do {
-      final response =
-          await _client.get('/api/purchase-orders?page=$page&pageSize=100');
-      if (response.statusCode != 200) {
-        throw Exception('Purchase order request failed');
-      }
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final items = (data['items'] as List?) ?? const [];
-      pending += items.where((order) {
-        final status =
-            (order is Map ? order['status'] : null)?.toString().toLowerCase() ??
-                '';
-        return !terminal.contains(status);
-      }).length;
-      if (page == 1) {
-        totalPages = (data['totalPages'] as num?)?.toInt() ?? 1;
-      }
-      page++;
-    } while (page <= totalPages);
-    return pending;
+    final response = await _client.get('/api/purchase-orders?pageSize=100');
+    if (response.statusCode != 200) {
+      throw Exception('Purchase order request failed');
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = (data['items'] as List?) ?? const [];
+    const terminal = {'Received', 'Cancelled'};
+    return items.where((o) {
+      final status = (o is Map ? o['status'] : null)?.toString() ?? '';
+      return !terminal.contains(status);
+    }).length;
   }
 }
 
@@ -2021,313 +3021,4 @@ class DashboardSummary {
   });
   final int totalItems, lowStock, outOfStock, pendingOrders;
   final double totalValue;
-}
-
-class _AnimatedHeroBanner extends StatefulWidget {
-  const _AnimatedHeroBanner({
-    required this.summary,
-    required this.allItemsLength,
-    required this.loading,
-    this.role,
-  });
-
-  final DashboardSummary? summary;
-  final int allItemsLength;
-  final bool loading;
-  final String? role;
-
-  @override
-  State<_AnimatedHeroBanner> createState() => _AnimatedHeroBannerState();
-}
-
-class _AnimatedHeroBannerState extends State<_AnimatedHeroBanner>
-    with TickerProviderStateMixin {
-  late final AnimationController _pulseCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 4),
-  )..repeat(reverse: true);
-
-  late final AnimationController _sheenCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 3200),
-  )..repeat();
-
-  late final AnimationController _floatCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2400),
-  )..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _pulseCtrl.dispose();
-    _sheenCtrl.dispose();
-    _floatCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([_pulseCtrl, _sheenCtrl, _floatCtrl]),
-      builder: (context, _) {
-        final pulse = Curves.easeInOut.transform(_pulseCtrl.value);
-        final floatY = -4.0 * Curves.easeInOut.transform(_floatCtrl.value);
-
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: Color.lerp(
-                const Color(0xFF47776D),
-                const Color(0xFF8AE8C7),
-                pulse,
-              )!
-                  .withValues(alpha: 0.6 + 0.3 * pulse),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF4F46E5)
-                    .withValues(alpha: 0.15 + 0.12 * pulse),
-                blurRadius: 28 + 12 * pulse,
-                spreadRadius: 2 * pulse,
-                offset: const Offset(0, 8),
-              ),
-              const BoxShadow(
-                color: Color(0x40000000),
-                blurRadius: 16,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(22),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment(-1.0 + 0.4 * pulse, -1.0),
-                  end: Alignment(1.0, 1.0 - 0.4 * pulse),
-                  colors: [
-                    Color.lerp(const Color(0xFF174B4D), const Color(0xFF244B44),
-                        pulse)!,
-                    Color.lerp(const Color(0xFF17343E), const Color(0xFF203C45),
-                        pulse)!,
-                    const Color(0xFF122A35),
-                  ],
-                ),
-              ),
-              child: Stack(
-                children: [
-                  // Ambient glowing orb top right
-                  Positioned(
-                    right: -30,
-                    top: -50,
-                    child: Container(
-                      width: 180 + 30 * pulse,
-                      height: 180 + 30 * pulse,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            const Color(0xFF7C3AED)
-                                .withValues(alpha: 0.22 + 0.12 * pulse),
-                            const Color(0xFF06B6D4).withValues(alpha: 0.08),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Ambient secondary glow bottom left
-                  Positioned(
-                    left: -20,
-                    bottom: -30,
-                    child: Container(
-                      width: 140,
-                      height: 140,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            const Color(0xFF00E5FF)
-                                .withValues(alpha: 0.12 + 0.08 * pulse),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Shimmer sweep beam
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Align(
-                        alignment: Alignment(-2.0 + 4.0 * _sheenCtrl.value, 0),
-                        child: Transform.rotate(
-                          angle: -0.35,
-                          child: Container(
-                            width: 60,
-                            height: 400,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.transparent,
-                                  Colors.white.withValues(alpha: 0.05),
-                                  Colors.white.withValues(alpha: 0.12),
-                                  Colors.white.withValues(alpha: 0.05),
-                                  Colors.transparent,
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Main content
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            // 3D Bobbing glowing icon container
-                            Transform.translate(
-                              offset: Offset(0, floatY),
-                              child: Container(
-                                width: 50,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Color(0xFF312E81),
-                                      Color(0xFF1E1B4B),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: const Color(0xFF6366F1)
-                                        .withValues(alpha: 0.4 + 0.3 * pulse),
-                                    width: 1.4,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFF6366F1)
-                                          .withValues(alpha: 0.3 + 0.2 * pulse),
-                                      blurRadius: 14 + 6 * pulse,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.inventory_2_rounded,
-                                  color: Color(0xFF67E8F9),
-                                  size: 26,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 6,
-                                        height: 6,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: const Color(0xFF22C55E),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: const Color(0xFF22C55E)
-                                                  .withValues(alpha: 0.7),
-                                              blurRadius: 6 + 4 * pulse,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        'LIVE OPERATIONS',
-                                        style: AppTextStyles.label.copyWith(
-                                          color: const Color(0xFF67E8F9),
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 1.2,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  ShaderMask(
-                                    shaderCallback: (bounds) =>
-                                        const LinearGradient(
-                                      colors: [
-                                        Colors.white,
-                                        Color(0xFFE0E7FF),
-                                        Color(0xFFC7D2FE),
-                                      ],
-                                    ).createShader(bounds),
-                                    child: Text(
-                                      'Inventory Hub',
-                                      style: AppTextStyles.title.copyWith(
-                                        fontSize: 23,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: -0.6,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (widget.role case final role?)
-                              _RoleBadge(label: role.trim().toUpperCase()),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          'Real-time overview of products, stock movements, branch allocations, and reorder levels.',
-                          style: AppTextStyles.body.copyWith(
-                            color: const Color(0xFFCBD5E1),
-                            fontSize: 12.5,
-                            height: 1.45,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _HeroPill(
-                              icon: Icons.inventory_2_outlined,
-                              label:
-                                  '${widget.summary?.totalItems ?? widget.allItemsLength} SKUs Monitored',
-                            ),
-                            _HeroPill(
-                              icon: Icons.wifi_tethering_rounded,
-                              label: widget.loading
-                                  ? 'Synchronizing...'
-                                  : 'Active Feed',
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 }

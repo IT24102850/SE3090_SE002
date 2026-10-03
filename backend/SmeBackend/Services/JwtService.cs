@@ -31,14 +31,13 @@ public class JwtService : IJwtService
     
     // InventoryAccessHandler gates Staff on explicit "component" grants. Until
     // per-user grants are stored, Staff get the baseline set the mobile device
-    // app needs (stock counts, scans, and purchase request creation); approval
+    // app needs (stock counts, scans, PO queue view); purchase-order approval
     // stays with Manager/Admin.
     public static readonly string[] StaffComponentGrants =
     {
         "inventory.read",
         "inventory.write",
-        "purchase-orders.read",
-        "purchase-orders.write"
+        "purchase-orders.read"
     };
 
     public string GenerateAccessToken(User user)

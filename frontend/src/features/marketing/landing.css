@@ -1566,7 +1566,10 @@ html[data-unify-theme='dark'] .su {
   align-items: center;
   gap: 8px;
 }
-.lp-home-nav-links button {
+/* Pricing is a real page, not an in-page anchor, so it is an <a>; it has to
+   sit beside the scroll buttons without looking like a different thing. */
+.lp-home-nav-links button,
+.lp-home-nav-links a {
   background: transparent;
   border: 0;
   padding: 8px 14px;
@@ -1575,9 +1578,11 @@ html[data-unify-theme='dark'] .su {
   font-weight: 650;
   color: var(--lp-text-secondary);
   cursor: pointer;
+  text-decoration: none;
   transition: color 0.2s, background-color 0.2s;
 }
-.lp-home-nav-links button:hover {
+.lp-home-nav-links button:hover,
+.lp-home-nav-links a:hover {
   color: var(--lp-brand);
   background: var(--lp-border-subtle);
 }

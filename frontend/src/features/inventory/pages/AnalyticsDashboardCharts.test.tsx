@@ -3,23 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider as AppToastProvider } from '../../../shared/components/Toast';
 import { AnalyticsDashboardPage } from './AnalyticsDashboardCharts';
 import { ToastProvider } from '../ui/ToastContext';
-import { MemoryRouter } from 'react-router-dom';
 
 describe('inventory sales activity', () => {
-  const commerceReport = {
-    salesCount: 2,
-    salesRevenue: 12500,
-    customerOrderCount: 4,
-    customerOrderValue: 28500,
-    pendingOrders: 1,
-    confirmedOrders: 0,
-    preparingOrders: 1,
-    readyForPickupOrders: 1,
-    outForDeliveryOrders: 0,
-    completedOrders: 1,
-    cancelledOrders: 0,
-  };
-
   beforeEach(() => {
     localStorage.clear();
   });
@@ -55,9 +40,7 @@ describe('inventory sales activity', () => {
               },
             ],
           }
-        : path.startsWith('/api/reports/branch-commerce')
-          ? commerceReport
-          : path.startsWith('/api/reports/inventory-usage')
+        : path.startsWith('/api/reports/inventory-usage')
           ? {
               totalReceivedQuantity: 0,
               totalIssuedQuantity: 0,
@@ -100,73 +83,23 @@ describe('inventory sales activity', () => {
     );
 
     render(
-      <MemoryRouter><AppToastProvider>
+      <AppToastProvider>
         <ToastProvider>
           <AnalyticsDashboardPage />
         </ToastProvider>
-      </AppToastProvider></MemoryRouter>,
+      </AppToastProvider>,
     );
 
     expect(await screen.findByText('What’s happening in sales')).toBeInTheDocument();
     expect(screen.getByText('SALE-20260929-001')).toBeInTheDocument();
     expect(screen.getByText('Coffee Beans')).toBeInTheDocument();
-    expect(screen.getByText('SALE-20260929-001').closest('.inventory-sales-reference')).toBeInTheDocument();
-    expect(screen.getByText('SALE REF')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('Orders placed').closest('article')).toHaveTextContent('4');
-    const orderValueCard = screen.getByText('Total order value').closest('.inventory-analytics-order-value');
-    expect(orderValueCard).toHaveTextContent('28,500');
-    expect(orderValueCard).toHaveTextContent('Excludes cancelled orders');
-    expect(orderValueCard).not.toHaveTextContent('NaN');
-    expect(screen.getByText('Awaiting review').closest('article')).toHaveTextContent('1');
-    expect(screen.getByText('Completed').closest('article')).toHaveTextContent('1');
     expect(screen.getAllByText('Gross profit')).toHaveLength(2);
-    const revenueMetric = screen.getByText('Sales revenue').closest('article');
-    expect(revenueMetric).toHaveClass('inventory-analytics-metric');
-    expect(revenueMetric?.querySelector('.inventory-analytics-metric-main')).not.toBeNull();
-    expect(revenueMetric?.querySelector('.inventory-analytics-metric-detail')).toHaveTextContent('Revenue from recorded sales');
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/^\/api\/reports\/sales-activity\?/),
       expect.anything(),
     );
     await waitFor(() => expect(screen.getByText('Recent sales')).toBeInTheDocument());
-  });
-
-  it('links to the dedicated branch performance report', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const path = String(input);
-      const body = path.startsWith('/api/reports/sales-activity')
-        ? { salesCount: 0, totalRevenue: 0, averageSale: 0, costOfGoodsSold: 0, grossProfit: 0, page: 1, pageSize: 5, totalPages: 0, recentSales: [] }
-        : path.startsWith('/api/reports/branch-commerce')
-          ? commerceReport
-          : path.startsWith('/api/reports/inventory-usage')
-          ? { totalReceivedQuantity: 0, totalIssuedQuantity: 0, netQuantity: 0, items: [] }
-          : { items: [], totalCount: 0, totalPages: 0 };
-      return { ok: true, json: async () => body } as Response;
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('matchMedia', vi.fn(() => ({
-      matches: false,
-      media: '(prefers-color-scheme: dark)',
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(() => false),
-    })));
-
-    render(
-      <MemoryRouter><AppToastProvider>
-        <ToastProvider>
-          <AnalyticsDashboardPage />
-        </ToastProvider>
-      </AppToastProvider></MemoryRouter>,
-    );
-
-    const branchLink = await screen.findByRole('link', { name: 'View branch performance' });
-    expect(branchLink).toHaveAttribute('href', '/branch-performance');
-    expect(fetchMock).not.toHaveBeenCalledWith('/api/inventory/branches', expect.anything());
   });
 
   it('opens a printable receipt from recent sales', async () => {
@@ -195,9 +128,7 @@ describe('inventory sales activity', () => {
               },
             ],
           }
-        : path.startsWith('/api/reports/branch-commerce')
-          ? commerceReport
-          : path.startsWith('/api/reports/inventory-usage')
+        : path.startsWith('/api/reports/inventory-usage')
           ? {
               totalReceivedQuantity: 0,
               totalIssuedQuantity: 0,
@@ -223,11 +154,11 @@ describe('inventory sales activity', () => {
     );
 
     render(
-      <MemoryRouter><AppToastProvider>
+      <AppToastProvider>
         <ToastProvider>
           <AnalyticsDashboardPage />
         </ToastProvider>
-      </AppToastProvider></MemoryRouter>,
+      </AppToastProvider>,
     );
 
     fireEvent.click(await screen.findByRole('button', {
@@ -280,9 +211,6 @@ describe('inventory sales activity', () => {
           }),
         } as Response;
       }
-      if (path.startsWith('/api/reports/branch-commerce')) {
-        return { ok: true, json: async () => commerceReport } as Response;
-      }
 
       const body = path.startsWith('/api/reports/inventory-usage')
         ? { totalReceivedQuantity: 0, totalIssuedQuantity: 0, netQuantity: 0, items: [] }
@@ -305,11 +233,11 @@ describe('inventory sales activity', () => {
     );
 
     render(
-      <MemoryRouter><AppToastProvider>
+      <AppToastProvider>
         <ToastProvider>
           <AnalyticsDashboardPage />
         </ToastProvider>
-      </AppToastProvider></MemoryRouter>,
+      </AppToastProvider>,
     );
 
     expect(await screen.findByText('SALE-1')).toBeInTheDocument();

@@ -15,6 +15,8 @@ const NAV = [
   { path: '/platform', label: 'Overview', icon: '◎', end: true },
   { path: '/platform/tenants', label: 'Tenants', icon: '🏢' },
   { path: '/platform/users', label: 'Users', icon: '👥' },
+  { path: '/platform/revenue', label: 'Revenue', icon: '💰' },
+  { path: '/platform/copilot', label: 'Copilot', icon: '✦' },
   { path: '/platform/audit', label: 'Audit log', icon: '🧾' },
   { path: '/platform/security', label: 'Security', icon: '🔐' },
 ];

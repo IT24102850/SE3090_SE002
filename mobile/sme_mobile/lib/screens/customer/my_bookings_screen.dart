@@ -12,6 +12,7 @@ import '../../widgets/booking_qr_code.dart';
 import '../../widgets/date_slot_picker.dart';
 import '../../widgets/status_badge.dart';
 import '../../widgets/ui/ui.dart';
+import '../../widgets/add_to_calendar_button.dart';
 
 class MyBookingsScreen extends ConsumerWidget {
   const MyBookingsScreen({super.key});
@@ -282,6 +283,12 @@ class _BookingCard extends ConsumerWidget {
                 icon: Icons.qr_code_rounded,
                 height: 44,
                 onPressed: () => _showQr(context),
+              ),
+              // The guest's own calendar reminds them even when our push and
+              // SMS do not reach the phone.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: AddToCalendarButton(bookingId: booking.id),
               ),
             ],
             if (showActions && (booking.isCancellable || (booking.isReschedulable && booking.bookingUnit == 'Slot'))) ...[

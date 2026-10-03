@@ -1,3 +1,11 @@
+// pdf 3.11 is the newest release that still supports the Flutter version this
+// project pins, and its pw.TextStyle constructor asserts `fontNormal != null`
+// on a Font? - a comparison Dart refuses to evaluate in a constant expression.
+// Every `const pw.TextStyle(...)` here is therefore a compile error, while the
+// linter goes on recommending one. Built at runtime until the pdf constraint
+// can move with the SDK.
+// ignore_for_file: prefer_const_constructors
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -39,7 +47,7 @@ class SaleReceipt {
   String get shareText {
     final time = occurredAt.toLocal().toString();
     return [
-      'UNIFY · SALES RECEIPT',
+      'SALES RECEIPT',
       'Reference: $reference',
       'Date: ${time.substring(0, 16)}',
       'Branch: $branch',
@@ -51,7 +59,7 @@ class SaleReceipt {
       if (unitPrice == null) 'Quantity total: ${_formatQuantity(quantity)}',
       'TOTAL: LKR ${_money(total)}',
       '',
-      'Inventory sale recorded in Unify. Payment collection is not recorded by this receipt.',
+      'Inventory sale recorded. Payment collection is not handled by this receipt.',
     ].join('\n');
   }
 
@@ -106,7 +114,7 @@ class SaleReceiptPdfGenerator {
                     children: [
                       pw.Text(
                         'SALES RECEIPT',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: PdfColors.white,
                           fontSize: 10,
                           fontWeight: pw.FontWeight.bold,
@@ -116,7 +124,7 @@ class SaleReceiptPdfGenerator {
                       pw.SizedBox(height: 7),
                       pw.Text(
                         'Sale recorded',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: PdfColors.white,
                           fontSize: 23,
                           fontWeight: pw.FontWeight.bold,
@@ -124,8 +132,8 @@ class SaleReceiptPdfGenerator {
                       ),
                       pw.SizedBox(height: 5),
                       pw.Text(
-                        'Official inventory sale record',
-                        style: const pw.TextStyle(
+                        'Inventory transaction receipt',
+                        style: pw.TextStyle(
                           color: PdfColor.fromInt(0xFFC3D1E1),
                           fontSize: 10,
                         ),
@@ -143,8 +151,8 @@ class SaleReceiptPdfGenerator {
                     borderRadius: pw.BorderRadius.all(pw.Radius.circular(9)),
                   ),
                   child: pw.Text(
-                    'SALE RECORDED',
-                    style: const pw.TextStyle(
+                    'PAID STATUS NOT RECORDED',
+                    style: pw.TextStyle(
                       color: PdfColor.fromInt(0xFF8CEBFA),
                       fontSize: 7,
                       fontWeight: pw.FontWeight.bold,
@@ -210,7 +218,7 @@ class SaleReceiptPdfGenerator {
                           children: [
                             pw.Text(
                               receipt.itemName,
-                              style: const pw.TextStyle(
+                              style: pw.TextStyle(
                                 color: _ink,
                                 fontSize: 12,
                                 fontWeight: pw.FontWeight.bold,
@@ -221,7 +229,7 @@ class SaleReceiptPdfGenerator {
                               pw.SizedBox(height: 4),
                               pw.Text(
                                 'SKU ${receipt.sku}',
-                                style: const pw.TextStyle(
+                                style: pw.TextStyle(
                                   color: _muted,
                                   fontSize: 9,
                                 ),
@@ -235,19 +243,19 @@ class SaleReceiptPdfGenerator {
                         receipt.unitPrice == null
                             ? 'Qty ${_quantity(receipt.quantity)}'
                             : '${_quantity(receipt.quantity)} ${receipt.unit}',
-                        style: const pw.TextStyle(color: _ink, fontSize: 9),
+                        style: pw.TextStyle(color: _ink, fontSize: 9),
                       ),
                       if (receipt.unitPrice != null) ...[
                         pw.SizedBox(width: 18),
                         pw.Text(
                           'LKR ${_money(receipt.unitPrice!)}',
-                          style: const pw.TextStyle(color: _ink, fontSize: 9),
+                          style: pw.TextStyle(color: _ink, fontSize: 9),
                         ),
                       ],
                       pw.SizedBox(width: 18),
                       pw.Text(
                         'LKR ${_money(receipt.total)}',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: _ink,
                           fontSize: 9,
                           fontWeight: pw.FontWeight.bold,
@@ -283,7 +291,7 @@ class SaleReceiptPdfGenerator {
                         receipt.remainingQuantity == null
                             ? 'Saved sale transaction'
                             : 'Stock remaining: ${_quantity(receipt.remainingQuantity!)} ${receipt.unit}',
-                        style: const pw.TextStyle(color: _ink, fontSize: 9),
+                        style: pw.TextStyle(color: _ink, fontSize: 9),
                       ),
                     ],
                   ),
@@ -302,7 +310,7 @@ class SaleReceiptPdfGenerator {
                   children: [
                     pw.Text(
                       'TOTAL',
-                      style: const pw.TextStyle(
+                      style: pw.TextStyle(
                         color: PdfColor.fromInt(0xFFC3D1E1),
                         fontSize: 9,
                         fontWeight: pw.FontWeight.bold,
@@ -312,7 +320,7 @@ class SaleReceiptPdfGenerator {
                     pw.SizedBox(height: 7),
                     pw.Text(
                       'LKR ${_money(receipt.total)}',
-                      style: const pw.TextStyle(
+                      style: pw.TextStyle(
                         color: PdfColors.white,
                         fontSize: 19,
                         fontWeight: pw.FontWeight.bold,
@@ -328,15 +336,15 @@ class SaleReceiptPdfGenerator {
           pw.Container(height: 1, color: _line),
           pw.SizedBox(height: 12),
           pw.Text(
-            'This receipt confirms that the inventory sale was recorded in Unify. Payment collection is not recorded by this receipt.',
+            'This receipt confirms an inventory sale record only. It does not confirm that payment was collected.',
             textAlign: pw.TextAlign.center,
-            style: const pw.TextStyle(color: _muted, fontSize: 8),
+            style: pw.TextStyle(color: _muted, fontSize: 8),
           ),
           pw.SizedBox(height: 5),
           pw.Text(
-            'Generated by Unify',
+            'Generated by SME Mobile',
             textAlign: pw.TextAlign.center,
-            style: const pw.TextStyle(color: _cyan, fontSize: 8),
+            style: pw.TextStyle(color: _cyan, fontSize: 8),
           ),
         ],
       ),
@@ -351,7 +359,7 @@ class SaleReceiptPdfGenerator {
           pw.SizedBox(height: 5),
           pw.Text(
             value,
-            style: const pw.TextStyle(
+            style: pw.TextStyle(
               color: _ink,
               fontSize: 10,
               fontWeight: pw.FontWeight.bold,
@@ -362,7 +370,7 @@ class SaleReceiptPdfGenerator {
 
   static pw.Widget _tableHeader(String value) => pw.Text(
         value,
-        style: const pw.TextStyle(
+        style: pw.TextStyle(
           color: _muted,
           fontSize: 7,
           fontWeight: pw.FontWeight.bold,
@@ -386,7 +394,7 @@ class SaleReceiptPdfGenerator {
         ),
         child: pw.Text(
           'LOW STOCK  |  Remaining quantity is at or below the reorder level.',
-          style: const pw.TextStyle(
+          style: pw.TextStyle(
             color: _amber,
             fontSize: 9,
             fontWeight: pw.FontWeight.bold,
@@ -464,16 +472,7 @@ class _SaleReceiptDialogState extends State<SaleReceiptDialog> {
                 color: AppColors.cyan, size: 34),
             const SizedBox(height: 8),
             Text(
-              'UNIFY · SALES RECEIPT',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.label.copyWith(
-                color: AppColors.cyan,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Sale recorded',
+              'Sales receipt',
               textAlign: TextAlign.center,
               style: AppTextStyles.subtitle.copyWith(
                 color: AppColors.textPrimary,
@@ -481,12 +480,6 @@ class _SaleReceiptDialogState extends State<SaleReceiptDialog> {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              'Official inventory sale record',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 8),
             Text(
               receipt.reference,
               key: const Key('sale-receipt-reference'),
@@ -549,7 +542,7 @@ class _SaleReceiptDialogState extends State<SaleReceiptDialog> {
             ],
             const SizedBox(height: 12),
             Text(
-              'Inventory sale recorded in Unify. Payment collection is not recorded by this receipt.',
+              'Inventory sale recorded. Payment collection is not handled by this receipt.',
               textAlign: TextAlign.center,
               style: AppTextStyles.caption.copyWith(
                 color: AppColors.textMuted,
@@ -583,26 +576,10 @@ class _SaleReceiptDialogState extends State<SaleReceiptDialog> {
       fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
     );
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: style,
-          ),
-        ),
+        Expanded(child: Text(label, style: style)),
         const SizedBox(width: 12),
-        Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.end,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: style,
-          ),
-        ),
+        Text(value, style: style),
       ],
     );
   }

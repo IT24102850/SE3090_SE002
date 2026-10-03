@@ -1,17 +1,53 @@
 # SE3090_SE002 - Universal SME Management Platform
 
 ## Team Members
-- Hasiru - Universal Booking & Resource Engine + Planner/Coordinator Agent
-- Student 2 - Billing, Payments & Dynamic Forms Engine + Domain Analysis Agent
-- Student 3 - Inventory, Analytics & Intelligence Hub + Action/Tool Agent + Validation/Safety Agent
+
+A three-member group, so three primary business components - one per
+student, as Section 3 of the specification requires.
+
+> **⚠ GROUP-SIZE APPROVAL — NOT YET RECORDED. Fill in before submitting.**
+>
+> Section 3 requires the lecturer-in-charge's **written** approval for a group
+> size other than four. Replace this whole block with the real details and put
+> a copy of the approval in the consolidated report:
+>
+> - Approved by: `<lecturer-in-charge's name>`
+> - Date of approval: `<date>`
+> - Evidence: `<email / Course Web message / other, and where it is in the report>`
+>
+> This block is deliberately visible rather than a hidden comment: an
+> unfilled placeholder that ships is an obvious gap an evaluator can ask
+> about, whereas an invented name and date would be fabricated evidence
+> under Section 18.2. If the approval does not exist yet, request it — do not
+> write something here to make the warning go away.
+
+The Agentic AI column names the files each student authored; it matches
+`git log --author`.
+
+| Student | ID | Primary component | Agentic AI contribution (own files) |
+|---|---|---|---|
+| Hasiru Chamika | IT24102850 | Universal Booking & Resource Engine (bookings, resources, schedules, availability, check-in) | The four-agent booking pipeline - Planner/Coordinator, Domain Analysis, Action/Tool and Validation/Safety - used by **Schedule Copilot** and customer **find-and-book** (`agentic-ai-service/agents/planner_agent.py`, `domain_analysis_agent.py`, `action_tool_agent.py`, `validation_safety_agent.py`, `schedule_*.py`, `tools/booking_tools.py`, `tools/schedule_tools.py`, `Services/PlannerAgentService.cs`, `Controllers/AgentWorkflowController.cs`); also the Platform Operations Copilot (`agents/platform_*.py`) |
+| Oshadi | IT24101203 | Billing, Payments & Dynamic Forms Engine | **Billing Copilot** - the planning and narration agent at the model edges (`agentic-ai-service/agents/billing_planner.py`, `schemas/billing_contracts.py`) and the deterministic billing analysis agent it drives (`Services/Billing/BillingAgentService.cs`, `Controllers/BillingAgentController.cs`) |
+| Hasaranga Abeyrathna | IT24102315 | Inventory, Analytics & Intelligence Hub | **StockSense** - inventory agents for planning, inventory-domain analysis, replenishment recommendation and health analysis (`agentic-ai-service/agents/inventory_agents.py`, `tools/inventory_tools.py`, `Services/InventoryAgentService.cs`). The StockSense reorder workflow built on it - deterministic safety gate, persisted state and human approval (`Services/Inventory/ReorderSafetyGate.cs`, `Controllers/StockSenseReordersController.cs`) - was prepared by Hasiru Chamika with Claude Code and reviewed by Hasaranga, as `git log` shows |
+
+The Platform console (SuperAdmin, Unify subscriptions) is additional scope
+beyond the three primary components.
 
 ## Tech Stack
 - **Backend:** ASP.NET Core 8 Web API, Entity Framework Core, PostgreSQL
-- **Frontend:** React 19, Vite, Redux Toolkit, Tailwind CSS
+- **Frontend:** React 18, Vite, Redux Toolkit (+ RTK Query)
 - **Mobile:** Flutter, Dart, Riverpod
-- **Agentic AI:** LangGraph (Python), FastAPI, Ollama (llama3)
-- **Database:** PostgreSQL (Supabase/Railway)
-- **Deployment:** Railway (API + DB), Vercel (React), Local APK (Flutter)
+- **Agentic AI:** FastAPI (Python) with a custom four-agent orchestration
+  (Planner -> Domain Analysis -> Action/Tool -> Validation/Safety). Gemini is
+  the default model provider, with an Ollama provider behind `LLM_PROVIDER`.
+  Not LangGraph: the pipeline is a fixed, auditable sequence with a
+  deterministic (non-LLM) safety gate, so a graph runtime would add a
+  dependency without adding control. See `agentic-ai-service/README.md`.
+  Two assessed workflows run on it: **Schedule Copilot** (staff objective → plan →
+  validated proposal → manager approval → apply; React and Flutter) and customer
+  **find-and-book** (Flutter request → agents → approval in React → status back to Flutter).
+- **Database:** PostgreSQL (Supabase)
+- **Deployment:** Render (API + agent service, Docker), Supabase (PostgreSQL), Vercel (React), Android APK (Flutter)
 
 ## Password reset email
 The forgot-password flow sends a six-digit code through Gmail SMTP or SendGrid.
@@ -347,77 +383,134 @@ The owner is seeded on startup in every environment, once. After that the
 password lives only as a hash in the database and is rotated from
 Security → Change password.
 
+## Platform Operations Copilot (the owner's Agentic AI)
+
+The fourth agentic workflow, and the only one that reasons **across** tenants
+rather than inside one. The platform owner gives it an objective — "reduce
+churn risk this month" — and four agents plan, read the platform's own
+commercial records, propose one intervention per at-risk business, and check
+every proposal against policy. Full detail in
+[`docs/platform-operations-copilot.md`](docs/platform-operations-copilot.md).
+
+The property it is built on: **the agent cannot carry out a high-impact
+action.** Extending a term or comping a plan goes through an endpoint that
+demands a fresh authenticator code, and the agent service has no database
+credentials, no write tool and no way to produce one. So no sequence of model
+outputs — however well injected — moves money here. A person with the
+authenticator does, or it does not happen.
+
+| Agent | Responsibility | Tools | Model |
+|---|---|---|---|
+| Planner | Objective → plan, states its reading of the goal | none | yes |
+| Analysis | Who is at risk, on what evidence | 3 read-only | yes |
+| Action | One intervention each, with cost | 1 read-only | yes |
+| Safety | Policy, caps, blast radius | none | **no** |
+
+- Tools are read-only *by construction* — there is no write method to call
+- Ceilings enforced three times: agent gate, API boundary, execution
+- The apply request carries *which* businesses, never *what to do* to them
+- No suspend or delete exists; every reachable write is additive for the tenant
+- 33 tests (19 Python, 14 C#), none of which involve a language model
+- Screen: `/platform/copilot`
+
+## Unify subscriptions (what a tenant pays us)
+
+A tenant admin has to hold a Unify subscription to get the platform. The price
+list, the payment gateways behind it, the gate that decides what a plan allows
+and the owner's revenue console are all described in
+[`docs/unify-subscription-pricing.md`](docs/unify-subscription-pricing.md).
+
+Not to be confused with `/subscriptions`, which is the memberships a tenant
+sells to *its own* customers (`Models/Subscription.cs`). Two different
+ledgers; they never share a table or a gateway credential.
+
+The ladder follows Tinder's playbook, because it is the best-documented
+consumer subscription funnel there is and most of it translates:
+
+| Plan | Monthly (LKR) | 12 months | Hook |
+|---|---|---|---|
+| **Starter** | Free forever | — | 1 branch, 2 team members, 60 bookings/month, a public listing. Capped, not crippled. |
+| **Grow** | 5,900 | 38,940 (−45%) | Unlimited bookings, card payments, SMS, the website widget |
+| **Pro** ★ | 14,900 | 98,340 (−45%) | The AI copilots and demand analytics — the "See Who Likes You" rung. 14-day free trial. |
+| **Prime** | 34,900 | 230,340 (−45%) | No ceilings, API access, 4-hour support |
+
+Plus consumables sold in packs where the bigger pack always wins on unit
+price — **Spotlight** (24 h at the top of the directory, on sale to free
+tenants too), AI credits, message credits and extra seats — and a 50% intro
+offer on a first term. USD pricing runs alongside LKR from the same catalogue.
+
+What Tinder's playbook is deliberately missing here: its age-tiered pricing,
+which produced a California class action and an ACCC finding. Offers here are
+earned by what a business *does* (never paid before, lapsed, anniversary), and
+no demographic value is an input to any price the system quotes.
+
+- Price list in code, synced every boot: `backend/SmeBackend/Data/PlatformPlanCatalog.cs`
+- The gate: `[RequiresPlanFeature]` / `[MetersPlanQuota]` answer **402** with
+  the exact limit hit and the cheapest plan that clears it; the apps render
+  that as a paywall over whatever the user was doing
+- Payments reuse the billing engine's Stripe/PayPal processors with
+  platform-level credentials from configuration (`Platform:Billing:*`); with
+  nothing configured the sandbox runs the whole flow and says so
+- Screens: `/pricing` (public), `/subscription` (tenant admin),
+  `/platform/revenue` (owner), and *Business → Your Unify Plan* in the Flutter app
+- A business that stops paying loses the paid features and keeps every row of
+  its data — a failed renewal opens a 14-day grace window, and cancelling
+  keeps every day already bought
+
 ## Getting Started
-See `/docs/` for setup instructions.
+See [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md) for the
+complete project overview, architecture, installation, environment variables,
+API, testing, deployment, accounts, contribution record, security notes, and
+AI usage declaration. Component-specific details remain in
+[`agentic-ai-service/README.md`](agentic-ai-service/README.md) and
+[`mobile/README.md`](mobile/README.md).
 
-## Railway deployment
+- Load testing and results: [`docs/PERFORMANCE_REPORT.md`](docs/PERFORMANCE_REPORT.md)
+- Where the delivered system differs from the original task-assignment plan,
+  and why: [`docs/CHANGES_FROM_PLAN.md`](docs/CHANGES_FROM_PLAN.md)
 
-> The current deployment configuration is `render.yaml` (Render API + AI
-> service) and `frontend/vercel.json` (Vercel React app). The Railway section
-> below is retained as historical setup guidance; use the Render steps for a
-> new deployment.
+## Deployment (Render + Supabase + Vercel)
 
-The root [`railway.toml`](railway.toml) publishes `backend/SmeBackend` and
-configures Railway's deployment health check. Create a Railway service from
-this repository and set these variables:
+[`render.yaml`](render.yaml) is a Render Blueprint that deploys two Docker
+services from this repository: `sme-backend` (`backend/SmeBackend`) and
+`sme-agentic-ai` (`agentic-ai-service`). PostgreSQL is hosted on Supabase;
+the API applies its EF Core migrations on startup. The React app is deployed
+on Vercel, whose [`frontend/vercel.json`](frontend/vercel.json) rewrites
+`/api/*` to the Render API. Secrets are set in each host's dashboard, never in
+the repository:
 
-- `ASPNETCORE_ENVIRONMENT=Production`
+- `ConnectionStrings__DefaultConnection` — the Supabase PostgreSQL connection
+  string (`Ssl Mode=Require;Trust Server Certificate=true`)
 - `Jwt__Key` — a long, private signing key (at least 32 bytes)
-- `Platform__SecretKey` — a second private key for the platform console's
-  MFA secret (optional; `Jwt__Key` is used when unset — but changing either
-  key later invalidates the enrolled authenticator, so keep them stable)
-- `ConnectionStrings__DefaultConnection` — the PostgreSQL connection string.
-  For a Railway PostgreSQL service, use its `PGHOST`, `PGPORT`, `PGDATABASE`,
-  `PGUSER`, and `PGPASSWORD` reference variables to build an Npgsql connection
-  string, with `Ssl Mode=Require;Trust Server Certificate=true`.
+- `Platform__SecretKey` — key for the platform console's MFA secret
+  (optional; falls back to `Jwt__Key` — keep both stable, changing either
+  invalidates the enrolled authenticator)
+- `AgentService__InternalToken` / `AGENT_SERVICE_INTERNAL_TOKEN` — the shared
+  secret between the API and the agent service (same value on both)
+- `GEMINI_API_KEY` — on the agent service only
+- `Cors__AllowedOrigins__0` — optional extra browser origin (the Vercel
+  domain is allowed by default)
 
-After deployment, substitute the generated Railway domain below:
-
-- Health/readiness: `https://<railway-domain>/health` (200 only when PostgreSQL is reachable)
-- Liveness: `https://<railway-domain>/health/live`
-- Swagger UI: `https://<railway-domain>/swagger`
-- OpenAPI JSON: `https://<railway-domain>/swagger/v1/swagger.json`
+The free Render tier sleeps idle services: the first request after a quiet
+spell takes about 40 seconds. Open both `/health` URLs a few minutes before a
+demonstration.
 
 ## Live URLs
-- API: [pending — add the generated Railway domain after the first deployment]
-- React: [pending]
-- Swagger: `https://<railway-domain>/swagger`
-- Demo Video: [pending]
 
-## Render + Vercel deployment
+| What | URL |
+|---|---|
+| React web app | https://se-3090-se-002.vercel.app |
+| API health (checks PostgreSQL) | https://sme-backend-lxsp.onrender.com/health |
+| API liveness | https://sme-backend-lxsp.onrender.com/health/live |
+| Swagger UI | https://sme-backend-lxsp.onrender.com/swagger |
+| OpenAPI JSON | https://sme-backend-lxsp.onrender.com/swagger/v1/swagger.json |
+| Agentic AI service health (internal service, token-protected apart from `/health`) | https://sme-agentic-ai.onrender.com/health |
+| Platform owner console | https://se-3090-se-002.vercel.app/platform/login |
+| Android APK | GitHub Actions → "Build Android APK" workflow artifact, and attached to the submission |
+| Demonstration video | _add the public link before submitting_ |
 
-The root `render.yaml` creates the ASP.NET Core API and Python agent service
-as two Render web services. In Render, choose **New + → Blueprint**, connect
-this repository, then provide the requested values when prompted. Because the
-new service URLs do not exist yet, enter `https://example.invalid` for both
-URL values below during the initial setup; replace them in the services'
-Environment settings after Render creates the services:
-
-- API `ConnectionStrings__DefaultConnection`: the production PostgreSQL
-  connection string (the API runs migrations at startup).
-- API `Jwt__Key`: a stable, random signing key of at least 32 bytes.
-- API `AgentService__BaseUrl`: the agent service's HTTPS URL after Render
-  creates it (no trailing slash).
-- API `AgentService__InternalToken` and agent
-  `AGENT_SERVICE_INTERNAL_TOKEN`: the same long random secret on both
-  services.
-- API `Cloudinary__CloudName`, `Cloudinary__ApiKey`, and
-  `Cloudinary__ApiSecret`: the Cloudinary credentials used for uploads.
-- Agent `GEMINI_API_KEY`: a key from Google AI Studio.
-- Agent `BACKEND_API_BASE_URL`: the API's HTTPS URL followed by `/api`.
-
-After the services are created, replace both temporary URLs and make sure the
-shared token matches in each service's Environment settings, then redeploy
-both. Check
-`https://<api-domain>/health` for database readiness and
-`https://<agent-domain>/health` for the agent service.
-
-For the frontend, import the repository into Vercel and set the project Root
-Directory to `frontend`. Use `npm run build` and `dist` as the output
-directory. Set `VITE_API_URL` to `https://<api-domain>/api`, then deploy. The
-existing `vercel.json` rewrite is a fallback for the previous Render API
-domain; setting `VITE_API_URL` ensures the frontend calls the API you just
-deployed.
+Test accounts for evaluators are listed in
+[`docs/TECHNICAL_DOCUMENTATION.md` §15](docs/TECHNICAL_DOCUMENTATION.md#15-live-urls-and-test-accounts).
 
 ## License
 MIT

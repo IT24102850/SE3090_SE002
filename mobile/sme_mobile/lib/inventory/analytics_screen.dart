@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'inventory_scaffold.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -449,7 +448,7 @@ class _InsightsScreenState extends State<InsightsScreen>
 
   @override
   Widget build(BuildContext context) {
-    return InventoryScaffold(
+    return AppBackgroundScaffold(
       showParticles: false,
       extendBodyBehindAppBar: false,
       appBar: GlassAppBar(

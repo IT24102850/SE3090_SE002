@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,8 +7,9 @@ import 'models/notification_model.dart';
 import 'providers/auth_provider.dart';
 import 'providers/notification_providers.dart';
 import 'screens/unify_auth/welcome_flow_screen.dart';
-import 'screens/dashboard_screen.dart';
+import 'screens/role_home.dart';
 import 'screens/profile_setup_screen.dart';
+import 'services/device_notification_service.dart';
 import 'services/push_notification_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/ui/ui.dart';
@@ -41,37 +41,18 @@ class _MyAppState extends ConsumerState<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authProvider);
-    ref.listen<AuthState>(authProvider, (previous, next) {
-      final signedIn = previous?.isAuthenticated != true &&
-          next.isAuthenticated &&
-          next.user != null;
-      final signedOut =
-          previous?.isAuthenticated == true && !next.isAuthenticated;
-      if (!signedIn && !signedOut) return;
-
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        // Wait for AnimatedSwitcher to finish replacing the auth screen so
-        // the notification is attached to the newly visible page.
-        await Future<void>.delayed(const Duration(milliseconds: 520));
-        if (!mounted) return;
-        final name = signedIn
-            ? (next.user!.fullName.trim().isNotEmpty
-                ? next.user!.fullName.trim()
-                : next.user!.email.split('@').first)
-            : null;
-        showAppNotification(
-          signedIn
-              ? 'Welcome back, $name!'
-              : 'You are back at the secure sign-in screen. Use your Quick PIN or work email to continue.',
-          tone: AppNotificationTone.success,
-          title: signedIn ? 'Great to see you!' : 'Session secured',
-          duration: const Duration(seconds: 5),
-        );
-      });
+    // Device notifications follow the session: on at sign-in (including a
+    // restored session), off at sign-out.
+    ref.listen(authProvider.select((a) => a.isAuthenticated), (was, now) {
+      if (now) {
+        unawaited(DeviceNotificationService.instance.start());
+      } else if (was == true) {
+        unawaited(DeviceNotificationService.instance.stop());
+      }
     });
+    final auth = ref.watch(authProvider);
 
-    late final Widget home;
+    Widget home;
     if (!auth.isInitialized) {
       home = const _SplashScreen();
     } else if (!auth.isAuthenticated) {
@@ -79,18 +60,9 @@ class _MyAppState extends ConsumerState<MyApp> {
     } else if (!auth.isProfileComplete) {
       home = const ProfileSetupScreen();
     } else {
-      home = const DashboardEntryAnimation(child: DashboardScreen());
+      // Role decides the home screen, in one place - see screens/role_home.dart.
+      home = roleHome(auth.user?.role);
     }
-
-    final homeKey = ValueKey<String>(
-      !auth.isInitialized
-          ? 'splash'
-          : !auth.isAuthenticated
-              ? 'login'
-              : !auth.isProfileComplete
-                  ? 'profile-setup'
-                  : 'dashboard',
-    );
 
     return MaterialApp(
       title: 'Unify',
@@ -103,96 +75,7 @@ class _MyAppState extends ConsumerState<MyApp> {
       darkTheme: AppTheme.dark(),
       themeMode: ThemeMode.dark,
       scrollBehavior: const AppScrollBehavior(),
-      builder: (context, child) => _NotificationLiveListener(
-        child: child ?? const SizedBox.shrink(),
-      ),
-      home: AnimatedSwitcher(
-        // Dashboard entry: elastic depth-reveal that pairs with the VFX overlay.
-        // Auth-out: swift dissolve so the lock screen snaps back crisply.
-        duration: const Duration(milliseconds: 900),
-        reverseDuration: const Duration(milliseconds: 900),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) {
-          final isDashboard = child.key == const ValueKey<String>('dashboard');
-          if (isDashboard) {
-            if (animation.status == AnimationStatus.reverse) {
-              // Logout: soften the dashboard, then let it drift down and
-              // recede as the welcome screen comes back into view.
-              final exit = CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeInOutCubic,
-              );
-              return AnimatedBuilder(
-                animation: exit,
-                child: child,
-                builder: (context, child) {
-                  final progress = exit.value;
-                  final retreat = 1 - progress;
-                  return Opacity(
-                    opacity: progress,
-                    child: Transform.translate(
-                      offset: Offset(0, retreat * 34),
-                      child: Transform.scale(
-                        scale: 0.94 + progress * 0.06,
-                        child: ImageFiltered(
-                          imageFilter: ui.ImageFilter.blur(
-                            sigmaX: retreat * 5,
-                            sigmaY: retreat * 5,
-                          ),
-                          child: child,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            }
-
-            // Elastic spring scale: starts deep (0.82), overshoots and settles.
-            final scaleCurve = CurvedAnimation(
-              parent: animation,
-              curve: Curves.elasticOut,
-              reverseCurve: Curves.easeInCubic,
-            );
-            final fadeCurve = CurvedAnimation(
-              parent: animation,
-              curve: const Interval(0.0, 0.45, curve: Curves.easeOut),
-              reverseCurve: Curves.easeIn,
-            );
-            return FadeTransition(
-              opacity: fadeCurve,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, 0.045),
-                  end: Offset.zero,
-                ).animate(CurvedAnimation(
-                  parent: animation,
-                  curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
-                )),
-                child: ScaleTransition(
-                  scale: Tween<double>(begin: 0.82, end: 1.0).animate(scaleCurve),
-                  child: child,
-                ),
-              ),
-            );
-          }
-          // Auth / login screen transition: simple fade + slight scale-out.
-          final eased = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeInCubic,
-          );
-          return FadeTransition(
-            opacity: eased,
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 1.04, end: 1.0).animate(eased),
-              child: child,
-            ),
-          );
-        },
-        child: KeyedSubtree(key: homeKey, child: home),
-      ),
+      home: home,
     );
   }
 }
@@ -265,8 +148,7 @@ class _SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.business_center_rounded,
-                size: 64, color: AppColors.cyan),
+            Icon(Icons.business_center_rounded, size: 64, color: AppColors.cyan),
             SizedBox(height: 24),
             AppLoader(message: 'Loading…'),
           ],
