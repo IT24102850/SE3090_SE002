@@ -42,7 +42,8 @@ dependencies:
   google_sign_in: ^7.2.0
   flutter_appauth: ^8.0.3
   local_auth: ^3.0.2
-  pdf: ^3.13.1
+  # Keep below 3.13.0 until CI upgrades from Dart 3.8.x.
+  pdf: ^3.11.3
   geolocator: ^14.0.2
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
