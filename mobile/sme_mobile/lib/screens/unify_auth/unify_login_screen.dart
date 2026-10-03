@@ -173,8 +173,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                     // cannot fit, and scrolling beats clipping the form.
                     final height = constraints.maxHeight;
                     final tooShort = height < _minFittableHeight;
-                    final compactWidth = constraints.maxWidth < 600;
-                    final showHero = !tooShort && !compactWidth;
+                    final showHero = !tooShort;
                     final t = ((height - 700) / 240).clamp(0.0, 1.0);
                     final m = _Metrics(
                       gap: 0.46 + 0.39 * t,
@@ -265,7 +264,7 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                     // The one case that still has to scroll: the keyboard eats
                     // roughly half the viewport, and no amount of compressing
                     // keeps the password field reachable under it.
-                    if (!keyboardOpen && !tooShort && !compactWidth) {
+                    if (!keyboardOpen && !tooShort) {
                       return column;
                     }
                     return SingleChildScrollView(
