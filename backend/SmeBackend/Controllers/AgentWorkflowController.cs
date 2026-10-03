@@ -507,6 +507,25 @@ public class AgentWorkflowController : ControllerBase
                 // (FR-AS23) without going through PersistWorkflowAsync's
                 // approval branching (already decided) or /apply (would
                 // create a second booking).
+                if (trace.ValidationOutput?.BookingId is { } createdId
+                    && Guid.TryParse(createdId, out var createdBookingId))
+                {
+                    var createdBooking = await _db.Bookings.FirstOrDefaultAsync(b =>
+                        b.Id == createdBookingId && b.TenantId == tenant.Id && b.BookedBy == customer.Id);
+                    if (createdBooking != null && createdBooking.Status == BookingStatus.Pending)
+                    {
+                        createdBooking.Status = BookingStatus.Confirmed;
+                        createdBooking.UpdatedAt = DateTime.UtcNow;
+                        NotificationHelper.Queue(
+                            _db,
+                            createdBooking.TenantId,
+                            createdBooking.BookedBy,
+                            "BookingConfirmed",
+                            "Booking confirmed",
+                            $"Your AI agent booking for {createdBooking.StartTime:MMM d, h:mm tt} is confirmed.");
+                    }
+                }
+
                 var workflow = new AgentWorkflow
                 {
                     TenantId = tenant.Id,
@@ -523,7 +542,14 @@ public class AgentWorkflowController : ControllerBase
                 };
                 _db.AgentWorkflows.Add(workflow);
                 await _db.SaveChangesAsync();
-                return Ok(new { workflowId = workflow.Id, status = workflow.Status, bookingId = trace.ValidationOutput?.BookingId });
+                return Ok(new
+                {
+                    workflowId = workflow.Id,
+                    status = workflow.Status,
+                    bookingId = trace.ValidationOutput?.BookingId,
+                    invoiceId = trace.ValidationOutput?.InvoiceId,
+                    checkout = trace.ValidationOutput?.Checkout,
+                });
             }
             case "AwaitingApproval":
             {

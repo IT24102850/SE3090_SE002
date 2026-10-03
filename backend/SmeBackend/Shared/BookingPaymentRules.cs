@@ -9,12 +9,9 @@ namespace SmeBackend.Shared;
 ///                "freeCancelHours": 24, "refundPercent": 100 }
 ///
 /// It lives in ConfigJson rather than in columns because the answer is
-/// per-product and business-type specific: a clinic takes payment at the
-/// desk, a tourism operator wants a deposit to stop no-shows on a boat it
-/// has to crew anyway, and a gym class is paid for in full or it is not
-/// booked. A booking type that says nothing keeps today's behaviour -
-/// PayAtVenue, no hold, no money taken - so every existing tenant is
-/// unaffected until it opts in.
+/// per-product and business-type specific. A booking type that says nothing
+/// keeps the existing pay-at-venue behavior; operators can explicitly opt
+/// into a deposit or full-payment policy in the payment block.
 public sealed record BookingPaymentRules(
     PaymentMode Mode,
     decimal DepositPercent,
@@ -22,8 +19,6 @@ public sealed record BookingPaymentRules(
     int FreeCancelHours,
     decimal RefundPercent)
 {
-    /// What a tenant gets before configuring anything: the pre-payment
-    /// behaviour this platform has always had.
     public static readonly BookingPaymentRules PayAtVenue =
         new(PaymentMode.PayAtVenue, 0m, 0, 0, 100m);
 

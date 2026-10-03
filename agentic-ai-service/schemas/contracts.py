@@ -90,6 +90,8 @@ class ValidationSafetyOutput(BaseModel):
     rejection_reason: str | None = None
     validation_notes: list[str] = Field(default_factory=list)
     booking_id: str | None = None  # set only if create_booking actually ran
+    invoice_id: str | None = None
+    checkout: dict[str, Any] | None = None
 
 
 # ── Full trace, returned by /plan and stored (in-memory) for /trace ─────

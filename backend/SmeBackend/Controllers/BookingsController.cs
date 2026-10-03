@@ -1356,7 +1356,8 @@ public class BookingsController : ControllerBase
 
         var total = await query.CountAsync();
         var items = await query
-            .OrderBy(b => b.StartTime)
+            .OrderByDescending(b => b.CreatedAt)
+            .ThenByDescending(b => b.StartTime)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(b => new

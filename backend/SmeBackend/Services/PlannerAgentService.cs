@@ -383,7 +383,8 @@ public record ActionToolOutputDto(List<ProposedBookingDto> ProposedBookings, dou
 
 public record ValidationSafetyOutputDto(
     bool IsAllowed, bool RequiresHumanApproval, string? RejectionReason,
-    List<string> ValidationNotes, string? BookingId
+    List<string> ValidationNotes, string? BookingId, string? InvoiceId,
+    JsonElement? Checkout
 );
 
 public record ToolCallRecordDto(string Tool, string Agent, int DurationMs, bool Success, string? Error);

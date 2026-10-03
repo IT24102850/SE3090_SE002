@@ -83,6 +83,10 @@ public sealed class BookingCheckoutService(
             priced != null ? TicketPricing.Serialize(priced.Lines) : null, dto.AttendeeCount);
         var payableNow = rules.AmountPayableNow(amountDue);
 
+        if (rules.RequiresPrepayment && payableNow <= 0)
+            return BillingResult<BookingCheckoutResult>.BadRequest(
+                "This service requires payment, but it has no price configured.");
+
         // Nothing to collect - either the operator takes payment at the
         // desk, or the product is free. Confirm it and skip the gateway
         // entirely rather than holding a seat against a zero invoice.
