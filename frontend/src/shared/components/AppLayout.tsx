@@ -1,16 +1,15 @@
-﻿import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { useEffect, useState, type ReactNode } from 'react';
 import { RootState } from '../../store/store';
-import { signOut } from '../../store/authSlice';
+import { logout } from '../../store/authSlice';
 import NotificationBell from './NotificationBell';
-import { bookingApi, useGetTenantProfileQuery, useGetTenantQuery } from '../../api/bookingApi';
+import { bookingApi } from '../../api/bookingApi';
 import { resetSubtypeCache } from '../../features/dashboard/subtype';
 import { useSubtypeConfig } from '../../features/dashboard/useSubtypeConfig';
 import { useToast } from './Toast';
 import WorkspaceAssistant from './WorkspaceAssistant';
 import UserAvatar from './UserAvatar';
-import BusinessAvatar from './BusinessAvatar';
 import { Icon as InventoryIcon } from '../../features/inventory/ui/Icon';
 
 interface NavItem {
@@ -26,53 +25,27 @@ interface NavSection {
   items: NavItem[];
 }
 
-/* Sections are the ONLY nav definition — there is no separate flat list to
-   fall out of sync with, so an item cannot be dropped by regrouping. All 19
-   destinations that had a sidebar entry still have one; nothing was removed,
-   merged or hidden behind a "more" affordance. scripts/check-nav-parity.mjs
-   asserts that against the router's own paths and runs as part of the build. */
-const NAV_SECTIONS: NavSection[] = [
+/* Sections are the only navigation definition, grouped by destination area. */
+export const NAV_SECTIONS: NavSection[] = [
   {
     id: 'overview',
     label: 'Overview',
     items: [
       { path: '/dashboard', label: 'Dashboard', icon: '📊', roles: ['Admin', 'Manager', 'Staff', 'Customer'] },
+      { path: '/reports', label: 'Reports', icon: '📈', roles: ['Admin', 'Manager'] },
     ],
   },
   {
-    // The customer's own destinations - the same four the Flutter app's
-    // customer tabs offer. Staff roles never see this section.
+    // The customer's own destinations. Staff roles never see this section.
     id: 'customer',
-    label: 'My visits',
+    label: 'My space',
     items: [
       { path: '/book', label: 'Book a service', icon: '📅', roles: ['Customer'] },
       { path: '/my-bookings', label: 'My bookings', icon: '🎟️', roles: ['Customer'] },
+      { path: '/shop', label: 'Shop & my orders', icon: '🛍️', roles: ['Customer'] },
       { path: '/ai-planner', label: 'AI planner', icon: '🤖', roles: ['Customer'] },
       { path: '/business', label: 'About the business', icon: '🏪', roles: ['Customer'] },
       { path: '/my-bills', label: 'My bills', icon: '💳', roles: ['Customer'] },
-    ],
-  },
-  {
-    // The Universal Booking & Resource Engine (spec 2.5). Its screens used
-    // to be scattered across Overview, Resources and Automation, which made
-    // the core engine look like the smallest thing in the product. They are
-    // grouped here because they are one component, not because the section
-    // needed padding: every entry is a screen the spec assigns to it.
-    id: 'scheduling',
-    label: 'Booking & Scheduling',
-    items: [
-      { path: '/calendar', label: 'Calendar', icon: '🗓️', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/bookings', label: 'Booking Manager', icon: '📅', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/multi-branch', label: 'Multi-Branch Schedule', icon: '🗂️', roles: ['Admin', 'Manager'] },
-      { path: '/availability', label: 'Availability Slots', icon: '⏳', roles: ['Admin', 'Manager'] },
-      { path: '/recurring', label: 'Recurring Series', icon: '🔁', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/booking-types', label: 'Booking Types', icon: '🏷️', roles: ['Admin', 'Manager'] },
-      { path: '/resources', label: 'Resource Manager', icon: '🏢', roles: ['Admin', 'Manager'] },
-      { path: '/planner', label: 'Schedule Copilot', icon: '✦', roles: ['Admin', 'Manager'] },
-      { path: '/disruption-recovery', label: 'Disruption Recovery', icon: '🛟', roles: ['Admin', 'Manager'] },
-      { path: '/agent-workflows', label: 'Agent Workflows', icon: '🛰️', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/reports', label: 'Reports', icon: '📈', roles: ['Admin', 'Manager'] },
-      { path: '/my-schedule', label: 'My Schedule', icon: '🩺', roles: ['Staff'] },
     ],
   },
   {
@@ -93,11 +66,21 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: 'resources',
-    label: 'People & Places',
+    id: 'scheduling',
+    label: 'Scheduling',
     items: [
-      { path: '/staff', label: 'Staff', icon: '🧑‍💼', roles: ['Admin', 'Manager'] },
-      { path: '/users', label: 'Users & Access', icon: '🔑', roles: ['Admin'] },
+      { path: '/bookings', label: 'Booking Manager', icon: '📅', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/my-schedule', label: 'My Schedule', icon: '🩺', roles: ['Staff'] },
+      { path: '/multi-branch', label: 'Multi-Branch Schedule', icon: '🗂️', roles: ['Admin', 'Manager'] },
+      { path: '/booking-types', label: 'Booking Types', icon: '🏷️', roles: ['Admin', 'Manager'] },
+    ],
+  },
+  {
+    id: 'resources',
+    label: 'Resources',
+    items: [
+      { path: '/resources', label: 'Resource Manager', icon: '🏢', roles: ['Admin', 'Manager'] },
+      { path: '/staff', label: 'Staff', icon: '🧑‍💼', roles: ['Manager'] },
       { path: '/branches', label: 'Branches', icon: '📍', roles: ['Admin'] },
     ],
   },
@@ -106,12 +89,23 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Inventory',
     items: [
       { path: '/inventory', label: 'Inventory Manager', icon: '📦', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/suppliers', label: 'Suppliers', icon: '🏭', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/stock-movements', label: 'Stock Movements', icon: '🔄', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/suppliers', label: 'Suppliers', icon: '🏭', roles: ['Admin', 'Staff'] },
+      { path: '/stock-movements', label: 'Physical Counts & Activity', icon: '🔄', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/purchase-orders', label: 'Purchase Orders', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/low-stock-alerts', label: 'StockSense AI', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/customer-orders', label: 'Customer orders', icon: '🛍️', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/sales', label: 'Sales', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/stocksense-ai', label: 'StockSense AI', icon: '⚠️', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/branch-overview', label: 'Branch Overview', icon: '🏬', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/inventory-analytics', label: 'Inventory Analytics', icon: '📉', roles: ['Admin', 'Manager'] },
+      { path: '/branch-performance', label: 'Branch Performance', icon: '📊', roles: ['Admin', 'Manager'] },
+    ],
+  },
+  {
+    id: 'automation',
+    label: 'Automation',
+    items: [
+      { path: '/planner', label: 'AI Planner', icon: '🤖', roles: ['Admin', 'Manager'] },
+      { path: '/agent-workflows', label: 'Agent Workflows', icon: '🛰️', roles: ['Admin', 'Manager', 'Staff'] },
     ],
   },
   {
@@ -120,9 +114,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: '/business-profile', label: 'Business Profile', icon: '🏪', roles: ['Admin', 'Manager'] },
       { path: '/settings', label: 'Business Settings', icon: '⚙️', roles: ['Admin'] },
-      // What this business pays Unify. Not /subscriptions, which is the
-      // memberships this business sells to its own customers.
-      { path: '/subscription', label: 'Your Unify Plan', icon: '✨', roles: ['Admin', 'Manager'] },
+      { path: '/users', label: 'People & access', icon: '👥', roles: ['Admin'] },
     ],
   },
 ];
@@ -135,9 +127,10 @@ const INVENTORY_NAV_ICONS: Record<string, string> = {
   '/suppliers': 'supplier',
   '/stock-movements': 'movement',
   '/purchase-orders': 'po',
-  '/low-stock-alerts': 'stocksense',
+  '/stocksense-ai': 'stocksense',
   '/branch-overview': 'branch',
   '/inventory-analytics': 'chart',
+  '/branch-performance': 'chart',
 };
 
 function NavigationIcon({ item, size = 18 }: { item: NavItem; size?: number }) {
@@ -153,12 +146,6 @@ function inventoryIconClass(item: NavItem) {
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user } = useSelector((state: RootState) => state.auth);
-  // The top-bar chip carries the business's identity - its logo from
-  // Settings -> Business Profile - rather than the person's photo, which
-  // stays on the sidebar profile link. Skipped until someone is signed in.
-  const chipTenantId = user?.tenantId ?? '';
-  const { data: chipTenant } = useGetTenantQuery({ tenantId: chipTenantId }, { skip: !chipTenantId });
-  const { data: chipProfile } = useGetTenantProfileQuery({ tenantId: chipTenantId }, { skip: !chipTenantId });
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -236,16 +223,20 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     sections.flatMap((section) => section.items).find((item) => item.path === '/dashboard'),
     sections.find((section) => section.id === 'scheduling')?.items[0],
     sections.find((section) => section.id === 'inventory')?.items[0],
-    sections.find((section) => section.id === 'inventory')?.items.find((item) => item.path === '/low-stock-alerts'),
+    sections.find((section) => section.id === 'inventory')?.items.find((item) => item.path === '/stocksense-ai'),
   ].filter((item): item is NavItem => Boolean(item));
-  const pageName = location.pathname === '/inventory-analytics'
+  const pageName = location.pathname === '/stock-movements'
+    ? 'PHYSICAL COUNTS & ACTIVITY'
+    : location.pathname === '/inventory-analytics'
     ? 'INVENTORY ANALYTICS'
-    : location.pathname === '/low-stock-alerts'
+    : location.pathname === '/branch-performance'
+    ? 'BRANCH PERFORMANCE'
+    : location.pathname === '/stocksense-ai'
       ? 'STOCKSENSE AI'
     : location.pathname === '/inventory'
       ? 'STOCK MANAGEMENT'
       : location.pathname.replace('/', '').replace(/-/g, ' ').toUpperCase() || 'OPERATIONS';
-  const pageCategory = location.pathname.startsWith('/inventory') || location.pathname === '/purchase-orders' || location.pathname === '/stock-movements' || location.pathname === '/low-stock-alerts' || location.pathname === '/branch-overview'
+  const pageCategory = location.pathname.startsWith('/inventory') || location.pathname === '/purchase-orders' || location.pathname === '/stock-movements' || location.pathname === '/low-stock-alerts' || location.pathname === '/branch-overview' || location.pathname === '/branch-performance'
     ? 'inventory'
     : location.pathname === '/planner' || location.pathname === '/agent-workflows'
       ? 'automation'
@@ -280,7 +271,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         // Ignore storage restrictions while logging out.
       }
     }
-    signOut(dispatch);
+    dispatch(logout());
     // Both caches are keyed to the tenant that just logged out. RTK Query
     // keeps its store across a logout, and the sub-type is memoised in a
     // module variable, so without these two the next tenant to sign in on
@@ -341,7 +332,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                       <NavLink
                         key={item.path}
                         to={item.path}
-                        className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+                        className={({ isActive }) => `sidebar-link${item.path === '/users' ? ' sidebar-link-admin-shortcut' : ''}${isActive ? ' active' : ''}`}
                         onClick={() => setMobileNavOpen(false)}
                       >
                         <span className={`sidebar-link-icon${inventoryIconClass(item) ? ` ${inventoryIconClass(item)}` : ''}`} aria-hidden="true"><NavigationIcon item={item} /></span>
@@ -419,8 +410,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </div>}
             </label>
             <span className="app-clock" aria-label="Current time">◷ {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <NavLink to="/profile" className="app-user-chip" title={chipTenant?.name ? `${chipTenant.name} · ${user.fullName || user.email}` : undefined}>
-              <BusinessAvatar name={chipTenant?.name} src={chipProfile?.logoUrl} size={27} className="app-user-avatar" />
+            <NavLink to="/profile" className="app-user-chip" title={`${user.fullName || user.email} profile`}>
+              <UserAvatar name={user.fullName} email={user.email} src={user.profilePictureUrl} size={27} className="app-user-avatar" />
               <strong>{user.fullName || user.email}</strong>
               <span className="app-role-chip">{user.role}</span>
             </NavLink>
@@ -443,7 +434,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 className={({ isActive }) => `mobile-quick-link${isActive ? ' active' : ''}`}
               >
                 <span className={inventoryIconClass(item)} aria-hidden="true"><NavigationIcon item={item} size={20} /></span>
-                <small>{item.label.replace(' Manager', '').replace('StockSense AI', 'StockSense')}</small>
+                <small>{item.label.replace(' Manager', '')}</small>
               </NavLink>
             ))}
             <button type="button" className="mobile-quick-link mobile-quick-more" onClick={() => setMobileNavOpen(true)}>

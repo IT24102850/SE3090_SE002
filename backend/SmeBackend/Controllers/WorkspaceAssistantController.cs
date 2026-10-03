@@ -3,28 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Authorization;
 using SmeBackend.Data;
-using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
-/// Quick answers for the workspace: a deterministic lookup service, NOT an
-/// agent and not a language model.
-///
-/// Every question it handles has an exact answer in the database - how many
-/// items are below reorder level, how many purchase orders are open. Those
-/// are queries, so they are served as queries: the figures are always right,
-/// there is nothing to hallucinate, and the reply is instant.
-///
-/// The agentic subsystem is deliberately separate - the four agents behind
-/// Schedule Copilot (agentic-ai-service), which exist because scheduling is a
-/// genuine multi-step reasoning problem. Keeping the two apart is why nothing
-/// on this endpoint is branded as AI.
 [ApiController]
 [Authorize]
 [Route("api/workspace-assistant")]
-// Paid feature: the tenant's Unify plan decides whether this module is
-// available at all (Authorization/RequiresPlanAttribute.cs).
-[RequiresPlanFeature(PlanFeatures.AiAgents)]
 public sealed class WorkspaceAssistantController(AppDbContext db) : ControllerBase
 {
     [HttpPost("chat")]
@@ -53,7 +37,12 @@ public sealed class WorkspaceAssistantController(AppDbContext db) : ControllerBa
             .Take(8)
             .ToListAsync(cancellationToken);
         var branchCount = await db.Branches.CountAsync(branch => branch.TenantId == tenantId && branch.IsActive, cancellationToken);
-        var openOrders = await db.PurchaseOrders.CountAsync(order => order.TenantId == tenantId && order.Status != "Received" && order.Status != "Cancelled", cancellationToken);
+        var openOrders = await db.PurchaseOrders.CountAsync(
+            order => order.TenantId == tenantId &&
+                order.Status != "Received" &&
+                order.Status != "Rejected" &&
+                order.Status != "Cancelled",
+            cancellationToken);
         var bookingCount = await db.Bookings.CountAsync(booking => booking.TenantId == tenantId && booking.Status != SmeBackend.Models.BookingStatus.Cancelled, cancellationToken);
 
         string answer;
@@ -76,15 +65,15 @@ public sealed class WorkspaceAssistantController(AppDbContext db) : ControllerBa
         }
         else if (normalized.Contains("booking") || normalized.Contains("appointment") || normalized.Contains("schedule"))
         {
-            answer = $"There are {bookingCount} non-cancelled booking(s) in the workspace. Use Booking Manager for changes, Multi-Branch Schedule for availability, or Schedule Copilot for AI scheduling proposals.";
+            answer = $"There are {bookingCount} non-cancelled booking(s) in the workspace. Use Booking Manager for changes, Multi-Branch Schedule for availability, or AI Planner for scheduling proposals.";
         }
         else if (normalized.Contains("help") || normalized.Contains("what can") || normalized.Contains("how"))
         {
-            answer = "I answer questions about this workspace from live data: inventory and low stock, purchase orders, branches, bookings and schedules, and where to find features. Ask something like “Which items need reordering?” or “How many open purchase orders do we have?” For AI scheduling proposals, use Schedule Copilot.";
+            answer = "I can help with inventory and low-stock questions, purchase orders, branches, bookings, schedules, AI workflows, and where to find features. Ask something like “Which items need reordering?” or “How many open purchase orders do we have?”";
         }
         else
         {
-            answer = $"I answer questions about this workspace using live data. Currently I can see {inventoryCount} active inventory item(s), {branchCount} active branch(es), {openOrders} open purchase order(s), and {bookingCount} non-cancelled booking(s). Try asking about low stock, purchase orders, branches, bookings, or AI workflows.";
+            answer = $"I can answer questions about this workspace using live data. Currently I can see {inventoryCount} active inventory item(s), {branchCount} active branch(es), {openOrders} open purchase order(s), and {bookingCount} non-cancelled booking(s). Try asking about low stock, purchase orders, branches, bookings, or AI workflows.";
         }
 
         return Ok(new AssistantChatResponse(answer, DateTimeOffset.UtcNow));

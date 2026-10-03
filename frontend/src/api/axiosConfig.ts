@@ -1,6 +1,5 @@
 ﻿import { API_BASE_URL } from './apiBaseUrl';
-import axios, { type InternalAxiosRequestConfig } from 'axios';
-import { expireSession, refreshSession } from './sessionRefresh';
+import axios from 'axios';
 
 
 const api = axios.create({
@@ -20,17 +19,11 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const request = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
-    if (error.response?.status === 401 && request && !request._retried) {
-      // Expired access token: refresh once, then replay the request.
-      const token = await refreshSession();
-      if (token) {
-        request._retried = true;
-        request.headers.Authorization = `Bearer ${token}`;
-        return api(request);
-      }
-      expireSession();
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }

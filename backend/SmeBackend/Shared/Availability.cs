@@ -16,34 +16,14 @@ public sealed record AvailabilityOutcome(
 /// out of BookingsController so the anonymous path cannot drift from it.
 public static class Availability
 {
-    /// The one definition of "this booking still holds its seat", used by
-    /// the conflict check, the capacity sum and every slot listing, so a
-    /// seat cannot be free in one and taken in another.
-    ///
-    /// Cancelled, WeatherCancelled and Expired have all handed the seat
-    /// back. A PendingPayment hold keeps its seat only while its window is
-    /// open: an abandoned checkout stops blocking the slot the moment it
-    /// lapses, rather than waiting for BookingHoldExpiryService to sweep
-    /// it - the sweeper tidies the record, it is not what frees the seat.
-    ///
-    /// Rejected is deliberately absent: it is handled per call site,
-    /// because the bulk path has always released it and the single-booking
-    /// path has always not.
-    public static IQueryable<Booking> HoldingSeats(this IQueryable<Booking> bookings, DateTime now) =>
-        bookings.Where(b =>
-            b.DeletedAt == null
-            && b.Status != BookingStatus.Cancelled
-            && b.Status != BookingStatus.WeatherCancelled
-            && b.Status != BookingStatus.Expired
-            && (b.Status != BookingStatus.PendingPayment
-                || (b.HoldExpiresAt != null && b.HoldExpiresAt > now)));
-
     public static async Task<bool> HasConflictAsync(
         AppDbContext db, Guid resourceId, DateTime start, DateTime end,
-        Guid? excludeBookingId = null, bool excludeRejected = false, DateTime? now = null)
+        Guid? excludeBookingId = null, bool excludeRejected = false)
     {
-        return await db.Bookings.HoldingSeats(now ?? DateTime.UtcNow).AnyAsync(b =>
+        return await db.Bookings.AnyAsync(b =>
             b.ResourceId == resourceId
+            && b.DeletedAt == null
+            && b.Status != BookingStatus.Cancelled
             && (!excludeRejected || b.Status != BookingStatus.Rejected)
             && (excludeBookingId == null || b.Id != excludeBookingId)
             && b.StartTime < end
@@ -92,10 +72,10 @@ public static class Availability
         // resource still enforces capacity for tenants that book it without
         // creating Departure rows at all.
         var query = db.Bookings.AsNoTracking()
-            .HoldingSeats(DateTime.UtcNow)
-            // A seat held for an unpaid checkout is a sold seat until the
-            // hold lapses, so two customers cannot pay for the last one.
-            .Where(b => b.Status != BookingStatus.Rejected
+            .Where(b => b.DeletedAt == null
+                && b.Status != BookingStatus.Cancelled
+                && b.Status != BookingStatus.WeatherCancelled
+                && b.Status != BookingStatus.Rejected
                 && (excludeBookingId == null || b.Id != excludeBookingId));
 
         query = departureId.HasValue

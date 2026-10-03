@@ -338,11 +338,6 @@ class Subscription {
   final String paymentStatus;
   final DateTime? nextBillingAt;
   final DateTime? lastPaymentAt;
-  // Only the owner-side list has these: a customer already knows whose
-  // subscription it is, but the subscription manager lists everybody's.
-  final String? customerName;
-  final String? customerId;
-  final String? notes;
 
   const Subscription({
     required this.id,
@@ -356,9 +351,6 @@ class Subscription {
     required this.paymentStatus,
     this.nextBillingAt,
     this.lastPaymentAt,
-    this.customerName,
-    this.customerId,
-    this.notes,
   });
 
   factory Subscription.fromJson(Map<String, dynamic> j) => Subscription(
@@ -373,9 +365,6 @@ class Subscription {
         paymentStatus: j['paymentStatus'] as String? ?? 'Paid',
         nextBillingAt: _date(j['nextBillingAt']),
         lastPaymentAt: _date(j['lastPaymentAt']),
-        customerName: j['customerName'] as String?,
-        customerId: j['customerId'] as String?,
-        notes: j['notes'] as String?,
       );
 
   bool get isActive => status == 'Active';

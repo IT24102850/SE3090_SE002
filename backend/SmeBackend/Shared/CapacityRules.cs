@@ -63,29 +63,6 @@ public static class CapacityRules
     public static bool IsShared(Resource? resource, BookingType? bookingType, Departure? departure = null) =>
         Resolve(resource, bookingType, departure) is > 1;
 
-    /// True when two bookings that overlap in time on one resource are seats
-    /// on the same sailing rather than a double booking.
-    ///
-    /// Availability.CheckAsync already sells them that way: on a resource
-    /// with a declared capacity above one it sums seats instead of refusing
-    /// the overlap, so a 120-seat boat legitimately carries a Whale Watching
-    /// reservation and a Photo Tours reservation on the same 12:00 trip. Any
-    /// report of clashes has to agree with the rule that created them, or a
-    /// well-sold departure reads as a pile of double bookings.
-    ///
-    /// Two different scheduled departures are not one sailing: a vessel
-    /// cannot leave twice at once, so an overlap between them stays a clash.
-    public static bool ShareOneSailing(
-        Resource? resource,
-        BookingType? bookingTypeA, Departure? departureA,
-        BookingType? bookingTypeB, Departure? departureB)
-    {
-        if (!IsShared(resource, bookingTypeA, departureA)) return false;
-        if (!IsShared(resource, bookingTypeB, departureB)) return false;
-
-        return departureA == null || departureB == null || departureA.Id == departureB.Id;
-    }
-
     /// Checks a requested number of seats against what is already sold.
     /// Rejects over the licensed capacity; warns from 90% full.
     public static CapacityCheck Check(int capacity, int seatsTaken, int seatsRequested)

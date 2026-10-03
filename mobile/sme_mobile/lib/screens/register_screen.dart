@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/tourism_subtype.dart';
 import '../providers/auth_provider.dart';
-import 'role_home.dart';
+import '../screens/dashboard_screen.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_text_styles.dart';
 import '../widgets/ui/ui.dart';
@@ -68,11 +68,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         );
 
     if (success && mounted) {
-      // Registering a business makes the caller its Admin, so this lands on
-      // the owner workspace, not the customer dashboard. roleHome keeps that
-      // decision in step with main.dart.
+      // Pop all routes and go to dashboard
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => roleHome(ref.read(authProvider).user?.role)),
+        MaterialPageRoute(builder: (_) => const DashboardScreen()),
         (route) => false,
       );
     }
@@ -145,7 +143,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       Text('BUSINESS TYPE *', style: AppTextStyles.label),
                       const SizedBox(height: 10),
                       DropdownButtonFormField<String>(
-                        value: _businessType,
+                        initialValue: _businessType,
                         decoration: _dropdownDecoration(Icons.category),
                         dropdownColor: AppColors.overlaySurface,
                         borderRadius: BorderRadius.circular(AppRadii.control),
@@ -168,7 +166,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         Text('TOURISM SUB-TYPE *', style: AppTextStyles.label),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<String>(
-                          value: _subType,
+                          initialValue: _subType,
                           decoration: _dropdownDecoration(Icons.travel_explore),
                           dropdownColor: AppColors.overlaySurface,
                           borderRadius: BorderRadius.circular(AppRadii.control),

@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { errorMessage, useEnrolMfaMutation, useLoginMutation, type PlatformLoginResult } from './platformApi';
 import { clearPlatformSession, isPlatformSessionLive, storePlatformSession } from './platformSession';
+import { useToast } from '../../shared/components/Toast';
 import './platform.css';
 
 /* Sign-in for the platform console. Three screens in one card:
@@ -26,6 +27,7 @@ export default function PlatformLoginPage() {
   );
   const [login, { isLoading: loggingIn }] = useLoginMutation();
   const [enrol, { isLoading: enrolling }] = useEnrolMfaMutation();
+  const { show } = useToast();
 
   useEffect(() => {
     document.documentElement.dataset.theme = 'dark';
@@ -36,6 +38,8 @@ export default function PlatformLoginPage() {
   const finish = (result: PlatformLoginResult) => {
     if (result.status === 'ok' && result.accessToken && result.expiresAt) {
       storePlatformSession(result.accessToken, result.expiresAt, result.idleTimeoutMinutes ?? 15);
+      const name = result.user?.fullName?.trim() || result.user?.email?.split('@')[0] || 'there';
+      show(`Welcome back, ${name}!`, 'success');
       navigate('/platform', { replace: true });
       return true;
     }

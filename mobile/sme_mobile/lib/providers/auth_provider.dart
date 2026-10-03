@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../models/user_model.dart';
@@ -67,6 +66,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (token != null && token.isNotEmpty && userJson != null) {
         final user =
             User.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
+        // A configured quick PIN locks the cached session between launches.
+        // Keep the credentials in secure storage; unlockWithPin restores them.
+        if (await SecureStorageService.hasPin()) {
+          state = const AuthState(isInitialized: true);
+          return;
+        }
         state = AuthState(
           user: user,
           token: token,
@@ -89,7 +94,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     try {
       final response = await ApiService.dio.post(
-        kIsWeb ? '/auth/login' : '/auth/mobile/login',
+        '/auth/mobile/login',
         data: {'email': email.trim(), 'password': password},
       );
 
@@ -125,7 +130,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       return true;
     } on DioException catch (e) {
-      final message = _extractError(e) ?? 'Invalid email or password';
+      final serverMessage = _extractError(e);
+      final message = serverMessage == null ||
+              RegExp(
+                r'invalid email or password|incorrect email or password|invalid credentials',
+                caseSensitive: false,
+              ).hasMatch(serverMessage)
+          ? 'No worries - please check your email and password, then try again.'
+          : serverMessage;
       state = state.copyWith(isLoading: false, error: message);
       return false;
     } catch (e) {
@@ -152,8 +164,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (storedPin == null || storedPin.isEmpty) {
       state = state.copyWith(
         isLoading: false,
-        error:
-            'No Quick PIN is set up. Sign in with your work email, then set one in Security.',
+        error: 'No Quick PIN is set up. Sign in with your work email, then set one in Security.',
       );
       return false;
     }
@@ -178,8 +189,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     state = state.copyWith(
       isLoading: false,
-      error:
-          'There is no saved session to unlock. Sign in with your work email; your PIN will be kept for next time.',
+      error: 'There is no saved session to unlock. Sign in with your work email; your PIN will be kept for next time.',
     );
     return false;
   }
@@ -206,8 +216,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     state = state.copyWith(
       isLoading: false,
-      error:
-          'Please sign in with your work email first to activate biometrics.',
+      error: 'Please sign in with your work email first to activate biometrics.',
     );
     return false;
   }
@@ -495,7 +504,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Explicit sign out clears the session and this device's Quick PIN.
   Future<void> logout() async {
-    await ApiService.revokeRefreshToken();
     await SecureStorageService.clearAll();
     state = const AuthState(isInitialized: true);
   }

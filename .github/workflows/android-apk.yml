@@ -38,29 +38,9 @@ jobs:
         working-directory: mobile/sme_mobile
         run: flutter pub get
 
-      # The URL is compiled into the binary, so it has to be passed here.
-      # Without it the build falls back to ApiService._defaultBaseUrl(), which
-      # is http://10.0.2.2:5000/api on Android - the emulator's alias for the
-      # host machine, and meaningless on a real phone. An APK published from
-      # this workflow is meant to be installed on real devices, so it gets the
-      # deployed HTTPS API. Override by setting the API_BASE_URL repository
-      # variable (Settings -> Secrets and variables -> Actions -> Variables).
       - name: Build release APK
         working-directory: mobile/sme_mobile
-        env:
-          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://sme-backend-lxsp.onrender.com/api' }}
-        run: flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
-
-      - name: Show which API the APK points at
-        working-directory: mobile/sme_mobile
-        env:
-          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://sme-backend-lxsp.onrender.com/api' }}
-        run: |
-          echo "APK built against $API_BASE_URL"
-          case "$API_BASE_URL" in
-            https://*) ;;
-            *) echo "::warning::APK points at a non-HTTPS URL; it will only work where cleartext is permitted." ;;
-          esac
+        run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

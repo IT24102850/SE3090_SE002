@@ -26,20 +26,14 @@ public sealed class PaymentCheckoutService : IPaymentCheckoutService
     private readonly ILogger<PaymentCheckoutService> _logger;
 
     public PaymentCheckoutService(AppDbContext db, IPaymentProcessorFactory processors, BillingSettingsService settings,
-        IBillingService billing, ILogger<PaymentCheckoutService> logger,
-        Services.BookingPayments.IBookingPaymentListener? bookings = null)
+        IBillingService billing, ILogger<PaymentCheckoutService> logger)
     {
         _db = db;
         _processors = processors;
         _settings = settings;
         _billing = billing;
         _logger = logger;
-        // Optional so this service keeps working - and keeps its tests
-        // passing - with nothing on the booking side wired in.
-        _bookings = bookings ?? new Services.BookingPayments.NullBookingPaymentListener();
     }
-
-    private readonly Services.BookingPayments.IBookingPaymentListener _bookings;
 
     public async Task<BillingResult<CheckoutResponse>> StartCheckoutAsync(BillingActor actor, Guid invoiceId, CheckoutRequest request, CancellationToken ct = default)
     {
@@ -77,14 +71,6 @@ public sealed class PaymentCheckoutService : IPaymentCheckoutService
             ? new GatewayCredentials(PaymentProviders.Manual, null, null, null, true)
             : _settings.Credentials(gateway);
 
-        // The gateway may not take the invoice's currency - Stripe will not
-        // take LKR at all. Charge it the equivalent at the operator's own
-        // rate and record what was charged; the invoice stays in its own
-        // currency and is still settled by Amount.
-        var settlement = PaymentSettlement.For(gateway, invoice.Currency);
-        var chargeAmount = settlement?.Convert(amount) ?? amount;
-        var chargeCurrency = settlement?.Currency ?? invoice.Currency;
-
         var payment = new Payment
         {
             InvoiceId = invoice.Id,
@@ -92,9 +78,6 @@ public sealed class PaymentCheckoutService : IPaymentCheckoutService
             Method = string.IsNullOrWhiteSpace(request.Method) ? "Card" : request.Method.Trim(),
             Provider = provider,
             Status = PaymentStatuses.Pending,
-            SettlementCurrency = settlement?.Currency,
-            SettlementAmount = settlement is null ? null : chargeAmount,
-            ExchangeRate = settlement?.Rate,
         };
         _db.Payments.Add(payment);
         await _db.SaveChangesAsync(ct);
@@ -103,7 +86,7 @@ public sealed class PaymentCheckoutService : IPaymentCheckoutService
         try
         {
             session = await _processors.Get(provider).CreateCheckoutAsync(credentials,
-                new CheckoutIntent(payment.Id, invoice.Id, invoice.InvoiceNumber, chargeAmount, chargeCurrency, payment.Method, request.ReturnUrl,
+                new CheckoutIntent(payment.Id, invoice.Id, invoice.InvoiceNumber, amount, invoice.Currency, payment.Method, request.ReturnUrl,
                     request.HostedPage), ct);
         }
         catch (Exception ex) when (ex is PaymentProviderException or HttpRequestException)
@@ -122,8 +105,7 @@ public sealed class PaymentCheckoutService : IPaymentCheckoutService
         await _db.SaveChangesAsync(ct);
 
         return BillingResult<CheckoutResponse>.Created(new CheckoutResponse(payment.Id, invoice.Id, provider, payment.Status, amount,
-            invoice.Currency, session.ClientSecret, session.RedirectUrl, credentials.PublicKey, session.ExternalId, session.Simulated,
-            settlement?.Currency, settlement is null ? null : chargeAmount, settlement?.Rate));
+            invoice.Currency, session.ClientSecret, session.RedirectUrl, credentials.PublicKey, session.ExternalId, session.Simulated));
     }
 
     public async Task<BillingResult<(PaymentResponse Payment, InvoiceResponse Invoice)>> ConfirmCheckoutAsync(BillingActor actor, ConfirmCheckoutRequest request, CancellationToken ct = default)
@@ -228,14 +210,6 @@ public sealed class PaymentCheckoutService : IPaymentCheckoutService
         }
 
         await _db.SaveChangesAsync(ct);
-
-        // A booking waiting on this invoice can now be confirmed. Kept
-        // behind IBookingPaymentListener so this service still knows
-        // nothing about seats or holds; see Services/Booking.
-        if (invoice.Status == InvoiceStatuses.Paid)
-        {
-            await _bookings.OnInvoicePaidAsync(invoice, ct);
-        }
     }
 
     private IQueryable<Invoice> InvoicesFor(BillingActor actor)

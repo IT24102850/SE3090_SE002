@@ -10,9 +10,9 @@ import {
 } from '../../api/bookingApi';
 import type { RootState } from '../../store/store';
 import { apiErrorMessage, useToast } from '../../shared/components/Toast';
+import { useConfirmation } from '../../shared/components/ConfirmationProvider';
 import { addDays, formatDayLabel, formatTime, toISODate } from '../../shared/dateUtils';
 import type { AvailableSlot, Booking } from '../booking/types';
-import { AddToCalendarButton } from '../../shared/components/AddToCalendarButton';
 import { BookingCard, CheckInQr, isUpcoming } from './customerShared';
 
 /* My bookings - the web twin of the Flutter MyBookingsScreen: upcoming,
@@ -27,14 +27,9 @@ export default function MyBookingsPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const toast = useToast();
+  const confirm = useConfirmation();
   const today = useMemo(() => new Date(), []);
-  /* The business can confirm, move or cancel any of these from its own
-   * side, so the list refreshes on a timer and on focus rather than only
-   * when this page makes a change. */
-  const { data, isLoading } = useGetBookingsQuery(
-    { tenantId, dateFrom: toISODate(addDays(today, -365)), dateTo: toISODate(addDays(today, 365)), pageSize: 500 },
-    { skip: !tenantId, pollingInterval: 30_000, skipPollingIfUnfocused: true, refetchOnFocus: true, refetchOnReconnect: true },
-  );
+  const { data, isLoading } = useGetBookingsQuery({ tenantId, dateFrom: toISODate(addDays(today, -365)), dateTo: toISODate(addDays(today, 365)), pageSize: 500 }, { skip: !tenantId });
   const { data: tenant } = useGetTenantQuery({ tenantId }, { skip: !tenantId });
   const [tab, setTab] = useState<Tab>('upcoming');
   const [qrFor, setQrFor] = useState<Booking | null>(null);
@@ -51,7 +46,12 @@ export default function MyBookingsPage() {
   const rows = lists[tab];
 
   async function cancel(b: Booking) {
-    if (!window.confirm(`Cancel ${b.bookingTypeName} with ${b.resourceName} on ${formatDayLabel(new Date(b.startTime))}? This cannot be undone.`)) return;
+    if (!await confirm({
+      title: 'Cancel this booking?',
+      message: `Cancel ${b.bookingTypeName} with ${b.resourceName} on ${formatDayLabel(new Date(b.startTime))}? This cannot be undone.`,
+      confirmLabel: 'Cancel booking',
+      tone: 'danger',
+    })) return;
     setBusyId(b.id);
     try {
       await cancelBooking(b.id).unwrap();
@@ -103,7 +103,6 @@ export default function MyBookingsPage() {
                 actions={tab === 'upcoming' ? (
                   <>
                     {b.status !== 'Pending' && <button type="button" className="btn btn-primary" onClick={() => setQrFor(b)}>Check-in code</button>}
-                    <AddToCalendarButton bookingId={b.id} />
                     {tenant && canChange(b, tenant.rescheduleCutoffHours) && (b.status === 'Pending' || b.status === 'Confirmed') && (
                       <button type="button" className="btn btn-secondary" onClick={() => setMoving(b)}>Reschedule</button>
                     )}

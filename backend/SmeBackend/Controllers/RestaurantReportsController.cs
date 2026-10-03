@@ -1190,7 +1190,7 @@ public class RestaurantReportsController : ControllerBase
     // may still ask for another one explicitly.
     private Guid? ResolveBranchScope(Guid? requested)
     {
-        if (User.IsInRole(UserRole.Admin.ToString()) || requested.HasValue) return requested;
+        if (User.IsInRole(UserRole.Admin.ToString())) return requested;
         return Guid.TryParse(User.FindFirst(InventoryAccessHandler.BranchIdClaimType)?.Value, out var branchId) ? branchId : null;
     }
 }

@@ -69,13 +69,7 @@ const KPIS = {
  *  empty object so an unrelated query cannot fail the test. */
 function stubFetch(overrides: Record<string, unknown> = {}) {
   return vi.fn(async (input: RequestInfo | URL) => {
-    // RTK Query's fetchBaseQuery calls fetch(new Request(url, config)), and
-    // Request.toString() is "[object Request]", not the URL - so matching on
-    // toString() routed nothing and every query silently received the {}
-    // fallback. Read .url off a Request; only a string or URL stringifies.
-    const url = typeof input === 'string' ? input
-      : input instanceof URL ? input.toString()
-      : input.url;
+    const url = typeof input === 'string' ? input : input.toString();
     const routes: Record<string, unknown> = {
       '/departures/board': { from: '', to: '', today: [DEPARTURE], upcoming: [DEPARTURE] },
       '/reports/excursions/kpis': KPIS,
@@ -147,7 +141,7 @@ describe('WhaleWatchingDashboard', () => {
     }} />);
 
     expect(await screen.findByText('Mirissa Jetliner')).toBeInTheDocument();
-    expect(await screen.findByText(/Sea Guardian/)).toBeInTheDocument();
+    expect(await screen.findByText('Sea Guardian')).toBeInTheDocument();
     expect(screen.getByText(/Manage today's departures/i)).toBeInTheDocument();
   });
 
@@ -166,7 +160,7 @@ describe('WhaleWatchingDashboard', () => {
     expect(screen.getByText('Sighting success')).toBeInTheDocument();
     expect(screen.getByText('Weather-cancelled')).toBeInTheDocument();
     expect(screen.getByText('Waiver completion')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getAllByText('78.6%').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByText('78.6%')).toBeInTheDocument());
     // Pax reads against the capacity it is measured on.
     expect(screen.getByText('42 / 400')).toBeInTheDocument();
   });
@@ -207,7 +201,7 @@ describe('DashboardRouter', () => {
 
     renderWith(<DashboardRouter />);
 
-    expect(await screen.findByText(/Sea Guardian/)).toBeInTheDocument();
+    expect(await screen.findByText('Sea Guardian')).toBeInTheDocument();
     expect(screen.getByText('Open manifest')).toBeInTheDocument();
   });
 

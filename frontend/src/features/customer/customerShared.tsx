@@ -37,7 +37,6 @@ export function money(amount: number, currency = 'LKR'): string {
 
 const CUSTOMER_STATUS: Partial<Record<Booking['status'], string>> = {
   Pending: 'Awaiting approval',
-  PendingPayment: 'Payment pending',
   Confirmed: 'Confirmed',
   CheckedIn: 'Checked in',
   InProgress: 'In progress',
@@ -46,7 +45,6 @@ const CUSTOMER_STATUS: Partial<Record<Booking['status'], string>> = {
   NoShow: 'Missed',
   Rejected: 'Declined',
   WeatherCancelled: 'Cancelled (weather)',
-  Expired: 'Payment expired',
 };
 
 export function StatusBadge({ status }: { status: Booking['status'] }) {
@@ -55,7 +53,7 @@ export function StatusBadge({ status }: { status: Booking['status'] }) {
 }
 
 export function isUpcoming(b: Booking, now = new Date()): boolean {
-  return new Date(b.endTime) >= now && b.status !== 'Cancelled' && b.status !== 'Rejected' && b.status !== 'NoShow' && b.status !== 'WeatherCancelled' && b.status !== 'Completed' && b.status !== 'Expired';
+  return new Date(b.endTime) >= now && b.status !== 'Cancelled' && b.status !== 'Rejected' && b.status !== 'NoShow' && b.status !== 'WeatherCancelled' && b.status !== 'Completed';
 }
 
 export function CheckInQr({ bookingId, resourceName, size = 180 }: { bookingId: string; resourceName?: string; size?: number }) {
