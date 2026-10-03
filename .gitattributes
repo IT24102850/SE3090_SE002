@@ -1,0 +1,40 @@
+# Binary formats, declared explicitly.
+#
+# This repo is worked on with core.autocrlf=true, and Git's own text/binary
+# guess is only a heuristic: a PDF that happens to contain no NUL bytes is
+# taken for text, and committing it strips every CR byte. That silently
+# corrupted a submission PDF once (25841 bytes on disk, 25590 in the blob),
+# which is why these are listed rather than left to the guess.
+
+*.pdf    binary
+*.docx   binary
+*.doc    binary
+*.pptx   binary
+*.xlsx   binary
+*.apk    binary
+*.aab    binary
+*.jar    binary
+*.keystore binary
+*.jks    binary
+
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.ico    binary
+*.svgz   binary
+
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.otf    binary
+*.eot    binary
+
+*.so     binary
+*.dll    binary
+*.dylib  binary
+*.pdb    binary
+*.zip    binary
+*.gz     binary
+*.7z     binary
