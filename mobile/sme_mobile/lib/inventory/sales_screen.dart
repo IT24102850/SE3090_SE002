@@ -1017,7 +1017,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Widget _buildBranchPicker() => DropdownButtonFormField<String>(
         key: const Key('sales-branch-dropdown'),
-        initialValue: _selectedBranchId,
+        value: _selectedBranchId,
         isExpanded: true,
         decoration: _inputDecoration('Sale branch', Icons.storefront_outlined),
         dropdownColor: AppColors.bgMid,

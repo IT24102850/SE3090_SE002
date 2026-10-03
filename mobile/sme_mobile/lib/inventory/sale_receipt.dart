@@ -106,7 +106,7 @@ class SaleReceiptPdfGenerator {
                     children: [
                       pw.Text(
                         'SALES RECEIPT',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: PdfColors.white,
                           fontSize: 10,
                           fontWeight: pw.FontWeight.bold,
@@ -116,7 +116,7 @@ class SaleReceiptPdfGenerator {
                       pw.SizedBox(height: 7),
                       pw.Text(
                         'Sale recorded',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: PdfColors.white,
                           fontSize: 23,
                           fontWeight: pw.FontWeight.bold,
@@ -125,7 +125,7 @@ class SaleReceiptPdfGenerator {
                       pw.SizedBox(height: 5),
                       pw.Text(
                         'Official inventory sale record',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: PdfColor.fromInt(0xFFC3D1E1),
                           fontSize: 10,
                         ),
@@ -144,7 +144,7 @@ class SaleReceiptPdfGenerator {
                   ),
                   child: pw.Text(
                     'SALE RECORDED',
-                    style: const pw.TextStyle(
+                    style: pw.TextStyle(
                       color: PdfColor.fromInt(0xFF8CEBFA),
                       fontSize: 7,
                       fontWeight: pw.FontWeight.bold,
@@ -210,7 +210,7 @@ class SaleReceiptPdfGenerator {
                           children: [
                             pw.Text(
                               receipt.itemName,
-                              style: const pw.TextStyle(
+                              style: pw.TextStyle(
                                 color: _ink,
                                 fontSize: 12,
                                 fontWeight: pw.FontWeight.bold,
@@ -247,7 +247,7 @@ class SaleReceiptPdfGenerator {
                       pw.SizedBox(width: 18),
                       pw.Text(
                         'LKR ${_money(receipt.total)}',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: _ink,
                           fontSize: 9,
                           fontWeight: pw.FontWeight.bold,
@@ -302,7 +302,7 @@ class SaleReceiptPdfGenerator {
                   children: [
                     pw.Text(
                       'TOTAL',
-                      style: const pw.TextStyle(
+                      style: pw.TextStyle(
                         color: PdfColor.fromInt(0xFFC3D1E1),
                         fontSize: 9,
                         fontWeight: pw.FontWeight.bold,
@@ -312,7 +312,7 @@ class SaleReceiptPdfGenerator {
                     pw.SizedBox(height: 7),
                     pw.Text(
                       'LKR ${_money(receipt.total)}',
-                      style: const pw.TextStyle(
+                      style: pw.TextStyle(
                         color: PdfColors.white,
                         fontSize: 19,
                         fontWeight: pw.FontWeight.bold,
@@ -351,7 +351,7 @@ class SaleReceiptPdfGenerator {
           pw.SizedBox(height: 5),
           pw.Text(
             value,
-            style: const pw.TextStyle(
+            style: pw.TextStyle(
               color: _ink,
               fontSize: 10,
               fontWeight: pw.FontWeight.bold,
@@ -362,7 +362,7 @@ class SaleReceiptPdfGenerator {
 
   static pw.Widget _tableHeader(String value) => pw.Text(
         value,
-        style: const pw.TextStyle(
+        style: pw.TextStyle(
           color: _muted,
           fontSize: 7,
           fontWeight: pw.FontWeight.bold,
@@ -386,7 +386,7 @@ class SaleReceiptPdfGenerator {
         ),
         child: pw.Text(
           'LOW STOCK  |  Remaining quantity is at or below the reorder level.',
-          style: const pw.TextStyle(
+          style: pw.TextStyle(
             color: _amber,
             fontSize: 9,
             fontWeight: pw.FontWeight.bold,

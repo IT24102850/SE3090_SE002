@@ -810,31 +810,32 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                     const Divider(color: AppColors.hairline, height: 22),
                     Text('Fulfilment', style: AppTextStyles.subtitle),
                     const SizedBox(height: 5),
-                    RadioGroup<bool>(
-                      groupValue: _delivery,
-                      onChanged: (value) =>
-                          setSheetState(() => _delivery = value ?? false),
-                      child: Column(
-                        children: [
-                          RadioListTile<bool>(
-                            value: false,
-                            title: Text(
-                                'Pick up at ${_firstOrNull(_branches.where((branch) => branch['id'] == _branchId))?['name'] ?? 'the store'}',
-                                style: AppTextStyles.body),
-                            activeColor: AppColors.cyan,
-                            contentPadding: EdgeInsets.zero,
-                            dense: true,
-                          ),
-                          RadioListTile<bool>(
-                            value: true,
-                            title: Text('Deliver to me',
-                                style: AppTextStyles.body),
-                            activeColor: AppColors.cyan,
-                            contentPadding: EdgeInsets.zero,
-                            dense: true,
-                          ),
-                        ],
-                      ),
+                    Column(
+                      children: [
+                        RadioListTile<bool>(
+                          value: false,
+                          groupValue: _delivery,
+                          onChanged: (value) =>
+                              setSheetState(() => _delivery = value ?? false),
+                          title: Text(
+                              'Pick up at ${_firstOrNull(_branches.where((branch) => branch['id'] == _branchId))?['name'] ?? 'the store'}',
+                              style: AppTextStyles.body),
+                          activeColor: AppColors.cyan,
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                        ),
+                        RadioListTile<bool>(
+                          value: true,
+                          groupValue: _delivery,
+                          onChanged: (value) =>
+                              setSheetState(() => _delivery = value ?? false),
+                          title:
+                              Text('Deliver to me', style: AppTextStyles.body),
+                          activeColor: AppColors.cyan,
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                        ),
+                      ],
                     ),
                     if (_delivery) ...[
                       TextField(
@@ -2479,7 +2480,7 @@ class _StoreSelector extends StatelessWidget {
         const SizedBox(width: 8),
         Flexible(
           child: DropdownButtonFormField<String>(
-            initialValue: branchId,
+            value: branchId,
             isExpanded: true,
             decoration: const InputDecoration(
                 contentPadding:

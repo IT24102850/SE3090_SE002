@@ -2325,7 +2325,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
               if (_suppliers.isNotEmpty) ...[
                 DropdownButtonFormField<String>(
                   key: const Key('po-supplier-dropdown'),
-                  initialValue: _selectedSupplierId,
+                  value: _selectedSupplierId,
                   dropdownColor: const Color(0xFF17263C),
                   decoration: _inputDec('SUPPLIER'),
                   items: _suppliers
@@ -2464,7 +2464,7 @@ class _CreateOrderBottomSheetState extends State<_CreateOrderBottomSheet> {
               else
                 DropdownButtonFormField<String>(
                   key: ValueKey('po-item-dropdown-$_selectedSupplierId'),
-                  initialValue: _selectedItemId,
+                  value: _selectedItemId,
                   isExpanded: true,
                   dropdownColor: const Color(0xFF17263C),
                   decoration: _inputDec('SUPPLIER ITEM'),
@@ -2828,7 +2828,7 @@ class _ReceivePurchaseOrderSheetState
                           )
                         else
                           DropdownButtonFormField<String>(
-                            initialValue: _linkedInventoryItemIds[item.id],
+                            value: _linkedInventoryItemIds[item.id],
                             isExpanded: true,
                             dropdownColor: const Color(0xFF17263C),
                             decoration: InputDecoration(

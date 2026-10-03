@@ -788,7 +788,7 @@ class _StockOperationsScreenState extends State<StockOperationsScreen> {
                                   const SizedBox(height: 14),
                                   DropdownButtonFormField<String>(
                                     key: const Key('stock-operations-branch'),
-                                    initialValue: matches.any((candidate) =>
+                                    value: matches.any((candidate) =>
                                             candidate.id == _selectedItemId)
                                         ? _selectedItemId
                                         : null,
