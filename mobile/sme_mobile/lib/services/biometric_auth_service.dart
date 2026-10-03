@@ -54,7 +54,7 @@ class BiometricAuthService {
 
       return await _auth.authenticate(
         localizedReason: localizedReason,
-        options: const AuthenticationOptions(biometricOnly: true),
+        biometricOnly: true,
       );
     } on PlatformException catch (_) {
       // Platform failure (e.g. user cancelled or biometric not enrolled)

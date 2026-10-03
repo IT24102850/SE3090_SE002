@@ -1,9 +1,8 @@
-﻿import Modal from '../../shared/components/Modal';
+import Modal from '../../shared/components/Modal';
 import StatusBadge from '../../shared/components/StatusBadge';
 import { useCancelBookingMutation, useSendReminderMutation } from '../../api/bookingApi';
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
 import { formatDateTime } from '../../shared/dateUtils';
-import BookingHistoryTimeline from './BookingHistoryTimeline';
 import type { Booking } from './types';
 
 export default function BookingDetailsModal({ booking, onClose }: { booking: Booking; onClose: () => void }) {
@@ -74,10 +73,6 @@ export default function BookingDetailsModal({ booking, onClose }: { booking: Boo
           <div>{booking.notes}</div>
         </div>
       )}
-      <div className="field">
-        <label>History</label>
-        <BookingHistoryTimeline bookingId={booking.id} />
-      </div>
     </Modal>
   );
 }

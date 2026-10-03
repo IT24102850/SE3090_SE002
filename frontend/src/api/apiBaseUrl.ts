@@ -21,7 +21,7 @@ const configured = (import.meta.env.VITE_API_URL ?? '')
   .trim()
   .replace(/\/+$/, '');
 
-export const LOCAL_API_BASE_URL = 'http://localhost:5000/api';
+export const LOCAL_API_BASE_URL = 'http://localhost:5298/api';
 
 export const API_BASE_URL: string =
   /^https?:\/\//i.test(configured) ? configured

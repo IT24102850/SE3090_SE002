@@ -30,11 +30,25 @@ public sealed class InventoryAccessHandler : AuthorizationHandler<InventoryAcces
             return Task.CompletedTask;
         }
 
-        // Managers may act only on resources assigned to their JWT branch.
+        var hasAssignedBranch = Guid.TryParse(
+            context.User.FindFirst(BranchIdClaimType)?.Value,
+            out var assignedBranchId);
+
+        // Branch-bound inventory and purchase-order access always has to
+        // match the branch in the authenticated token. Only explicit metadata
+        // policies may omit a branch; they still require a valid assignment.
+        if (resource.BranchId.HasValue &&
+            (!hasAssignedBranch || assignedBranchId != resource.BranchId.Value))
+        {
+            return Task.CompletedTask;
+        }
+
+        var branchlessMetadataAllowed =
+            resource.BranchId.HasValue ||
+            requirement.AllowsBranchlessMetadata && hasAssignedBranch;
+
         if (context.User.IsInRole(UserRole.Manager.ToString()) &&
-            resource.BranchId.HasValue &&
-            Guid.TryParse(context.User.FindFirst(BranchIdClaimType)?.Value, out var managerBranchId) &&
-            managerBranchId == resource.BranchId.Value)
+            branchlessMetadataAllowed)
         {
             context.Succeed(requirement);
             return Task.CompletedTask;
@@ -44,7 +58,11 @@ public sealed class InventoryAccessHandler : AuthorizationHandler<InventoryAcces
         // trusted internal staff provisioning, not ordinary role assignment.
         if (context.User.IsInRole(UserRole.Staff.ToString()) &&
             context.User.FindAll(ComponentClaimType)
-                .Any(claim => claim.Value is "*" || claim.Value == requirement.Component))
+                .Any(claim => claim.Value is "*" || claim.Value == requirement.Component) &&
+            (resource.BranchId.HasValue ||
+                requirement.AllowsBranchlessMetadata &&
+                requirement.Component == "inventory.read" &&
+                hasAssignedBranch))
         {
             context.Succeed(requirement);
         }

@@ -14,7 +14,7 @@ The agent may call only the following tools:
 - `send_notification`
 - `update_inventory_count`
 
-These are implemented in `agents/inventory_tools.py` and are guarded by strict validation before execution. The purchase-order tool also enforces budget limits, supplier active status, and order-multiple/reorder rules when those fields are supplied.
+The inventory planning flow currently exposes read-only stock snapshot and recent movement tools in `tools/inventory_tools.py`. Replenishment quantities are computed deterministically from those captured API values. Purchase order creation remains in the existing backend/UI after a person reviews the recommendation; the other allow-listed mutation tools below describe the target contract and are not exposed by this read-only endpoint yet.
 
 ### `predict_demand`
 

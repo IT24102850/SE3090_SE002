@@ -23,6 +23,7 @@ export default function CustomerAiPlannerPage() {
   const { data: requests, isLoading: requestsLoading } = useGetMyWorkflowsQuery();
   const [findAndBook, { isLoading }] = useFindAndBookMutation();
   const [objective, setObjective] = useState('');
+  const [bookingTypeId, setBookingTypeId] = useState('');
   const [days, setDays] = useState(7);
   const [result, setResult] = useState<{ status: string; bookingId?: string | null; message?: string | null; workflowId: string } | null>(null);
 
@@ -33,7 +34,8 @@ export default function CustomerAiPlannerPage() {
     setResult(null);
     try {
       const from = new Date();
-      const r = await findAndBook({ objective: objective.trim(), dateFrom: toISODate(from), dateTo: toISODate(addDays(from, days)) }).unwrap();
+      if (!bookingTypeId) { toast.show('Choose a service first.', 'error'); return; }
+      const r = await findAndBook({ objective: objective.trim(), dateFrom: toISODate(from), dateTo: toISODate(addDays(from, days)), extraConstraints: { booking_type_id: bookingTypeId } }).unwrap();
       setResult(r);
       toast.show(r.bookingId ? 'Booked!' : r.message ?? 'Request sent.', r.bookingId ? 'success' : 'info');
     } catch (error) {
@@ -46,12 +48,17 @@ export default function CustomerAiPlannerPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">AI planner</h1>
-          <p className="page-subtitle">Tell it what you want; it finds a slot that fits and books it for you.</p>
+          <p className="page-subtitle">Choose a service and describe what you need. AI searches available slots; it may book immediately or send the request to the business for approval.</p>
         </div>
       </div>
 
       <section className="card chart-card">
         <div className="cust-ai">
+          <label className="cust-note" htmlFor="ai-booking-type">Service</label>
+          <select id="ai-booking-type" className="input" value={bookingTypeId} onChange={(e) => setBookingTypeId(e.target.value)} disabled={!types?.length}>
+            <option value="">Choose a service</option>
+            {(types ?? []).map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+          </select>
           <textarea className="input" placeholder='e.g. "Find me the earliest beginner-friendly slot this week, afternoons only"' value={objective} onChange={(e) => setObjective(e.target.value)} aria-label="What would you like?" />
           {examples.length > 0 && (
             <div className="cust-ai-examples">
@@ -64,7 +71,7 @@ export default function CustomerAiPlannerPage() {
               {WINDOWS.map((d) => <button key={d} type="button" role="tab" aria-selected={days === d} className={days === d ? 'active' : ''} onClick={() => setDays(d)}>{d} days</button>)}
             </div>
             <span style={{ flex: 1 }} />
-            <button type="button" className="btn btn-primary" disabled={isLoading} onClick={submit}>{isLoading ? 'Planning…' : '✨ Plan & book'}</button>
+            <button type="button" className="btn btn-primary" disabled={isLoading || !bookingTypeId} onClick={submit}>{isLoading ? 'Planning…' : '✨ Find & book'}</button>
           </div>
           {(types?.length ?? 0) === 0 && <p className="cust-note">No bookable services yet.</p>}
           {result && (

@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.Models;
 using SmeBackend.Shared;
@@ -36,6 +36,12 @@ public static class RecipeConsumptionService
         var recipe = RestaurantConfig.RecipeOf(type);
         if (recipe.Count == 0) return 0;
 
+        var branchId = await db.Resources
+            .Where(resource => resource.Id == booking.ResourceId && resource.TenantId == booking.TenantId)
+            .Select(resource => resource.BranchId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (!branchId.HasValue) return 0;
+
         var reference = ReferenceFor(booking.Id);
         var alreadyConsumed = await db.StockMovements.AsNoTracking()
             .AnyAsync(m => m.TenantId == booking.TenantId && m.MovementType == MovementType && m.Reference == reference, cancellationToken);
@@ -43,7 +49,11 @@ public static class RecipeConsumptionService
 
         var skus = recipe.Select(r => r.Sku.ToLowerInvariant()).Distinct().ToList();
         var items = await db.InventoryItems
-            .Where(i => i.TenantId == booking.TenantId && i.IsActive && skus.Contains(i.Sku.ToLower()))
+            .Where(i =>
+                i.TenantId == booking.TenantId &&
+                i.BranchId == branchId &&
+                i.IsActive &&
+                skus.Contains(i.Sku.ToLower()))
             .ToListAsync(cancellationToken);
         if (items.Count == 0) return 0;
 
@@ -54,23 +64,19 @@ public static class RecipeConsumptionService
         foreach (var line in recipe)
         {
             var item = items.FirstOrDefault(i => string.Equals(i.Sku, line.Sku, StringComparison.OrdinalIgnoreCase));
-            // An item without a branch cannot carry a movement (BranchId is
-            // a required FK), so it is skipped rather than half-recorded.
-            if (item == null || !item.BranchId.HasValue) continue;
+            if (item == null) continue;
 
             var wanted = line.Qty * (line.PerCover ? covers : 1);
             var taken = Math.Min(wanted, Math.Max(0m, item.Quantity));
             var shortfall = wanted - taken;
 
-            var quantityBefore = item.Quantity;
             item.Quantity -= taken;
             item.UpdatedAt = now;
-            SmeBackend.Services.Inventory.LowStockAlerts.QueueIfCrossed(db, item, quantityBefore);
 
             db.StockMovements.Add(new StockMovement
             {
                 TenantId = booking.TenantId,
-                BranchId = item.BranchId.Value,
+                BranchId = branchId.Value,
                 InventoryItemId = item.Id,
                 MovementType = MovementType,
                 Quantity = -wanted,

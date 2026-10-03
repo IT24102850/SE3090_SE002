@@ -4,8 +4,10 @@ from agents.inventory_agents import (
     DomainSnapshot,
     InventoryPlan,
     analyze_inventory_domain,
+    analyze_inventory_health,
     recommend_replenishment,
 )
+from tools.inventory_tools import InventoryToolsClient
 
 
 def _item(*, quantity: float, reorder: float = 10) -> dict:
@@ -46,12 +48,7 @@ def test_recommendation_uses_negative_mobile_issue_adjustments_and_excludes_wast
     assert recommendation.avg_daily_outflow == 1
     assert recommendation.recommended_quantity == 9
     assert "negative manual-adjustment" in recommendation.validation_notes[0]
-    # By presence, not position: replenishment now also reports where the lead
-    # time came from, and the read-only disclaimer stays last however many
-    # notes precede it.
-    notes = recommendation.validation_notes
-    assert any("no stock or purchase order was changed" in note for note in notes)
-    assert any("lead-time data was found" in note for note in notes)
+    assert any("no stock or purchase order was changed" in note for note in recommendation.validation_notes)
 
 
 def test_no_usage_history_falls_back_to_reorder_level_with_low_confidence():
@@ -72,6 +69,39 @@ def test_projected_stock_cover_can_trigger_reorder_before_reorder_level():
 
     assert recommendation.days_until_reorder == 1
     assert recommendation.recommended_quantity == 16
+
+
+def test_below_reorder_point_is_not_described_as_zero_days():
+    snapshot = DomainSnapshot(items=[_item(quantity=48, reorder=50)], movements=[_movement("Issue", -4)])
+    [recommendation] = recommend_replenishment(
+        snapshot=snapshot, plan=_plan(), objective="reorder", workflow_id="wf",
+    )
+
+    [risk] = [
+        insight for insight in analyze_inventory_health(
+            snapshot=snapshot, plan=_plan(), recommendations=[recommendation],
+        )
+        if insight.category == "risk"
+    ]
+
+    assert recommendation.days_until_reorder == 0
+    assert "already below its reorder level (on hand 48; reorder at 50)" in recommendation.reason
+    assert "0.0 days" not in recommendation.reason
+    assert "Disposable" not in risk.detail
+    assert "Paper towels is already below its reorder level" in risk.detail
+    assert "0.0 days" not in risk.detail
+
+
+def test_positive_sub_tenth_day_estimate_is_not_reported_as_zero():
+    snapshot = DomainSnapshot(items=[_item(quantity=10.01, reorder=10)], movements=[_movement("Issue", -280)])
+    [recommendation] = recommend_replenishment(
+        snapshot=snapshot, plan=_plan(), objective="reorder", workflow_id="wf",
+    )
+    insights = analyze_inventory_health(snapshot=snapshot, plan=_plan(), recommendations=[recommendation])
+    [risk] = [insight for insight in insights if insight.category == "risk"]
+
+    assert recommendation.days_until_reorder == 0
+    assert "less than 0.1 days" in risk.detail
 
 
 def test_outflow_older_than_thirty_days_is_not_treated_as_recent_demand():
@@ -100,3 +130,43 @@ def test_domain_analyst_uses_authorized_api_snapshots_without_rewriting_them():
 
     assert result.items[0]["quantity"] == 4
     assert result.movements[0]["quantity"] == -1
+
+
+def test_stock_movement_tool_reads_paginated_inventory_api_response():
+    movement = _movement("Issue", -1)
+    client = InventoryToolsClient("https://example.test", "test-token")
+    client._get = lambda path, params: {
+        "items": [movement],
+        "page": 1,
+        "pageSize": 100,
+        "totalCount": 1,
+        "totalPages": 1,
+    }
+    try:
+        assert client.query_stock_movements() == [movement]
+    finally:
+        client.close()
+
+
+def test_stock_movement_tool_still_accepts_legacy_list_response():
+    movement = _movement("Issue", -1)
+    client = InventoryToolsClient("https://example.test", "test-token")
+    client._get = lambda path, params: [movement]
+    try:
+        assert client.query_stock_movements() == [movement]
+    finally:
+        client.close()
+
+
+def test_stock_movement_tool_rejects_unrecognized_response():
+    client = InventoryToolsClient("https://example.test", "test-token")
+    client._get = lambda path, params: {"movements": []}
+    try:
+        try:
+            client.query_stock_movements()
+        except ValueError as error:
+            assert str(error) == "Inventory API returned an invalid stock movement list."
+        else:
+            raise AssertionError("Expected invalid stock movement response to fail.")
+    finally:
+        client.close()

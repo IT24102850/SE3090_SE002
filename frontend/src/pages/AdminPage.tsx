@@ -25,10 +25,10 @@ const AREAS = [
     body: 'The public listing: cover image, gallery, description, amenities, contact details and opening hours.',
   },
   {
-    to: '/staff',
-    icon: '🧑‍💼',
-    title: 'Staff',
-    body: 'Invite managers and staff, assign them to a branch, and deactivate accounts that should no longer sign in.',
+    to: '/users',
+    icon: '👥',
+    title: 'People & access',
+    body: 'Create and manage all business accounts, assign Admin, Manager, or Staff roles, and review registration requests.',
   },
   {
     to: '/branches',

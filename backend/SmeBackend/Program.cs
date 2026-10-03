@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -6,8 +6,6 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using Serilog;
-using Serilog.Events;
 using SmeBackend.Authorization;
 using SmeBackend.Data;
 using SmeBackend.Middleware;
@@ -16,28 +14,16 @@ using SmeBackend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Structured logging through Serilog. It replaces every default provider,
-// which also keeps the Windows Event Log provider (injected by some local
-// tooling, and a startup crash without elevation) out of the pipeline.
-// Levels and extra sinks can be overridden from the "Serilog" config section.
-builder.Host.UseSerilog((context, services, logger) => logger
-    .ReadFrom.Configuration(context.Configuration)
-    .MinimumLevel.Information()
-    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
-    .Enrich.FromLogContext()
-    .Enrich.WithProperty("Application", "SmeBackend")
-    .WriteTo.Console(outputTemplate:
-        "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext}: {Message:lj} {Properties:j}{NewLine}{Exception}"));
-
-// Global error handling: any unhandled exception becomes an RFC 7807
-// ProblemDetails body with a trace id, never a stack trace or a bare 500.
-builder.Services.AddProblemDetails(options =>
+// The Windows Event Log provider can be injected by local tooling. It requires
+// elevated permissions and turns otherwise harmless EF Core warnings into a
+// startup crash for a normal developer account. Development logs belong in the
+// console/debug output instead.
+if (builder.Environment.IsDevelopment())
 {
-    options.CustomizeProblemDetails = context =>
-        context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
-});
-builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+    builder.Logging.ClearProviders();
+    builder.Logging.AddSimpleConsole();
+    builder.Logging.AddDebug();
+}
 
 // Railway (and most PaaS hosts) assign the listen port via $PORT at runtime
 // rather than appsettings/launchSettings - bind to it when present so the
@@ -87,42 +73,9 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddMemoryCache();
-
-// SMS through text.lk (Sri Lankan numbers), and the keyless public-holiday
-// feed. Both are advisory paths, so both get short timeouts.
-builder.Services.AddHttpClient(SmeBackend.Services.TextLkSmsGateway.ClientName,
-    client => client.Timeout = TimeSpan.FromSeconds(15));
-builder.Services.AddScoped<SmeBackend.Services.ISmsGateway, SmeBackend.Services.TextLkSmsGateway>();
-
-builder.Services.AddHttpClient(SmeBackend.Services.GoogleCalendarHolidayService.ClientName,
-    client => client.Timeout = TimeSpan.FromSeconds(10));
-builder.Services.AddScoped<SmeBackend.Services.IPublicHolidayService,
-    SmeBackend.Services.GoogleCalendarHolidayService>();
-
-builder.Services.AddHttpClient(SmeBackend.Services.OpenRouteTravelTimeService.ClientName,
-    client => client.Timeout = TimeSpan.FromSeconds(10));
-builder.Services.AddScoped<SmeBackend.Services.ITravelTimeService,
-    SmeBackend.Services.OpenRouteTravelTimeService>();
-
-// Open-Meteo: no API key, so the forecast works from a clean clone. A short
-// timeout keeps an advisory call from holding up the screen that asked for it.
-builder.Services.AddHttpClient(SmeBackend.Services.OpenMeteoForecastService.ClientName,
-    client => client.Timeout = TimeSpan.FromSeconds(8));
-builder.Services.AddScoped<SmeBackend.Services.IWeatherForecastService,
-    SmeBackend.Services.OpenMeteoForecastService>();
-
-// Live notifications. The stream is a singleton because connections outlive
-// any one request; the interceptor publishes a Notification row the moment its
-// transaction commits, so every site that raises one is covered without having
-// to remember to announce it.
-builder.Services.AddSingleton<SmeBackend.Services.INotificationStream, SmeBackend.Services.NotificationStream>();
-builder.Services.AddSingleton<SmeBackend.Services.NotificationPublishInterceptor>();
-
 // PostgreSQL
-builder.Services.AddDbContext<AppDbContext>((sp, options) =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
-           .AddInterceptors(sp.GetRequiredService<SmeBackend.Services.NotificationPublishInterceptor>()));
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -177,21 +130,11 @@ builder.Services.AddSingleton<IPlatformSecretProtector, PlatformSecretProtector>
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
-builder.Services.AddScoped<ICurrentActor, CurrentActor>();
 builder.Services.AddScoped<ICustomerAccountService, CustomerAccountService>();
-
-// Pay to confirm a booking: the booking half of the payment flow, built on
-// the billing engine's gateways rather than beside them (Services/Booking).
-builder.Services.AddScoped<SmeBackend.Services.BookingPayments.IBookingCheckoutService, SmeBackend.Services.BookingPayments.BookingCheckoutService>();
-builder.Services.AddScoped<SmeBackend.Services.BookingPayments.IBookingPaymentListener, SmeBackend.Services.BookingPayments.BookingPaymentListener>();
-builder.Services.AddHostedService<SmeBackend.Services.BookingPayments.BookingHoldExpiryService>();
 builder.Services.AddHostedService<SmeBackend.Services.ReminderDispatchService>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPlannerAgentService, SmeBackend.Services.PlannerAgentService>();
 builder.Services.AddHttpClient<SmeBackend.Services.IInventoryAgentService, SmeBackend.Services.InventoryAgentService>();
-// Real Twilio (SMS/WhatsApp) and SendGrid (email) delivery, reusing the
-// gateway code billing already ships. Without credentials it records
-// Simulated rather than pretending the reminder was sent.
-builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.ReminderChannelSender>();
+builder.Services.AddScoped<SmeBackend.Services.IReminderChannelSender, SmeBackend.Services.StubReminderChannelSender>();
 builder.Services.AddHttpClient<SmeBackend.Services.IPushNotificationSender, SmeBackend.Services.FcmPushNotificationSender>();
 builder.Services.AddScoped<SmeBackend.Services.ICloudinaryImageService, SmeBackend.Services.CloudinaryImageService>();
 builder.Services.AddSingleton<SmeBackend.Services.IPasswordResetManager, SmeBackend.Services.PasswordResetManager>();
@@ -212,37 +155,12 @@ builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingSettingsService>(
     sp.GetRequiredService<SmeBackend.Services.Billing.BillingSettingsService>());
 builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingReportService, SmeBackend.Services.Billing.BillingReportService>();
 builder.Services.AddScoped<SmeBackend.Services.Billing.IBillingAgentService, SmeBackend.Services.Billing.BillingAgentService>();
-// The billing copilot's two model edges (POST /billing/plan, /billing/narrate
-// on the agent service). The deterministic /analyze path does not depend on
-// it, so a missing agent service degrades the copilot alone.
-builder.Services.AddHttpClient<SmeBackend.Services.Billing.IBillingPlannerService, SmeBackend.Services.Billing.BillingPlannerService>();
 builder.Services.AddScoped<SmeBackend.Services.Billing.IPaymentCheckoutService, SmeBackend.Services.Billing.PaymentCheckoutService>();
 builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.StripePaymentProcessor>();
 builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.PayPalPaymentProcessor>();
 builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessor, SmeBackend.Services.Billing.ManualPaymentProcessor>();
 builder.Services.AddSingleton<SmeBackend.Services.Billing.IPaymentProcessorFactory, SmeBackend.Services.Billing.PaymentProcessorFactory>();
 builder.Services.AddHostedService<SmeBackend.Services.Billing.BillingAutomationService>();
-
-// Unify's own subscription: what a tenant admin pays US for the platform, as
-// opposed to the billing engine above, which is what a tenant charges their
-// own customers. The two never share credentials - see
-// Services/PlatformBilling/PlatformGatewayProvider.cs - but they do share the
-// IPaymentProcessor implementations registered just above, so Stripe and
-// PayPal are implemented once.
-builder.Services.AddSingleton<SmeBackend.Services.PlatformBilling.IPlatformGatewayProvider,
-    SmeBackend.Services.PlatformBilling.PlatformGatewayProvider>();
-builder.Services.AddScoped<SmeBackend.Services.PlatformBilling.IEntitlementService,
-    SmeBackend.Services.PlatformBilling.EntitlementService>();
-builder.Services.AddScoped<SmeBackend.Services.PlatformBilling.IPlatformSubscriptionService,
-    SmeBackend.Services.PlatformBilling.PlatformSubscriptionService>();
-builder.Services.AddScoped<SmeBackend.Services.PlatformBilling.IPlatformCheckoutService,
-    SmeBackend.Services.PlatformBilling.PlatformCheckoutService>();
-builder.Services.AddHostedService<SmeBackend.Services.PlatformBilling.PlatformRenewalService>();
-// The platform owner's Agentic AI console. An HttpClient-backed service
-// because it calls the internal agent service, exactly as the other
-// agent flows do - React and Flutter never reach that service directly.
-builder.Services.AddHttpClient<SmeBackend.Services.PlatformBilling.IPlatformCopilotService,
-    SmeBackend.Services.PlatformBilling.PlatformCopilotService>();
 
 // The public website booking widget is anonymous, so it gets a per-IP
 // budget that no signed-in endpoint needs: enough for a family working
@@ -273,18 +191,12 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-// CORS: only the deployed web app (and its Vercel previews) and local dev
-// servers may call the API from a browser. The Flutter Android app is not a
-// browser and is unaffected; the website widget is an iframe served from the
-// web app's own origin. Extra origins: Cors:AllowedOrigins (or
-// Cors__AllowedOrigins__0, ... as environment variables).
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? new[] { "https://se-3090-se-002.vercel.app" };
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.SetIsOriginAllowed(origin => CorsOrigins.IsAllowed(origin, allowedOrigins))
+        policy.AllowAnyOrigin()
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -293,10 +205,6 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Middleware pipeline
-app.UseExceptionHandler();
-app.UseStatusCodePages();
-app.UseSerilogRequestLogging();
-
 // Railway and other managed hosts terminate TLS at a reverse proxy. Honor its
 // forwarded scheme before applying HTTPS redirection.
 app.UseForwardedHeaders(new ForwardedHeadersOptions
@@ -356,12 +264,7 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    // PostgreSQL gets its migrations; the in-memory provider the HTTP
-    // integration tests swap in has no migrations to run.
-    if (db.Database.IsRelational())
-        db.Database.Migrate();
-    else
-        db.Database.EnsureCreated();
+    db.Database.Migrate();
 
     // The platform owner exists in every environment - the console is for
     // the deployed site. See Data/PlatformOwnerSeeder.cs for the config keys.
@@ -369,13 +272,6 @@ using (var scope = app.Services.CreateScope())
         db,
         app.Configuration,
         scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PlatformOwnerSeeder"));
-
-    // The price list is code, not data: syncing it on every boot is what
-    // makes a pricing change a reviewable commit. See Data/PlatformPlanCatalog.
-    var catalogueLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PlatformCatalog");
-    await PlatformPlanCatalog.SyncAsync(db, catalogueLogger);
-    await PlatformAddOnCatalog.SyncAsync(db, catalogueLogger);
-    await PlatformPromotionSeeder.SeedAsync(db, catalogueLogger);
 
     if (app.Environment.IsDevelopment())
     {
@@ -413,6 +309,3 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
-
-// Exposes the entry point to WebApplicationFactory<Program> in the tests.
-public partial class Program { }

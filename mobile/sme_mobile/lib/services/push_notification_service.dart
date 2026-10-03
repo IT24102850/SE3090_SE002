@@ -16,14 +16,15 @@ import 'notification_sound_service.dart';
 /// caught and logged, never rethrown - push notifications must never be
 /// able to block app startup.
 class PushNotificationService {
+  /// Global navigator access lets app-level notifications survive route and
+  /// auth-screen changes, including the transition caused by logout.
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
   /// Lets foreground push messages show a SnackBar without threading a
   /// BuildContext through here. Attach via MaterialApp(scaffoldMessengerKey:).
-  static final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
-
-  /// The navigator, so a notification can be shown as an overlay entry rather
-  /// than a snack bar. The inventory feed (lib/inventory/app_notifications.dart)
-  /// needs an Overlay to insert into, and only the navigator has one.
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final GlobalKey<ScaffoldMessengerState> messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   static Future<void> init(WidgetRef ref) async {
     if (kIsWeb) {
@@ -37,7 +38,8 @@ class PushNotificationService {
     try {
       await Firebase.initializeApp();
     } catch (e) {
-      debugPrint('Push notifications unavailable (no Firebase project configured yet): $e');
+      debugPrint(
+          'Push notifications unavailable (no Firebase project configured yet): $e');
       return;
     }
 
@@ -55,14 +57,16 @@ class PushNotificationService {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final title = message.notification?.title;
       final body = message.notification?.body;
-      final text = [title, body].where((s) => s != null && s.isNotEmpty).join(': ');
+      final text =
+          [title, body].where((s) => s != null && s.isNotEmpty).join(': ');
       if (text.isEmpty) return;
       playMobileNotificationSound();
       messengerKey.currentState?.showSnackBar(SnackBar(content: Text(text)));
     });
   }
 
-  static Future<void> _registerToken(WidgetRef ref, FirebaseMessaging messaging) async {
+  static Future<void> _registerToken(
+      WidgetRef ref, FirebaseMessaging messaging) async {
     if (!ref.read(authProvider).isAuthenticated) return;
 
     try {

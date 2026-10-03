@@ -12,6 +12,7 @@ import {
   useUpdateBookingStatusMutation,
 } from '../../api/bookingApi';
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
+import { useConfirmation } from '../../shared/components/ConfirmationProvider';
 import BookingFormModal from './BookingFormModal';
 import {
   addDays, buildMonthGrid, buildWeekGrid, combineDateWithTimeOfDay, formatDayLabel, formatMonthYear, formatTime,
@@ -35,9 +36,6 @@ import './reservations.css';
  */
 
 type View = 'list' | 'week';
-
-// Matches the live cadence of the operational dashboards.
-const LIVE_POLL_MS = 30_000;
 
 const AVATAR_HUES = [212, 262, 330, 20, 152, 190];
 
@@ -69,6 +67,7 @@ export default function BookingManagerPage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
   const { show } = useToast();
+  const confirm = useConfirmation();
 
   const today = useMemo(() => startOfDay(new Date()), []);
   const [view, setView] = useState<View>('list');
@@ -100,11 +99,7 @@ export default function BookingManagerPage() {
   const windowTo = useMemo(() => addDays(monthDays[41], 1), [monthDays]);
   const { data: windowData, isFetching: windowLoading } = useGetBookingsQuery(
     { ...scope, dateFrom: toISODate(windowFrom < monthDays[0] ? windowFrom : monthDays[0]), dateTo: toISODate(windowTo), pageSize: 1000 },
-    /* This window is what "Next up" reads, and the desk watches it while
-     * customers book from their phones, so it refreshes on its own rather
-     * than only when this tab makes a change. Paused while the tab is in
-     * the background, and brought up to date the moment it is focused. */
-    { skip: !tenantId, pollingInterval: LIVE_POLL_MS, skipPollingIfUnfocused: true, refetchOnFocus: true, refetchOnReconnect: true },
+    { skip: !tenantId },
   );
   const windowItems = useMemo(() => windowData?.items ?? [], [windowData]);
 
@@ -229,7 +224,12 @@ export default function BookingManagerPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this booking permanently?')) return;
+    if (!await confirm({
+      title: 'Delete this booking?',
+      message: 'This permanently removes the booking and cannot be undone.',
+      confirmLabel: 'Delete booking',
+      tone: 'danger',
+    })) return;
     try { await deleteBooking(id).unwrap(); show('Booking deleted.', 'success'); }
     catch (err) { show(apiErrorMessage(err, 'Could not delete.'), 'error'); }
   };

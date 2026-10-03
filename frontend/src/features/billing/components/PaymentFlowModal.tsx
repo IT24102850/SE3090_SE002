@@ -18,7 +18,6 @@ interface Props {
   invoice: Invoice;
   onClose: () => void;
   onPaid: (invoice: Invoice) => void;
-  initialSession?: CheckoutResponse;
   api?: Pick<typeof billingApi, 'availableProviders' | 'checkout' | 'confirmPayment'>;
 }
 
@@ -28,11 +27,11 @@ const METHODS: { id: PayMethod; icon: string; title: string; hint: string }[] = 
   { id: 'Cash', icon: '💵', title: 'Cash', hint: 'Pay at the counter' },
 ];
 
-export default function PaymentFlowModal({ invoice, onClose, onPaid, initialSession, api = billingApi }: Props) {
+export default function PaymentFlowModal({ invoice, onClose, onPaid, api = billingApi }: Props) {
   const [available, setAvailable] = useState<AvailableProviders | null>(null);
   const [method, setMethod] = useState<PayMethod>('Card');
   const [amount, setAmount] = useState('');
-  const [step, setStep] = useState<PaymentStep>(() => initialSession ? stepForSession(initialSession) : { kind: 'choose' });
+  const [step, setStep] = useState<PaymentStep>({ kind: 'choose' });
   const cardRef = useRef<HTMLDivElement>(null);
   const stripeRef = useRef<{ stripe: StripeLike; card: { destroy: () => void } } | null>(null);
   const [cardError, setCardError] = useState<string | null>(null);

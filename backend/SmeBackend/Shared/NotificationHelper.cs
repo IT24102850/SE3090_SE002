@@ -9,7 +9,7 @@ namespace SmeBackend.Shared;
 /// claim of real device push.
 public static class NotificationHelper
 {
-    /// userId == null means tenant-wide (surfaced to Admin/Manager, e.g. an
+    /// userId == null means tenant-wide (surfaced to tenant users, e.g. an
     /// agent workflow awaiting approval) rather than a specific person.
     public static void Queue(AppDbContext db, Guid tenantId, Guid? userId, string type, string title, string message)
     {

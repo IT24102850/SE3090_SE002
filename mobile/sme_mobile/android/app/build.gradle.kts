@@ -8,18 +8,11 @@ plugins {
 android {
     namespace = "com.example.sme_mobile"
     compileSdk = flutter.compileSdkVersion
-    // flutter.ndkVersion (26.3.11579264) is an incomplete/corrupted install on
-    // this machine - missing source.properties, fails Gradle configuration.
-    // Pinned to 27.1.12297006, a verified-complete install under the SDK's
-    // ndk/ dir, until the default version is reinstalled properly.
-    ndkVersion = "27.1.12297006"
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-        // flutter_local_notifications uses java.time APIs; desugaring makes
-        // them available on older Android versions.
-        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -49,8 +42,4 @@ android {
 
 flutter {
     source = "../.."
-}
-
-dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

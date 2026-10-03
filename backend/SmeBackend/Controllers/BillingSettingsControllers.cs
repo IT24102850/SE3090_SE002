@@ -5,9 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.DTOs;
 using SmeBackend.Services.Billing;
-using SmeBackend.Authorization;
-using SmeBackend.Models;
-using SmeBackend.Services.PlatformBilling;
 
 namespace SmeBackend.Controllers;
 
@@ -16,10 +13,6 @@ namespace SmeBackend.Controllers;
 [Route("api/payment-gateways")]
 [Authorize]
 [Produces("application/json")]
-// Taking card payments from their own customers is a paid feature; the
-// sandbox provider stays available on every plan so a free tenant can
-// still see the flow end to end.
-[RequiresPlanFeature(PlanFeatures.PaymentGateways)]
 public class PaymentGatewaysController : BillingControllerBase
 {
     private readonly IBillingSettingsService _settings;
@@ -182,7 +175,6 @@ public class PaymentsController : BillingControllerBase
 [Route("api/commission-rules")]
 [Authorize(Policy = "StaffPlus")]
 [Produces("application/json")]
-[RequiresPlanFeature(PlanFeatures.AdvancedBilling)]
 public class CommissionRulesController : BillingControllerBase
 {
     private readonly IBillingSettingsService _settings;
@@ -243,7 +235,6 @@ public class CommissionRulesController : BillingControllerBase
 [Route("api/invoice-templates")]
 [Authorize(Policy = "StaffPlus")]
 [Produces("application/json")]
-[RequiresPlanFeature(PlanFeatures.CustomBranding)]
 public class InvoiceTemplatesController : BillingControllerBase
 {
     private readonly IBillingSettingsService _settings;

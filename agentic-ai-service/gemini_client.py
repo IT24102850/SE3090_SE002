@@ -32,168 +32,7 @@ from pydantic import BaseModel, ValidationError
 GEMINI_TIMEOUT_SECONDS = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30"))
 MAX_AGENT_TURNS = int(os.getenv("MAX_AGENT_TURNS", "6"))
 
-# Retry/fallback budget. Kept small on purpose: a viva demo would rather
-# degrade to a weaker model in two seconds than stall for thirty.
-GEMINI_MAX_ATTEMPTS = int(os.getenv("GEMINI_MAX_ATTEMPTS", "3"))
-GEMINI_BACKOFF_SECONDS = float(os.getenv("GEMINI_BACKOFF_SECONDS", "0.6"))
-
 _client: genai.Client | None = None
-
-# Every LLM call this module makes, in order, for the observability trace.
-# Reset per workflow by `reset_call_log()`; read by `drain_call_log()`.
-_call_log: list[dict[str, Any]] = []
-
-
-def reset_call_log() -> None:
-    _call_log.clear()
-
-
-def drain_call_log() -> list[dict[str, Any]]:
-    """Return the calls recorded since the last reset and clear the buffer."""
-    entries = list(_call_log)
-    _call_log.clear()
-    return entries
-
-
-def _record_call(*, model: str, attempt: int, duration_ms: int, ok: bool, error: str | None) -> None:
-    _call_log.append(
-        {"model": model, "attempt": attempt, "duration_ms": duration_ms, "ok": ok, "error": error}
-    )
-
-
-def _status_code(error: Exception) -> int | None:
-    """google-genai raises APIError subclasses carrying `.code`. Fall back to
-    scraping the message, because the SDK has moved this attribute before."""
-    code = getattr(error, "code", None)
-    if isinstance(code, int):
-        return code
-    match = re.search(r"\b(4\d\d|5\d\d)\b", str(error))
-    return int(match.group(1)) if match else None
-
-
-def _is_quota_exhausted(error: Exception) -> bool:
-    """A 429 comes in two kinds. A per-minute rate limit clears in seconds;
-    "you exceeded your current quota" is the plan's allowance and does not.
-    Only the message tells them apart."""
-    return _status_code(error) == 429 and "quota" in str(error).lower()
-
-
-def _is_malformed_request(error: Exception) -> bool:
-    """A 400 INVALID_ARGUMENT means we built the request wrong - an
-    unsupported role, a bad schema, an oversized payload. No model in the
-    chain will like it any better, and no amount of waiting changes it, so it
-    is the one failure worth failing fast and loudly on.
-
-    A 400 without INVALID_ARGUMENT is left to the normal path: it may be
-    model-specific (an unsupported parameter), where the next model can work.
-    """
-    return _status_code(error) == 400 and "INVALID_ARGUMENT" in str(error).upper()
-
-
-def _is_transient(error: Exception) -> bool:
-    """503 overloaded, 429 rate-limited, 500/504 server-side: worth retrying
-    on the SAME model. A 404 (model not available to this key), a 400/401/403,
-    or an exhausted quota never becomes true by waiting, so those skip
-    straight to the next model."""
-    code = _status_code(error)
-    if _is_quota_exhausted(error):
-        return False
-    if code in (429, 500, 502, 503, 504):
-        return True
-    if code is not None:
-        return False
-    # No code at all is usually a socket timeout or a dropped connection.
-    return True
-
-
-def _model_chain(model: str) -> list[str]:
-    """The requested model first, then declared fallbacks.
-
-    This exists because free-tier Gemini genuinely fails per-model: at the
-    time of writing `gemini-flash-latest` returns 503 "high demand" while
-    `gemini-3.5-flash` answers fine, and `gemini-2.5-flash` 404s for keys
-    issued recently. A single hard-coded model name is therefore a demo that
-    breaks on someone else's traffic spike, not a configuration preference.
-    """
-    raw = os.getenv("GEMINI_MODEL_FALLBACKS", "gemini-3.5-flash,gemini-flash-lite-latest")
-    chain = [model] + [m.strip() for m in raw.split(",") if m.strip()]
-    seen: set[str] = set()
-    return [m for m in chain if not (m in seen or seen.add(m))]
-
-
-# Circuit breaker. A model that just told us it is out of quota, or does not
-# exist for this key, will say the same thing on the next call - so the next
-# call skips it for a while instead of paying for the same failure again.
-# Without this, every agent call re-tried a spent model first; that was the
-# difference between a 10-second and a 37-second planning step in testing.
-QUOTA_COOLDOWN_SECONDS = float(os.getenv("GEMINI_QUOTA_COOLDOWN_SECONDS", "600"))
-MISSING_MODEL_COOLDOWN_SECONDS = 3600.0
-_cooldown_until: dict[str, float] = {}
-
-
-def _trip_breaker(model: str, error: Exception) -> None:
-    if _is_quota_exhausted(error):
-        _cooldown_until[model] = time.monotonic() + QUOTA_COOLDOWN_SECONDS
-    elif _status_code(error) == 404:
-        _cooldown_until[model] = time.monotonic() + MISSING_MODEL_COOLDOWN_SECONDS
-
-
-def _available_chain(model: str) -> list[str]:
-    """The chain minus models cooling down - unless that leaves nothing, in
-    which case try them anyway: a stale breaker must never turn a working
-    service into a guaranteed failure."""
-    chain = _model_chain(model)
-    now = time.monotonic()
-    live = [m for m in chain if _cooldown_until.get(m, 0.0) <= now]
-    return live or chain
-
-
-def reset_breakers() -> None:
-    _cooldown_until.clear()
-
-
-def _call_with_resilience(attempt_once: Callable[[str], Any], *, model: str) -> Any:
-    """Run `attempt_once(model)` across the fallback chain.
-
-    Transient failures are retried on the same model with exponential backoff;
-    permanent ones move to the next model immediately. If every model in the
-    chain is exhausted the last error is re-raised as AgentSafeFailure, so the
-    caller's safe-failure path is unchanged — this layer only decides how hard
-    to try before giving up.
-    """
-    last_error: Exception | None = None
-    for candidate in _available_chain(model):
-        for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
-            started = time.monotonic()
-            try:
-                result = attempt_once(candidate)
-                _record_call(
-                    model=candidate, attempt=attempt,
-                    duration_ms=int((time.monotonic() - started) * 1000), ok=True, error=None,
-                )
-                return result
-            except Exception as e:  # noqa: BLE001 - re-raised below as AgentSafeFailure
-                last_error = e
-                _record_call(
-                    model=candidate, attempt=attempt,
-                    duration_ms=int((time.monotonic() - started) * 1000), ok=False, error=str(e)[:200],
-                )
-                if _is_malformed_request(e):
-                    # Our fault, not the model's: the same request will be
-                    # rejected identically by every model in the chain, so
-                    # walking it only burns seconds and quota to reach the
-                    # same place. Surface it straight away, with the reason
-                    # intact so the bug is visible rather than buried under
-                    # "tried three models".
-                    raise AgentSafeFailure(
-                        f"Gemini rejected the request as malformed (not retryable): {e}"
-                    ) from e
-                if not _is_transient(e):
-                    _trip_breaker(candidate, e)
-                    break  # next model; waiting will not help
-                if attempt < GEMINI_MAX_ATTEMPTS:
-                    time.sleep(GEMINI_BACKOFF_SECONDS * (2 ** (attempt - 1)))
-    raise AgentSafeFailure(f"Gemini call failed after trying {', '.join(_model_chain(model))}: {last_error}")
 
 
 def _get_client() -> genai.Client:
@@ -252,10 +91,9 @@ def generate_structured(
 ) -> BaseModel:
     """No-tools call: the model must answer directly as JSON matching `response_schema`."""
     client = _get_client()
-
-    def _attempt(candidate: str):
-        return client.models.generate_content(
-            model=candidate,
+    try:
+        response = client.models.generate_content(
+            model=model,
             contents=user_content,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -265,42 +103,13 @@ def generate_structured(
                 http_options=types.HttpOptions(timeout=int(GEMINI_TIMEOUT_SECONDS * 1000)),
             ),
         )
-
-    # Retries transient failures and falls back across models; still raises
-    # AgentSafeFailure once the whole chain is exhausted.
-    response = _call_with_resilience(_attempt, model=model)
+    except Exception as e:  # network error, API error, etc.
+        raise AgentSafeFailure(f"Gemini call failed: {e}") from e
 
     text = getattr(response, "text", None)
     if not text:
         raise AgentSafeFailure("Gemini returned an empty response.")
     return _parse_json_response(text, response_schema)
-
-
-def _with_schema_contract(system_instruction: str, response_schema: type[BaseModel]) -> str:
-    """Spell out the exact answer shape in the instruction.
-
-    `generate_structured` hands Gemini a `response_schema` and the SDK
-    constrains the output to it. A tool-calling call cannot: Gemini rejects
-    structured output alongside function declarations, so the final answer is
-    whatever the model decides to emit, and prose alone is a weak contract.
-    Every agent prompt here names a field or two in passing and leaves the
-    rest implicit, which is exactly how find-and-book died - the model
-    returned `ranked_resources` where `DomainAnalysisOutput` requires
-    `ranked_candidates`, a reasonable guess given every tool it had was named
-    after resources.
-
-    Emitting the real JSON Schema removes the guess for every tool-using
-    agent at once, rather than one prompt at a time.
-    """
-    schema = json.dumps(response_schema.model_json_schema(), separators=(",", ":"))
-    return (
-        f"{system_instruction}\n\n"
-        "FINAL ANSWER FORMAT — once you have finished calling tools, reply "
-        "with ONLY a JSON object matching this JSON Schema. Use these field "
-        "names exactly as written, include every required field, and invent "
-        "no others. No prose, no markdown fences.\n"
-        f"{schema}"
-    )
 
 
 def generate_with_tools(
@@ -325,29 +134,23 @@ def generate_with_tools(
     ]
     handlers = {t.name: t.handler for t in tools}
     tool_config = types.Tool(function_declarations=declarations)
-    instruction = _with_schema_contract(system_instruction, response_schema)
 
     contents: list[types.Content] = [types.Content(role="user", parts=[types.Part.from_text(text=user_content)])]
 
     for turn in range(max_turns):
-        def _attempt(candidate_model: str, _contents=contents):
-            return client.models.generate_content(
-                model=candidate_model,
-                contents=_contents,
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
                 config=types.GenerateContentConfig(
-                    system_instruction=instruction,
+                    system_instruction=system_instruction,
                     tools=[tool_config],
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                     temperature=0.2,
                     http_options=types.HttpOptions(timeout=int(GEMINI_TIMEOUT_SECONDS * 1000)),
                 ),
             )
-
-        try:
-            response = _call_with_resilience(_attempt, model=model)
-        except AgentSafeFailure as e:
-            # Keep the turn number in the message: which turn died tells you
-            # whether the model failed to start or failed mid tool loop.
+        except Exception as e:
             raise AgentSafeFailure(f"Gemini call failed on turn {turn + 1}: {e}") from e
 
         candidate = response.candidates[0] if response.candidates else None
@@ -374,11 +177,7 @@ def generate_with_tools(
                 continue
             result = _run_tool_with_one_retry(handler, dict(call.args or {}))
             response_parts.append(types.Part.from_function_response(name=call.name, response=result))
-        # Gemini has no "tool" role - that is the OpenAI convention, and it is
-        # rejected with 400 INVALID_ARGUMENT on every model. Function results
-        # go back as the user turn; the parts being function_response is what
-        # marks them as tool output, not the role.
-        contents.append(types.Content(role="user", parts=response_parts))
+        contents.append(types.Content(role="tool", parts=response_parts))
 
     raise AgentSafeFailure(f"Exceeded max agent turns ({max_turns}) without a final answer.")
 
