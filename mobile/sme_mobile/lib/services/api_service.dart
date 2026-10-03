@@ -43,8 +43,8 @@ class ApiService {
   static String _defaultBaseUrl() {
     const configured = String.fromEnvironment('API_BASE_URL');
     if (configured.isNotEmpty) return _normaliseBaseUrl(configured);
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5298/api';
-    return 'http://localhost:5298/api';
+    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5000/api';
+    return 'http://localhost:5000/api';
   }
 
   static String _normaliseBaseUrl(String url) {
@@ -122,7 +122,8 @@ class ApiService {
       final nextRefresh = response.data?['refreshToken'] as String?;
       if (access == null || access.isEmpty) return null;
       await SecureStorageService.saveToken(access);
-      if (nextRefresh != null) await SecureStorageService.saveRefreshToken(nextRefresh);
+      if (nextRefresh != null)
+        await SecureStorageService.saveRefreshToken(nextRefresh);
       return access;
     } on DioException {
       return null;
@@ -170,7 +171,8 @@ class ApiService {
             }
             // A refused /auth/refresh is reported by the request that asked
             // for it, below - handling it here too would sign out twice.
-            if (error.response?.statusCode == 401 && !request.path.contains('/auth/refresh')) {
+            if (error.response?.statusCode == 401 &&
+                !request.path.contains('/auth/refresh')) {
               // No refresh token, or the server refused it → clear storage,
               // then tell the app so it can send the user back to the login
               // screen. Guarded so a burst of concurrent 401s (a screen fires
