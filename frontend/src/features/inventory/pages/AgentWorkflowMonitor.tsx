@@ -190,6 +190,11 @@ export function AgentWorkflowMonitorPage() {
   }, [statusFilter, search, token, user?.tenantId]);
 
   async function approve(id: string) {
+    if (!await confirm({
+      title: 'Approve this workflow?',
+      message: 'This will approve the proposed workflow for processing.',
+      confirmLabel: 'Approve workflow',
+    })) return;
     try {
       const resp = await fetch(`${apiBaseUrl}/agent/workflow/${id}/approve`, {
         method: 'POST',

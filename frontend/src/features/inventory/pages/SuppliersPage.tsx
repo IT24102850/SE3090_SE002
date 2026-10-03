@@ -76,6 +76,7 @@ export function SuppliersPage() {
   const [directoryFilter, setDirectoryFilter] = useState<SupplierFilter>('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
@@ -124,11 +125,11 @@ export function SuppliersPage() {
   useEffect(() => {
     if (!editingSupplierId) return;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !saving) resetSupplierForm();
+      if (event.key === 'Escape' && !saving && !confirmSaveOpen) resetSupplierForm();
     };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [editingSupplierId, saving]);
+  }, [editingSupplierId, saving, confirmSaveOpen]);
 
   async function loadSupplierOrderHistory(supplier: Supplier) {
     const cached = supplierOrderHistories[supplier.id];
@@ -202,14 +203,22 @@ export function SuppliersPage() {
     });
   }, [directoryFilter, query, suppliers]);
 
-  async function createSupplier(event: FormEvent) {
+  function createSupplier(event: FormEvent) {
     event.preventDefault();
+    if (saving) return;
     if (!name.trim()) return;
     const leadDays = leadTimeDays.trim() ? Number(leadTimeDays) : null;
     if (leadDays !== null && (!Number.isInteger(leadDays) || leadDays < 1 || leadDays > 90)) {
       notify('Lead time must be a whole number from 1 to 90 days.', 'error');
       return;
     }
+    setConfirmSaveOpen(true);
+  }
+
+  async function saveSupplier() {
+    if (saving) return;
+    setConfirmSaveOpen(false);
+    const leadDays = leadTimeDays.trim() ? Number(leadTimeDays) : null;
     setSaving(true);
     try {
       const response = await fetch(editingSupplierId ? `/api/suppliers/${editingSupplierId}` : '/api/suppliers', {
@@ -276,6 +285,7 @@ export function SuppliersPage() {
   }
 
   function resetSupplierForm() {
+    setConfirmSaveOpen(false);
     setEditingSupplierId(null);
     setName('');
     setContactPerson('');
@@ -655,6 +665,17 @@ export function SuppliersPage() {
           </div>
         );
       })()}
+      {canManageSuppliers && confirmSaveOpen && (
+        <ConfirmDialog
+          title={editingSupplierId ? 'Save supplier changes?' : 'Add this supplier?'}
+          message={editingSupplierId
+            ? `Save the updated details for "${name.trim()}"?`
+            : `Add "${name.trim()}" to your supplier directory?`}
+          confirmLabel={editingSupplierId ? 'Save changes' : 'Add supplier'}
+          onConfirm={() => { void saveSupplier(); }}
+          onCancel={() => setConfirmSaveOpen(false)}
+        />
+      )}
       {canManageSuppliers && supplierPendingDeletion && (
         <ConfirmDialog
           title={`Delete ${supplierPendingDeletion.name}?`}
