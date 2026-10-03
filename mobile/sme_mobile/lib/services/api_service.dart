@@ -122,8 +122,9 @@ class ApiService {
       final nextRefresh = response.data?['refreshToken'] as String?;
       if (access == null || access.isEmpty) return null;
       await SecureStorageService.saveToken(access);
-      if (nextRefresh != null)
+      if (nextRefresh != null) {
         await SecureStorageService.saveRefreshToken(nextRefresh);
+      }
       return access;
     } on DioException {
       return null;

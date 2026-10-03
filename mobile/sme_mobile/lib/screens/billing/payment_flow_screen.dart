@@ -64,8 +64,9 @@ class _PaymentFlowScreenState extends ConsumerState<PaymentFlowScreen> {
     }
     // Pre-select the customer's default saved method.
     ref.read(paymentMethodStoreProvider).defaultMethod().then((m) {
-      if (m != null && mounted && _step == _Step.choose)
+      if (m != null && mounted && _step == _Step.choose) {
         setState(() => _method = PayMethodX.fromSaved(m.type));
+      }
     }).catchError((_) {});
   }
 
@@ -114,11 +115,12 @@ class _PaymentFlowScreenState extends ConsumerState<PaymentFlowScreen> {
         }
       });
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = billingErrorMessage(e, 'The payment could not be started.');
           _step = _Step.error;
         });
+      }
     }
   }
 
@@ -136,11 +138,12 @@ class _PaymentFlowScreenState extends ConsumerState<PaymentFlowScreen> {
         _step = _Step.done;
       });
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = billingErrorMessage(e, 'We could not confirm the payment.');
           _step = _Step.error;
         });
+      }
     }
   }
 
@@ -149,8 +152,9 @@ class _PaymentFlowScreenState extends ConsumerState<PaymentFlowScreen> {
     if (url == null) return;
     final ok =
         await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    if (!ok && mounted)
+    if (!ok && mounted) {
       AppSnackBar.error(context, 'Could not open ${_session!.provider}.');
+    }
   }
 
   Future<void> _rememberMethod() async {
