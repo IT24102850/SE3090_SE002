@@ -61,7 +61,7 @@
 .inventory-scope .inventory-branch-stock-row input[type="number"] { width: 100%; min-width: 0; margin-left: auto; }
 .inventory-scope .inventory-product-branch-list { display: grid; gap: .4rem; min-width: 0; }
 .inventory-scope .inventory-product-branch { display: grid; grid-template-columns: minmax(0, 1fr) 36px; grid-template-areas: "name delete" "quantity quantity" "status status"; align-items: center; column-gap: .65rem; row-gap: .4rem; min-width: 0; padding: .5rem .6rem; background: var(--color-surface-subtle, var(--color-background)); border: 1px solid var(--color-border); border-radius: .6rem; }
-.inventory-scope .inventory-product-branch-name { grid-area: name; min-width: 0; color: var(--color-text-secondary); font-size: .78rem; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
+.inventory-scope .inventory-product-branch-name { grid-area: name; min-width: 0; color: var(--color-text-secondary); font-size: .78rem; font-weight: 650; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; }
 .inventory-scope .inventory-product-branch-quantity { grid-area: quantity; min-width: 0; color: var(--color-text); font-size: .8rem; font-weight: 750; white-space: normal; overflow-wrap: anywhere; }
 .inventory-scope .inventory-product-branch .badge { grid-area: status; justify-self: start; min-width: 0; max-width: 100%; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; font-size: .62rem; }
 .inventory-scope .inventory-product-branch-delete { grid-area: delete; min-width: 32px; min-height: 32px; }
