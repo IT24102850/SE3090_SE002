@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../models/user_model.dart';
@@ -26,8 +27,8 @@ class AuthState {
     this.error,
   });
 
-  bool get isAuthenticated => token != null && token!.isNotEmpty && user != null;
-
+  bool get isAuthenticated =>
+      token != null && token!.isNotEmpty && user != null;
 
   AuthState copyWith({
     User? user,
@@ -64,7 +65,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final userJson = await SecureStorageService.getUser();
 
       if (token != null && token.isNotEmpty && userJson != null) {
-        final user = User.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
+        final user =
+            User.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
         state = AuthState(
           user: user,
           token: token,
@@ -87,12 +89,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     try {
       final response = await ApiService.dio.post(
-        '/auth/mobile/login',
+        kIsWeb ? '/auth/login' : '/auth/mobile/login',
         data: {'email': email.trim(), 'password': password},
       );
 
       final data = response.data as Map<String, dynamic>;
-      final accessToken = data['accessToken'] as String? ?? data['token'] as String?;
+      final accessToken =
+          data['accessToken'] as String? ?? data['token'] as String?;
       if (accessToken == null || accessToken.isEmpty) {
         state = state.copyWith(
           isLoading: false,
@@ -126,7 +129,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(isLoading: false, error: message);
       return false;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Something went wrong. Please try again.');
+      state = state.copyWith(
+          isLoading: false, error: 'Something went wrong. Please try again.');
       return false;
     }
   }
@@ -148,7 +152,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (storedPin == null || storedPin.isEmpty) {
       state = state.copyWith(
         isLoading: false,
-        error: 'No Quick PIN is set up. Sign in with your work email, then set one in Security.',
+        error:
+            'No Quick PIN is set up. Sign in with your work email, then set one in Security.',
       );
       return false;
     }
@@ -173,7 +178,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     state = state.copyWith(
       isLoading: false,
-      error: 'There is no saved session to unlock. Sign in with your work email; your PIN will be kept for next time.',
+      error:
+          'There is no saved session to unlock. Sign in with your work email; your PIN will be kept for next time.',
     );
     return false;
   }
@@ -200,7 +206,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     state = state.copyWith(
       isLoading: false,
-      error: 'Please sign in with your work email first to activate biometrics.',
+      error:
+          'Please sign in with your work email first to activate biometrics.',
     );
     return false;
   }
@@ -288,13 +295,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'adminEmail': adminEmail.trim(),
           'adminPassword': adminPassword,
           'adminFullName': adminFullName.trim(),
-          if (adminPhone != null && adminPhone.isNotEmpty) 'adminPhone': adminPhone.trim(),
+          if (adminPhone != null && adminPhone.isNotEmpty)
+            'adminPhone': adminPhone.trim(),
           if (subType != null && subType.isNotEmpty) 'subType': subType,
         },
       );
 
       final data = response.data as Map<String, dynamic>;
-      final accessToken = data['accessToken'] as String? ?? data['token'] as String?;
+      final accessToken =
+          data['accessToken'] as String? ?? data['token'] as String?;
       if (accessToken == null || accessToken.isEmpty) {
         state = state.copyWith(
           isLoading: false,
@@ -327,7 +336,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(isLoading: false, error: message);
       return false;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Something went wrong. Please try again.');
+      state = state.copyWith(
+          isLoading: false, error: 'Something went wrong. Please try again.');
       return false;
     }
   }
@@ -359,9 +369,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final accessToken = data['accessToken'] as String? ?? data['token'] as String?;
+      final accessToken =
+          data['accessToken'] as String? ?? data['token'] as String?;
       if (accessToken == null || accessToken.isEmpty) {
-        state = state.copyWith(isLoading: false, error: 'Invalid response from server');
+        state = state.copyWith(
+            isLoading: false, error: 'Invalid response from server');
         return false;
       }
 
@@ -389,7 +401,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(isLoading: false, error: message);
       return false;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Something went wrong. Please try again.');
+      state = state.copyWith(
+          isLoading: false, error: 'Something went wrong. Please try again.');
       return false;
     }
   }
@@ -408,7 +421,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final response = await ApiService.dio.post('/auth/join/$tenantId');
       final data = response.data as Map<String, dynamic>;
-      final accessToken = data['accessToken'] as String? ?? data['token'] as String?;
+      final accessToken =
+          data['accessToken'] as String? ?? data['token'] as String?;
       if (accessToken == null || accessToken.isEmpty) return false;
 
       final userMap = data['user'] as Map<String, dynamic>? ?? data;
@@ -424,7 +438,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(user: user, token: accessToken, clearError: true);
       return true;
     } on DioException catch (e) {
-      state = state.copyWith(error: _extractError(e) ?? 'Could not open this business.');
+      state = state.copyWith(
+          error: _extractError(e) ?? 'Could not open this business.');
       return false;
     } catch (_) {
       state = state.copyWith(error: 'Something went wrong. Please try again.');
@@ -441,6 +456,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? insuranceNumber,
     String? medicalNotes,
     String? profilePictureUrl,
+
     /// Send an explicit empty string to clear the photo; null just leaves
     /// it untouched, matching how the other optional fields behave.
     bool removeProfilePicture = false,
@@ -455,8 +471,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         if (insuranceProvider != null) 'insuranceProvider': insuranceProvider,
         if (insuranceNumber != null) 'insuranceNumber': insuranceNumber,
         if (medicalNotes != null) 'medicalNotes': medicalNotes,
-        if (removeProfilePicture) 'profilePictureUrl': ''
-        else if (profilePictureUrl != null) 'profilePictureUrl': profilePictureUrl,
+        if (removeProfilePicture)
+          'profilePictureUrl': ''
+        else if (profilePictureUrl != null)
+          'profilePictureUrl': profilePictureUrl,
       });
 
       final user = User.fromJson(response.data as Map<String, dynamic>);
@@ -464,10 +482,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(user: user, isLoading: false);
       return true;
     } on DioException catch (e) {
-      state = state.copyWith(isLoading: false, error: _extractError(e) ?? 'Could not update your profile.');
+      state = state.copyWith(
+          isLoading: false,
+          error: _extractError(e) ?? 'Could not update your profile.');
       return false;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Something went wrong. Please try again.');
+      state = state.copyWith(
+          isLoading: false, error: 'Something went wrong. Please try again.');
       return false;
     }
   }

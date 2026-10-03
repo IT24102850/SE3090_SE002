@@ -77,4 +77,38 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('the category strip offers every type that is present, plus All',
+      (tester) async {
+    await pumpAt(tester, const Size(462, 740));
+
+    // The filter was a Material dropdown that hid the categories behind a
+    // tap; the chips have to actually be on screen.
+    expect(find.text('All'), findsOneWidget);
+    expect(find.text('Tourism'), findsWidgets);
+    expect(find.text('Healthcare'), findsWidgets);
+  });
+
+  testWidgets('picking a category narrows the list and says so', (tester) async {
+    await pumpAt(tester, const Size(462, 740));
+
+    expect(find.text('8 businesses'), findsOneWidget);
+
+    await tester.tap(find.text('Healthcare').first);
+    await tester.pumpAndSettle();
+
+    // Four of the eight are Healthcare; the count has to show that a filter
+    // is hiding the rest, otherwise a narrowed list looks like a short one.
+    expect(find.text('4 of 8 businesses'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a search that matches nothing explains itself', (tester) async {
+    await pumpAt(tester, const Size(462, 740));
+
+    await tester.enterText(find.byType(TextFormField).first, 'zzzz');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('No businesses match'), findsOneWidget);
+  });
 }

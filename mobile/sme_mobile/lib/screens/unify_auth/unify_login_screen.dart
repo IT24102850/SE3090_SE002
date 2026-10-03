@@ -89,7 +89,9 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(
-            provider == null ? 'Coming soon' : '$provider sign-in — coming soon',
+            provider == null
+                ? 'Coming soon'
+                : '$provider sign-in — coming soon',
           ),
           backgroundColor: AppColors.inputFill,
           behavior: SnackBarBehavior.floating,
@@ -171,6 +173,8 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                     // cannot fit, and scrolling beats clipping the form.
                     final height = constraints.maxHeight;
                     final tooShort = height < _minFittableHeight;
+                    final compactWidth = constraints.maxWidth < 600;
+                    final showHero = !tooShort && !compactWidth;
                     final t = ((height - 700) / 240).clamp(0.0, 1.0);
                     final m = _Metrics(
                       gap: 0.46 + 0.39 * t,
@@ -188,14 +192,17 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                         // no height, and height is the one thing this layout
                         // has none to spare. The tile matches the wordmark's
                         // cap height so the two read as one unit.
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            UnifyLogoMark(size: m.wordmark * 0.98),
-                            SizedBox(width: m.wordmark * 0.3),
-                            UnifyWordmark(fontSize: m.wordmark),
-                          ],
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              UnifyLogoMark(size: m.wordmark * 0.98),
+                              SizedBox(width: m.wordmark * 0.3),
+                              UnifyWordmark(fontSize: m.wordmark),
+                            ],
+                          ),
                         ),
                         SizedBox(height: 8 * m.gap),
                         Text(
@@ -211,12 +218,13 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                         // The slack. Caps at the 340 design size on a tall
                         // screen, shrinks on a short one, and drops out
                         // entirely rather than forcing an overflow.
-                        if (!tooShort)
+                        if (showHero)
                           Expanded(
                             child: LayoutBuilder(
                               builder: (context, slack) {
                                 final size = math.min(
-                                  math.min(slack.maxHeight - 8, slack.maxWidth * 0.82),
+                                  math.min(slack.maxHeight - 8,
+                                      slack.maxWidth * 0.82),
                                   340.0,
                                 );
                                 if (size < _minHeroSize) {
@@ -257,7 +265,9 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                     // The one case that still has to scroll: the keyboard eats
                     // roughly half the viewport, and no amount of compressing
                     // keeps the password field reachable under it.
-                    if (!keyboardOpen && !tooShort) return column;
+                    if (!keyboardOpen && !tooShort && !compactWidth) {
+                      return column;
+                    }
                     return SingleChildScrollView(
                       physics: const ClampingScrollPhysics(),
                       child: ConstrainedBox(
@@ -390,7 +400,8 @@ class _UnifyLoginScreenState extends ConsumerState<UnifyLoginScreen> {
                       padding: EdgeInsets.symmetric(horizontal: 10),
                       child: Text(
                         '·',
-                        style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+                        style:
+                            TextStyle(fontSize: 14, color: AppColors.textMuted),
                       ),
                     ),
                     _TextLink(
