@@ -80,78 +80,127 @@ class NotificationsScreen extends ConsumerWidget {
   }
 }
 
-class _LiveUpdatesBanner extends StatelessWidget {
+class _LiveUpdatesBanner extends StatefulWidget {
   final int unreadCount;
-
   const _LiveUpdatesBanner({required this.unreadCount});
+  @override
+  State<_LiveUpdatesBanner> createState() => _LiveUpdatesBannerState();
+}
+
+class _LiveUpdatesBannerState extends State<_LiveUpdatesBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _pulse.stop();
+      _pulse.value = 0.5;
+    } else if (!_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final unread = widget.unreadCount;
+    final headline = unread == 0
+        ? 'You’re all caught up'
+        : '$unread new ${unread == 1 ? 'update' : 'updates'}';
     return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
-      borderRadius: AppRadii.row,
-      borderColor: AppColors.cyan.withValues(alpha: 0.38),
-      fill: AppColors.cyan.withValues(alpha: 0.07),
-      child: Row(
+      padding: const EdgeInsets.all(20),
+      borderRadius: 24,
+      borderColor: AppColors.cyan.withValues(alpha: 0.35),
+      fill: AppColors.cyan.withValues(alpha: 0.08),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: AppColors.success,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.success.withValues(alpha: 0.45),
-                  blurRadius: 9,
+          Row(children: [
+            AnimatedBuilder(
+              animation: _pulse,
+              builder: (context, child) => Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.cyan.withValues(alpha: 0.12),
+                  border: Border.all(
+                      color: AppColors.cyan
+                          .withValues(alpha: 0.2 + _pulse.value * 0.3)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.cyan
+                          .withValues(alpha: 0.06 + _pulse.value * 0.12),
+                      blurRadius: 10 + _pulse.value * 12,
+                    )
+                  ],
                 ),
-              ],
+                child: child,
+              ),
+              child: const Icon(Icons.notifications_active_outlined,
+                  color: AppColors.cyan, size: 22),
             ),
-          ),
-          const SizedBox(width: 11),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'LIVE UPDATES',
-                  style: TextStyle(
-                    color: AppColors.cyan,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1,
-                  ),
-                ),
-                SizedBox(height: 3),
-                Text(
-                  'Automatically checks every 15 seconds',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (unreadCount > 0)
+            const SizedBox(width: 12),
+            const Expanded(
+                child: Text('YOUR UPDATES',
+                    style: TextStyle(
+                        color: AppColors.cyan,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5))),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               decoration: BoxDecoration(
-                color: AppColors.magenta.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(99),
-                border: Border.all(
-                  color: AppColors.magenta.withValues(alpha: 0.35),
-                ),
-              ),
-              child: Text(
-                '$unreadCount unread',
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+                  color: AppColors.success.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(99)),
+              child: const Text('AUTO',
+                  style: TextStyle(
+                      color: AppColors.success,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800)),
             ),
+          ]),
+          const SizedBox(height: 20),
+          AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 300),
+            child: Align(
+              key: ValueKey(unread),
+              alignment: Alignment.centerLeft,
+              child: Text(headline,
+                  style: AppTextStyles.subtitle.copyWith(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+              unread == 0
+                  ? 'Your latest activity will appear here.'
+                  : 'Bookings, approvals and more — all in one place.',
+              style:
+                  AppTextStyles.bodyMuted.copyWith(fontSize: 13, height: 1.5)),
+          const SizedBox(height: 18),
+          Row(children: [
+            const Icon(Icons.swipe_down_rounded,
+                size: 15, color: AppColors.textSecondary),
+            const SizedBox(width: 7),
+            Expanded(
+                child: Text('Pull down to refresh · Checks every 15 seconds',
+                    style: AppTextStyles.caption.copyWith(fontSize: 11))),
+          ]),
         ],
       ),
     );
@@ -194,7 +243,9 @@ class _NotificationTile extends ConsumerWidget {
     final accent = _accentFor(notification.type, unread);
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 350 + (index * 55).clamp(0, 350)),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : Duration(milliseconds: 350 + (index * 55).clamp(0, 350)),
       curve: Curves.easeOutCubic,
       builder: (context, value, child) => Opacity(
         opacity: value,

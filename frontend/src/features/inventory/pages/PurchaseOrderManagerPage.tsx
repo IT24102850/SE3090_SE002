@@ -1,3 +1,4 @@
+import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { API_BASE_URL } from '../../../api/apiBaseUrl';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -1476,6 +1477,7 @@ export function PurchaseOrderManagerPage() {
     <div className="page purchase-orders-page">
       <header className="purchase-orders-hero">
         <span className="inventory-hero-sheen" aria-hidden="true" />
+        <InventoryHeroArtwork icon="po" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="purchase-orders-hero-copy">
           <p className="purchase-orders-eyebrow"><span aria-hidden="true">◈</span> INVENTORY / PROCUREMENT</p>

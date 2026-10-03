@@ -1,3 +1,4 @@
+import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -329,6 +330,7 @@ export function BranchPerformancePage() {
     <div className="page inventory-analytics-page branch-performance-page">
       <header className="inventory-analytics-hero panel">
         <span className="inventory-hero-sheen" aria-hidden="true" />
+        <InventoryHeroArtwork icon="chart" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="inventory-analytics-hero-top">
           <span className="inventory-analytics-mark" aria-hidden="true">⌖</span>

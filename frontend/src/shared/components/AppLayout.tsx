@@ -26,7 +26,7 @@ interface NavSection {
 }
 
 /* Sections are the only navigation definition, grouped by destination area. */
-const NAV_SECTIONS: NavSection[] = [
+export const NAV_SECTIONS: NavSection[] = [
   {
     id: 'overview',
     label: 'Overview',

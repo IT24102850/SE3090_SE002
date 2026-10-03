@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import type { RootState } from '../../store/store';
 import { switchBusinessSession } from '../../store/authSlice';
@@ -16,6 +17,8 @@ import {
 } from '../../api/bookingApi';
 import DeliveryLocationPicker, { type DeliveryPin } from './DeliveryLocationPicker';
 import './customer.css';
+
+type BasketFlight = { id: number; imageUrl?: string | null; x: number; y: number; dx: number; dy: number };
 
 type FulfillmentMethod = 'Pickup' | 'Delivery';
 const currency = new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR', maximumFractionDigits: 2 });
@@ -41,11 +44,16 @@ export default function CustomerShopPage() {
   const [activeTab, setActiveTab] = useState<'shop' | 'orders'>('shop');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All items');
+  const basketTarget = useRef<HTMLButtonElement>(null);
+  const basketPanel = useRef<HTMLElement>(null);
+  const flightId = useRef(0);
+  const [basketFlights, setBasketFlights] = useState<BasketFlight[]>([]);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [fulfillmentMethod, setFulfillmentMethod] = useState<FulfillmentMethod>('Pickup');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [deliveryPin, setDeliveryPin] = useState<DeliveryPin | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<CustomerOrderProduct | null>(null);
   const [businessPickerOpen, setBusinessPickerOpen] = useState(false);
   const [businessError, setBusinessError] = useState('');
   const {
@@ -71,6 +79,15 @@ export default function CustomerShopPage() {
     );
   }, [branches, user?.branchId]);
 
+  useEffect(() => {
+    if (!selectedProduct) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedProduct(null);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [selectedProduct]);
+
   const categories = useMemo(
     () => ['All items', ...new Set(products.map((product) => product.category))],
     [products],
@@ -91,7 +108,20 @@ export default function CustomerShopPage() {
   const cartCount = Object.values(cart).reduce((sum, quantity) => sum + quantity, 0);
   const selectedBranch = branches.find((branch) => branch.id === selectedBranchId);
 
-  function setQuantity(product: CustomerOrderProduct, quantity: number) {
+  function setQuantity(product: CustomerOrderProduct, quantity: number, source?: HTMLElement) {
+    const nextQuantity = Math.max(0, Math.min(quantity, product.quantityAvailable));
+    if (source && nextQuantity > (cart[product.id] ?? 0)
+      && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      const start = source.getBoundingClientRect();
+      const target = basketTarget.current?.getBoundingClientRect();
+      if (target) {
+        const x = start.left + start.width / 2;
+        const y = start.top + start.height / 2;
+        const flight = { id: ++flightId.current, imageUrl: product.imageUrl, x, y,
+          dx: target.left + target.width / 2 - x, dy: target.top + target.height / 2 - y };
+        setBasketFlights((current) => [...current, flight]);
+      }
+    }
     setCart((current) => {
       const next = { ...current };
       if (quantity <= 0) delete next[product.id];
@@ -190,6 +220,10 @@ export default function CustomerShopPage() {
             </select>
           </label>
         )}
+        {activeTab === 'shop' && <button ref={basketTarget} type="button" className="cust-shop-basket-shortcut" aria-label={`View basket, ${cartCount} items`} onClick={() => {
+          setSelectedProduct(null);
+          basketPanel.current?.scrollIntoView({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+        }}><span key={cartCount} className="cust-shop-basket-bounce" aria-hidden="true">&#x1F9FA;</span> Basket <b key={`count-${cartCount}`} className="cust-shop-quantity-change">{cartCount}</b></button>}
         <button type="button" className="btn btn-secondary cust-shop-switch" onClick={() => setBusinessPickerOpen(true)}>
           <span aria-hidden="true">↗</span> Switch business
         </button>
@@ -242,16 +276,19 @@ export default function CustomerShopPage() {
                         <div className="cust-shop-product-meta"><span>{product.sku}</span><span>{product.quantityAvailable} available</span></div>
                         <h2>{product.name}</h2>
                         <p>{product.description || `A lovely ${product.category.toLowerCase()} pick, ready for you.`}</p>
+                        <button type="button" className="cust-shop-view" onClick={() => setSelectedProduct(product)}>
+                          View item <span aria-hidden="true">→</span>
+                        </button>
                         <div className="cust-shop-product-foot">
                           <strong>{currency.format(product.price)}{product.unit ? <small> / {product.unit}</small> : null}</strong>
                           {cart[product.id] ? (
                             <div className="cust-shop-stepper" aria-label={`${product.name} quantity`}>
                               <button type="button" aria-label={`Remove one ${product.name}`} onClick={() => setQuantity(product, cart[product.id] - 1)}>−</button>
-                              <span>{cart[product.id].toLocaleString()}</span>
-                              <button type="button" aria-label={`Add one ${product.name}`} disabled={cart[product.id] >= product.quantityAvailable} onClick={() => setQuantity(product, cart[product.id] + 1)}>+</button>
+                              <span key={cart[product.id]} className="cust-shop-quantity-change">{cart[product.id].toLocaleString()}</span>
+                              <button type="button" aria-label={`Add one ${product.name}`} disabled={cart[product.id] >= product.quantityAvailable} onClick={(event) => setQuantity(product, cart[product.id] + 1, event.currentTarget)}>+</button>
                             </div>
                           ) : (
-                            <button type="button" className="cust-shop-add" onClick={() => setQuantity(product, Math.min(1, product.quantityAvailable))} aria-label={`Add ${product.name} to basket`}>Add <span aria-hidden="true">+</span></button>
+                            <button type="button" className="cust-shop-add" onClick={(event) => setQuantity(product, 1, event.currentTarget)} disabled={product.quantityAvailable <= 0} aria-label={`Add ${product.name} to basket`}>Add <span aria-hidden="true">+</span></button>
                           )}
                         </div>
                       </div>
@@ -261,9 +298,9 @@ export default function CustomerShopPage() {
               )}
             </section>
 
-            <aside className="cust-shop-cart card">
+            <aside ref={basketPanel} className="cust-shop-cart card">
               <div className="cust-shop-cart-heading">
-                <div><span className="cust-shop-kicker">Your picks</span><h2>Basket <span>{cartCount}</span></h2></div>
+                <div><span className="cust-shop-kicker">Your picks</span><h2>Basket <span key={cartCount} className="cust-shop-quantity-change">{cartCount}</span></h2></div>
                 <span className="cust-shop-bag" aria-hidden="true">🧺</span>
               </div>
               {cartItems.length === 0 ? (
@@ -274,11 +311,11 @@ export default function CustomerShopPage() {
                     {cartItems.map(({ product, quantity }) => (
                       <div className="cust-shop-cart-line" key={product.id}>
                         <div><strong>{product.name}</strong><small>{quantity.toLocaleString()} × {currency.format(product.price)}</small></div>
-                        <b>{currency.format(product.price * quantity)}</b>
+                        <b key={quantity} className="cust-shop-quantity-change">{currency.format(product.price * quantity)}</b>
                       </div>
                     ))}
                   </div>
-                  <div className="cust-shop-total"><span>Estimated total</span><strong>{currency.format(cartTotal)}</strong></div>
+                  <div className="cust-shop-total"><span>Estimated total</span><strong key={cartTotal} className="cust-shop-quantity-change">{currency.format(cartTotal)}</strong></div>
                   <fieldset className="cust-shop-fulfillment">
                     <legend>How would you like it?</legend>
                     <label><input type="radio" name="fulfillment" checked={fulfillmentMethod === 'Pickup'} onChange={() => setFulfillmentMethod('Pickup')} /> Pick up at {selectedBranch?.name ?? 'the store'}</label>
@@ -324,6 +361,57 @@ export default function CustomerShopPage() {
             ))
           )}
         </section>
+      )}
+      {basketFlights.length > 0 && createPortal(<div className="cust-shop-flight-layer" aria-hidden="true">
+        {basketFlights.map((flight) => <div key={flight.id} className="cust-shop-flight" style={{ left: flight.x, top: flight.y, '--flight-dx': `${flight.dx}px`, '--flight-dy': `${flight.dy}px` } as CSSProperties}
+          onAnimationEnd={() => setBasketFlights((current) => current.filter((item) => item.id !== flight.id))}>
+          <div className="cust-shop-flight-art">{flight.imageUrl ? <img src={flight.imageUrl} alt="" onError={(event) => { event.currentTarget.hidden = true; }} /> : null}</div>
+        </div>)}
+      </div>, document.body)}
+      {selectedProduct && (
+        <div className="cust-shop-modal-backdrop" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setSelectedProduct(null);
+        }}>
+          <section className="cust-shop-product-modal card" role="dialog" aria-modal="true" aria-labelledby="product-detail-title">
+            <button type="button" className="cust-shop-modal-close" aria-label="Close item details" onClick={() => setSelectedProduct(null)}>×</button>
+            <div className="cust-shop-product-modal-media">
+              <span className="cust-shop-product-modal-sparkle" aria-hidden="true">✦</span>
+              {selectedProduct.imageUrl ? (
+                <img src={selectedProduct.imageUrl} alt={selectedProduct.name} />
+              ) : (
+                <div className="cust-shop-product-modal-placeholder" aria-hidden="true">🛍️</div>
+              )}
+              <span className="cust-shop-product-modal-category">{selectedProduct.category}</span>
+            </div>
+            <div className="cust-shop-product-modal-content">
+              <span className="cust-shop-kicker">Item details</span>
+              <h2 id="product-detail-title">{selectedProduct.name}</h2>
+              <p className="cust-shop-product-modal-description">
+                {selectedProduct.description || `A lovely ${selectedProduct.category.toLowerCase()} pick, ready for you.`}
+              </p>
+              <dl className="cust-shop-product-facts">
+                <div><dt>Price</dt><dd>{currency.format(selectedProduct.price)}{selectedProduct.unit ? <small> / {selectedProduct.unit}</small> : null}</dd></div>
+                <div><dt>Availability</dt><dd><i aria-hidden="true" /> {selectedProduct.quantityAvailable.toLocaleString()} in stock</dd></div>
+                <div><dt>SKU</dt><dd>{selectedProduct.sku}</dd></div>
+                <div><dt>Shopping at</dt><dd>{selectedBranch?.name ?? 'Selected store'}</dd></div>
+              </dl>
+              <div className="cust-shop-product-modal-action">
+                <div><span>Your quantity</span><strong key={cart[selectedProduct.id] ?? 0} className="cust-shop-quantity-change">{(cart[selectedProduct.id] ?? 0).toLocaleString()}</strong></div>
+                {cart[selectedProduct.id] ? (
+                  <div className="cust-shop-stepper" aria-label={`${selectedProduct.name} quantity`}>
+                    <button type="button" aria-label={`Remove one ${selectedProduct.name}`} onClick={() => setQuantity(selectedProduct, cart[selectedProduct.id] - 1)}>−</button>
+                    <span key={cart[selectedProduct.id]} className="cust-shop-quantity-change">{cart[selectedProduct.id].toLocaleString()}</span>
+                    <button type="button" aria-label={`Add one ${selectedProduct.name}`} disabled={cart[selectedProduct.id] >= selectedProduct.quantityAvailable} onClick={(event) => setQuantity(selectedProduct, cart[selectedProduct.id] + 1, event.currentTarget)}>+</button>
+                  </div>
+                ) : (
+                  <button type="button" className="btn btn-primary cust-shop-modal-add" disabled={selectedProduct.quantityAvailable <= 0} onClick={(event) => setQuantity(selectedProduct, 1, event.currentTarget)}>
+                    Add to basket <span aria-hidden="true">+</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
       )}
       {businessPickerOpen && (
         <div className="cust-shop-modal-backdrop" onMouseDown={(event) => {

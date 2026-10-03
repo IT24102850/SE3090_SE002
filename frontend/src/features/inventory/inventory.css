@@ -4645,10 +4645,10 @@ body:has(.inventory-scope) .app-content::after {
   z-index: 1 !important;
   inset: -70% auto -70% -45% !important;
   width: 34% !important;
-  transform: translateX(-160%) rotate(18deg) !important;
+  transform: translateX(-160%) rotate(18deg);
   background: linear-gradient(90deg, transparent, rgb(255 255 255 / 16%), transparent) !important;
   pointer-events: none !important;
-  opacity: 1 !important;
+  opacity: 1;
   animation: inv-top-card-sheen 7s ease-in-out 1.2s infinite !important;
 }
 

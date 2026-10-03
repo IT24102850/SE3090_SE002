@@ -1,3 +1,4 @@
+import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -365,6 +366,7 @@ export function SuppliersPage() {
     <div className="page suppliers-page">
       <header className="suppliers-hero">
         <span className="inventory-hero-sheen" aria-hidden="true" />
+        <InventoryHeroArtwork icon="supplier" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="suppliers-hero-copy">
           <p className="suppliers-eyebrow"><span aria-hidden="true">◈</span> INVENTORY PARTNERS</p>

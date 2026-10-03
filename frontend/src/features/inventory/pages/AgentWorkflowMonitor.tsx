@@ -1,3 +1,4 @@
+import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { API_BASE_URL as apiBaseUrl } from '../../../api/apiBaseUrl';
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -244,6 +245,7 @@ export function AgentWorkflowMonitorPage() {
     <div className="page">
       <header className="page-head workflow-page-head workflow-hero">
         <span className="inventory-hero-sheen" aria-hidden="true" />
+        <InventoryHeroArtwork icon="workflow" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="workflow-hero-copy">
           <p className="eyebrow">AUTOMATION / WORKFLOWS</p>

@@ -1,3 +1,4 @@
+import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -230,6 +231,7 @@ export function LowStockAlertsPage() {
     <div className={`page stocksense-page${isStaff ? ' is-staff' : ''}`}>
       <header className={`page-head stocksense-hero${isStaff ? ' is-staff' : ''}`}>
         <span className="inventory-hero-sheen" aria-hidden="true" />
+        <InventoryHeroArtwork icon="stocksense" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="stocksense-hero-copy">
           <div className="stocksense-brandmark">

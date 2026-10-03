@@ -1,3 +1,4 @@
+import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { API_BASE_URL } from '../../../api/apiBaseUrl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
@@ -327,6 +328,7 @@ export function SalesPage() {
     <div className="page sales-page">
       <header className="workflow-hero sales-hero">
         <span className="inventory-hero-sheen" aria-hidden="true" />
+        <InventoryHeroArtwork icon="box" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="workflow-hero-copy">
           <p className="eyebrow">OPERATIONS / INVENTORY</p>

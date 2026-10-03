@@ -1,3 +1,4 @@
+import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -839,6 +840,7 @@ export function InventoryManagerPage() {
     <div className="page inventory-manager-page">
       <header className="inventory-manager-hero">
         <span className="inventory-hero-sheen" aria-hidden="true" />
+        <InventoryHeroArtwork icon="box" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="inventory-manager-hero-copy">
           <p className="inventory-manager-eyebrow"><span aria-hidden="true">▦</span> INVENTORY CONTROL CENTER</p>
@@ -881,6 +883,25 @@ export function InventoryManagerPage() {
         <article className="stat metric-card inventory-manager-metric inventory-manager-metric-attention"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="alert" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">STOCK HEALTH</span><strong className="inventory-manager-metric-value">{stats.low + stats.out}</strong><span className="inventory-manager-metric-label">Need attention</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">03</span></div>        <div className="inventory-manager-metric-detail">{stats.out} products out of stock · {stats.low} with low stock</div></article>
         <article className="stat metric-card inventory-manager-metric inventory-manager-metric-valuation"><div className="inventory-manager-metric-main"><span className="inventory-manager-metric-icon" aria-hidden="true"><Icon name="chart" size={20} /></span><div className="metric-info"><span className="inventory-manager-metric-kicker">VALUATION</span><strong className="inventory-manager-metric-value-number">LKR {stats.value.toLocaleString()}</strong><span className="inventory-manager-metric-label">Stock value</span></div><span className="inventory-manager-metric-symbol" aria-hidden="true">04</span></div><div className="inventory-manager-metric-detail">Calculated using recorded unit costs</div></article>
       </section>
+
+      {stats.items > 0 && <section className="inventory-health-overview" aria-label="Product health overview">
+        <div className="inventory-health-heading">
+          <span className="inventory-health-icon" aria-hidden="true"><Icon name="chart" size={22} /></span>
+          <div><h2>Your catalogue at a glance</h2><p>Product availability across your branch stocks.</p></div>
+          <Link to="/stocksense-ai" className="inventory-health-link">Review stock health <span aria-hidden="true">&rarr;</span></Link>
+        </div>
+        <div className="inventory-health-track" role="img" aria-label={`${stats.items - stats.low - stats.out} products in good supply, ${stats.low} with low stock, ${stats.out} out of stock`}>
+          <span className="inventory-health-good" style={{ flex: stats.items - stats.low - stats.out }} />
+          <span className="inventory-health-low" style={{ flex: stats.low }} />
+          <span className="inventory-health-out" style={{ flex: stats.out }} />
+        </div>
+        <div className="inventory-health-legend">
+          <span><i className="inventory-health-good" />{stats.items - stats.low - stats.out} in good supply</span>
+          <span><i className="inventory-health-low" />{stats.low} low stock</span>
+          <span><i className="inventory-health-out" />{stats.out} out of stock</span>
+          <small>{stats.items} products in total</small>
+        </div>
+      </section>}
 
       <div className="inventory-layout inventory-manager-layout">
         <section className="panel inventory-panel inventory-manager-table-panel">
@@ -974,13 +995,21 @@ export function InventoryManagerPage() {
                   return (
                     <tr key={key}>
                       <td>
-                        <p className="cell-title">{primary.item}</p>
-                        <div className="inventory-manager-item-meta">
-                          <code className="inventory-manager-item-sku">{primary.sku}</code>
-                          <span className="inventory-manager-item-branch-count">
-                            <span aria-hidden="true">⌖</span>
-                            {rows.length} {rows.length === 1 ? 'branch' : 'branches'}
+                        <div className="inventory-item-identity">
+                          <span className="inventory-item-thumbnail" aria-hidden="true">
+                            <Icon name="box" size={22} />
+                            {primary.imageUrl && <img src={primary.imageUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} />}
                           </span>
+                          <div>
+                            <p className="cell-title">{primary.item}</p>
+                            <div className="inventory-manager-item-meta">
+                              <code className="inventory-manager-item-sku">{primary.sku}</code>
+                              <span className="inventory-manager-item-branch-count">
+                                <span aria-hidden="true">⌖</span>
+                                {rows.length} {rows.length === 1 ? 'branch' : 'branches'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td><span className="category-pill">{primary.category}</span></td>

@@ -38,6 +38,9 @@ class CustomerShopScreen extends StatefulWidget {
 }
 
 class _CustomerShopScreenState extends State<CustomerShopScreen> {
+  final _basketKey = GlobalKey();
+  final Map<String, GlobalKey> _productKeys = {};
+  final Set<OverlayEntry> _basketFlights = {};
   final _addressController = TextEditingController();
   final _notesController = TextEditingController();
   final _locationSearchController = TextEditingController();
@@ -82,6 +85,11 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
 
   @override
   void dispose() {
+    for (final flight in _basketFlights) {
+      flight.remove();
+      flight.dispose();
+    }
+    _basketFlights.clear();
     _trackingTimer?.cancel();
     _deliverySearchDebounce?.cancel();
     _addressController.dispose();
@@ -470,10 +478,12 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
 
   String _price(num amount) => 'LKR ${amount.toStringAsFixed(2)}';
 
-  void _changeQuantity(Map<String, dynamic> product, double change) {
+  void _changeQuantity(Map<String, dynamic> product, double change,
+      {BuildContext? source}) {
     final id = product['id'] as String;
     final available = (product['quantityAvailable'] as num).toDouble();
     final quantity = (_cart[id] ?? 0) + change;
+    final previous = _cart[id] ?? 0;
     setState(() {
       if (quantity <= 0) {
         _cart.remove(id);
@@ -481,6 +491,209 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
         _cart[id] = quantity.clamp(0, available).toDouble();
       }
     });
+    if ((_cart[id] ?? 0) > previous) {
+      _animateIntoBasket(product, source ?? _productKeys[id]?.currentContext);
+    }
+  }
+
+  Widget _productImage(Map<String, dynamic> product, {double size = 64}) {
+    final url = product['imageUrl'] as String?;
+    final fallback = Icon(Icons.shopping_bag_rounded,
+        size: size * 0.55, color: AppColors.cyan);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: size,
+        height: size,
+        color: AppColors.overlaySurface,
+        child: url == null || url.isEmpty
+            ? fallback
+            : Image.network(url,
+                fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback),
+      ),
+    );
+  }
+
+  void _animateIntoBasket(Map<String, dynamic> product, BuildContext? source) {
+    if (MediaQuery.of(context).disableAnimations) return;
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final overlayBox = overlay.context.findRenderObject();
+    final sourceBox = source?.findRenderObject();
+    final targetBox = _basketKey.currentContext?.findRenderObject();
+    if (overlayBox is! RenderBox ||
+        sourceBox is! RenderBox ||
+        targetBox is! RenderBox ||
+        !sourceBox.hasSize ||
+        !targetBox.hasSize) {
+      return;
+    }
+    final start = overlayBox.globalToLocal(
+        sourceBox.localToGlobal(sourceBox.size.center(Offset.zero)));
+    final end = overlayBox.globalToLocal(
+        targetBox.localToGlobal(targetBox.size.center(Offset.zero)));
+    late final OverlayEntry flight;
+    flight = OverlayEntry(
+        builder: (_) => IgnorePointer(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 720),
+                onEnd: () {
+                  if (_basketFlights.remove(flight)) {
+                    flight.remove();
+                    flight.dispose();
+                  }
+                },
+                builder: (_, t, child) {
+                  final progress = Curves.easeInOutCubic.transform(t);
+                  final position = Offset.lerp(start, end, progress)! +
+                      Offset(0, -100 * 4 * t * (1 - t));
+                  return Stack(children: [
+                    Positioned(
+                        left: position.dx - 32,
+                        top: position.dy - 32,
+                        child: Opacity(
+                            opacity:
+                                t < 0.85 ? 1 : ((1 - t) / 0.15).clamp(0.0, 1.0),
+                            child: Transform.scale(
+                                scale: 1 - 0.75 * progress,
+                                child: Transform.rotate(
+                                    angle: 0.3 * (1 - t), child: child))))
+                  ]);
+                },
+                child: Material(
+                    elevation: 12,
+                    borderRadius: BorderRadius.circular(18),
+                    child: _productImage(product)),
+              ),
+            ));
+    _basketFlights.add(flight);
+    overlay.insert(flight);
+  }
+
+  Future<void> _viewProduct(Map<String, dynamic> product) async {
+    final id = product['id'] as String;
+    final available = (product['quantityAvailable'] as num).toDouble();
+    final branch =
+        _branches.where((branch) => branch['id'] == _branchId).firstOrNull;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(builder: (context, refresh) {
+        final quantity = _cart[id] ?? 0;
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.overlaySurface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            border: Border.all(color: AppColors.glassBorder),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.32),
+                blurRadius: 34,
+                offset: const Offset(0, -8),
+              ),
+            ],
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.glassBorder,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                Row(children: [
+                  Expanded(
+                      child: Text('Item details',
+                          style: AppTextStyles.headlineSmall)),
+                  IconButton(
+                      tooltip: 'Close item details',
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: const Icon(Icons.close)),
+                ]),
+                Center(child: _productImage(product, size: 220)),
+                const SizedBox(height: 18),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.violet.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(
+                        color: AppColors.violet.withValues(alpha: 0.28)),
+                  ),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                    child: Text(
+                        product['category'] as String? ??
+                            'Everyday essentials',
+                        style: AppTextStyles.caption
+                            .copyWith(color: AppColors.violet)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(product['name'] as String? ?? 'Item',
+                    style: AppTextStyles.headlineSmall),
+                const SizedBox(height: 12),
+                Text(product['description'] as String? ?? 'Ready for you.',
+                    style: AppTextStyles.body),
+                const SizedBox(height: 16),
+                Text(
+                    '${_price(product['price'] as num)}${product['unit'] == null ? '' : ' / ${product['unit']}'}',
+                    style: AppTextStyles.subtitle),
+                Text('$available in stock · SKU: ${product['sku'] ?? '—'}',
+                    style: AppTextStyles.caption),
+                Text('Shopping at ${branch?['name'] ?? 'Selected store'}',
+                    style: AppTextStyles.caption),
+                const SizedBox(height: 20),
+                Builder(
+                    builder: (buttonContext) => Row(children: [
+                          Expanded(
+                              child: Text('Your quantity: $quantity',
+                                  style: AppTextStyles.subtitle)),
+                          if (quantity > 0)
+                            IconButton(
+                                tooltip: 'Remove one',
+                                onPressed: () {
+                                  _changeQuantity(product, -1);
+                                  refresh(() {});
+                                },
+                                icon: const Icon(Icons.remove)),
+                          FilledButton.icon(
+                            onPressed: quantity >= available
+                                ? null
+                                : () {
+                                    _changeQuantity(
+                                        product,
+                                        (available - quantity)
+                                            .clamp(0, 1)
+                                            .toDouble(),
+                                        source: buttonContext);
+                                    refresh(() {});
+                                  },
+                            icon: const Icon(Icons.add),
+                            label: Text(
+                                quantity > 0 ? 'Add one' : 'Add to basket'),
+                          ),
+                        ])),
+                const SizedBox(height: 12),
+              ]),
+          ),
+        );
+      }),
+    );
   }
 
   Future<void> _openCart() async {
@@ -1050,6 +1263,7 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
             offset: Offset(0, 12 * (1 - value)), child: child),
       ),
       child: Container(
+        key: _productKeys.putIfAbsent(id, () => GlobalKey()),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(22),
           color: AppColors.glassFill,
@@ -1127,6 +1341,9 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.caption.copyWith(height: 1.35),
                   ),
+                  TextButton(
+                      onPressed: () => _viewProduct(product),
+                      child: const Text('View item →')),
                   const SizedBox(height: 11),
                   Row(
                     children: [
@@ -1171,8 +1388,10 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                                       AppColors.cyan.withValues(alpha: 0.15),
                                   foregroundColor: AppColors.cyan,
                                 ),
-                                onPressed: () => _changeQuantity(
-                                    product, available < 1 ? available : 1),
+                                onPressed: available <= 0
+                                    ? null
+                                    : () => _changeQuantity(
+                                        product, available < 1 ? available : 1),
                                 icon: const Icon(Icons.add_rounded),
                               ),
                       ),
@@ -1364,7 +1583,9 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
             onPressed: _findBusiness,
             icon: const Icon(Icons.storefront_outlined),
           ),
-          _CartAppBarAction(count: cartCount, onPressed: _openCart),
+          SizedBox(
+              key: _basketKey,
+              child: _CartAppBarAction(count: cartCount, onPressed: _openCart)),
         ],
       ),
       bottomNavigationBar: _cart.isEmpty || _showOrders
@@ -1534,20 +1755,24 @@ class _CustomerShopScreenState extends State<CustomerShopScreen> {
                   else
                     LayoutBuilder(
                       builder: (context, constraints) {
-                        final columns = constraints.maxWidth > 700 ? 3 : 2;
-                        return GridView.builder(
-                          itemCount: _visibleProducts.length,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: columns,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                            mainAxisExtent: 320,
-                          ),
-                          itemBuilder: (context, index) =>
-                              _productCard(_visibleProducts[index], index),
+                        final columns = constraints.maxWidth > 700
+                            ? 3
+                            : constraints.maxWidth < 340
+                                ? 1
+                                : 2;
+                        final width =
+                            (constraints.maxWidth - (columns - 1) * 10) /
+                                columns;
+                        final products = _visibleProducts;
+                        return Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: List.generate(
+                              products.length,
+                              (index) => SizedBox(
+                                    width: width,
+                                    child: _productCard(products[index], index),
+                                  )),
                         );
                       },
                     ),

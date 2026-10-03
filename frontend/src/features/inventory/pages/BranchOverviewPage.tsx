@@ -1,3 +1,4 @@
+import { InventoryHeroArtwork } from '../ui/InventoryHeroArtwork';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
@@ -340,6 +341,7 @@ export function BranchOverviewPage() {
     <div className="page branch-overview-page">
       <header className="branch-overview-hero">
         <span className="inventory-hero-sheen" aria-hidden="true" />
+        <InventoryHeroArtwork icon="branches" />
         <span className="inventory-hero-ambient" aria-hidden="true"><i /></span>
         <div className="branch-overview-hero-copy">
           <p className="branch-overview-eyebrow"><span aria-hidden="true">◈</span> INVENTORY / NETWORK</p>

@@ -46,6 +46,7 @@ export default function NotificationBell() {
     isLoading,
     isFetching,
     error,
+    refetch,
   } = useGetNotificationsQuery(undefined, {
     pollingInterval: NOTIFICATION_POLL_INTERVAL,
   });
@@ -96,10 +97,16 @@ export default function NotificationBell() {
         onClick={() => setOpen((value) => !value)}
         aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}
         aria-expanded={open}
+        aria-controls="updates-panel"
       >
-        <span className="notification-bell-glyph" aria-hidden="true">🔔</span>
+        <span className="notification-bell-glyph" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+            <path d="M10 21h4" />
+          </svg>
+        </span>
         <small>Updates</small>
-        {unread > 0 && <b key={unread}>{unread > 9 ? '9+' : unread}</b>}
+        {unread > 0 && <b className="notification-count" key={unread} aria-hidden="true">{unread > 9 ? '9+' : unread}</b>}
       </button>
       {open && (
         <>
@@ -109,11 +116,11 @@ export default function NotificationBell() {
             aria-label="Close notifications"
             onClick={() => setOpen(false)}
           />
-          <section className="notification-panel" aria-label="Notifications">
+          <section id="updates-panel" className="notification-panel" aria-label="Notifications">
             <header className="notification-panel-header">
               <div>
                 <span>{isCustomer ? 'YOUR UPDATES' : 'WORKSPACE PULSE'}</span>
-                <h2>Notifications</h2>
+                <h2>Stay in the loop</h2>
               </div>
               <div className="notification-panel-header-actions">
                 <span className="notification-live-indicator">
@@ -124,6 +131,22 @@ export default function NotificationBell() {
                 <button type="button" onClick={() => setOpen(false)} aria-label="Close notifications">×</button>
               </div>
             </header>
+            <div className="notification-update-summary">
+              <div className="notification-orbit" aria-hidden="true">✦</div>
+              <div className="notification-summary-copy">
+                <strong key={isLoading ? 'loading' : error ? 'error' : unread}>
+                  {isLoading ? 'Getting your updates…' : error ? 'Let’s reconnect' : unread > 0
+                    ? `${unread} new ${unread === 1 ? 'update' : 'updates'}`
+                    : 'You’re all caught up'}
+                </strong>
+                <p>{error ? 'Refresh to check your latest activity.' : 'Your latest activity, all in one place.'}</p>
+              </div>
+              <button className="notification-refresh" type="button"
+                disabled={isFetching} aria-label="Refresh updates"
+                onClick={() => void refetch()}>
+                <span className={isFetching ? 'is-syncing' : ''} aria-hidden="true">↻</span>
+              </button>
+            </div>
             {isLoading ? (
               <div className="notification-loading">
                 <span className="spinner spinner-dark" />
@@ -143,11 +166,12 @@ export default function NotificationBell() {
               </div>
             ) : (
               <div className="notification-list">
-                {data.items.map((notification) => (
+                {data.items.map((notification, index) => (
                   <button
                     className={`notification-item${notification.isRead ? '' : ' is-unread'}${freshIds.has(notification.id) ? ' is-new' : ''}`}
                     type="button"
                     key={notification.id}
+                    style={{ animationDelay: `${Math.min(index, 6) * 45}ms` }}
                     onClick={() => {
                       if (!notification.isRead && !isMarkingRead) void handleMarkRead(notification.id);
                     }}

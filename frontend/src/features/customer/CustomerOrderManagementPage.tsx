@@ -173,7 +173,7 @@ export default function CustomerOrderManagementPage() {
                       aria-label={`${status === 'Cancelled' ? 'Cancel' : 'Mark'} order ${order.number} as ${statusLabel(status)}`}
                     >{updatingId === order.id ? 'Saving…' : statusLabel(status)}</button>)}
                   </div>}
-                  {actions.length === 0 && <span className="cust-order-ops-done">This order is complete</span>}
+                  {actions.length === 0 && <span className={`cust-order-ops-done${order.status === 'Cancelled' ? ' is-cancelled' : ''}`}>{order.status === 'Cancelled' ? 'This order was cancelled' : 'This order is complete'}</span>}
                 </div>
               </article>
             );
