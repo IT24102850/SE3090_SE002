@@ -25,6 +25,42 @@ export function refreshSession(): Promise<string | null> {
   return inFlight;
 }
 
+/**
+ * Fetch an authenticated API resource and transparently rotate an expired
+ * access token once before replaying the request.
+ *
+ * Some feature pages use fetch directly instead of the shared Axios client.
+ * Keeping the retry here prevents those pages from diverging from the app-wide
+ * session behaviour.
+ */
+export async function fetchWithAuth(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  const requestInit: RequestInit = {
+    ...init,
+    headers: new Headers(init.headers),
+  };
+
+  const send = () => {
+    const headers = new Headers(requestInit.headers);
+    const token = localStorage.getItem(TOKEN);
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return fetch(input, { ...requestInit, headers });
+  };
+
+  const response = await send();
+  if (response.status !== 401) return response;
+
+  const token = await refreshSession();
+  if (!token) {
+    expireSession();
+    return response;
+  }
+
+  return send();
+}
+
 async function doRefresh(): Promise<string | null> {
   const refreshToken = localStorage.getItem(REFRESH);
   if (!refreshToken) return null;

@@ -8,6 +8,7 @@ import { Badge, type BadgeTone } from '../ui/Badge';
 import { useToast } from '../ui/ToastContext';
 import { Icon } from '../ui/Icon';
 import { getStoredToken } from '../authToken';
+import { fetchWithAuth } from '../../../api/sessionRefresh';
 import ConfirmDialog from '../../../shared/components/ConfirmDialog';
 import { useConfirmation } from '../../../shared/components/ConfirmationProvider';
 
@@ -565,7 +566,7 @@ export function InventoryManagerPage() {
       const headers = { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' };
       const params = new URLSearchParams({ page: '1', pageSize: '100' });
       if (assignedBranchId) params.set('branchId', assignedBranchId);
-      const firstResponse = await fetch(`/api/inventory?${params}`, { headers });
+      const firstResponse = await fetchWithAuth(`/api/inventory?${params}`, { headers });
       if (!firstResponse.ok) {
         const errorBody = await firstResponse.json().catch(() => null);
         throw new Error(errorBody?.message || errorBody?.title || `Inventory request failed (${firstResponse.status})`);
@@ -576,7 +577,7 @@ export function InventoryManagerPage() {
         Array.from({ length: totalPages - 1 }, async (_, index) => {
           const pageParams = new URLSearchParams({ page: String(index + 2), pageSize: '100' });
           if (assignedBranchId) pageParams.set('branchId', assignedBranchId);
-          const response = await fetch(`/api/inventory?${pageParams}`, { headers });
+          const response = await fetchWithAuth(`/api/inventory?${pageParams}`, { headers });
           if (!response.ok) throw new Error(`Inventory page ${index + 2} failed (${response.status})`);
           return response.json();
         }),
@@ -670,7 +671,7 @@ export function InventoryManagerPage() {
           ? importedSellingPrice
           : null;
         const sku = nextSku(stagedItems);
-        const res = await fetch('/api/inventory', {
+        const res = await fetchWithAuth('/api/inventory', {
           method: 'POST',
           headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: token ? 'Bearer ' + token : '' },
           body: JSON.stringify({
@@ -713,7 +714,7 @@ export function InventoryManagerPage() {
     async function loadCategoriesAndInventory() {
       let options: InventoryCategoryOption[] = [];
       try {
-        const response = await fetch('/api/inventory/categories', {
+        const response = await fetchWithAuth('/api/inventory/categories', {
           headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' },
         });
         if (!response.ok) throw new Error(`Inventory categories request failed (${response.status})`);
@@ -731,7 +732,7 @@ export function InventoryManagerPage() {
 
   useEffect(() => {
     let active = true;
-    void fetch('/api/inventory/branches', {
+    void fetchWithAuth('/api/inventory/branches', {
       headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' },
     })
       .then(async (response) => {
@@ -753,7 +754,7 @@ export function InventoryManagerPage() {
 
   useEffect(() => {
     let active = true;
-    void fetch('/api/suppliers', { headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' } })
+    void fetchWithAuth('/api/suppliers', { headers: { Accept: 'application/json', Authorization: token ? `Bearer ${token}` : '' } })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Supplier request failed (${response.status})`);
         return response.json();
@@ -775,7 +776,7 @@ export function InventoryManagerPage() {
       const existing = modal?.mode === 'edit' ? items.find((row) => row.id === modal.id) : undefined;
       const path = existing?.id ? `/api/inventory/${existing.id}` : '/api/inventory';
       const method = existing?.id ? 'PUT' : 'POST';
-      const response = await fetch(path, {
+      const response = await fetchWithAuth(path, {
         method,
         headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: token ? 'Bearer ' + token : '' },
         body: JSON.stringify({
@@ -826,7 +827,7 @@ export function InventoryManagerPage() {
       return;
     }
     try {
-      const response = await fetch(`/api/inventory/${item.id}`, {
+      const response = await fetchWithAuth(`/api/inventory/${item.id}`, {
         method: 'DELETE',
         headers: { Accept: 'application/json', Authorization: token ? 'Bearer ' + token : '' },
       });
