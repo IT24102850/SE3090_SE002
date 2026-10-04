@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
 import {
@@ -14,6 +14,7 @@ import {
 import { useToast, apiErrorMessage } from '../../shared/components/Toast';
 import { useConfirmation } from '../../shared/components/ConfirmationProvider';
 import BookingFormModal from './BookingFormModal';
+import QrCheckInModal from './QrCheckInModal';
 import {
   addDays, buildMonthGrid, buildWeekGrid, combineDateWithTimeOfDay, formatDayLabel, formatMonthYear, formatTime,
   isSameDay, startOfDay, toISODate, WEEKDAY_LABELS,
@@ -85,6 +86,7 @@ export default function BookingManagerPage() {
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
   const [showConflicts, setShowConflicts] = useState(false);
   const [checkInId, setCheckInId] = useState('');
+  const [showQrScanner, setShowQrScanner] = useState(false);
 
   const weekDays = useMemo(() => buildWeekGrid(weekAnchor), [weekAnchor]);
   const monthDays = useMemo(() => buildMonthGrid(monthAnchor), [monthAnchor]);
@@ -246,19 +248,26 @@ export default function BookingManagerPage() {
     catch (err) { show(apiErrorMessage(err, 'Could not update status.'), 'error'); }
   };
 
-  // FR-AS9: desk check-in without a camera - paste the booking ID from the
-  // guest's confirmation/QR (mobile has the actual camera scanner).
+  // FR-AS9: desk check-in supports both pasted IDs and the camera flow used
+  // by the Flutter app.
   const handleCheckIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!checkInId.trim()) return;
+    await checkInBookingId(checkInId.trim());
+  };
+
+  const checkInBookingId = useCallback(async (bookingId: string): Promise<boolean> => {
     try {
-      const result = await checkIn(checkInId.trim()).unwrap();
+      const result = await checkIn(bookingId).unwrap();
       show(result.message, 'success');
       setCheckInId('');
+      setShowQrScanner(false);
+      return true;
     } catch (err) {
       show(apiErrorMessage(err, 'Could not check in — is the booking ID correct?'), 'error');
+      return false;
     }
-  };
+  }, [checkIn, show]);
 
   const pickDay = (d: Date) => {
     setSelectedDay((cur) => (cur && isSameDay(cur, d) ? null : d));
@@ -285,6 +294,9 @@ export default function BookingManagerPage() {
               {checkingIn ? <span className="spinner" /> : 'Check in'}
             </button>
           </form>
+          <button className="btn btn-secondary" type="button" onClick={() => setShowQrScanner(true)}>
+            Scan QR
+          </button>
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New {subtype.bookingTermPlural.replace(/s$/i, '').toLowerCase()}</button>
         </div>
       </div>
@@ -553,6 +565,14 @@ export default function BookingManagerPage() {
 
       {showCreate && user && (
         <BookingFormModal tenantId={tenantId} userId={user.id} defaultDate={selectedDay ?? weekDays[0]} onClose={() => setShowCreate(false)} />
+      )}
+      {showQrScanner && (
+        <QrCheckInModal
+          bookingLabel={subtype.bookingTermSingular}
+          processing={checkingIn}
+          onScan={checkInBookingId}
+          onClose={() => setShowQrScanner(false)}
+        />
       )}
     </div>
   );

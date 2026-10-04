@@ -136,6 +136,21 @@ tr:hover .rsv-actions { opacity: 1; }
 .rsv-up-meta { margin-top: 2px; font-size: .72rem; color: var(--color-text-muted); }
 .rsv-up-empty { padding: 18px 0; font-size: .8rem; color: var(--color-text-muted); }
 
+.qr-checkin-backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 20px; background: rgba(12, 18, 42, .68); backdrop-filter: blur(8px); }
+.qr-checkin-modal { width: min(480px, 100%); overflow: hidden; border: 1px solid var(--color-border); border-radius: 22px; background: var(--color-surface); box-shadow: var(--shadow-lg); }
+.qr-checkin-header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 15px 18px; border-bottom: 1px solid var(--color-border); }
+.qr-checkin-header h2 { margin: 3px 0 0; color: var(--color-text); font-size: 1.1rem; }
+.qr-checkin-back { padding: 7px 9px; white-space: nowrap; }
+.qr-checkin-kicker { color: var(--color-primary); font-size: .62rem; font-weight: 800; letter-spacing: .12em; }
+.qr-checkin-close { border: 0; color: var(--color-text-muted); background: transparent; font-size: 1.7rem; line-height: 1; cursor: pointer; }
+.qr-checkin-body { padding: 18px; }
+.qr-checkin-viewfinder { position: relative; aspect-ratio: 1; overflow: hidden; border-radius: 16px; background: #101322; }
+.qr-checkin-viewfinder video { width: 100%; height: 100%; display: block; object-fit: cover; }
+.qr-checkin-reticle { position: absolute; inset: 18%; border: 3px solid var(--color-primary); border-radius: 18px; box-shadow: 0 0 0 999px rgba(5, 10, 25, .22), 0 0 24px var(--color-primary); pointer-events: none; }
+.qr-checkin-status { position: absolute; right: 12px; bottom: 12px; left: 12px; padding: 10px; border-radius: 10px; color: #fff; background: rgba(10, 14, 30, .8); text-align: center; font-size: .8rem; }
+.qr-checkin-instruction { margin: 14px 0 0; color: var(--color-text-secondary); font-size: .82rem; text-align: center; }
+.qr-checkin-error { margin: 10px 0 0; color: var(--color-critical); font-size: .76rem; line-height: 1.45; text-align: center; }
+
 /* ── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 1500px) { .rsv { grid-template-columns: minmax(0, 1fr) 290px; gap: 18px; } .rsv-table td { padding: 11px 12px; } }
 @media (max-width: 1280px) {
@@ -150,4 +165,10 @@ tr:hover .rsv-actions { opacity: 1; }
   .rsv-kpi { min-height: 84px; padding: 14px 16px; }
   .rsv-kpi-value { font-size: 1.5rem; }
   .rsv-table th:nth-child(4), .rsv-table td:nth-child(4) { display: none; }
+}
+@media (max-width: 520px) {
+  .qr-checkin-backdrop { align-items: end; padding: 0; }
+  .qr-checkin-modal { width: 100%; border-radius: 22px 22px 0 0; }
+  .qr-checkin-header { padding: 14px; }
+  .qr-checkin-body { padding: 14px; }
 }
