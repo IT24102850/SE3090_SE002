@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { scrollToId } from './scroll/useSmoothScroll';
 import './landing.css';
 import './landing-enhanced.css';
+import { applyTheme, getStoredTheme } from '../../shared/theme';
 
 interface Industry {
   id: string;
@@ -259,9 +260,10 @@ function IndustryIcon({ id }: { id: string }) {
 
 export default function LandingPage() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('unify-home-theme');
-    if (saved === 'dark' || saved === 'light') return saved;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const stored = getStoredTheme();
+    return stored === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : stored;
   });
 
   const [selectedIndustry, setSelectedIndustry] = useState(0);
@@ -313,11 +315,7 @@ export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   useEffect(() => {
-    document.documentElement.dataset.unifyTheme = theme;
-    localStorage.setItem('unify-home-theme', theme);
-    return () => {
-      delete document.documentElement.dataset.unifyTheme;
-    };
+    applyTheme(theme);
   }, [theme]);
 
   const toggleTheme = (newTheme: 'light' | 'dark') => {

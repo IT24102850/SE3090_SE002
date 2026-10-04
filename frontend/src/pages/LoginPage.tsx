@@ -6,6 +6,7 @@ import { AppDispatch, RootState } from '../store/store';
 import { useToast } from '../shared/components/Toast';
 import '../features/marketing/landing.css';
 import './auth-enhanced.css';
+import { applyTheme, getStoredTheme } from '../shared/theme';
 
 /* ── Interactive Particle Canvas ─────────────────────────────── */
 function ParticleCanvas() {
@@ -67,9 +68,10 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('unify-home-theme');
-    if (saved === 'dark' || saved === 'light') return saved;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const stored = getStoredTheme();
+    return stored === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : stored;
   });
 
   const dispatch = useDispatch<AppDispatch>();
@@ -93,11 +95,7 @@ export default function LoginPage() {
   }, [error, show]);
 
   useEffect(() => {
-    document.documentElement.dataset.unifyTheme = theme;
-    localStorage.setItem('unify-home-theme', theme);
-    return () => {
-      delete document.documentElement.dataset.unifyTheme;
-    };
+    applyTheme(theme);
   }, [theme]);
 
   const handleSubmit = (e: React.FormEvent) => {

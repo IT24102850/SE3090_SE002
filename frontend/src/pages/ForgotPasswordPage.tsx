@@ -5,6 +5,7 @@ import { API_BASE_URL } from '../api/apiBaseUrl';
 import { useToast } from '../shared/components/Toast';
 import '../features/marketing/landing.css';
 import './signup.css';
+import { applyTheme, getStoredTheme } from '../shared/theme';
 
 /* Interactive particle canvas */
 function ParticleCanvas() {
@@ -76,20 +77,17 @@ export default function ForgotPasswordPage() {
   const [codeFeedback, setCodeFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('unify-home-theme');
-    if (saved === 'dark' || saved === 'light') return saved;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const stored = getStoredTheme();
+    return stored === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : stored;
   });
 
   const { show } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
-    document.documentElement.dataset.unifyTheme = theme;
-    localStorage.setItem('unify-home-theme', theme);
-    return () => {
-      delete document.documentElement.dataset.unifyTheme;
-    };
+    applyTheme(theme);
   }, [theme]);
 
   // Resend cooldown timer

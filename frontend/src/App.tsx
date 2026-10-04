@@ -55,6 +55,7 @@ const MyProfilePage = lazy(() => import('./features/settings/MyProfilePage'));
 const CustomerBookPage = lazy(() => import('./features/customer/CustomerBookPage'));
 const MyBookingsPage = lazy(() => import('./features/customer/MyBookingsPage'));
 const CustomerAiPlannerPage = lazy(() => import('./features/customer/CustomerAiPlannerPage'));
+const MyAiRequestsPage = lazy(() => import('./features/customer/MyAiRequestsPage'));
 const BusinessInfoPage = lazy(() => import('./features/customer/BusinessInfoPage'));
 const CustomerShopPage = lazy(() => import('./features/customer/CustomerShopPage'));
 const CustomerOrderManagementPage = lazy(() => import('./features/customer/CustomerOrderManagementPage'));
@@ -211,6 +212,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Customer']}>
                     <Shell><CustomerAiPlannerPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/my-ai-requests"
+                element={
+                  <ProtectedRoute allowedRoles={['Customer']}>
+                    <Shell><MyAiRequestsPage /></Shell>
                   </ProtectedRoute>
                 }
               />

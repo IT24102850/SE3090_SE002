@@ -11,6 +11,7 @@ import { useToast } from './Toast';
 import WorkspaceAssistant from './WorkspaceAssistant';
 import UserAvatar from './UserAvatar';
 import { Icon as InventoryIcon } from '../../features/inventory/ui/Icon';
+import { applyTheme, getStoredTheme, type AppTheme } from '../theme';
 
 interface NavItem {
   path: string;
@@ -43,6 +44,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: '/my-bookings', label: 'My bookings', icon: '🎟️', roles: ['Customer'] },
       { path: '/shop', label: 'Shop & my orders', icon: '🛍️', roles: ['Customer'] },
       { path: '/ai-planner', label: 'AI planner', icon: '🤖', roles: ['Customer'] },
+      { path: '/my-ai-requests', label: 'My AI requests', icon: '🛰️', roles: ['Customer'] },
       { path: '/business', label: 'About the business', icon: '🏪', roles: ['Customer'] },
       { path: '/my-bills', label: 'My bills', icon: '💳', roles: ['Customer'] },
     ],
@@ -156,7 +158,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem('unify-theme') || 'light');
+  const [theme, setTheme] = useState<AppTheme>(getStoredTheme);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   // The rail is viewport-height, so below the nav there is room for one
@@ -186,8 +188,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }, [show, user]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem('unify-theme', theme);
+    applyTheme(theme);
   }, [theme]);
 
   // Role filtering happens inside each section; a section whose items are all
@@ -404,11 +405,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 <span className="theme-select-chevron" aria-hidden="true" />
               </button>
               {themeMenuOpen && <div className="theme-menu" role="listbox" aria-label="Choose theme">
-                {[
+                {([
                   ['light', 'Light theme'],
                   ['dark', 'Dark theme'],
                   ['system', 'System theme'],
-                ].map(([value, label]) => (
+                ] as const).map(([value, label]) => (
                   <button type="button" role="option" aria-selected={theme === value} className={`theme-menu-option${theme === value ? ' selected' : ''}`} key={value} onClick={() => { setTheme(value); setThemeMenuOpen(false); }}>
                     <span>{theme === value ? '✓' : ''}</span>{label}
                   </button>

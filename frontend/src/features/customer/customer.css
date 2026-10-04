@@ -959,3 +959,48 @@
   .cust-shop-page *, .cust-shop-page *::before, .cust-shop-page *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .cust-shop-flight-layer { display: none; }
 }
+.customer-ai-request-list {
+  display: grid;
+  gap: 12px;
+}
+
+.customer-ai-request-card {
+  padding: 18px 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-card);
+}
+
+.customer-ai-request-card__body {
+  display: grid;
+  gap: 8px;
+}
+
+.customer-ai-request-card h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.customer-ai-request-card p,
+.customer-ai-request-card time {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.customer-ai-request-status {
+  width: fit-content;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.customer-ai-request-status.status-warning { color: var(--warning); }
+.customer-ai-request-status.status-info { color: var(--accent); }
+.customer-ai-request-status.status-success { color: var(--success); }
+.customer-ai-request-status.status-danger { color: var(--danger); }
+.customer-ai-request-status.status-muted { color: var(--text-secondary); }

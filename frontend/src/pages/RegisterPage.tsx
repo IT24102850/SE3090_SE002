@@ -11,6 +11,7 @@ import type { AppDispatch } from '../store/store';
 import '../features/marketing/landing.css';
 import './signup.css';
 import './auth-enhanced.css';
+import { applyTheme, getStoredTheme } from '../shared/theme';
 
 /* ── Interactive Particle Canvas ─────────────────────────────── */
 function ParticleCanvas() {
@@ -206,9 +207,10 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [confirm, setConfirm] = useState('');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('unify-home-theme');
-    if (saved === 'dark' || saved === 'light') return saved;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const stored = getStoredTheme();
+    return stored === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : stored;
   });
 
   const navigate = useNavigate();
@@ -241,11 +243,7 @@ export default function RegisterPage() {
   }, [error, show]);
 
   useEffect(() => {
-    document.documentElement.dataset.unifyTheme = theme;
-    localStorage.setItem('unify-home-theme', theme);
-    return () => {
-      delete document.documentElement.dataset.unifyTheme;
-    };
+    applyTheme(theme);
   }, [theme]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
