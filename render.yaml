@@ -43,6 +43,18 @@ services:
         sync: false
       - key: SMTP_FROM
         sync: false
+      # Platform billing is separate from each tenant's payment gateway.
+      # Stripe must be configured here for the Unify "Pay now" checkout.
+      - key: Platform__Billing__Currency
+        value: USD
+      - key: Platform__Billing__TestMode
+        value: "true"
+      - key: Platform__Billing__Stripe__SecretKey
+        sync: false
+      - key: Platform__Billing__Stripe__PublicKey
+        sync: false
+      - key: Platform__Billing__Stripe__WebhookSecret
+        sync: false
 
   - type: web
     name: sme-agentic-ai

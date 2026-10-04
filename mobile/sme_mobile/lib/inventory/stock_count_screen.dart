@@ -1865,7 +1865,7 @@ class _StockCountScreenState extends State<StockCountScreen>
             DropdownButtonFormField<String>(
               key: const Key('stock-count-branch-selector'),
               isExpanded: true,
-              initialValue: _matchingCatalogItems
+              value: _matchingCatalogItems
                       .any((item) => item.id == _selectedCatalogItemId)
                   ? _selectedCatalogItemId
                   : null,
@@ -2055,7 +2055,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                       children: [
                         const SizedBox(height: 14),
                         DropdownButtonFormField<String>(
-                          initialValue: _reason,
+                          value: _reason,
                           decoration: const InputDecoration(
                             labelText: 'Reason for discrepancy *',
                             filled: true,

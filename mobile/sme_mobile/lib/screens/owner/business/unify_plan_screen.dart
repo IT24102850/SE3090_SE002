@@ -317,7 +317,7 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen>
     try {
       final checkout = await ref
           .read(unifyPlanRepositoryProvider)
-          .buyAddOn(addOn.code, quantity: 1, currency: currency);
+          .buyAddOn(addOn.code, quantity: 1, currency: currency, returnUrl: _returnUrl);
       await _settle(checkout);
     } catch (error) {
       _handleError(error, 'That purchase could not be started.');

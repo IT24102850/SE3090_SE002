@@ -23,7 +23,12 @@ abstract class UnifyPlanRepository {
     String? provider,
     String? returnUrl,
   });
-  Future<PlanCheckout> buyAddOn(String addOnCode, {int quantity, String? currency, String? provider});
+  Future<PlanCheckout> buyAddOn(String addOnCode, {
+    int quantity,
+    String? currency,
+    String? provider,
+    String? returnUrl,
+  });
   Future<PlanCheckout> payInvoice(String invoiceId, {String? provider, String? returnUrl});
   Future<UnifyInvoice> confirm(String paymentId, {bool simulateFailure});
   Future<UnifySubscription> startTrial({String? planCode});
@@ -97,12 +102,19 @@ class DioUnifyPlanRepository implements UnifyPlanRepository {
   }
 
   @override
-  Future<PlanCheckout> buyAddOn(String addOnCode, {int quantity = 1, String? currency, String? provider}) async {
+  Future<PlanCheckout> buyAddOn(
+    String addOnCode, {
+    int quantity = 1,
+    String? currency,
+    String? provider,
+    String? returnUrl,
+  }) async {
     final response = await _dio.post<dynamic>('/subscription/addons/checkout', data: {
       'addOnCode': addOnCode,
       'quantity': quantity,
       if (currency != null) 'currency': currency,
       if (provider != null) 'provider': provider,
+      if (returnUrl != null) 'returnUrl': returnUrl,
     });
     return PlanCheckout.fromJson(_map(response.data));
   }

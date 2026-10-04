@@ -188,6 +188,23 @@ Platform:Billing:SettlementCurrency     e.g. USD — Stripe will not take LKR
 Platform:Billing:Rates:LKR              units of LKR per 1 settlement unit
 ```
 
+For the hosted Stripe checkout used by the web and mobile apps, configure the
+platform merchant account in the deployment environment (not in either client):
+
+```text
+Platform__Billing__Currency=USD
+Platform__Billing__TestMode=true
+Platform__Billing__Stripe__SecretKey=sk_test_...
+Platform__Billing__Stripe__PublicKey=pk_test_...
+Platform__Billing__Stripe__WebhookSecret=whsec_...
+```
+
+If the catalogue must remain in LKR, set
+`Platform__Billing__SettlementCurrency=USD` and provide
+`Platform__Billing__Rates__LKR` with the approved LKR-per-USD rate. The
+backend records both the invoice currency and the Stripe settlement amount.
+Never put the Stripe secret key in the web or mobile app.
+
 The `IPaymentProcessor` implementations (Stripe, PayPal, Manual) are shared
 with the tenant-facing billing engine — the integrations are written once.
 Only the credentials differ.
