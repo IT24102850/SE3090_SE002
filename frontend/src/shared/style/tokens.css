@@ -377,8 +377,8 @@ button, input, select, textarea { font-family: inherit; }
   @keyframes assistant-launcher-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes assistant-dots { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
   @media (max-width: 560px) {
-    .workspace-assistant { right: 16px; bottom: 82px; width: calc(100vw - 32px); }
-    .workspace-assistant-launcher { right: 16px; bottom: 16px; }
+      .workspace-assistant { right: 16px; bottom: calc(150px + env(safe-area-inset-bottom)); width: calc(100vw - 32px); }
+      .workspace-assistant-launcher { right: 16px; bottom: calc(86px + env(safe-area-inset-bottom)); }
   }
   @media (prefers-reduced-motion: reduce) {
     .workspace-assistant, .workspace-assistant-launcher, .workspace-assistant-message.is-thinking span {
@@ -1728,7 +1728,17 @@ body.modal-open { overflow: hidden; }
   .app-breadcrumb strong, .app-breadcrumb > span:nth-last-child(2) { display: none; }
   .app-breadcrumb { max-width: calc(100vw - 190px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .app-topbar-actions { gap: 6px; }
-  .app-user-chip, .app-signout, .app-home { display: none; }
+  .app-home, .app-signout { display: none; }
+  .app-user-chip {
+    display: inline-flex;
+    width: 38px;
+    min-height: 38px;
+    padding: 4px;
+    justify-content: center;
+    gap: 0;
+  }
+  .app-user-chip strong, .app-user-chip .app-role-chip { display: none; }
+  .app-user-avatar { width: 29px; height: 29px; }
   .theme-select { min-height: 38px; padding: 0 8px; border-radius: 11px; }
   .theme-select-label { display: none; }
   .theme-select-icon { width: 23px; height: 23px; }
@@ -1794,7 +1804,7 @@ body.modal-open { overflow: hidden; }
 }
 
 @media (max-width: 900px) {
-  .app-main { min-height: 100dvh; padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .app-main { min-height: 100dvh; padding-bottom: calc(108px + env(safe-area-inset-bottom)); }
   .app-footer { display: none; }
   .app-content {
     position: relative;

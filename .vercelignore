@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/build
+mobile/**/build
+mobile/**/.dart_tool
+backend
+agentic-ai-service
+.git
+*.apk
+*.aab
