@@ -125,7 +125,7 @@ class SaleReceiptPdfGenerator {
                       pw.SizedBox(height: 5),
                       pw.Text(
                         'Official inventory sale record',
-                        style: const pw.TextStyle(
+                        style: pw.TextStyle(
                           color: PdfColor.fromInt(0xFFC3D1E1),
                           fontSize: 10,
                         ),
@@ -138,13 +138,13 @@ class SaleReceiptPdfGenerator {
                     horizontal: 12,
                     vertical: 9,
                   ),
-                  decoration: const pw.BoxDecoration(
+                  decoration: pw.BoxDecoration(
                     color: PdfColor.fromInt(0xFF1E3148),
                     borderRadius: pw.BorderRadius.all(pw.Radius.circular(9)),
                   ),
                   child: pw.Text(
                     'SALE RECORDED',
-                    style: const pw.TextStyle(
+                    style: pw.TextStyle(
                       color: PdfColor.fromInt(0xFF8CEBFA),
                       fontSize: 7,
                       fontWeight: pw.FontWeight.bold,
@@ -302,7 +302,7 @@ class SaleReceiptPdfGenerator {
                   children: [
                     pw.Text(
                       'TOTAL',
-                      style: const pw.TextStyle(
+                      style: pw.TextStyle(
                         color: PdfColor.fromInt(0xFFC3D1E1),
                         fontSize: 9,
                         fontWeight: pw.FontWeight.bold,
