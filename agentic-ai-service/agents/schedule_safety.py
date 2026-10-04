@@ -11,7 +11,7 @@ exactly what was verified:
   schema              every proposal is well-formed and internally consistent
   count               no more bookings than the planner was allowed to ask for
   future              nothing starts in the past
-  duration            within MAX_APPOINTMENT_DURATION_MINUTES (spec: 2 hours)
+  duration            within MAX_APPOINTMENT_DURATION_MINUTES
   no_double_booking   no two proposals overlap on one resource
   live_conflicts      every slot is still free right now (detect_conflicts)
   daily_hours         existing + proposed load within the daily cap (spec: 8h)
@@ -44,7 +44,13 @@ from tools.schedule_tools import AgentToolbox, parse_hhmm
 
 APPROVAL_BOOKING_COUNT_THRESHOLD = int(os.getenv("APPROVAL_BOOKING_COUNT_THRESHOLD", "20"))
 APPROVAL_REVENUE_THRESHOLD_USD = float(os.getenv("APPROVAL_REVENUE_THRESHOLD", "500"))
-MAX_APPOINTMENT_DURATION_MINUTES = int(os.getenv("MAX_APPOINTMENT_DURATION_MINUTES", "120"))
+# Whale-watching and similar tours may legitimately take four hours. The
+# configured limit can be lowered, but never raised above this hard ceiling.
+ABSOLUTE_MAX_APPOINTMENT_DURATION_MINUTES = 360
+MAX_APPOINTMENT_DURATION_MINUTES = min(
+    int(os.getenv("MAX_APPOINTMENT_DURATION_MINUTES", "300")),
+    ABSOLUTE_MAX_APPOINTMENT_DURATION_MINUTES,
+)
 
 # Approximate, and labelled so in the trace. The threshold in the spec is in
 # dollars; a Sri Lankan operator prices in rupees, and comparing LKR 287,000

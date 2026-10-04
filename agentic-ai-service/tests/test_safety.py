@@ -84,6 +84,24 @@ def test_validation_rejects_over_duration_limit():
     client.create_booking.assert_not_called()
 
 
+def test_validation_allows_240_minute_whale_watching_booking():
+    client = MagicMock()
+    client.detect_conflicts.return_value = {"has_conflict": False, "reason": None}
+    client.predict_no_show_probability.return_value = {"totalPast": 0, "noShows": 0, "rate": 0.0}
+    client.create_booking.return_value = {"success": True, "booking": {"id": "whale-booking-1"}}
+
+    result = validation_safety_agent.run(
+        proposed_bookings=[_future_booking(duration_minutes=240)],
+        tenant_id="tenant-mirissa-jet-liner",
+        client=client,
+    )
+
+    assert result.is_allowed is True
+    assert result.requires_human_approval is False
+    assert result.rejection_reason is None
+    client.create_booking.assert_called_once()
+
+
 def test_validation_rejects_empty_proposal_list():
     client = MagicMock()
     result = validation_safety_agent.run(proposed_bookings=[], tenant_id="tenant-1", client=client)

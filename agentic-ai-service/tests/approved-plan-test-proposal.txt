@@ -1,0 +1,80 @@
+MIRISSA JET LINER - WHALE WATCHING TEST PROPOSAL
+=================================================
+
+Purpose
+-------
+Run one realistic Schedule Copilot request using the values currently shown
+in the web form.
+
+Form values to enter
+--------------------
+Business: Mirissa Jet Liner
+Booking type: Whale Watching (240 min)
+From: 2026-10-06
+To: 2026-10-10
+How many: 1
+Resources: Whale Watching Boat - Dawn Departure
+Objective:
+Book the earliest available whale-watching trip for one customer this week,
+in the morning, and keep lunch free.
+
+Priority rules to select
+------------------------
+[x] Prefer mornings
+[x] Earliest first
+[x] Keep lunch free
+[ ] Prefer afternoons
+[ ] Balance load
+[ ] Minimise travel
+[ ] Avoid no-shows
+[ ] Cluster days
+
+Expected request meaning
+------------------------
+The planner should search for one future morning slot between 2026-10-06 and
+2026-10-10 on Whale Watching Boat - Dawn Departure. It should preserve the
+240-minute booking duration, avoid conflicts, and avoid a slot that crosses
+12:00-13:00.
+
+Expected safe result with the current policy
+--------------------------------------------
+Status: Completed
+Safety allowed: true
+Human approval required: false
+Rejection reason: null
+Proposal count: 1
+Duration: 240 minutes
+
+Expected checks
+---------------
+schema: pass
+count: pass
+future: pass
+duration: pass
+no_double_booking: pass, if the boat is free
+live_conflicts: pass, if the slot is still free
+daily_hours: pass, if capacity remains
+lunch_break: pass, if the trip does not cross lunch
+
+Safety configuration
+--------------------
+The web form correctly reports Whale Watching as 240 minutes. The Agentic AI
+configuration now allows legitimate tours up to 300 minutes:
+
+MAX_APPOINTMENT_DURATION_MINUTES=300
+
+The hard absolute ceiling remains 360 minutes. Requests above that ceiling
+are rejected even if the environment variable is set higher.
+
+Expected proposal after running
+--------------------------------
+Status: Completed
+Safety allowed: true
+Human approval required: false
+Rejection reason: null
+Proposal count: 1
+Duration: 240 minutes
+Resource: Whale Watching Boat - Dawn Departure
+
+Do not shorten the proposal to 90 minutes. That would not represent the
+actual Whale Watching booking type shown in the form.

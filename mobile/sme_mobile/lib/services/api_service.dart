@@ -1,7 +1,4 @@
-import 'dart:io' show Platform;
-
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'secure_storage_service.dart';
 
@@ -43,8 +40,10 @@ class ApiService {
   static String _defaultBaseUrl() {
     const configured = String.fromEnvironment('API_BASE_URL');
     if (configured.isNotEmpty) return _normaliseBaseUrl(configured);
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5000/api';
-    return 'http://localhost:5000/api';
+    // A released APK must reach the hosted API. `localhost` would point to
+    // the phone itself, while 10.0.2.2 only works from an Android emulator.
+    // Local development can opt in with --dart-define=API_BASE_URL=...
+    return 'https://sme-backend-lxsp.onrender.com/api';
   }
 
   static String _normaliseBaseUrl(String url) {

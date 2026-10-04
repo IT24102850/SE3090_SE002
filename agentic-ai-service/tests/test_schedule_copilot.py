@@ -129,6 +129,44 @@ def test_golden_double_book_same_room_must_fail(no_llm, monkeypatch):
     assert "Double-booking" in trace.error
 
 
+def test_workable_plan_is_approved_when_service_fits_safety_limit(no_llm):
+    """A normal 60-minute request should pass every safety check.
+
+    This is the operator-facing happy path: the service duration is below the
+    configured 120-minute ceiling, the requested count is below the human
+    approval threshold, and the generated slots are conflict-free.
+    """
+    backend = FakeBackend()
+    backend.add_resource("r1", "Consultation Room")
+
+    trace = run(
+        backend,
+        request(
+            "Schedule three consultations with no conflicts",
+            target=3,
+            duration=60,
+            rules=["earliest_first"],
+        ),
+    )
+
+    assert trace.status == "Completed", trace.error
+    assert trace.safety.is_allowed is True
+    assert trace.safety.requires_human_approval is False
+    assert trace.safety.rejection_reason is None
+    assert len(trace.action.proposals) == 3
+    assert all(p.duration_minutes == 60 for p in trace.action.proposals)
+    assert {check(trace, rule) for rule in (
+        "schema",
+        "count",
+        "future",
+        "duration",
+        "no_double_booking",
+        "live_conflicts",
+        "daily_hours",
+        "lunch_break",
+    )} == {"pass"}
+
+
 # ═══ Human approval (spec 2.7) ═══════════════════════════════════════════
 def test_more_than_twenty_bookings_pauses_for_approval(no_llm):
     backend = FakeBackend()
