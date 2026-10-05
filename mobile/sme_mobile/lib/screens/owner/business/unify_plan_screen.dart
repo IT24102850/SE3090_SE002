@@ -240,6 +240,12 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen>
             'Pay the open invoice and your plan carries on as normal.',
       ));
     }
+    banners.add(const _Notice(
+      tone: AppColors.cyan,
+      title: 'Stripe test payments',
+      body:
+          'Use 4242 4242 4242 4242 with any future expiry date and any CVC. No real money is charged.',
+    ));
     if (sub.isTrialing && sub.trialEndsAt != null) {
       banners.add(_Notice(
         tone: AppColors.success,

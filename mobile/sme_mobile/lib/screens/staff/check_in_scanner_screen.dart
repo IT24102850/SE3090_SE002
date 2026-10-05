@@ -139,6 +139,30 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
       body: Stack(
         children: [
           MobileScanner(controller: _controller, onDetect: _onDetect),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: Builder(
+              builder: (buttonContext) => SafeArea(
+                child: Material(
+                  color: AppColors.overlaySurface.withValues(alpha: 0.9),
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    tooltip: 'Back',
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    color: AppColors.iconPrimary,
+                    onPressed: () {
+                      if (Navigator.of(buttonContext).canPop()) {
+                        Navigator.of(buttonContext).pop();
+                      } else {
+                        Scaffold.of(buttonContext).openDrawer();
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
           Center(
             child: Container(
               width: 240,
