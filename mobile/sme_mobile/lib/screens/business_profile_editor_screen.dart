@@ -162,8 +162,9 @@ class _BusinessProfileEditorScreenState
   void _addAmenity(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
-    if (_amenities.any((a) => a.toLowerCase() == trimmed.toLowerCase()))
+    if (_amenities.any((a) => a.toLowerCase() == trimmed.toLowerCase())) {
       return; // no duplicates
+    }
     setState(() => _amenities.add(trimmed));
     _markProfileDirty();
   }
@@ -227,10 +228,12 @@ class _BusinessProfileEditorScreenState
     setState(() => _saving = true);
     final dio = ref.read(apiServiceProvider);
     try {
-      if (_logoDirty && _logoUrl != null)
+      if (_logoDirty && _logoUrl != null) {
         await setTenantLogo(dio, tenantId, _logoUrl!);
-      if (_coverDirty && _coverImageUrl != null)
+      }
+      if (_coverDirty && _coverImageUrl != null) {
         await setTenantCoverImage(dio, tenantId, _coverImageUrl!);
+      }
       if (_profileDirty) {
         await updateTenantProfileFields(
           dio,
@@ -525,9 +528,11 @@ class _GallerySectionState extends ConsumerState<_GallerySection> {
       }
       ref.invalidate(tenantProfileProvider(widget.tenantId));
     } on TenantProfileRequestException catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -552,9 +557,11 @@ class _GallerySectionState extends ConsumerState<_GallerySection> {
       await removeTenantGalleryImage(dio, widget.tenantId, index);
       ref.invalidate(tenantProfileProvider(widget.tenantId));
     } on TenantProfileRequestException catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
     }
   }
 
@@ -571,9 +578,11 @@ class _GallerySectionState extends ConsumerState<_GallerySection> {
       await reorderTenantGalleryImages(dio, widget.tenantId, reordered);
       ref.invalidate(tenantProfileProvider(widget.tenantId));
     } on TenantProfileRequestException catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
     }
   }
 

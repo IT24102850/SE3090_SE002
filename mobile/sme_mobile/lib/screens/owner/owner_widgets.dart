@@ -504,11 +504,14 @@ class OwnerStatusChip extends StatelessWidget {
 String serverMessage(Object error, String fallback) {
   if (error is DioException) {
     final data = error.response?.data;
-    if (data is Map && data['message'] is String)
+    if (data is Map && data['message'] is String) {
       return data['message'] as String;
+    }
     if (data is Map && data['errors'] is Map) {
       final first = (data['errors'] as Map).values.first;
-      if (first is List && first.isNotEmpty) return first.first.toString();
+      if (first is List && first.isNotEmpty) {
+        return first.first.toString();
+      }
     }
   }
   return fallback;
