@@ -244,7 +244,7 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
                       border: Border.all(color: AppColors.glassBorder),
                     ),
                     child: Text(
-                      'Point the camera at the patient\'s booking QR code',
+                      'Point the camera at the booking QR code',
                       textAlign: TextAlign.center,
                       style: AppTextStyles.body.copyWith(fontSize: 13),
                     ),
