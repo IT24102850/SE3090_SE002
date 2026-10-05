@@ -802,6 +802,10 @@ public class BookingsController : ControllerBase
             {
                 b.Id,
                 b.TenantId,
+                TenantBusinessType = _db.Tenants
+                    .Where(t => t.Id == b.TenantId)
+                    .Select(t => t.BusinessType)
+                    .FirstOrDefault(),
                 b.ResourceId,
                 ResourceName = b.Resource.Name,
                 b.BookingTypeId,
@@ -810,6 +814,10 @@ public class BookingsController : ControllerBase
                 BookingUnit = b.BookingType.BookingUnit,
                 b.BookedBy,
                 b.BookedFor,
+                CustomerName = _db.Users
+                    .Where(u => u.Id == (b.BookedFor ?? b.BookedBy))
+                    .Select(u => u.FullName)
+                    .FirstOrDefault(),
                 b.Title,
                 b.Notes,
                 b.StartTime,

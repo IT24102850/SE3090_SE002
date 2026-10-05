@@ -44,7 +44,6 @@ export default function SubscriptionPage() {
   const [currency, setCurrency] = useState<string | undefined>(undefined);
   const [pending, setPending] = useState<Quote | null>(null);
   const [promoInput, setPromoInput] = useState('');
-  const [provider, setProvider] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -53,6 +52,13 @@ export default function SubscriptionPage() {
   const catalog = useAsync(() => subscriptionApi.catalog(currency), [currency]);
   const invoices = useAsync(() => subscriptionApi.invoices(), []);
   const providers = useAsync(() => subscriptionApi.providers(), []);
+  const stripeAvailable = providers.data?.providers.some(
+    (p) => p.provider === 'Stripe' && p.live,
+  ) ?? false;
+  // Unify plan payments are always Stripe. If test credentials are missing,
+  // the API must reject the checkout instead of silently falling back to the
+  // manual sandbox.
+  const selectedProvider = 'Stripe';
 
   const reloadAll = useCallback(() => {
     subscription.reload();
@@ -189,7 +195,7 @@ export default function SubscriptionPage() {
           period: pending.period,
           currency: pending.currency,
           promotionCode: pending.promotionCode ?? undefined,
-          provider,
+          provider: selectedProvider,
           returnUrl,
         }),
       );
@@ -208,7 +214,7 @@ export default function SubscriptionPage() {
           addOnCode: addOn.code,
           quantity: 1,
           currency: activeCurrency,
-          provider,
+          provider: selectedProvider,
           returnUrl,
         }),
       );
@@ -222,7 +228,7 @@ export default function SubscriptionPage() {
   const payInvoice = async (invoiceId: string) => {
     setBusy(true);
     try {
-      handleCheckout(await subscriptionApi.payInvoice(invoiceId, { provider, returnUrl }));
+      handleCheckout(await subscriptionApi.payInvoice(invoiceId, { provider: selectedProvider, returnUrl }));
     } catch (err) {
       toast.show(errorMessage(err, 'That invoice could not be paid.'), 'error');
     } finally {
@@ -416,21 +422,10 @@ export default function SubscriptionPage() {
         </>
       )}
 
-      {providers.data && providers.data.providers.length > 1 && isAdmin && (
+      {providers.data && isAdmin && stripeAvailable && (
         <label className="sub-row sub-small">
-          <span className="sub-muted">Pay with</span>
-          <select
-            className="input"
-            style={{ width: 'auto' }}
-            value={provider ?? providers.data.defaultProvider}
-            onChange={(e) => setProvider(e.target.value)}
-          >
-            {providers.data.providers.map((p) => (
-              <option key={p.provider} value={p.provider}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+          <span className="sub-muted">Pay securely with Stripe test mode</span>
+          <span className="sub-small sub-muted">Use card 4242 4242 4242 4242, any future expiry, any CVC.</span>
         </label>
       )}
 

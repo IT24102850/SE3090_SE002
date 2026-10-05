@@ -17,6 +17,7 @@ class OwnerScaffold extends StatelessWidget {
   final List<Widget>? actions;
   final Widget? floatingActionButton;
   final PreferredSizeWidget? bottom;
+  final bool preferBackButton;
 
   const OwnerScaffold({
     super.key,
@@ -26,19 +27,39 @@ class OwnerScaffold extends StatelessWidget {
     this.actions,
     this.floatingActionButton,
     this.bottom,
+    this.preferBackButton = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return AppBackgroundScaffold(
       appBar: GlassAppBar(
+        leading: Builder(
+          builder: (context) {
+            final canPop = preferBackButton || Navigator.of(context).canPop();
+            return IconButton(
+              tooltip: canPop ? 'Back' : 'Open workspace menu',
+              icon:
+                  Icon(canPop ? Icons.arrow_back_rounded : Icons.menu_rounded),
+              onPressed: () {
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                } else {
+                  Scaffold.of(context).openDrawer();
+                }
+              },
+            );
+          },
+        ),
         titleWidget: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(title, style: AppTextStyles.title),
             if (subtitle != null)
-              Text(subtitle!, style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+              Text(subtitle!,
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textMuted)),
           ],
         ),
         actions: actions,
@@ -60,7 +81,13 @@ class StatTile extends StatelessWidget {
   final Color? accent;
   final VoidCallback? onTap;
 
-  const StatTile({super.key, required this.label, required this.value, this.sub, this.accent, this.onTap});
+  const StatTile(
+      {super.key,
+      required this.label,
+      required this.value,
+      this.sub,
+      this.accent,
+      this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -71,17 +98,22 @@ class StatTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label.toUpperCase(), style: AppTextStyles.label.copyWith(color: AppColors.textMuted)),
+          Text(label.toUpperCase(),
+              style: AppTextStyles.label.copyWith(color: AppColors.textMuted)),
           const SizedBox(height: 8),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.stat.copyWith(color: accent ?? AppColors.textPrimary),
+            style: AppTextStyles.stat
+                .copyWith(color: accent ?? AppColors.textPrimary),
           ),
           if (sub != null) ...[
             const SizedBox(height: 4),
-            Text(sub!, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTextStyles.caption),
+            Text(sub!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption),
           ],
         ],
       ),
@@ -120,7 +152,11 @@ class FilterChips<T> extends StatelessWidget {
   final T? selected;
   final ValueChanged<T?> onSelected;
 
-  const FilterChips({super.key, required this.options, required this.selected, required this.onSelected});
+  const FilterChips(
+      {super.key,
+      required this.options,
+      required this.selected,
+      required this.onSelected});
 
   @override
   Widget build(BuildContext context) {
@@ -137,12 +173,17 @@ class FilterChips<T> extends StatelessWidget {
                 onSelected: (_) => onSelected(option.value),
                 showCheckmark: false,
                 labelStyle: AppTextStyles.caption.copyWith(
-                  color: option.value == selected ? AppColors.onPrimary : AppColors.textBody,
+                  color: option.value == selected
+                      ? AppColors.onPrimary
+                      : AppColors.textBody,
                   fontWeight: FontWeight.w600,
                 ),
                 backgroundColor: AppColors.glassFill,
                 selectedColor: AppColors.cyan,
-                side: BorderSide(color: option.value == selected ? AppColors.cyan : AppColors.glassBorder),
+                side: BorderSide(
+                    color: option.value == selected
+                        ? AppColors.cyan
+                        : AppColors.glassBorder),
               ),
             ),
         ],
@@ -182,9 +223,13 @@ class AsyncList<T> extends ConsumerWidget {
       onRefresh: () async => onRefresh(ref),
       child: async.when(
         loading: () => const AppLoader(),
-        error: (error, _) => ErrorState(message: errorMessage, onRetry: () => onRefresh(ref)),
+        error: (error, _) =>
+            ErrorState(message: errorMessage, onRetry: () => onRefresh(ref)),
         data: (items) => items.isEmpty
-            ? ListView(children: [const SizedBox(height: 80), EmptyState(icon: emptyIcon, message: emptyMessage)])
+            ? ListView(children: [
+                const SizedBox(height: 80),
+                EmptyState(icon: emptyIcon, message: emptyMessage)
+              ])
             : builder(items),
       ),
     );
@@ -197,7 +242,8 @@ class DetailRow extends StatelessWidget {
   final String value;
   final Color? valueColor;
 
-  const DetailRow({super.key, required this.label, required this.value, this.valueColor});
+  const DetailRow(
+      {super.key, required this.label, required this.value, this.valueColor});
 
   @override
   Widget build(BuildContext context) {
@@ -206,12 +252,14 @@ class DetailRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 132, child: Text(label, style: AppTextStyles.caption)),
+          SizedBox(
+              width: 132, child: Text(label, style: AppTextStyles.caption)),
           Expanded(
             child: Text(
               value,
               textAlign: TextAlign.end,
-              style: AppTextStyles.body.copyWith(color: valueColor ?? AppColors.textPrimary),
+              style: AppTextStyles.body
+                  .copyWith(color: valueColor ?? AppColors.textPrimary),
             ),
           ),
         ],
@@ -248,9 +296,15 @@ class RankedBar extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.body)),
+              Expanded(
+                  child: Text(label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.body)),
               const SizedBox(width: 10),
-              Text(trailing, style: AppTextStyles.caption.copyWith(color: color, fontWeight: FontWeight.w600)),
+              Text(trailing,
+                  style: AppTextStyles.caption
+                      .copyWith(color: color, fontWeight: FontWeight.w600)),
             ],
           ),
           const SizedBox(height: 6),
@@ -291,7 +345,8 @@ class MiniSeriesChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (points.isEmpty) {
-      return Text('Nothing to chart for this period.', style: AppTextStyles.caption);
+      return Text('Nothing to chart for this period.',
+          style: AppTextStyles.caption);
     }
     final max = points
         .map((p) => p.primary > p.secondary ? p.primary : p.secondary)
@@ -320,9 +375,15 @@ class MiniSeriesChart extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        _Bar(value: point.primary, max: max, color: primaryColor),
+                        _Bar(
+                            value: point.primary,
+                            max: max,
+                            color: primaryColor),
                         const SizedBox(height: 2),
-                        _Bar(value: point.secondary, max: max, color: secondaryColor),
+                        _Bar(
+                            value: point.secondary,
+                            max: max,
+                            color: secondaryColor),
                       ],
                     ),
                   ),
@@ -354,7 +415,9 @@ class _Bar extends StatelessWidget {
     final height = max <= 0 ? 1.0 : (value / max * 42).clamp(1.0, 42.0);
     return Container(
       height: height,
-      decoration: BoxDecoration(color: color.withValues(alpha: .85), borderRadius: BorderRadius.circular(2)),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: .85),
+          borderRadius: BorderRadius.circular(2)),
     );
   }
 }
@@ -369,7 +432,11 @@ class _Key extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
+        Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+                color: color, borderRadius: BorderRadius.circular(3))),
         const SizedBox(width: 6),
         Text(label, style: AppTextStyles.caption),
       ],
@@ -424,7 +491,9 @@ class OwnerStatusChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withValues(alpha: .5)),
       ),
-      child: Text(status, style: AppTextStyles.caption.copyWith(color: color, fontWeight: FontWeight.w600)),
+      child: Text(status,
+          style: AppTextStyles.caption
+              .copyWith(color: color, fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -435,10 +504,14 @@ class OwnerStatusChip extends StatelessWidget {
 String serverMessage(Object error, String fallback) {
   if (error is DioException) {
     final data = error.response?.data;
-    if (data is Map && data['message'] is String) return data['message'] as String;
+    if (data is Map && data['message'] is String) {
+      return data['message'] as String;
+    }
     if (data is Map && data['errors'] is Map) {
       final first = (data['errors'] as Map).values.first;
-      if (first is List && first.isNotEmpty) return first.first.toString();
+      if (first is List && first.isNotEmpty) {
+        return first.first.toString();
+      }
     }
   }
   return fallback;

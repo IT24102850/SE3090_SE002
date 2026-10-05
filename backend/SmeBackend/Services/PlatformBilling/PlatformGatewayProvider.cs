@@ -57,12 +57,22 @@ public sealed class PlatformGatewayProvider : IPlatformGatewayProvider
 
     public bool IsLive(string provider) => provider switch
     {
-        PaymentProviders.Stripe => !string.IsNullOrWhiteSpace(Section["Stripe:SecretKey"]),
+        PaymentProviders.Stripe => StripeConfiguredForMode(),
         PaymentProviders.PayPal => !string.IsNullOrWhiteSpace(Section["PayPal:ClientId"])
                                    && !string.IsNullOrWhiteSpace(Section["PayPal:ClientSecret"]),
         PaymentProviders.Manual => true,
         _ => false,
     };
+
+    private bool StripeConfiguredForMode()
+    {
+        var secret = Section["Stripe:SecretKey"];
+        if (string.IsNullOrWhiteSpace(secret)) return false;
+
+        // Test mode must never accidentally charge a live Stripe account.
+        // Stripe test credentials are deliberately recognisable by prefix.
+        return !TestMode || secret.StartsWith("sk_test_", StringComparison.Ordinal);
+    }
 
     public IReadOnlyList<string> Available
     {
