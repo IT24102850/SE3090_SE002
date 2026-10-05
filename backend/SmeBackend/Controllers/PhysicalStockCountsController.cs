@@ -305,7 +305,7 @@ public sealed class PhysicalStockCountsController(
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<PhysicalStockCountResponse>> UploadPhoto(
         Guid countId,
-        [FromForm] IFormFile? file,
+        IFormFile? file,
         [FromForm] string? evidenceKey,
         CancellationToken cancellationToken)
     {
