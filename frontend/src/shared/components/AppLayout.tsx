@@ -32,7 +32,8 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'overview',
     label: 'Overview',
     items: [
-      { path: '/dashboard', label: 'Dashboard', icon: '📊', roles: ['Admin', 'Manager', 'Staff', 'Customer'] },
+      { path: '/dashboard', label: 'Dashboard', icon: '📊', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/customer', label: 'Customer home', icon: '🏠', roles: ['Customer'] },
     ],
   },
   {
@@ -45,8 +46,13 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: '/shop', label: 'Shop & my orders', icon: '🛍️', roles: ['Customer'] },
       { path: '/ai-planner', label: 'AI planner', icon: '🤖', roles: ['Customer'] },
       { path: '/my-ai-requests', label: 'My AI requests', icon: '🛰️', roles: ['Customer'] },
+      { path: '/find-business', label: 'Find a business', icon: '🔎', roles: ['Customer'] },
       { path: '/business', label: 'About the business', icon: '🏪', roles: ['Customer'] },
+      { path: '/profile', label: 'My profile', icon: '👤', roles: ['Customer'] },
       { path: '/my-bills', label: 'My bills', icon: '💳', roles: ['Customer'] },
+      { path: '/customer-subscriptions', label: 'My subscriptions', icon: '🔁', roles: ['Customer'] },
+      { path: '/security-pin', label: 'Security & PIN', icon: '🔐', roles: ['Customer'] },
+      { path: '/lock-app', label: 'Lock app', icon: '🔒', roles: ['Customer'] },
     ],
   },
   {
@@ -291,7 +297,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${user?.role === 'Customer' ? ' customer-shell' : ''}`}>
       <button
         type="button"
         className="mobile-menu-toggle"

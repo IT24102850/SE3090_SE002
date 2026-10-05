@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { useGetBookingsQuery, useGetNotificationsQuery, useGetTenantProfileQuery, useGetTenantQuery } from '../../api/bookingApi';
+import { useGetBookingsQuery, useGetNotificationsQuery, useGetTenantProfileQuery } from '../../api/bookingApi';
 import type { RootState } from '../../store/store';
 import { addDays, formatDateTime, toISODate } from '../../shared/dateUtils';
 import type { Booking } from '../booking/types';
@@ -25,10 +25,12 @@ const LIVE_OPTS = { pollingInterval: LIVE_POLL_MS, skipPollingIfUnfocused: true,
 export default function CustomerHomePage() {
   const { user } = useSelector((state: RootState) => state.auth);
   const tenantId = user?.tenantId ?? '';
-  const { data: tenant } = useGetTenantQuery({ tenantId }, { skip: !tenantId });
   const { data: profile } = useGetTenantProfileQuery({ tenantId }, { skip: !tenantId });
   const today = useMemo(() => new Date(), []);
-  const { data: bookings, isLoading } = useGetBookingsQuery({ tenantId, dateFrom: toISODate(addDays(today, -60)), dateTo: toISODate(addDays(today, 120)), pageSize: 200 }, { skip: !tenantId, ...LIVE_OPTS });
+  // Customer bookings are account-wide. Leaving tenantId out lets the
+  // backend resolve all memberships for this authenticated customer, rather
+  // than showing only bookings from the currently selected business.
+  const { data: bookings, isLoading } = useGetBookingsQuery({ dateFrom: toISODate(addDays(today, -60)), dateTo: toISODate(addDays(today, 120)), pageSize: 200 }, { skip: !user?.id, ...LIVE_OPTS });
   const { data: notifications } = useGetNotificationsQuery(undefined, LIVE_OPTS);
   const [qrFor, setQrFor] = useState<Booking | null>(null);
 
@@ -42,13 +44,25 @@ export default function CustomerHomePage() {
 
   return (
     <div className="cust-page">
-      <section className="cust-home-hero" aria-labelledby="cust-home-title">
+      <section className="cust-home-hero cust-flutter-hero" aria-labelledby="cust-home-title">
         <div className="cust-home-hero-orbit" aria-hidden="true" />
         <div className="cust-home-top">
           <div className="cust-home-intro">
-            <span className="cust-home-eyebrow"><i aria-hidden="true" /> YOUR CUSTOMER SPACE</span>
-            <h1 id="cust-home-title">{firstName ? `Welcome back, ${firstName}` : 'Welcome back'}</h1>
-            <p>Your customer space for bookings and shopping, all in one place.</p>
+            <div className="cust-profile-row">
+              {user?.profilePictureUrl ? (
+                <img className="cust-profile-avatar" src={user.profilePictureUrl} alt="" />
+              ) : (
+                <span className="cust-profile-avatar cust-profile-initials" aria-hidden="true">
+                  {(user?.fullName || '?').trim().charAt(0).toUpperCase()}
+                </span>
+              )}
+              <div>
+                <span className="cust-home-eyebrow"><i aria-hidden="true" /> WELCOME BACK</span>
+                <h1 id="cust-home-title">{firstName || user?.fullName || 'Customer'}</h1>
+                <p>{user?.email || 'Your Unify customer account'}</p>
+              </div>
+            </div>
+            <span className="cust-role-pill">◉ Customer</span>
             {todayHours && (
               <span className={`cust-home-hours${todayHours.isClosed ? ' is-closed' : ''}`}>
                 <i aria-hidden="true" />
@@ -57,8 +71,7 @@ export default function CustomerHomePage() {
             )}
           </div>
           <div className="cust-home-actions">
-            <Link className="cust-home-action cust-home-action-primary" to="/book"><span aria-hidden="true">＋</span> Book a service</Link>
-            <Link className="cust-home-action" to="/shop"><span aria-hidden="true">🛍️</span> Browse items</Link>
+            <Link className="cust-home-action cust-home-action-primary" to="/book"><span aria-hidden="true">＋</span> Book now</Link>
             <Link className="cust-home-action cust-home-action-quiet" to="/my-bookings">My bookings <span aria-hidden="true">→</span></Link>
           </div>
         </div>
@@ -86,13 +99,17 @@ export default function CustomerHomePage() {
         </div>
       </section>
 
-      <div className="cust-quick">
-        <Link to="/book"><span className="cust-quick-icon" aria-hidden="true">📅</span><span><strong>Book a service</strong><span>Pick a service, a time and confirm</span></span></Link>
-        <Link to="/my-bookings"><span className="cust-quick-icon" aria-hidden="true">🎟️</span><span><strong>My bookings</strong><span>Check-in codes, reschedule, cancel</span></span></Link>
-        <Link to="/shop"><span className="cust-quick-icon" aria-hidden="true">🛍️</span><span><strong>Shop items</strong><span>Browse products and view your orders</span></span></Link>
-        <Link to="/ai-planner"><span className="cust-quick-icon" aria-hidden="true">🤖</span><span><strong>AI planner</strong><span>“Find me the earliest slot this week”</span></span></Link>
-        <Link to="/business"><span className="cust-quick-icon" aria-hidden="true">🏪</span><span><strong>{tenant?.name ?? 'The business'}</strong><span>Hours, contact, gallery</span></span></Link>
-      </div>
+      <section className="cust-dashboard-section">
+        <div className="cust-section-heading"><div><span className="cust-section-kicker">YOUR SPACE</span><h2>Quick actions</h2></div><span>Tap to continue</span></div>
+        <div className="cust-quick">
+          <Link to="/book"><span className="cust-quick-icon" aria-hidden="true">📅</span><span><strong>Appointments</strong><span>Book a service</span></span></Link>
+          <Link to="/my-bills"><span className="cust-quick-icon" aria-hidden="true">💳</span><span><strong>Payments</strong><span>View your bills</span></span></Link>
+          <Link to="/shop"><span className="cust-quick-icon" aria-hidden="true">🛍️</span><span><strong>Shop</strong><span>Browse items</span></span></Link>
+          <Link to="/ai-planner"><span className="cust-quick-icon" aria-hidden="true">✨</span><span><strong>Ask AI</strong><span>Book with AI</span></span></Link>
+          <Link to="/find-business"><span className="cust-quick-icon" aria-hidden="true">🔎</span><span><strong>Find a business</strong><span>Explore services</span></span></Link>
+          <Link to="/customer-subscriptions"><span className="cust-quick-icon" aria-hidden="true">🔁</span><span><strong>Subscriptions</strong><span>Manage memberships</span></span></Link>
+        </div>
+      </section>
 
       <div className="cust-grid">
         <section className="card chart-card">

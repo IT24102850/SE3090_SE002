@@ -34,8 +34,11 @@ export default function MyBookingsPage() {
    * side, so the list refreshes on a timer and on focus rather than only
    * when this page makes a change. */
   const { data, isLoading } = useGetBookingsQuery(
-    { tenantId, dateFrom: toISODate(addDays(today, -365)), dateTo: toISODate(addDays(today, 365)), pageSize: 500 },
-    { skip: !tenantId, pollingInterval: 30_000, skipPollingIfUnfocused: true, refetchOnFocus: true, refetchOnReconnect: true },
+    // Do not pass tenantId here. The backend resolves every customer
+    // membership linked to the authenticated account, so this list includes
+    // bookings made with any business the customer has joined.
+    { dateFrom: toISODate(addDays(today, -365)), dateTo: toISODate(addDays(today, 365)), pageSize: 500 },
+    { skip: !user?.id, pollingInterval: 30_000, skipPollingIfUnfocused: true, refetchOnFocus: true, refetchOnReconnect: true },
   );
   const { data: tenant } = useGetTenantQuery({ tenantId }, { skip: !tenantId });
   const [tab, setTab] = useState<Tab>('upcoming');

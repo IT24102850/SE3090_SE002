@@ -53,11 +53,15 @@ const BusinessSettingsPage = lazy(() => import('./features/settings/BusinessSett
 const BusinessProfilePage = lazy(() => import('./features/settings/BusinessProfilePage'));
 const MyProfilePage = lazy(() => import('./features/settings/MyProfilePage'));
 const CustomerBookPage = lazy(() => import('./features/customer/CustomerBookPage'));
+const CustomerHomePage = lazy(() => import('./features/customer/CustomerHomePage'));
 const MyBookingsPage = lazy(() => import('./features/customer/MyBookingsPage'));
 const CustomerAiPlannerPage = lazy(() => import('./features/customer/CustomerAiPlannerPage'));
 const MyAiRequestsPage = lazy(() => import('./features/customer/MyAiRequestsPage'));
 const BusinessInfoPage = lazy(() => import('./features/customer/BusinessInfoPage'));
+const CustomerBusinessDirectoryPage = lazy(() => import('./features/customer/CustomerBusinessDirectoryPage'));
 const CustomerShopPage = lazy(() => import('./features/customer/CustomerShopPage'));
+const CustomerSubscriptionsPage = lazy(() => import('./features/customer/CustomerSubscriptionsPage'));
+const CustomerSecurityPage = lazy(() => import('./features/customer/CustomerSecurityPage'));
 const CustomerOrderManagementPage = lazy(() => import('./features/customer/CustomerOrderManagementPage'));
 const InventoryManagerPage = lazy(() => import('./features/inventory/pages/InventoryManagerPage').then((m) => ({ default: m.InventoryManagerPage })));
 const SuppliersPage = lazy(() => import('./features/inventory/pages/SuppliersPage').then((m) => ({ default: m.SuppliersPage })));
@@ -175,6 +179,46 @@ function App() {
               />
 
               {/* Customer side - the web twin of the Flutter customer screens. */}
+              <Route
+                path="/customer"
+                element={
+                  <ProtectedRoute allowedRoles={['Customer']}>
+                    <Shell><CustomerHomePage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/find-business"
+                element={
+                  <ProtectedRoute allowedRoles={['Customer']}>
+                    <Shell><CustomerBusinessDirectoryPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/customer-subscriptions"
+                element={
+                  <ProtectedRoute allowedRoles={['Customer']}>
+                    <Shell><CustomerSubscriptionsPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/security-pin"
+                element={
+                  <ProtectedRoute allowedRoles={['Customer']}>
+                    <Shell><CustomerSecurityPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/lock-app"
+                element={
+                  <ProtectedRoute allowedRoles={['Customer']}>
+                    <Shell><CustomerSecurityPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/book"
                 element={

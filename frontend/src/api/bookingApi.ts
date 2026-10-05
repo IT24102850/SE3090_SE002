@@ -942,6 +942,7 @@ export interface PublicCustomerBusiness {
   businessType: string;
   subType?: string | null;
   logoUrl?: string | null;
+  coverImageUrl?: string | null;
 }
 
 export interface CustomerOrderProduct {

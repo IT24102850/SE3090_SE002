@@ -8,6 +8,7 @@ import {
   useGetBookingTypesQuery,
   useGetBranchesQuery,
   useGetResourcesQuery,
+  useGetTenantQuery,
   useGetUnavailableRangesQuery,
 } from '../../api/bookingApi';
 import type { RootState } from '../../store/store';
@@ -35,6 +36,7 @@ export default function CustomerBookPage() {
   const [params] = useSearchParams();
   const toast = useToast();
 
+  const { data: tenant } = useGetTenantQuery({ tenantId }, { skip: !tenantId });
   const { data: types, isLoading: typesLoading } = useGetBookingTypesQuery({ tenantId, status: 'Active' }, { skip: !tenantId });
   const { data: resourcesData, isLoading: resourcesLoading } = useGetResourcesQuery({ tenantId, pageSize: 100 }, { skip: !tenantId });
   const { data: branches } = useGetBranchesQuery({ tenantId }, { skip: !tenantId });
@@ -158,8 +160,16 @@ export default function CustomerBookPage() {
           <h1 className="page-title">New booking</h1>
           <p className="page-subtitle">Four quick steps. Nothing is booked until you confirm.</p>
         </div>
-        <Link className="btn btn-ghost" to="/dashboard">Cancel</Link>
+        <Link className="btn btn-ghost" to="/find-business">Change business</Link>
       </div>
+
+      {tenant && (
+        <div className="cust-booking-business">
+          <span className="cust-booking-business-mark" aria-hidden="true">⌂</span>
+          <span><small>BOOKING WITH</small><strong>{tenant.name}</strong></span>
+          <Link to="/find-business">Choose another</Link>
+        </div>
+      )}
 
       <section className="card chart-card">
         <div className="cust-steps" role="list">

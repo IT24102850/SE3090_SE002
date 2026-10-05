@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import type { Booking, BookingType, Resource } from '../booking/types';
+import { parseTicketBreakdown, parseWaiver, type Booking, type BookingType, type Resource } from '../booking/types';
 import { STATUS_COLORS } from '../booking/types';
 import { formatDateTime, formatTime } from '../../shared/dateUtils';
 import './customer.css';
@@ -69,18 +69,43 @@ export function CheckInQr({ bookingId, resourceName, size = 180 }: { bookingId: 
 }
 
 export function BookingCard({ booking, actions, highlight }: { booking: Booking; actions?: ReactNode; highlight?: boolean }) {
+  const start = new Date(booking.startTime);
+  const end = new Date(booking.endTime);
+  const durationMinutes = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+  const duration = durationMinutes >= 60
+    ? `${Math.floor(durationMinutes / 60)}h${durationMinutes % 60 ? ` ${durationMinutes % 60}m` : ''}`
+    : `${durationMinutes}m`;
+  const tickets = parseTicketBreakdown(booking.ticketBreakdown);
+  const waiver = parseWaiver(booking.waiver);
+
   return (
     <article className={`cust-booking${highlight ? ' cust-booking-next' : ''}`}>
       <div className="cust-booking-when">
-        <b>{new Date(booking.startTime).toLocaleDateString(undefined, { day: 'numeric' })}</b>
-        <span>{new Date(booking.startTime).toLocaleDateString(undefined, { month: 'short' })}</span>
+        <b>{start.toLocaleDateString(undefined, { day: 'numeric' })}</b>
+        <span>{start.toLocaleDateString(undefined, { month: 'short' })}</span>
         <small>{formatTime(booking.startTime)}</small>
       </div>
       <div className="cust-booking-main">
         <strong><i style={{ background: booking.colorHex || 'var(--color-primary)' }} aria-hidden="true" />{booking.bookingTypeName}</strong>
-        <span>{booking.resourceName} · {formatTime(booking.startTime)} – {formatTime(booking.endTime)}{booking.attendeeCount && booking.attendeeCount > 1 ? ` · ${booking.attendeeCount} people` : ''}</span>
+        <span className="cust-booking-date">{start.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+        <span>{booking.resourceName} · {formatTime(booking.startTime)} – {formatTime(booking.endTime)} · {duration}</span>
+        <div className="cust-booking-details" aria-label="Booking details">
+          <span>👥 {booking.attendeeCount && booking.attendeeCount > 1 ? `${booking.attendeeCount} guests` : '1 guest'}</span>
+          <span>🔖 {booking.id.slice(0, 8).toUpperCase()}</span>
+          {booking.source && <span>📱 {booking.source}</span>}
+        </div>
+        {tickets.length > 0 && (
+          <div className="cust-booking-tickets">
+            {tickets.map((ticket) => <span key={ticket.type}>{ticket.type} × {ticket.qty}</span>)}
+          </div>
+        )}
         {booking.notes && <span className="cust-booking-notes">“{booking.notes}”</span>}
-        <span className="cust-booking-meta"><StatusBadge status={booking.status} />{booking.totalCost != null && booking.totalCost > 0 && <em>{money(booking.totalCost)}</em>}{booking.checkInAt && <em>arrived {formatTime(booking.checkInAt)}</em>}</span>
+        <span className="cust-booking-meta">
+          <StatusBadge status={booking.status} />
+          {booking.totalCost != null && <em>{money(booking.totalCost)}</em>}
+          {booking.checkInAt && <em>Arrived {formatTime(booking.checkInAt)}</em>}
+          {waiver?.signedAt && <em>Waiver signed</em>}
+        </span>
       </div>
       {actions && <div className="cust-booking-actions">{actions}</div>}
     </article>

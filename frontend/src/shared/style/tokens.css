@@ -241,6 +241,44 @@ button, input, select, textarea { font-family: inherit; }
 /* Route-category motion language. Pages share the same accessibility-safe
    foundation, while each operational area gets a distinct visual rhythm. */
 .app-content > * { animation: workspace-page-in .42s cubic-bezier(.2,.75,.25,1) both; }
+
+/* Flutter customer chrome: keep the shared shell, but give customer pages
+   the same near-black glass canvas and neon rim without changing staff/admin. */
+.customer-shell { --customer-cyan: #00d9ff; --customer-violet: #765cff; }
+.customer-shell .sidebar {
+  background: linear-gradient(180deg, #090c20 0%, #0d1028 100%);
+  border-right-color: rgba(0,217,255,.16);
+}
+.customer-shell .sidebar-brand {
+  border-color: rgba(0,217,255,.2);
+  background: linear-gradient(145deg, rgba(0,217,255,.08), rgba(118,92,255,.12));
+}
+.customer-shell .sidebar-section-label { color: rgba(165,246,255,.62); }
+.customer-shell .sidebar-link.active {
+  border-color: rgba(0,217,255,.24);
+  background: linear-gradient(100deg, rgba(0,217,255,.14), rgba(118,92,255,.14));
+  color: #a5f6ff;
+  box-shadow: inset 3px 0 #00d9ff, 0 8px 22px rgba(40,20,90,.16);
+}
+.customer-shell .sidebar-link.active .sidebar-link-icon { filter: drop-shadow(0 0 6px rgba(0,217,255,.55)); }
+.customer-shell .app-topbar {
+  background: rgba(7,10,27,.84);
+  border-bottom-color: rgba(0,217,255,.14);
+}
+.customer-shell .app-breadcrumb-dot { background: #00d9ff; box-shadow: 0 0 9px #00d9ff; }
+.customer-shell .app-content {
+  background:
+    radial-gradient(circle at 92% 3%, rgba(118,92,255,.08), transparent 24rem),
+    radial-gradient(circle at 5% 45%, rgba(0,217,255,.045), transparent 20rem);
+}
+.customer-shell .app-content > .card,
+.customer-shell .app-content > .panel,
+.customer-shell .app-content article.card,
+.customer-shell .app-content section.card {
+  border-color: color-mix(in srgb, #765cff 22%, var(--color-border));
+  box-shadow: 0 12px 30px rgba(16,8,54,.11);
+}
+.customer-shell .app-footer { border-top-color: rgba(0,217,255,.12); }
 .app-content .card, .app-content .panel, .app-content .kpi-card, .app-content .stat-card {
   transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease, background-color .22s ease;
 }
@@ -387,6 +425,29 @@ button, input, select, textarea { font-family: inherit; }
       bottom: calc(84px + env(safe-area-inset-bottom));
     }
   }
+  /* Customer pages share the mobile bottom navigation. Keep Quick answers
+     compact and inside the thumb zone without obscuring page actions. */
+  .customer-shell .workspace-assistant-launcher {
+    right: 14px;
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    min-width: 44px;
+    height: 44px;
+    padding: 0 13px;
+    gap: 6px;
+    border: 1px solid rgba(255,255,255,.22);
+    box-shadow: 0 8px 22px rgba(41, 20, 105, .36);
+    font-size: 11px;
+    letter-spacing: .01em;
+  }
+  .customer-shell .workspace-assistant-launcher span { font-size: 16px; }
+  .customer-shell .workspace-assistant-launcher small { font-size: 11px; }
+  .customer-shell .workspace-assistant-launcher.is-open {
+    width: 44px;
+    padding: 0;
+  }
+  .customer-shell .workspace-assistant {
+    bottom: calc(136px + env(safe-area-inset-bottom));
+  }
   @media (max-width: 560px) {
     .workspace-assistant {
       right: 16px;
@@ -396,6 +457,15 @@ button, input, select, textarea { font-family: inherit; }
     .workspace-assistant-launcher {
       right: 16px;
       bottom: calc(86px + env(safe-area-inset-bottom));
+    }
+    .customer-shell .workspace-assistant-launcher {
+      right: 12px;
+      bottom: calc(76px + env(safe-area-inset-bottom));
+    }
+    .customer-shell .workspace-assistant {
+      right: 10px;
+      bottom: calc(132px + env(safe-area-inset-bottom));
+      width: calc(100vw - 20px);
     }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -2284,3 +2354,105 @@ img, svg, video, canvas { max-width: 100%; }
 @keyframes updates-count-glow { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 16%, transparent); } }
 @media (max-width: 640px) { .notification-trigger { width: auto; min-width: 42px; padding: 6px; gap: 5px; }.notification-trigger .notification-count { min-width: 22px; height: 22px; } }
 @media (prefers-reduced-motion: reduce) { .notification-trigger { transition: none; }.notification-trigger:hover, .notification-trigger[aria-expanded="true"] { transform: none; }.notification-trigger.has-new .notification-count { animation: none; } }
+
+/* Redmi Note 13 / compact Android phones (CSS viewport is commonly
+   393-412px wide). Keep the document itself within the viewport; only
+   explicitly wide data tables may scroll horizontally. */
+@media (max-width: 480px) {
+  html, body, #root { width: 100%; max-width: 100%; overflow-x: hidden; }
+  body { min-width: 0; }
+
+  .app-topbar {
+    min-height: 58px;
+    padding: 8px 10px 8px 58px;
+    gap: 6px;
+  }
+  .mobile-menu-toggle {
+    top: 9px;
+    left: 10px;
+    width: 38px;
+    height: 38px;
+  }
+  .app-breadcrumb { min-width: 0; max-width: calc(100vw - 156px); font-size: .72rem; }
+  .app-topbar-actions { min-width: 0; margin-left: auto; }
+  .theme-select { flex: 0 0 auto; }
+  .app-user-chip { flex: 0 0 38px; }
+  .app-content {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 16px 12px calc(92px + env(safe-area-inset-bottom));
+  }
+
+  .page-header,
+  .app-content .page-header,
+  .inventory-scope .page-head {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 14px;
+  }
+  .page-header > *,
+  .app-content .page-header > *,
+  .inventory-scope .page-head > * { max-width: 100%; min-width: 0; }
+  .page-header-actions,
+  .page-actions,
+  .header-actions,
+  .action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+  .page-header-actions > *,
+  .page-actions > *,
+  .header-actions > *,
+  .action-row > * { flex: 1 1 140px; min-width: 0; }
+
+  .card, .card-pad { min-width: 0; }
+  .card-pad { padding: 14px; }
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .stat-tile { min-width: 0; padding: 12px; }
+  .stat-tile-value { overflow-wrap: anywhere; }
+  .form-grid { min-width: 0; }
+  .field { min-width: 0; }
+  .input, select.input, textarea.input { box-sizing: border-box; max-width: 100%; }
+  .filter-bar { width: 100%; min-width: 0; }
+  .filter-bar > * { flex: 1 1 100%; min-width: 0 !important; }
+  .filter-bar .btn { width: 100%; }
+
+  .btn { max-width: 100%; white-space: normal; text-align: center; }
+  .btn-icon { flex: 0 0 44px !important; }
+  .tabs { overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab-btn { flex: 0 0 auto; min-height: 44px; padding-inline: 11px; }
+
+  .hero-body { padding: 16px; }
+  .hero-title { font-size: clamp(1.45rem, 8vw, 1.9rem); overflow-wrap: anywhere; }
+  .hero-figure { font-size: clamp(2rem, 12vw, 2.7rem); }
+  .hero-tiles { grid-template-columns: 1fr; }
+  .hero-identity { align-items: center; }
+  .hero-identity > div { overflow-wrap: anywhere; }
+
+  .modal-backdrop { align-items: flex-end; }
+  .modal { width: 100%; min-width: 0; }
+  .modal-header, .modal-body, .modal-footer { padding-inline: 14px; }
+  .modal-footer { flex-wrap: wrap; }
+  .modal-footer .btn { min-width: 0; }
+  .toast-stack {
+    right: 10px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    left: 10px;
+  }
+  .toast { min-width: 0; max-width: none; width: 100%; box-sizing: border-box; }
+
+  .workspace-assistant {
+    right: 10px;
+    bottom: calc(126px + env(safe-area-inset-bottom));
+    width: calc(100vw - 20px);
+  }
+  .workspace-assistant-messages { min-height: 200px; max-height: 42dvh; }
+  .workspace-assistant-input { padding: 9px; }
+  .workspace-assistant-input input { font-size: 16px; }
+}
