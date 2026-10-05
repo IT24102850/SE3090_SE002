@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using SmeBackend.Services.PlatformBilling;
+using SmeBackend.Shared;
 
 namespace SmeBackend.Authorization;
 
@@ -27,6 +28,15 @@ public sealed class RequiresPlanFeatureAttribute : Attribute, IAsyncActionFilter
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
+        // Customers consume tenant-provided features; subscription ownership
+        // and payment belong to the tenant admin. In particular, customer AI
+        // planning must not open a customer paywall.
+        if (context.HttpContext.User.IsInRole(Roles.Customer))
+        {
+            await next();
+            return;
+        }
+
         var tenantId = PlanGate.TenantId(context.HttpContext.User);
         if (tenantId is null)
         {
@@ -69,6 +79,14 @@ public sealed class MetersPlanQuotaAttribute : Attribute, IAsyncActionFilter
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
+        // AI usage from a customer is covered by the business subscription.
+        // Only tenant-side operators consume the tenant's paid quota.
+        if (context.HttpContext.User.IsInRole(Roles.Customer))
+        {
+            await next();
+            return;
+        }
+
         var tenantId = PlanGate.TenantId(context.HttpContext.User);
         if (tenantId is null)
         {

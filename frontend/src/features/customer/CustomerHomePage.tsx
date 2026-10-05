@@ -28,7 +28,10 @@ export default function CustomerHomePage() {
   const { data: tenant } = useGetTenantQuery({ tenantId }, { skip: !tenantId });
   const { data: profile } = useGetTenantProfileQuery({ tenantId }, { skip: !tenantId });
   const today = useMemo(() => new Date(), []);
-  const { data: bookings, isLoading } = useGetBookingsQuery({ tenantId, dateFrom: toISODate(addDays(today, -60)), dateTo: toISODate(addDays(today, 120)), pageSize: 200 }, { skip: !tenantId, ...LIVE_OPTS });
+  // Customer bookings are account-wide: the API resolves every membership
+  // linked to the authenticated customer and intentionally ignores the
+  // active business tenant filter.
+  const { data: bookings, isLoading } = useGetBookingsQuery({ dateFrom: toISODate(addDays(today, -60)), dateTo: toISODate(addDays(today, 120)), pageSize: 200 }, { skip: !user, ...LIVE_OPTS });
   const { data: notifications } = useGetNotificationsQuery(undefined, LIVE_OPTS);
   const [qrFor, setQrFor] = useState<Booking | null>(null);
 
@@ -37,7 +40,7 @@ export default function CustomerHomePage() {
   const next = upcoming[0];
   const recent = items.filter((b) => !isUpcoming(b)).sort((a, b) => b.startTime.localeCompare(a.startTime)).slice(0, 4);
 
-  const todayHours = profile?.businessHours.find((h) => h.dayOfWeek === DAYS[today.getDay()]);
+  const todayHours = profile?.businessHours?.find((h) => h.dayOfWeek === DAYS[today.getDay()]);
   const firstName = (user?.fullName ?? '').split(' ')[0];
 
   return (
@@ -130,11 +133,11 @@ export default function CustomerHomePage() {
           <section className="card chart-card">
             <p className="chart-title">Notifications</p>
             <p className="chart-subtitle">Confirmations, reminders and changes</p>
-            {(notifications?.items.length ?? 0) === 0 ? (
+            {(notifications?.items?.length ?? 0) === 0 ? (
               <div className="cust-empty">Nothing new.</div>
             ) : (
               <div className="cust-requests">
-                {notifications!.items.slice(0, 5).map((n) => (
+                {(notifications?.items ?? []).slice(0, 5).map((n) => (
                   <div key={n.id} className="cust-request" style={{ opacity: n.isRead ? 0.7 : 1 }}>
                     <div><strong>{n.title}</strong><span>{n.message}</span></div>
                     <span>{formatDateTime(n.createdAt).replace(/,.*$/, '')}</span>

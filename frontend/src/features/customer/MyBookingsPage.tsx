@@ -29,13 +29,12 @@ export default function MyBookingsPage() {
   const tenantId = user?.tenantId ?? '';
   const toast = useToast();
   const confirm = useConfirmation();
-  const today = useMemo(() => new Date(), []);
   /* The business can confirm, move or cancel any of these from its own
    * side, so the list refreshes on a timer and on focus rather than only
    * when this page makes a change. */
-  const { data, isLoading } = useGetBookingsQuery(
-    { tenantId, dateFrom: toISODate(addDays(today, -365)), dateTo: toISODate(addDays(today, 365)), pageSize: 500 },
-    { skip: !tenantId, pollingInterval: 30_000, skipPollingIfUnfocused: true, refetchOnFocus: true, refetchOnReconnect: true },
+  const { data, isLoading, isError, refetch } = useGetBookingsQuery(
+    { pageSize: 1000 },
+    { skip: !user, pollingInterval: 30_000, skipPollingIfUnfocused: true, refetchOnFocus: true, refetchOnReconnect: true },
   );
   const { data: tenant } = useGetTenantQuery({ tenantId }, { skip: !tenantId });
   const [tab, setTab] = useState<Tab>('upcoming');
@@ -98,6 +97,11 @@ export default function MyBookingsPage() {
 
         {isLoading ? (
           <div className="loading-row"><span className="spinner spinner-dark" /> Loading your bookings…</div>
+        ) : isError ? (
+          <div className="cust-empty">
+            Could not load your bookings from the database.{' '}
+            <button type="button" className="btn btn-secondary" onClick={() => refetch()}>Try again</button>
+          </div>
         ) : rows.length === 0 ? (
           <div className="cust-empty">{tab === 'upcoming' ? <>Nothing coming up. <Link to="/book">Book something</Link>.</> : tab === 'past' ? 'No past bookings yet.' : 'No cancelled bookings.'}</div>
         ) : (

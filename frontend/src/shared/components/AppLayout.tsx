@@ -32,7 +32,7 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'overview',
     label: 'Overview',
     items: [
-      { path: '/dashboard', label: 'Dashboard', icon: '📊', roles: ['Admin', 'Manager', 'Staff', 'Customer'] },
+      { path: '/dashboard', label: 'Dashboard', icon: '📊', roles: ['Admin', 'Manager', 'Staff'] },
     ],
   },
   {
@@ -40,13 +40,13 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'customer',
     label: 'My space',
     items: [
-      { path: '/book', label: 'Book a service', icon: '📅', roles: ['Customer'] },
+      { path: '/customer', label: 'Dashboard', icon: '📊', roles: ['Customer'] },
+      { path: '/profile', label: 'My profile', icon: '👤', roles: ['Customer'] },
+      { path: '/book', label: 'Find a business', icon: '🔎', roles: ['Customer'] },
       { path: '/my-bookings', label: 'My bookings', icon: '🎟️', roles: ['Customer'] },
-      { path: '/shop', label: 'Shop & my orders', icon: '🛍️', roles: ['Customer'] },
-      { path: '/ai-planner', label: 'AI planner', icon: '🤖', roles: ['Customer'] },
-      { path: '/my-ai-requests', label: 'My AI requests', icon: '🛰️', roles: ['Customer'] },
-      { path: '/business', label: 'About the business', icon: '🏪', roles: ['Customer'] },
       { path: '/my-bills', label: 'My bills', icon: '💳', roles: ['Customer'] },
+      { path: '/insurance-claims', label: 'Insurance claims', icon: '🛡️', roles: ['Admin', 'Manager', 'Staff', 'Customer'] },
+      { path: '/ai-planner', label: 'Ask AI to book for you', icon: '✨', roles: ['Customer'] },
     ],
   },
   {
@@ -80,7 +80,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: '/billing', label: 'Billing Dashboard', icon: '💹', roles: ['Admin', 'Manager'] },
       { path: '/invoices', label: 'Invoices', icon: '🧾', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/subscriptions', label: 'Subscriptions', icon: '🔁', roles: ['Admin', 'Manager', 'Staff'] },
-      { path: '/insurance-claims', label: 'Insurance Claims', icon: '🛡️', roles: ['Admin', 'Manager', 'Staff', 'Customer'] },
       { path: '/commission-rules', label: 'Commission Rules', icon: '🤝', roles: ['Admin', 'Manager', 'Staff'] },
       { path: '/billing-agent', label: 'Billing Agent', icon: '🧠', roles: ['Admin', 'Manager'] },
       { path: '/invoice-designer', label: 'Invoice Designer', icon: '🎨', roles: ['Admin', 'Manager'] },
@@ -291,7 +290,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${user?.role === 'Customer' ? ' customer-shell' : ''}`}>
       <button
         type="button"
         className="mobile-menu-toggle"
@@ -308,7 +307,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       {mobileNavOpen && (
         <div className="sidebar-overlay" onClick={() => setMobileNavOpen(false)} />
       )}
-      <aside className={`sidebar${mobileNavOpen ? ' open' : ''}`}>
+      <aside className={`sidebar${user?.role === 'Customer' ? ' customer-sidebar' : ''}${mobileNavOpen ? ' open' : ''}`}>
         <div className="sidebar-brand">
           <img className="sidebar-brand-mark" src="/unify-logo.svg" alt="" width={46} height={46} />
           <span>

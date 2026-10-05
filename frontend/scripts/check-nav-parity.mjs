@@ -25,6 +25,9 @@ const NOT_IN_NAV = new Set([
   // The public price list: a marketing page, reached from the landing page
   // and from the paywall, never from the signed-in sidebar.
   '/pricing',
+  // Customer legacy destinations remain available to existing deep links but
+  // are intentionally not shown in the Flutter-parity customer drawer.
+  '/shop', '/my-ai-requests', '/business',
 ]);
 
 const routes = [...read('src/App.tsx').matchAll(/path="(\/[a-z0-9-]*)"/g)].map((m) => m[1]);

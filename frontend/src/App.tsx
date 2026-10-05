@@ -53,6 +53,7 @@ const BusinessSettingsPage = lazy(() => import('./features/settings/BusinessSett
 const BusinessProfilePage = lazy(() => import('./features/settings/BusinessProfilePage'));
 const MyProfilePage = lazy(() => import('./features/settings/MyProfilePage'));
 const CustomerBookPage = lazy(() => import('./features/customer/CustomerBookPage'));
+const CustomerHomePage = lazy(() => import('./features/customer/CustomerHomePage'));
 const MyBookingsPage = lazy(() => import('./features/customer/MyBookingsPage'));
 const CustomerAiPlannerPage = lazy(() => import('./features/customer/CustomerAiPlannerPage'));
 const MyAiRequestsPage = lazy(() => import('./features/customer/MyAiRequestsPage'));
@@ -152,6 +153,15 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Shell><DashboardRouter /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              {/* Legacy/customer deep link used by the Flutter parity flow. */}
+              <Route
+                path="/customer"
+                element={
+                  <ProtectedRoute allowedRoles={['Customer']}>
+                    <Shell><CustomerHomePage /></Shell>
                   </ProtectedRoute>
                 }
               />
