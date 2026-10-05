@@ -302,6 +302,7 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen>
             period: _period,
             currency: currency,
             promotionCode: quote.promotionCode,
+            provider: 'Stripe',
             returnUrl: _returnUrl,
           );
       await _settle(checkout);
@@ -315,9 +316,12 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen>
   Future<void> _buyAddOn(PlanAddOn addOn, String currency) async {
     setState(() => _busy = true);
     try {
-      final checkout = await ref
-          .read(unifyPlanRepositoryProvider)
-          .buyAddOn(addOn.code, quantity: 1, currency: currency, returnUrl: _returnUrl);
+      final checkout = await ref.read(unifyPlanRepositoryProvider).buyAddOn(
+          addOn.code,
+          quantity: 1,
+          currency: currency,
+          provider: 'Stripe',
+          returnUrl: _returnUrl);
       await _settle(checkout);
     } catch (error) {
       _handleError(error, 'That purchase could not be started.');
@@ -331,7 +335,7 @@ class _UnifyPlanScreenState extends ConsumerState<UnifyPlanScreen>
     try {
       final checkout = await ref
           .read(unifyPlanRepositoryProvider)
-          .payInvoice(invoice.id, returnUrl: _returnUrl);
+          .payInvoice(invoice.id, provider: 'Stripe', returnUrl: _returnUrl);
       await _settle(checkout);
     } catch (error) {
       _handleError(error, 'That invoice could not be paid.');

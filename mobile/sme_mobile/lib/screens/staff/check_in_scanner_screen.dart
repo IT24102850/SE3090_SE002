@@ -6,6 +6,7 @@ import '../../providers/booking_providers.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/ui/ui.dart';
+import '../owner/owner_widgets.dart';
 
 /// FR-B7: staff scans a patient's booking QR (shown on their booking
 /// confirmation / "My Bookings") and checks them in on arrival.
@@ -13,7 +14,8 @@ class CheckInScannerScreen extends ConsumerStatefulWidget {
   const CheckInScannerScreen({super.key});
 
   @override
-  ConsumerState<CheckInScannerScreen> createState() => _CheckInScannerScreenState();
+  ConsumerState<CheckInScannerScreen> createState() =>
+      _CheckInScannerScreenState();
 }
 
 class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
@@ -57,10 +59,8 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
     // The camera preview *is* this screen's background — the app gradient
     // would be entirely hidden behind it — so the theme shows up in the glass
     // chrome and the cyan reticle instead.
-    return Scaffold(
-      backgroundColor: AppColors.bgTop,
-      extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(title: 'Scan to check in'),
+    return OwnerScaffold(
+      title: 'Scan to check in',
       body: Stack(
         children: [
           MobileScanner(controller: _controller, onDetect: _onDetect),
@@ -72,7 +72,10 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
                 border: Border.all(color: AppColors.cyan, width: 3),
                 borderRadius: BorderRadius.circular(AppRadii.card),
                 boxShadow: const [
-                  BoxShadow(color: AppColors.buttonGlow, blurRadius: 24, spreadRadius: 2),
+                  BoxShadow(
+                      color: AppColors.buttonGlow,
+                      blurRadius: 24,
+                      spreadRadius: 2),
                 ],
               ),
             ),
@@ -89,7 +92,8 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
                   // A dark pill behind the caption: over a live camera feed
                   // plain white text is unreadable on a bright scene.
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       color: AppColors.overlaySurface.withValues(alpha: 0.85),
                       borderRadius: BorderRadius.circular(AppRadii.control),
