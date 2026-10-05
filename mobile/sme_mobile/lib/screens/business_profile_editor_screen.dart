@@ -273,6 +273,7 @@ class _BusinessProfileEditorScreenState
 
     return OwnerScaffold(
       title: 'Business Profile',
+      preferBackButton: true,
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(

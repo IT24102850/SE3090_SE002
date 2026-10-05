@@ -17,6 +17,7 @@ class OwnerScaffold extends StatelessWidget {
   final List<Widget>? actions;
   final Widget? floatingActionButton;
   final PreferredSizeWidget? bottom;
+  final bool preferBackButton;
 
   const OwnerScaffold({
     super.key,
@@ -26,6 +27,7 @@ class OwnerScaffold extends StatelessWidget {
     this.actions,
     this.floatingActionButton,
     this.bottom,
+    this.preferBackButton = false,
   });
 
   @override
@@ -34,13 +36,13 @@ class OwnerScaffold extends StatelessWidget {
       appBar: GlassAppBar(
         leading: Builder(
           builder: (context) {
-            final canPop = Navigator.of(context).canPop();
+            final canPop = preferBackButton || Navigator.of(context).canPop();
             return IconButton(
               tooltip: canPop ? 'Back' : 'Open workspace menu',
               icon:
                   Icon(canPop ? Icons.arrow_back_rounded : Icons.menu_rounded),
               onPressed: () {
-                if (canPop) {
+                if (Navigator.of(context).canPop()) {
                   Navigator.of(context).pop();
                 } else {
                   Scaffold.of(context).openDrawer();

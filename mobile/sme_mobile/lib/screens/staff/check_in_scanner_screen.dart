@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -37,10 +38,33 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
     await _controller.stop();
 
     try {
-      await checkInBooking(ref.read(apiServiceProvider), bookingId);
+      final api = ref.read(apiServiceProvider);
+      await checkInBooking(api, bookingId);
+      Map<String, dynamic>? booking;
+      String? businessType;
+      try {
+        final bookingResponse = await api.get('/bookings/$bookingId');
+        booking = Map<String, dynamic>.from(
+            bookingResponse.data as Map<String, dynamic>);
+        final tenantId = booking['tenantId']?.toString();
+        if (tenantId != null && tenantId.isNotEmpty) {
+          final profileResponse = await api.get('/tenants/$tenantId/profile');
+          businessType =
+              (profileResponse.data as Map<String, dynamic>)['businessType']
+                  ?.toString();
+        }
+      } on DioException {
+        // Check-in already succeeded; details are supplementary.
+      }
       ref.invalidate(myScheduleProvider);
       if (mounted) {
+        setState(() {
+          _processing = false;
+        });
         AppSnackBar.success(context, 'Patient checked in.');
+        if (booking != null) {
+          await _showCheckInDetails(booking, businessType);
+        }
       }
     } on BookingRequestException catch (e) {
       if (mounted) {
@@ -54,6 +78,56 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
     }
   }
 
+  Future<void> _showCheckInDetails(
+      Map<String, dynamic> booking, String? businessType) async {
+    final patient =
+        (booking['bookedFor'] ?? booking['title'] ?? 'Patient').toString();
+    final bookingType =
+        (booking['bookingTypeName'] ?? 'Appointment').toString();
+    final start = booking['startTime']?.toString() ?? '';
+    final status = (booking['status'] ?? 'CheckedIn').toString();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Patient checked in'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _detailRow('Patient', patient),
+            _detailRow('Business type', businessType ?? 'Business'),
+            _detailRow('Service', bookingType),
+            if (start.isNotEmpty) _detailRow('Appointment', start),
+            _detailRow('Status', status),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: RichText(
+          text: TextSpan(
+            style: AppTextStyles.body,
+            children: [
+              TextSpan(
+                text: '$label: ',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              TextSpan(text: value),
+            ],
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     // The camera preview *is* this screen's background — the app gradient
@@ -61,6 +135,7 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
     // chrome and the cyan reticle instead.
     return OwnerScaffold(
       title: 'Scan to check in',
+      preferBackButton: true,
       body: Stack(
         children: [
           MobileScanner(controller: _controller, onDetect: _onDetect),
