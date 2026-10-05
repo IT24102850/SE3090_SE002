@@ -32,7 +32,6 @@ jobs:
         with:
           channel: stable
           cache: true
-          cache-dependency-path: mobile/sme_mobile/pubspec.lock
 
       - name: Install Flutter dependencies
         working-directory: mobile/sme_mobile
