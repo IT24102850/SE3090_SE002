@@ -34,7 +34,7 @@ public sealed class PurchaseOrderReceiptPhotosController(
     public async Task<ActionResult<PurchaseOrderReceiptPhotoResponse>> UploadPhoto(
         Guid orderId,
         Guid receiptId,
-        [FromForm] IFormFile? file,
+        IFormFile? file,
         CancellationToken cancellationToken)
     {
         if (!Guid.TryParse(User.FindFirst(InventoryAccessHandler.TenantIdClaimType)?.Value, out var tenantId))
