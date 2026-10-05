@@ -294,6 +294,7 @@ public sealed class PhysicalStockCountsController(
     }
 
     [HttpPost("physical-count-audits/{countId:guid}/photos")]
+    [Consumes("multipart/form-data")]
     [RequestSizeLimit(MaxPhotoBytes + 64 * 1024)]
     [ProducesResponseType(typeof(PhysicalStockCountResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

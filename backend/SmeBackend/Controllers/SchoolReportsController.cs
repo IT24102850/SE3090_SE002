@@ -11,7 +11,7 @@ namespace SmeBackend.Controllers;
 
 /// The school / tuition-centre dashboard: today's timetable and attendance
 /// marking, the gradebook, student performance and at-risk flags,
-/// enrolment and retention, tuition billing, a simple P&L, the term
+/// enrolment and retention, tuition billing, a simple P&amp;L, the term
 /// calendar, pending approvals and timetable conflicts.
 ///
 /// Same footing as the clinic / restaurant / gym controllers: its own role
