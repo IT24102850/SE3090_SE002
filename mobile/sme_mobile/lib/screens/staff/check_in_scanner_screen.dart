@@ -46,8 +46,15 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
         final bookingResponse = await api.get('/bookings/$bookingId');
         booking = Map<String, dynamic>.from(
             bookingResponse.data as Map<String, dynamic>);
+        businessType = _stringValue(
+          booking,
+          'tenantBusinessType',
+          'businessType',
+        );
         final tenantId = booking['tenantId']?.toString();
-        if (tenantId != null && tenantId.isNotEmpty) {
+        if ((businessType == null || businessType.isEmpty) &&
+            tenantId != null &&
+            tenantId.isNotEmpty) {
           final profileResponse = await api.get('/tenants/$tenantId/profile');
           businessType =
               (profileResponse.data as Map<String, dynamic>)['businessType']
@@ -80,25 +87,33 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
 
   Future<void> _showCheckInDetails(
       Map<String, dynamic> booking, String? businessType) async {
-    final patient =
-        (booking['bookedFor'] ?? booking['title'] ?? 'Patient').toString();
+    final normalizedBusinessType = (businessType ?? '').trim();
+    final labels = _labelsForBusiness(normalizedBusinessType);
+    final customer = _stringValue(booking, 'customerName') ??
+        _stringValue(booking, 'title') ??
+        'Guest';
     final bookingType =
-        (booking['bookingTypeName'] ?? 'Appointment').toString();
-    final start = booking['startTime']?.toString() ?? '';
+        _stringValue(booking, 'bookingTypeName') ?? labels.service;
+    final resource = _stringValue(booking, 'resourceName');
+    final start = _stringValue(booking, 'startTime');
     final status = (booking['status'] ?? 'CheckedIn').toString();
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Patient checked in'),
+        title: Text('${labels.person} checked in'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _detailRow('Patient', patient),
-            _detailRow('Business type', businessType ?? 'Business'),
+            _detailRow(labels.person, customer),
+            _detailRow('Business type',
+                normalizedBusinessType.isEmpty ? 'Business' : normalizedBusinessType),
             _detailRow('Service', bookingType),
-            if (start.isNotEmpty) _detailRow('Appointment', start),
+            if (resource != null && resource.isNotEmpty)
+              _detailRow(labels.location, resource),
+            if (start != null && start.isNotEmpty)
+              _detailRow(labels.time, start),
             _detailRow('Status', status),
           ],
         ),
@@ -110,6 +125,36 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
         ],
       ),
     );
+  }
+
+  String? _stringValue(Map<String, dynamic> values, String primary,
+      [String? fallback]) {
+    final value = values[primary]?.toString().trim();
+    if (value != null && value.isNotEmpty && value != 'null') return value;
+    if (fallback == null) return null;
+    final fallbackValue = values[fallback]?.toString().trim();
+    return fallbackValue != null &&
+            fallbackValue.isNotEmpty &&
+            fallbackValue != 'null'
+        ? fallbackValue
+        : null;
+  }
+
+  _CheckInLabels _labelsForBusiness(String businessType) {
+    switch (businessType.toLowerCase()) {
+      case 'clinic':
+        return const _CheckInLabels('Patient', 'Appointment', 'Room', 'Time');
+      case 'gym':
+        return const _CheckInLabels('Member', 'Session', 'Trainer', 'Time');
+      case 'school':
+        return const _CheckInLabels('Student', 'Class', 'Teacher', 'Time');
+      case 'restaurant':
+        return const _CheckInLabels('Guest', 'Reservation', 'Table', 'Time');
+      case 'tourism':
+        return const _CheckInLabels('Guest', 'Activity', 'Departure', 'Time');
+      default:
+        return const _CheckInLabels('Customer', 'Service', 'Resource', 'Time');
+    }
   }
 
   Widget _detailRow(String label, String value) => Padding(
@@ -211,6 +256,15 @@ class _CheckInScannerScreenState extends ConsumerState<CheckInScannerScreen> {
       ),
     );
   }
+}
+
+class _CheckInLabels {
+  final String person;
+  final String service;
+  final String location;
+  final String time;
+
+  const _CheckInLabels(this.person, this.service, this.location, this.time);
 }
 
 extension _FirstOrNull<T> on List<T> {
