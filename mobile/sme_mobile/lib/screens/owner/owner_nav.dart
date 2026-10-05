@@ -172,7 +172,7 @@ const List<OwnerSection> ownerSections = [
         roles: _staffUp,
         build: SubscriptionManagerScreen.new),
     OwnerDestination(
-        label: 'Insurance Claims',
+        label: 'Insurance claims',
         icon: Icons.shield_outlined,
         roles: _staffUp,
         build: ClaimsPipelineScreen.new),
