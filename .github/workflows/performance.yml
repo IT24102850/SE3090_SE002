@@ -1,0 +1,17 @@
+name: Performance test (k6)
+on: workflow_dispatch
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1
+      - name: Wake Render service
+        run: curl -s https://sme-backend-lxsp.onrender.com/health || true
+      - name: Run k6
+        run: k6 run tests/performance/load-test.js --summary-export=k6-summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-results
+          path: k6-summary.json
