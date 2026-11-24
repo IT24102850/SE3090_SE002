@@ -1,0 +1,87 @@
+/* Marketing & social screens. Prefixed so- and built on the shared tokens
+ * plus the billing module's bl- layout helpers, so both themes come free. */
+
+.so-platform {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px; flex: none;
+  color: #fff; font-weight: 800; font-size: 13px; letter-spacing: -0.02em;
+}
+.so-platform-sm { width: 20px; height: 20px; border-radius: 6px; font-size: 10px; }
+.so-platform-Facebook { background: #1877F2; }
+.so-platform-Instagram { background: linear-gradient(45deg, #F58529, #DD2A7B 55%, #8134AF); }
+.so-platform-TikTok { background: #111; box-shadow: inset -2px 0 0 #25F4EE, inset 2px 0 0 #FE2C55; }
+
+.so-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--color-surface-muted); flex: none; }
+
+.so-account {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface);
+}
+.so-account-body { flex: 1; min-width: 0; }
+.so-account-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.so-connect {
+  display: flex; flex-direction: column; gap: 10px; padding: 16px;
+  border: 1px dashed var(--color-border-strong); border-radius: 12px; background: var(--color-surface);
+}
+
+.so-code {
+  display: block; width: 100%; padding: 8px 10px; border-radius: 8px;
+  background: var(--color-surface-muted); border: 1px solid var(--color-border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;
+  overflow-wrap: anywhere; color: var(--color-text);
+}
+
+/* Composer */
+.so-composer { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 1000px) { .so-composer { grid-template-columns: 1fr; } }
+.so-pick {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px; border-radius: 999px;
+  border: 1px solid var(--color-border); background: var(--color-surface); cursor: pointer; font-size: 13px;
+  color: var(--color-text);
+}
+.so-pick[aria-pressed='true'] { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.so-pick:disabled { opacity: .5; cursor: not-allowed; }
+.so-counter { font-size: 12px; color: var(--color-text-muted); text-align: right; }
+.so-counter-over { color: var(--color-critical); font-weight: 700; }
+
+.so-preview {
+  border: 1px solid var(--color-border); border-radius: 14px; overflow: hidden; background: var(--color-surface);
+}
+.so-preview-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-weight: 600; font-size: 13px; }
+.so-preview-media { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: var(--color-surface-muted); display: block; }
+.so-preview-text { padding: 10px 12px 14px; white-space: pre-wrap; font-size: 13px; overflow-wrap: anywhere; }
+
+/* Post list */
+.so-post { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--color-border); }
+.so-post:last-child { border-bottom: none; }
+.so-thumb { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; background: var(--color-surface-muted); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.so-caption { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.so-targets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.so-target { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 8px 2px 2px; border-radius: 999px; background: var(--color-surface-muted); }
+
+/* Inbox */
+.so-inbox { display: grid; grid-template-columns: 340px minmax(0, 1fr); border: 1px solid var(--color-border); border-radius: 14px; overflow: hidden; background: var(--color-surface); min-height: 560px; height: calc(100vh - 220px); }
+@media (max-width: 860px) { .so-inbox { grid-template-columns: 1fr; height: auto; } }
+.so-threads { border-right: 1px solid var(--color-border); overflow-y: auto; }
+.so-thread { display: flex; gap: 10px; padding: 12px 14px; cursor: pointer; border-bottom: 1px solid var(--color-border); background: none; border-left: 3px solid transparent; width: 100%; text-align: left; color: var(--color-text); font: inherit; }
+.so-thread:hover { background: var(--color-surface-muted); }
+.so-thread[aria-current='true'] { background: var(--color-primary-soft); border-left-color: var(--color-primary); }
+.so-thread-unread .so-thread-name { font-weight: 800; }
+.so-unread { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--color-primary); color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.so-chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.so-chat-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--color-border); flex-wrap: wrap; }
+.so-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: var(--color-surface-muted); min-height: 240px; }
+.so-bubble { max-width: 72%; padding: 8px 12px; border-radius: 16px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.so-bubble-in { align-self: flex-start; background: var(--color-surface); border: 1px solid var(--color-border); border-bottom-left-radius: 4px; }
+.so-bubble-out { align-self: flex-end; background: var(--color-primary); color: #fff; border-bottom-right-radius: 4px; }
+.so-bubble-time { font-size: 11px; opacity: .7; margin-top: 2px; }
+.so-reply { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--color-border); }
+.so-reply textarea { resize: vertical; min-height: 64px; }
+
+/* Ads */
+.so-bar { height: 8px; border-radius: 999px; background: var(--color-surface-muted); overflow: hidden; }
+.so-bar > span { display: block; height: 100%; background: var(--color-primary); border-radius: 999px; }
+.so-roas-good { color: var(--color-good); font-weight: 700; }
+.so-roas-bad { color: var(--color-critical); font-weight: 700; }
+.so-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--color-text-secondary); }

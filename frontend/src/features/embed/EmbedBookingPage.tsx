@@ -2,6 +2,7 @@ import { API_BASE_URL } from '../../api/apiBaseUrl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { useParams, useSearchParams } from 'react-router-dom';
+import { collectAttribution } from './attribution';
 import './embed.css';
 
 /* The booking widget a business embeds on its own website.
@@ -89,6 +90,13 @@ export default function EmbedBookingPage() {
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
+
+  /* Captured once, on arrival: UTM tags, click ids and the inbox thread id
+   * that tell the business which post, ad or DM produced this booking. */
+  const attribution = useMemo(
+    () => collectAttribution(window.location.href, document.referrer, window.parent !== window),
+    [],
+  );
 
   /* Keep the host page's iframe the same height as our content. */
   useEffect(() => {
@@ -237,8 +245,9 @@ export default function EmbedBookingPage() {
         startTime: hasDepartures ? null : slotStart,
         adults, children, infants: infantsPriced ? infants : 0,
         notes: notes.trim() || null,
-        pageUrl: document.referrer || null,
+        pageUrl: attribution.landingUrl ?? (document.referrer || null),
         website: honeypot,
+        attribution,
       });
       setConfirmation(data);
       setStage('done');

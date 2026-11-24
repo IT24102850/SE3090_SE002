@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Data;
 using SmeBackend.Models;
+using SmeBackend.Models.Marketing;
+using SmeBackend.Services.Marketing;
 using SmeBackend.Shared;
 
 namespace SmeBackend.Controllers;
@@ -24,6 +26,12 @@ namespace SmeBackend.Controllers;
 /// booking type's config (never the request), and the same
 /// <see cref="Availability"/> rules as the authenticated endpoints decide
 /// whether the seats exist.
+///
+/// Marketing: the request may carry UTM tags, click ids (fbclid/ttclid) and
+/// pixel cookies. They become a BookingAttribution row and set Source to the
+/// channel (Facebook / Instagram / TikTok / Website), which is what the
+/// channel report, the campaign ROAS report and server-side conversion
+/// tracking (Services/Marketing/ConversionWorker) all read.
 [ApiController]
 [Route("api/public/booking")]
 [AllowAnonymous]
@@ -260,11 +268,30 @@ public class PublicBookingController : ControllerBase
             _db.Users.Add(guest);
         }
 
+        // ── Where the visitor came from ─────────────────────────────────
+        var now = DateTime.UtcNow;
+        var attribution = AttributionResolver.Resolve(dto.Attribution, dto.PageUrl, now);
+        attribution.TenantId = tenantId;
+        attribution.ClientIp = HttpContext?.Connection.RemoteIpAddress?.ToString();
+        var userAgent = HttpContext?.Request.Headers.UserAgent.ToString();
+        attribution.UserAgent = string.IsNullOrWhiteSpace(userAgent) ? null : userAgent.Length > 512 ? userAgent[..512] : userAgent;
+
+        // A conversation id in the link only counts if it is this tenant's.
+        SocialConversation? conversation = null;
+        if (attribution.SocialConversationId is { } convId)
+        {
+            conversation = await _db.SocialConversations.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(c => c.Id == convId && c.TenantId == tenantId);
+            if (conversation == null) attribution.SocialConversationId = null;
+        }
+        var channel = attribution.Channel;
+
         // ── The booking ─────────────────────────────────────────────────
         var priced = TicketPricing.Price(lines, bookingType, start);
         var formData = JsonSerializer.Serialize(new
         {
-            channel = Source,
+            channel,
+            campaign = attribution.UtmCampaign,
             guestName = dto.FullName.Trim(),
             guestEmail = email,
             guestPhone = dto.Phone.Trim(),
@@ -279,7 +306,7 @@ public class PublicBookingController : ControllerBase
             BookingTypeId = bookingType.Id,
             BookedBy = guest.Id,
             BookedFor = guest.Id,
-            Title = $"{dto.FullName.Trim()} · website",
+            Title = $"{dto.FullName.Trim()} · {(channel == Source ? "website" : channel)}",
             Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim(),
             StartTime = start,
             EndTime = end,
@@ -289,17 +316,28 @@ public class PublicBookingController : ControllerBase
             FormData = formData,
             DepartureId = departureId,
             TicketBreakdown = TicketPricing.Serialize(priced.Lines),
-            Source = Source,
+            Source = channel,
             TotalCost = priced.Total,
         };
         await BookingExclusivity.ApplyAsync(_db, booking);
         _db.Bookings.Add(booking);
 
+        attribution.BookingId = booking.Id;
+        attribution.Value = priced.Total;
+        attribution.Currency = priced.Currency?.Trim() is { Length: 3 } currency ? currency.ToUpperInvariant() : null;
+        _db.BookingAttributions.Add(attribution);
+        if (conversation != null)
+        {
+            conversation.LinkedBookingId = booking.Id;
+            conversation.UpdatedAt = now;
+        }
+
         // Tenant-wide (UserId null) so every admin, manager and staff member
         // sees the new website booking in their bell, not just one person.
+        var via = channel == Source ? "your website" : channel + (attribution.UtmCampaign != null ? $" (campaign \"{attribution.UtmCampaign}\")" : "");
         NotificationHelper.Queue(_db, tenantId, null, "WebsiteBooking",
-            "New website booking",
-            $"{dto.FullName.Trim()} booked {seats} seat{(seats == 1 ? "" : "s")} on {whereLabel} for {start:ddd d MMM, HH:mm} via your website.");
+            channel == Source ? "New website booking" : $"New booking from {channel}",
+            $"{dto.FullName.Trim()} booked {seats} seat{(seats == 1 ? "" : "s")} on {whereLabel} for {start:ddd d MMM, HH:mm} via {via}.");
 
         await _db.SaveChangesAsync();
 
@@ -354,4 +392,8 @@ public class PublicBookingRequest
     /// Honeypot. Hidden from people; bots fill it.
     [MaxLength(200)]
     public string? Website { get; set; }
+
+    /// UTM tags, click ids and pixel cookies seen by the booking page.
+    /// Optional; when absent, the tags in PageUrl are used.
+    public AttributionInput? Attribution { get; set; }
 }

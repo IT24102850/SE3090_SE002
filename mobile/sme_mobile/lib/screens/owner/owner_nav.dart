@@ -47,6 +47,10 @@ import 'scheduling/recurring_series_screen.dart';
 import 'automation/agent_workflows_screen.dart';
 import 'automation/ai_planner_screen.dart';
 import 'automation/disruption_recovery_screen.dart';
+import 'marketing/ads_attribution_screen.dart';
+import 'marketing/social_accounts_screen.dart';
+import 'marketing/social_inbox_screen.dart';
+import 'marketing/social_publisher_screen.dart';
 
 /// One owner destination — the mobile counterpart of an entry in the web
 /// app's sidebar. `roles` mirrors that sidebar's own role list exactly, so
@@ -81,7 +85,7 @@ const _staffUp = ['Admin', 'Manager', 'Staff'];
 
 /// The whole owner side, in the same order and the same grouping as the web
 /// sidebar: Overview, Scheduling, Billing, Resources, Inventory,
-/// Automation, Business.
+/// Automation, Marketing & Social, Business.
 const List<OwnerSection> ownerSections = [
   OwnerSection(label: 'Overview', items: [
     OwnerDestination(
@@ -286,6 +290,28 @@ const List<OwnerSection> ownerSections = [
         icon: Icons.satellite_alt_outlined,
         roles: _staffUp,
         build: AgentWorkflowsScreen.new),
+  ]),
+  OwnerSection(label: 'Marketing & Social', items: [
+    OwnerDestination(
+        label: 'Inbox',
+        icon: Icons.forum_outlined,
+        roles: _staffUp,
+        build: SocialInboxScreen.new),
+    OwnerDestination(
+        label: 'Publisher',
+        icon: Icons.campaign_outlined,
+        roles: _adminManager,
+        build: SocialPublisherScreen.new),
+    OwnerDestination(
+        label: 'Ads & Attribution',
+        icon: Icons.ads_click_outlined,
+        roles: _adminManager,
+        build: AdsAttributionScreen.new),
+    OwnerDestination(
+        label: 'Social Accounts',
+        icon: Icons.hub_outlined,
+        roles: _staffUp,
+        build: SocialAccountsScreen.new),
   ]),
   OwnerSection(label: 'Business', items: [
     OwnerDestination(

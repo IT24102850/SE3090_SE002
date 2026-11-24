@@ -23,6 +23,12 @@
  *                           Unify has the record. Falls back to the contact
  *                           phone on the business's Unify profile.
  *
+ * Marketing attribution: the host page's UTM tags, click ids (fbclid,
+ * ttclid), referrer and Meta/TikTok pixel cookies (_fbp, _fbc, _ttp) are
+ * passed into the iframe, which cannot read them itself, so a booking made
+ * from an Instagram or TikTok ad that landed on the business's own site is
+ * still credited to that ad.
+ *
  * Plain script, no build step, works on any site (static HTML, WordPress,
  * Wix custom-code blocks, Squarespace code injection). Idempotent: running
  * it twice mounts nothing twice.
@@ -51,6 +57,7 @@
     if (theme) params.push('theme=' + encodeURIComponent(theme));
     var whatsapp = host.getAttribute('data-whatsapp');
     if (whatsapp) params.push('whatsapp=' + encodeURIComponent(whatsapp.replace(/[^0-9]/g, '')));
+    params = params.concat(attributionParams());
 
     var frame = document.createElement('iframe');
     frame.src = origin + '/embed/book/' + encodeURIComponent(tenantId) + (params.length ? '?' + params.join('&') : '');
@@ -75,6 +82,33 @@
         try { frame.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* older browsers */ }
       }
     });
+  }
+
+  function cookie(name) {
+    var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function attributionParams() {
+    var out = [];
+    var keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'ttclid', 'conv'];
+    var search;
+    try { search = new URLSearchParams(window.location.search); } catch (e) { search = null; }
+    if (search) {
+      for (var i = 0; i < keys.length; i++) {
+        var v = search.get(keys[i]);
+        if (v) out.push(keys[i] + '=' + encodeURIComponent(v.slice(0, 500)));
+      }
+    }
+    var pairs = [['fbp', '_fbp'], ['fbc', '_fbc'], ['ttp', '_ttp']];
+    for (var j = 0; j < pairs.length; j++) {
+      var c = cookie(pairs[j][1]);
+      if (c) out.push(pairs[j][0] + '=' + encodeURIComponent(c.slice(0, 500)));
+    }
+    var landing = window.location.href.split('#')[0];
+    out.push('landing=' + encodeURIComponent(landing.slice(0, 2000)));
+    if (document.referrer) out.push('ref=' + encodeURIComponent(document.referrer.slice(0, 2000)));
+    return out;
   }
 
   function mountAll() {

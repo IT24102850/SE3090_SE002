@@ -244,6 +244,26 @@ builder.Services.AddHostedService<SmeBackend.Services.PlatformBilling.PlatformRe
 builder.Services.AddHttpClient<SmeBackend.Services.PlatformBilling.IPlatformCopilotService,
     SmeBackend.Services.PlatformBilling.PlatformCopilotService>();
 
+// Marketing & social: Facebook / Instagram / TikTok accounts, the post
+// publisher, the DM inbox and server-side conversion tracking. App
+// credentials come from the "Social" section (Social__Meta__AppId, ...);
+// without them only sandbox accounts work, and the UI says so.
+builder.Services.Configure<SmeBackend.Services.Marketing.SocialOptions>(
+    builder.Configuration.GetSection(SmeBackend.Services.Marketing.SocialOptions.Section));
+builder.Services.AddHttpClient(SmeBackend.Services.Marketing.MetaGraphClient.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient(SmeBackend.Services.Marketing.TikTokClient.ClientName,
+    client => client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddSingleton<SmeBackend.Services.Marketing.IOAuthStateProtector, SmeBackend.Services.Marketing.OAuthStateProtector>();
+builder.Services.AddScoped<SmeBackend.Services.Marketing.IMetaGraphClient, SmeBackend.Services.Marketing.MetaGraphClient>();
+builder.Services.AddScoped<SmeBackend.Services.Marketing.ITikTokClient, SmeBackend.Services.Marketing.TikTokClient>();
+builder.Services.AddScoped<SmeBackend.Services.Marketing.ISocialTokenService, SmeBackend.Services.Marketing.SocialTokenService>();
+builder.Services.AddScoped<SmeBackend.Services.Marketing.ISocialPublisher, SmeBackend.Services.Marketing.SocialPublisher>();
+builder.Services.AddScoped<SmeBackend.Services.Marketing.MetaWebhookProcessor>();
+builder.Services.AddScoped<SmeBackend.Services.Marketing.IMarketingAnalyticsService, SmeBackend.Services.Marketing.MarketingAnalyticsService>();
+builder.Services.AddHostedService<SmeBackend.Services.Marketing.SocialPublishingWorker>();
+builder.Services.AddHostedService<SmeBackend.Services.Marketing.ConversionWorker>();
+
 // The public website booking widget is anonymous, so it gets a per-IP
 // budget that no signed-in endpoint needs: enough for a family working
 // through the form, far short of a script hammering it.

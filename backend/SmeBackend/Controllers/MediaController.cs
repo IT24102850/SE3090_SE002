@@ -21,7 +21,7 @@ public class MediaController : ControllerBase
         "image/jpeg", "image/jpg", "image/png", "image/webp"
     };
     private const long MaxFileSizeBytes = 5 * 1024 * 1024;
-    private static readonly HashSet<string> AllowedPurposes = new(StringComparer.OrdinalIgnoreCase) { "logo", "cover", "gallery", "avatar", "maintenance", "booking" };
+    private static readonly HashSet<string> AllowedPurposes = new(StringComparer.OrdinalIgnoreCase) { "logo", "cover", "gallery", "avatar", "maintenance", "booking", "social" };
 
     private readonly ICloudinaryImageService _images;
     public MediaController(ICloudinaryImageService images) => _images = images;
@@ -40,7 +40,7 @@ public class MediaController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest(new { message = "No file was uploaded." });
         if (!AllowedPurposes.Contains(purpose))
-            return BadRequest(new { message = "purpose must be one of: logo, cover, gallery, avatar, maintenance, booking." });
+            return BadRequest(new { message = "purpose must be one of: logo, cover, gallery, avatar, maintenance, booking, social." });
         if (IsMaintenance(purpose) && !User.IsInRole(Roles.Admin) && !User.IsInRole(Roles.Manager) && !User.IsInRole(Roles.Staff))
             return Forbid();
         if (IsBooking(purpose) && !User.IsInRole(Roles.Customer))

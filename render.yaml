@@ -55,6 +55,20 @@ services:
         sync: false
       - key: Platform__Billing__Stripe__WebhookSecret
         sync: false
+      # Marketing & social (docs/marketing-social.md). Without these only
+      # sandbox social accounts work; everything else is unaffected.
+      - key: Social__PublicApiBaseUrl
+        value: https://sme-backend-lxsp.onrender.com
+      - key: Social__Meta__AppId
+        sync: false
+      - key: Social__Meta__AppSecret
+        sync: false
+      - key: Social__Meta__WebhookVerifyToken
+        sync: false
+      - key: Social__TikTok__ClientKey
+        sync: false
+      - key: Social__TikTok__ClientSecret
+        sync: false
 
   - type: web
     name: sme-agentic-ai
