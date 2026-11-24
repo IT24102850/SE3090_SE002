@@ -33,8 +33,24 @@ interface Catalog {
 }
 interface BookingType {
   id: string; name: string; description: string | null; defaultDurationMinutes: number; requiresApproval: boolean;
+  category?: string | null;
   currency: string; pricing: { adult: number | null; child: number | null; infant: number | null };
 }
+
+/* Add-ons (hotel pickup and the like) are extras, not something to book on
+ * their own, so they stay out of the tour list. */
+const isTour = (bt: BookingType) => (bt.category ?? '').trim().toLowerCase() !== 'addon';
+
+/* data-service matching: the id, or the name ignoring case, punctuation and a
+ * trailing plural "s", so a site's "Coastal Boat Tour" finds "Coastal Boat Tours". */
+const serviceKey = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/s$/, '');
+export const matchService = (types: BookingType[], wanted: string): BookingType | undefined => {
+  const w = wanted.trim().toLowerCase();
+  if (!w) return undefined;
+  return types.find((bt) => bt.id.toLowerCase() === w)
+    ?? types.find((bt) => bt.name.trim().toLowerCase() === w)
+    ?? types.find((bt) => serviceKey(bt.name) === serviceKey(w));
+};
 interface Departure {
   id: string; resourceId: string; vesselName: string; bookingTypeId: string | null; bookingTypeName: string | null;
   scheduledDeparture: string; scheduledReturn: string; capacity: number; seatsRemaining: number | null;
@@ -124,11 +140,12 @@ export default function EmbedBookingPage() {
       .then((r) => {
         if (cancelled) return;
         setCatalog(r.data);
+        const tourTypes = r.data.bookingTypes.filter(isTour);
         const wanted = serviceParam
-          ? r.data.bookingTypes.find((bt) => bt.id.toLowerCase() === serviceParam || bt.name.trim().toLowerCase() === serviceParam)
+          ? matchService(tourTypes, serviceParam)
           : undefined;
         // One type: nothing to choose. Otherwise the visitor picks, unless the page named one.
-        setServiceId(wanted?.id ?? (r.data.bookingTypes.length === 1 ? r.data.bookingTypes[0].id : ''));
+        setServiceId(wanted?.id ?? (tourTypes.length === 1 ? tourTypes[0].id : ''));
       })
       .catch((err) => {
         if (cancelled) return;
@@ -140,6 +157,7 @@ export default function EmbedBookingPage() {
   }, [tenantId, serviceParam]);
 
   const hasDepartures = (catalog?.departures.length ?? 0) > 0;
+  const tours = useMemo(() => (catalog?.bookingTypes ?? []).filter(isTour), [catalog]);
 
   /* Departure mode: the dates that have at least one open sailing. */
   const departureDays = useMemo(() => {
@@ -420,12 +438,12 @@ export default function EmbedBookingPage() {
             </>
           ) : (
             <>
-              {catalog.bookingTypes.length > 1 && (
+              {tours.length > 1 && (
                 <label className="ub-field ub-full">
                   <span>Tour</span>
                   <select value={serviceId} onChange={(e) => { setServiceId(e.target.value); setSlotStart(''); }} required>
                     <option value="">Choose a tour</option>
-                    {catalog.bookingTypes.map((bt) => (
+                    {tours.map((bt) => (
                       <option key={bt.id} value={bt.id}>
                         {bt.name}{bt.pricing.adult ? ` · ${fmtMoney(bt.pricing.adult, bt.currency)} per adult` : ''}
                       </option>

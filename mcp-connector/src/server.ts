@@ -4,7 +4,7 @@ import { UnifyClient } from "./client.js";
 import { loadConfig } from "./config.js";
 import { registerTools } from "./tools.js";
 
-export const VERSION = "1.1.0";
+export const VERSION = "1.2.0";
 
 export interface BuildOptions {
   readOnly: boolean;

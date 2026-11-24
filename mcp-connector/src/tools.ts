@@ -267,6 +267,79 @@ export function registerTools(server: McpServer, client: UnifyClient, opts: { re
       get("/bookings/unavailable-ranges", { resourceId, from: utc(from), to: utc(to, true) }),
   );
 
+  const jsonOrNull = (v: unknown) => (v === undefined ? undefined : JSON.stringify(v));
+  const RESOURCE_CATEGORIES = ["Room", "Equipment", "Vehicle", "Staff", "Desk", "Other"] as const;
+
+  tool(
+    "unify_create_resource",
+    "Create a resource",
+    "Adds a bookable resource (boat, room, vehicle, staff member, table...) to the business (Admin/Manager). " +
+      "It appears in the website booking form's resource list once it has status Available.",
+    {
+      name: z.string().min(1).max(100),
+      category: z.enum(RESOURCE_CATEGORIES),
+      description: z.string().max(500).optional(),
+      capacity: z.number().int().min(1).optional(),
+      hourlyRate: z.number().min(0).optional(),
+      specialty: z.string().max(100).optional(),
+      code: z.string().max(20).optional(),
+      branchId: optUuid("Branch id"),
+      customAttributes: z.record(z.unknown()).optional().describe("Free-form details, e.g. departure time, pricing, inclusions"),
+    },
+    WRITE,
+    async (a) =>
+      client.request("POST", "/resources", {
+        body: {
+          tenantId: await client.tenantId(),
+          branchId: a.branchId ?? null,
+          name: a.name,
+          code: a.code ?? null,
+          category: a.category,
+          description: a.description ?? null,
+          capacity: a.capacity ?? null,
+          hourlyRate: a.hourlyRate ?? null,
+          specialty: a.specialty ?? null,
+          linkedUserId: null,
+          customAttributes: jsonOrNull(a.customAttributes) ?? null,
+          locationMetadata: null,
+        },
+      }),
+  );
+
+  tool(
+    "unify_update_resource",
+    "Update a resource",
+    "Changes a resource's details or status (Admin/Manager). Only the fields given are changed. Status " +
+      "Available shows it in the booking form; UnderMaintenance or Archived hides it without deleting it.",
+    {
+      resourceId: uuid("Resource id"),
+      name: z.string().min(1).max(100).optional(),
+      category: z.enum(RESOURCE_CATEGORIES).optional(),
+      status: z.enum(["Available", "UnderMaintenance", "Archived", "Reserved"]).optional(),
+      description: z.string().max(500).optional(),
+      capacity: z.number().int().min(1).optional(),
+      hourlyRate: z.number().min(0).optional(),
+      specialty: z.string().max(100).optional(),
+      branchId: optUuid("Branch id"),
+      customAttributes: z.record(z.unknown()).optional().describe("Replaces the resource's custom attributes"),
+    },
+    WRITE,
+    async ({ resourceId, customAttributes, ...rest }) =>
+      client.request("PUT", `/resources/${resourceId}`, {
+        body: { ...rest, customAttributes: jsonOrNull(customAttributes) },
+      }),
+  );
+
+  tool(
+    "unify_delete_resource",
+    "Delete a resource",
+    "Deletes a resource so it no longer appears anywhere (Admin/Manager). Unify refuses while the resource " +
+      "has upcoming bookings.",
+    { resourceId: uuid("Resource id") },
+    WRITE,
+    async ({ resourceId }) => client.request("DELETE", `/resources/${resourceId}`),
+  );
+
   // ── Booking types ────────────────────────────────────────────────────
   tool(
     "unify_list_booking_types",
@@ -276,6 +349,137 @@ export function registerTools(server: McpServer, client: UnifyClient, opts: { re
     { status: z.string().optional().describe("e.g. Active") },
     READ,
     async ({ status }) => get("/bookingtypes", { tenantId: await client.tenantId(), status }),
+  );
+
+  const priceFields = {
+    adultPrice: z.number().min(0).optional().describe("Price per adult"),
+    childPrice: z.number().min(0).optional().describe("Price per child"),
+    infantPrice: z.number().min(0).optional().describe("Price per infant"),
+    currency: z.string().length(3).optional().describe("e.g. LKR, USD"),
+  };
+  /** Merges price fields and a config patch into a booking type's ConfigJson (null in the patch removes a key). */
+  const mergeConfig = (
+    current: string | null | undefined,
+    prices: { adultPrice?: number; childPrice?: number; infantPrice?: number; currency?: string },
+    patch?: Record<string, unknown>,
+  ) => {
+    let cfg: Record<string, unknown> = {};
+    try {
+      cfg = current ? JSON.parse(current) : {};
+    } catch {
+      cfg = {};
+    }
+    for (const [k, v] of Object.entries(patch ?? {})) {
+      if (v === null) delete cfg[k];
+      else cfg[k] = v;
+    }
+    const touched = ["adultPrice", "childPrice", "infantPrice", "currency"].some(
+      (k) => (prices as Record<string, unknown>)[k] !== undefined,
+    );
+    if (touched) {
+      const pricing = { ...((cfg.pricing as Record<string, unknown>) ?? {}) };
+      if (prices.adultPrice !== undefined) pricing.adult = prices.adultPrice;
+      if (prices.childPrice !== undefined) pricing.child = prices.childPrice;
+      if (prices.infantPrice !== undefined) pricing.infant = prices.infantPrice;
+      if (prices.currency !== undefined) pricing.currency = prices.currency.toUpperCase();
+      cfg.pricing = pricing;
+    }
+    return JSON.stringify(cfg);
+  };
+
+  tool(
+    "unify_create_booking_type",
+    "Create a booking type",
+    "Adds a service customers can book, such as a tour or treatment (Admin/Manager), with duration, booking " +
+      "unit and per-person prices. Active booking types appear in the website booking form's tour list.",
+    {
+      name: z.string().min(1).max(100),
+      description: z.string().max(1000).optional(),
+      durationMinutes: z.number().int().min(5).max(60 * 24 * 30),
+      bookingUnit: z.enum(["Slot", "Night", "DateRange", "Package"]).optional().describe("Default Slot"),
+      maxParticipants: z.number().int().min(1).optional(),
+      requiresApproval: z.boolean().optional(),
+      bufferMinutesBefore: z.number().int().min(0).optional(),
+      bufferMinutesAfter: z.number().int().min(0).optional(),
+      colorHex: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+      ...priceFields,
+      config: z.record(z.unknown()).optional().describe("Other settings stored with the booking type (season, includes...)"),
+    },
+    WRITE,
+    async (a) =>
+      client.request("POST", "/bookingtypes", {
+        body: {
+          tenantId: await client.tenantId(),
+          name: a.name,
+          description: a.description ?? null,
+          colorHex: a.colorHex ?? null,
+          defaultDurationMinutes: a.durationMinutes,
+          requiresApproval: a.requiresApproval ?? false,
+          maxParticipants: a.maxParticipants ?? null,
+          bufferMinutesBefore: a.bufferMinutesBefore ?? 0,
+          bufferMinutesAfter: a.bufferMinutesAfter ?? 0,
+          bookingUnit: a.bookingUnit ?? "Slot",
+          configJson: mergeConfig(JSON.stringify({ bookingUnit: a.bookingUnit ?? "Slot" }), a, a.config),
+        },
+      }),
+  );
+
+  tool(
+    "unify_update_booking_type",
+    "Update a booking type",
+    "Changes a service's details, prices or status (Admin/Manager). Only the fields given are changed; prices " +
+      "and configPatch are merged into the existing settings. Status Inactive removes it from the booking form.",
+    {
+      bookingTypeId: uuid("Booking type id"),
+      name: z.string().min(1).max(100).optional(),
+      description: z.string().max(1000).optional(),
+      status: z.enum(["Active", "Inactive"]).optional(),
+      durationMinutes: z.number().int().min(5).max(60 * 24 * 30).optional(),
+      maxParticipants: z.number().int().min(1).optional(),
+      requiresApproval: z.boolean().optional(),
+      bufferMinutesBefore: z.number().int().min(0).optional(),
+      bufferMinutesAfter: z.number().int().min(0).optional(),
+      colorHex: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+      ...priceFields,
+      configPatch: z
+        .record(z.unknown())
+        .optional()
+        .describe("Top-level settings to set; a null value removes that key"),
+    },
+    WRITE,
+    async (a) => {
+      const touchesConfig =
+        a.configPatch !== undefined ||
+        [a.adultPrice, a.childPrice, a.infantPrice, a.currency].some((v) => v !== undefined);
+      let configJson: string | undefined;
+      if (touchesConfig) {
+        const current = (await get(`/bookingtypes/${a.bookingTypeId}`)) as Record<string, unknown>;
+        configJson = mergeConfig((current.configJson ?? current.ConfigJson) as string | null, a, a.configPatch);
+      }
+      return client.request("PUT", `/bookingtypes/${a.bookingTypeId}`, {
+        body: {
+          name: a.name,
+          description: a.description,
+          colorHex: a.colorHex,
+          status: a.status,
+          defaultDurationMinutes: a.durationMinutes,
+          requiresApproval: a.requiresApproval,
+          maxParticipants: a.maxParticipants,
+          bufferMinutesBefore: a.bufferMinutesBefore,
+          bufferMinutesAfter: a.bufferMinutesAfter,
+          configJson,
+        },
+      });
+    },
+  );
+
+  tool(
+    "unify_delete_booking_type",
+    "Archive a booking type",
+    "Archives a service so it can no longer be booked (Admin/Manager). Existing bookings keep it.",
+    { bookingTypeId: uuid("Booking type id") },
+    WRITE,
+    async ({ bookingTypeId }) => client.request("DELETE", `/bookingtypes/${bookingTypeId}`),
   );
 
   // ── Bookings ─────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "unify",
   "display_name": "Unify Booking Platform",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Manage your Unify business from Claude: bookings, availability, resources, reports, inventory, invoices and AI planner approvals.",
   "long_description": "Connects Claude to the Unify SME booking platform (https://se-3090-se-002.vercel.app). Sign in with your Unify business account (Admin, Manager or Staff) and ask Claude to find free slots, book, reschedule or cancel appointments, check in guests, read your clinic/restaurant/gym/school/excursion dashboards, review revenue and no-shows, check low stock, look up invoices, and approve or reject AI planner workflows. Times are shown in your business's time zone.",
   "author": {
@@ -70,8 +70,32 @@
       "description": "Returns the periods a resource is already booked between two dates."
     },
     {
+      "name": "unify_create_resource",
+      "description": "Adds a bookable resource (boat, room, vehicle, staff member, table...) to the business (Admin/Manager)."
+    },
+    {
+      "name": "unify_update_resource",
+      "description": "Changes a resource's details or status (Admin/Manager)."
+    },
+    {
+      "name": "unify_delete_resource",
+      "description": "Deletes a resource so it no longer appears anywhere (Admin/Manager)."
+    },
+    {
       "name": "unify_list_booking_types",
       "description": "Lists the services/products that can be booked (e.g."
+    },
+    {
+      "name": "unify_create_booking_type",
+      "description": "Adds a service customers can book, such as a tour or treatment (Admin/Manager), with duration, booking unit and per-person prices."
+    },
+    {
+      "name": "unify_update_booking_type",
+      "description": "Changes a service's details, prices or status (Admin/Manager)."
+    },
+    {
+      "name": "unify_delete_booking_type",
+      "description": "Archives a service so it can no longer be booked (Admin/Manager)."
     },
     {
       "name": "unify_list_bookings",

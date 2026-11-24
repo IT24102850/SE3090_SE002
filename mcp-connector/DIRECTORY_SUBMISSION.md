@@ -20,7 +20,7 @@ Then open <https://claude.ai/directory/manage> → **Submit new** → **MCP conn
 
 ## 2. Tools
 
-These sync automatically: 36 tools (27 read-only, 9 write), plus 2 prompts. Every tool has a `title` and `readOnlyHint` or `destructiveHint`. There's no catch-all tool with a method parameter; `unify_api_get` is GET-only and links the API reference.
+These sync automatically: 42 tools (27 read-only, 15 write), plus 2 prompts. Every tool has a `title` and `readOnlyHint` or `destructiveHint`. There's no catch-all tool with a method parameter; `unify_api_get` is GET-only and links the API reference.
 
 ## 3. Listing
 

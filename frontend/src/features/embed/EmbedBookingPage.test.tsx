@@ -8,7 +8,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import axios from 'axios';
-import EmbedBookingPage from './EmbedBookingPage';
+import EmbedBookingPage, { matchService } from './EmbedBookingPage';
 
 vi.mock('axios');
 const mocked = axios as unknown as { get: ReturnType<typeof vi.fn>; post: ReturnType<typeof vi.fn>; isAxiosError: () => boolean };
@@ -18,6 +18,7 @@ const catalog = {
   bookingTypes: [
     { id: 'coastal', name: 'Coastal Boat Tours', description: '', defaultDurationMinutes: 150, requiresApproval: false, currency: 'LKR', pricing: { adult: 5000, child: 2500, infant: 0 } },
     { id: 'whale', name: 'Whale Watching', description: '', defaultDurationMinutes: 240, requiresApproval: false, currency: 'LKR', pricing: { adult: 7500, child: 4000, infant: 0 } },
+    { id: 'pickup', name: 'Hotel Pickup & Drop-off', description: '', defaultDurationMinutes: 45, requiresApproval: false, category: 'addon', currency: 'LKR', pricing: { adult: 0, child: 0, infant: 0 } },
   ],
   departures: [],
   resources: [{ id: 'boat', name: 'Dawn Departure', category: 'Vehicle', description: '' }],
@@ -64,5 +65,29 @@ describe('EmbedBookingPage without departures', () => {
     await waitFor(() =>
       expect(mocked.get).toHaveBeenCalledWith(expect.stringContaining('/bookings/available-slots'),
         expect.objectContaining({ params: expect.objectContaining({ bookingTypeId: 'whale' }) })));
+  });
+
+  it('keeps add-ons such as hotel pickup out of the tour list', async () => {
+    renderAt();
+    const tour = await screen.findByRole('combobox', { name: 'Tour' });
+    const labels = [...(tour as HTMLSelectElement).options].map((o) => o.value);
+    expect(labels).toEqual(['', 'coastal', 'whale']);
+  });
+
+  it('opens on a tour named loosely by the host page (singular, any case)', async () => {
+    renderAt('?service=coastal%20boat%20tour');
+    const tour = await screen.findByRole('combobox', { name: 'Tour' });
+    await waitFor(() => expect(tour).toHaveValue('coastal'));
+  });
+});
+
+describe('matchService', () => {
+  const types = catalog.bookingTypes;
+  it('matches by id, exact name, or name ignoring case, punctuation and plural', () => {
+    expect(matchService(types, 'whale')?.id).toBe('whale');
+    expect(matchService(types, 'Whale Watching')?.id).toBe('whale');
+    expect(matchService(types, 'Coastal Boat Tour')?.id).toBe('coastal');
+    expect(matchService(types, 'snorkeling')).toBeUndefined();
+    expect(matchService(types, '')).toBeUndefined();
   });
 });

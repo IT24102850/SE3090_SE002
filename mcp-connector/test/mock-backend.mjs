@@ -46,6 +46,14 @@ export function startMockBackend() {
     if (p === "/bookings/66666666-6666-4666-8666-666666666666/reschedule") return send(200, { id: "66666666-6666-4666-8666-666666666666", ...json });
     if (p === "/bookings/66666666-6666-4666-8666-666666666666/cancel") return send(204);
     if (p === "/bookings/forbidden/cancel" || p === "/bookings/forbidden/history") return send(403, { message: "Cancellation cutoff has passed" });
+    const BT = "77777777-7777-4777-8777-777777777777";
+    if (p === `/bookingtypes/${BT}` && req.method === "GET") return send(200, { id: BT, name: "Snorkeling",
+      configJson: JSON.stringify({ icon: "x", season: { months: ["Nov"] }, pricing: { adult: 6000, child: 3500, infant: 0, currency: "LKR" }, priceConfidence: "ASSUMPTION" }) });
+    if (p === `/bookingtypes/${BT}` && req.method === "PUT") return send(200, { id: BT, ...json });
+    if (p === "/bookingtypes" && req.method === "POST") return send(201, { id: "bt-new", ...json });
+    if (p === "/resources" && req.method === "POST") return send(201, { id: "r-new", ...json });
+    if (/^\/resources\/[0-9a-f-]{36}$/.test(p) && req.method === "PUT") return send(200, { ok: true, ...json });
+    if (/^\/resources\/[0-9a-f-]{36}$/.test(p) && req.method === "DELETE") return send(204);
     if (p.startsWith("/reports/clinic/")) return send(200, { view: p, kpis: { bookings: 12 } });
     if (p === "/bookings/available-slots") return send(200, [{ start: "2026-11-25T03:30:00Z", end: "2026-11-25T04:30:00Z" }]);
     if (p === "/resources/search-availability") return send(200, []);
