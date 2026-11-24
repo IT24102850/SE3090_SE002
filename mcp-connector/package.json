@@ -1,0 +1,34 @@
+{
+  "name": "unify-mcp",
+  "version": "1.0.0",
+  "description": "Claude connector (MCP server) for the Unify SME booking platform",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "npm run build && npm run build:vercel && node --experimental-strip-types --no-warnings --test test/*.test.mjs",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node18 --format=esm --legal-comments=none --outfile=dist/index.js --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\" && esbuild src/http.ts --bundle --platform=node --target=node18 --format=esm --legal-comments=none --outfile=dist/http.js --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\"",
+    "typecheck": "tsc -p .",
+    "build:vercel": "esbuild src/vercel.ts --bundle --platform=node --target=node18 --format=esm --legal-comments=none --minify --outfile=../frontend/api/claude-mcp.js --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\"",
+    "pack:desktop": "npm run build && mcpb pack . ../frontend/public/downloads/unify-claude.mcpb",
+    "start:http": "node dist/http.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  },
+  "type": "module",
+  "bin": {
+    "unify-mcp": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
