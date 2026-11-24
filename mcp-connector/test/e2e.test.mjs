@@ -91,13 +91,13 @@ test("invalid dashboard view gives a helpful error", async () => {
 });
 
 test("API errors are reported with the backend's message", async () => {
-  const r = await call("unify_api_request", { method: "PUT", path: "/bookings/forbidden/cancel" });
+  const r = await call("unify_api_get", { path: "/bookings/forbidden/history" });
   assert.equal(r.isError, true);
   assert.match(r.text, /not allowed.*Cancellation cutoff has passed/);
 });
 
 test("generic tool refuses platform-owner and auth endpoints", async () => {
-  const r = await call("unify_api_request", { method: "GET", path: "/platform/tenants" });
+  const r = await call("unify_api_get", { path: "/platform/tenants" });
   assert.equal(r.isError, true);
   assert.match(r.text, /not available/);
 });
@@ -123,4 +123,19 @@ test("tools carry safety annotations", async () => {
   assert.equal(byName.unify_list_bookings.annotations.readOnlyHint, true);
   assert.equal(byName.unify_cancel_booking.annotations.destructiveHint, true);
   assert.equal(byName.unify_create_booking.annotations.readOnlyHint, false);
+});
+
+test("directory rules: titles, read/write annotations, short names, no catch-all", async () => {
+  const { tools } = await client.listTools();
+  for (const t of tools) {
+    assert.ok(t.name.length <= 64, t.name);
+    assert.ok(t.title || t.annotations?.title, `${t.name} has a title`);
+    const a = t.annotations ?? {};
+    assert.ok(a.readOnlyHint === true || a.destructiveHint === true, `${t.name}: readOnlyHint or destructiveHint`);
+    assert.ok(!(a.readOnlyHint && a.destructiveHint), `${t.name}: not both`);
+    assert.ok(!("method" in (t.inputSchema.properties ?? {})), `${t.name}: no HTTP method parameter`);
+    assert.doesNotMatch(t.description, /confirm with the user|call this first|before calling/i, `${t.name}: no behavioural instructions`);
+  }
+  const get = tools.find((t) => t.name === "unify_api_get");
+  assert.match(get.description, /swagger/i, "free-form tool names the API reference");
 });

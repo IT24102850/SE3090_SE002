@@ -4,7 +4,7 @@ import { UnifyClient } from "./client.js";
 import { loadConfig } from "./config.js";
 import { registerTools } from "./tools.js";
 
-export const VERSION = "1.0.0";
+export const VERSION = "1.1.0";
 
 export interface BuildOptions {
   readOnly: boolean;
@@ -26,14 +26,13 @@ export function buildServer(client: UnifyClient, config: BuildOptions) {
         "slots), Night (check-in/out), DateRange (multi-day rental) or Package (date range + itinerary).",
         "",
         "Workflow tips:",
-        "- Start with unify_whoami to learn the business type, the user's role and today's date in business time.",
+        "- unify_whoami gives the business type, the user's role and today's date in business time.",
         `- Times without an offset are read as business-local time (${config.timeZone}). Every timestamp returned`,
         "  gets a matching ...Local field - quote those to the user, not the raw UTC values.",
-        "- Before creating or moving a booking, look up ids with unify_list_resources / unify_list_booking_types,",
-        "  check availability with unify_find_available_slots (Slot) or unify_get_booked_ranges (Night/DateRange),",
-        "  and confirm the details with the user.",
-        "- Cancelling, rejecting and applying AI workflows notify customers or create bookings: confirm first.",
-        "- Use unify_api_request only when no dedicated tool fits.",
+        "- Resource and booking-type ids come from unify_list_resources / unify_list_booking_types; free times from",
+        "  unify_find_available_slots (Slot) or unify_get_booked_ranges (Night/DateRange).",
+        "- Cancelling a booking notifies the customer; applying an AI workflow creates bookings.",
+        "- unify_api_get reads endpoints that no dedicated tool covers.",
         config.readOnly ? "- This connector is in READ-ONLY mode: write tools are disabled." : "",
       ].join("\n"),
     },

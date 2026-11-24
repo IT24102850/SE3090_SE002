@@ -77,7 +77,7 @@ const DASHBOARD_VIEWS = {
 type Dashboard = keyof typeof DASHBOARD_VIEWS;
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
-const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true } as const;
+const WRITE = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } as const;
 const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } as const;
 
 export function registerTools(server: McpServer, client: UnifyClient, opts: { readOnly: boolean }) {
@@ -120,7 +120,7 @@ export function registerTools(server: McpServer, client: UnifyClient, opts: { re
     "Who am I in Unify",
     "Shows the signed-in Unify user (name, role, tenant/business id, branch), the business profile " +
       "(name, business type, sub-type), the API being used, and the time zone this connector uses. " +
-      "Call this first in a conversation to learn the business type and the user's permissions. " +
+      "It reports the business type and the user's permissions. " +
       "Roles: Admin (full), Manager, Staff, Customer.",
     {},
     READ,
@@ -352,10 +352,10 @@ export function registerTools(server: McpServer, client: UnifyClient, opts: { re
   tool(
     "unify_create_booking",
     "Create a booking",
-    "Creates a booking. Check availability first with unify_find_available_slots (or unify_get_booked_ranges " +
-      "for Night/DateRange types). Give either endTime or durationMinutes. customerId is the customer the " +
+    "Creates a booking for a resource and booking type. Free times come from unify_find_available_slots (Slot types) " +
+      "or unify_get_booked_ranges (Night/DateRange types). Takes either endTime or durationMinutes. customerId is the customer the " +
       "booking is for (find it with unify_search_customers); if omitted the booking is made under the " +
-      "signed-in user. Confirm the details with the user before calling.",
+      "signed-in user.",
     {
       resourceId: uuid("Resource id"),
       bookingTypeId: uuid("Booking type id"),
@@ -442,7 +442,7 @@ export function registerTools(server: McpServer, client: UnifyClient, opts: { re
   tool(
     "unify_cancel_booking",
     "Cancel a booking",
-    "Cancels a booking (the customer is notified). Confirm with the user first.",
+    "Cancels a booking. Unify notifies the customer.",
     { bookingId: uuid("Booking id") },
     DESTRUCTIVE,
     async ({ bookingId }) => client.request("PUT", `/bookings/${bookingId}/cancel`),
@@ -670,23 +670,32 @@ export function registerTools(server: McpServer, client: UnifyClient, opts: { re
   );
 
   tool(
-    "unify_review_ai_workflow",
-    "Approve / reject AI workflow",
-    "Approves, rejects, or applies an AI planner workflow (Admin/Manager). 'apply' executes an approved plan " +
-      "and creates its bookings. A reason is required to reject. Confirm with the user first.",
-    {
-      workflowId: uuid("Workflow id"),
-      decision: z.enum(["approve", "reject", "apply"]),
-      reason: z.string().optional().describe("Required for reject"),
-    },
-    DESTRUCTIVE,
-    async ({ workflowId, decision, reason }) => {
-      if (decision === "reject") {
-        if (!reason) throw new Error("A reason is required to reject a workflow.");
-        return client.request("POST", `/agent/workflow/${workflowId}/reject`, { body: { reason } });
-      }
-      return client.request("POST", `/agent/workflow/${workflowId}/${decision}`);
-    },
+    "unify_approve_ai_workflow",
+    "Approve AI workflow",
+    "Approves a pending AI planner workflow (Admin/Manager). Approval alone books nothing; " +
+      "unify_apply_ai_workflow carries out an approved plan.",
+    { workflowId: uuid("Workflow id") },
+    WRITE,
+    async ({ workflowId }) => client.request("POST", `/agent/workflow/${workflowId}/approve`),
+  );
+
+  tool(
+    "unify_reject_ai_workflow",
+    "Reject AI workflow",
+    "Rejects a pending AI planner workflow with a reason (Admin/Manager).",
+    { workflowId: uuid("Workflow id"), reason: z.string().min(3).max(1000).describe("Why it is rejected") },
+    WRITE,
+    async ({ workflowId, reason }) =>
+      client.request("POST", `/agent/workflow/${workflowId}/reject`, { body: { reason } }),
+  );
+
+  tool(
+    "unify_apply_ai_workflow",
+    "Apply AI workflow",
+    "Carries out an approved AI planner workflow, creating the bookings in its plan (Admin/Manager).",
+    { workflowId: uuid("Workflow id") },
+    WRITE,
+    async ({ workflowId }) => client.request("POST", `/agent/workflow/${workflowId}/apply`),
   );
 
   tool(
@@ -732,29 +741,24 @@ export function registerTools(server: McpServer, client: UnifyClient, opts: { re
 
   // ── Escape hatch ─────────────────────────────────────────────────────
   tool(
-    "unify_api_request",
-    "Call any Unify API endpoint",
-    "Calls any Unify REST endpoint directly, for things the other tools don't cover (equipment, departures, " +
-      "sightings, subscriptions, purchase orders, suppliers, dynamic forms, school attendance, etc.). " +
-      "path is relative to /api, e.g. '/departures/board' or '/inventory/movements'. Many list endpoints need " +
-      "tenantId - pass it in query (get it from unify_whoami). Send times as UTC ISO strings. GET is read-only; " +
-      "other methods change data - confirm with the user first." +
-      (opts.readOnly ? " This connector is in read-only mode: only GET is allowed." : ""),
+    "unify_api_get",
+    "Read any Unify API endpoint",
+    "Read-only GET request to the Unify REST API (endpoint reference: " +
+      "https://sme-backend-lxsp.onrender.com/swagger), for data the other tools don't cover: equipment, " +
+      "departures, sightings, subscriptions, purchase orders, suppliers, dynamic forms, school reports and so on. " +
+      "path is relative to /api, e.g. '/departures/board' or '/inventory/movements'. Many list endpoints take " +
+      "tenantId as a query parameter (from unify_whoami). Times in the query are UTC ISO strings.",
     {
-      method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
       path: z.string().regex(/^\/?[A-Za-z0-9\-._~/{}%:]+$/, "A relative API path like /bookings/series"),
       query: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
-      body: z.unknown().optional(),
     },
-    // Registered as potentially destructive so clients ask before running it.
-    opts.readOnly ? READ : DESTRUCTIVE,
-    async ({ method, path, query, body }) => {
-      if (opts.readOnly && method !== "GET") throw new Error("Read-only mode: only GET requests are allowed.");
+    READ,
+    async ({ path, query }) => {
       const p = path.startsWith("/") ? path : `/${path}`;
       if (/^\/(platform|auth)(\/|$)/i.test(p) && !/^\/auth\/me$/i.test(p)) {
         throw new Error("The platform-owner console and auth endpoints are not available through this connector.");
       }
-      return client.request(method, p, { query: query as Query, body });
+      return client.request("GET", p, { query: query as Query });
     },
   );
 }

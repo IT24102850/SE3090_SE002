@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "unify",
   "display_name": "Unify Booking Platform",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Manage your Unify business from Claude: bookings, availability, resources, reports, inventory, invoices and AI planner approvals.",
   "long_description": "Connects Claude to the Unify SME booking platform (https://se-3090-se-002.vercel.app). Sign in with your Unify business account (Admin, Manager or Staff) and ask Claude to find free slots, book, reschedule or cancel appointments, check in guests, read your clinic/restaurant/gym/school/excursion dashboards, review revenue and no-shows, check low stock, look up invoices, and approve or reject AI planner workflows. Times are shown in your business's time zone.",
   "author": {
@@ -91,7 +91,7 @@
     },
     {
       "name": "unify_create_booking",
-      "description": "Creates a booking."
+      "description": "Creates a booking for a resource and booking type."
     },
     {
       "name": "unify_reschedule_booking",
@@ -99,7 +99,7 @@
     },
     {
       "name": "unify_cancel_booking",
-      "description": "Cancels a booking (the customer is notified)."
+      "description": "Cancels a booking."
     },
     {
       "name": "unify_update_booking_status",
@@ -154,8 +154,16 @@
       "description": "Gets one AI workflow with its objective, planned steps and validation results."
     },
     {
-      "name": "unify_review_ai_workflow",
-      "description": "Approves, rejects, or applies an AI planner workflow (Admin/Manager)."
+      "name": "unify_approve_ai_workflow",
+      "description": "Approves a pending AI planner workflow (Admin/Manager)."
+    },
+    {
+      "name": "unify_reject_ai_workflow",
+      "description": "Rejects a pending AI planner workflow with a reason (Admin/Manager)."
+    },
+    {
+      "name": "unify_apply_ai_workflow",
+      "description": "Carries out an approved AI planner workflow, creating the bookings in its plan (Admin/Manager)."
     },
     {
       "name": "unify_plan_schedule_with_ai",
@@ -166,8 +174,8 @@
       "description": "Sends a question to the built-in Unify workspace assistant (the chat panel in the web app) and returns its answer."
     },
     {
-      "name": "unify_api_request",
-      "description": "Calls any Unify REST endpoint directly, for things the other tools don't cover (equipment, departures, sightings, subscriptions, purchase orders, suppliers, dynamic forms, school attendance, etc.)."
+      "name": "unify_api_get",
+      "description": "Read-only GET request to the Unify REST API (endpoint reference: https://sme-backend-lxsp.onrender.com/swagger), for data the other tools don't cover: equipment, departures, sightings, subscriptions, purchase orders, suppliers, dynamic forms, school reports and so on."
     }
   ],
   "tools_generated": false,
@@ -246,5 +254,10 @@
     "runtimes": {
       "node": ">=18.0.0"
     }
-  }
+  },
+  "privacy_policies": [
+    "https://se-3090-se-002.vercel.app/connector/privacy"
+  ],
+  "documentation": "https://se-3090-se-002.vercel.app/connector/docs",
+  "support": "https://github.com/IT24102850/SE3090_SE002/issues"
 }

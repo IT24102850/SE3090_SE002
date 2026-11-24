@@ -45,7 +45,7 @@ export function startMockBackend() {
     if (p === "/bookings/66666666-6666-4666-8666-666666666666/history") return send(200, [{ type: "Created", at: "2026-11-20T10:00:00Z" }]);
     if (p === "/bookings/66666666-6666-4666-8666-666666666666/reschedule") return send(200, { id: "66666666-6666-4666-8666-666666666666", ...json });
     if (p === "/bookings/66666666-6666-4666-8666-666666666666/cancel") return send(204);
-    if (p === "/bookings/forbidden/cancel") return send(403, { message: "Cancellation cutoff has passed" });
+    if (p === "/bookings/forbidden/cancel" || p === "/bookings/forbidden/history") return send(403, { message: "Cancellation cutoff has passed" });
     if (p.startsWith("/reports/clinic/")) return send(200, { view: p, kpis: { bookings: 12 } });
     if (p === "/bookings/available-slots") return send(200, [{ start: "2026-11-25T03:30:00Z", end: "2026-11-25T04:30:00Z" }]);
     if (p === "/resources/search-availability") return send(200, []);

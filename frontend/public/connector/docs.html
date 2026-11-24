@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unify connector for Claude – Documentation</title><meta name="description" content="Connect Claude to the Unify booking platform: setup, tools, permissions and troubleshooting."><link rel="icon" href="/unify-logo.svg"><style>
+:root{--blue:#2563eb;--ink:#0f172a;--muted:#475569;--line:#e2e8f0;--bg:#f8fafc}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:#fff;border-bottom:1px solid var(--line)}.wrap{max-width:860px;margin:0 auto;padding:0 24px}
+header .wrap{display:flex;align-items:center;gap:12px;height:64px}header b{font-size:1.1rem}header nav{margin-left:auto;display:flex;gap:18px;font-size:.92rem}
+a{color:var(--blue)}main{padding:36px 0 64px}h1{font-size:2rem;line-height:1.2;margin:0 0 8px}h2{margin:40px 0 10px;font-size:1.3rem}h3{margin:24px 0 6px;font-size:1.05rem}
+.lead{color:var(--muted);font-size:1.08rem;margin:0 0 20px}code{background:#eef2ff;padding:2px 6px;border-radius:6px;font-size:.9em;word-break:break-all}
+.box{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:.94rem}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{background:#f1f5f9;font-weight:600}td code{white-space:nowrap;word-break:normal}
+.tag{display:inline-block;font-size:.75rem;font-weight:600;padding:1px 8px;border-radius:99px}.r{background:#dcfce7;color:#166534}.w{background:#fee2e2;color:#991b1b}
+footer{border-top:1px solid var(--line);color:var(--muted);font-size:.88rem;padding:22px 0}
+</style></head>
+<body><header><div class="wrap"><svg width="34" height="34" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#2563eb"/><path d="M32 12 49 22v20L32 52 15 42V22z" fill="#fff"/><text x="32" y="40" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="20" fill="#2563eb">U</text></svg><b>Unify</b><span style="color:#64748b">· Claude connector</span>
+<nav><a href="/connector/docs">Documentation</a><a href="/connector/privacy">Privacy</a><a href="/">Unify</a></nav></div></header>
+<main class="wrap">
+<h1>Unify connector for Claude</h1>
+<p class="lead">Manage your Unify business by chatting with Claude: see the day ahead, find free slots, book and reschedule, check guests in, read your dashboards and approve AI-planned schedules.</p>
+
+<div class="box"><b>Connector URL:</b> <code>https://se-3090-se-002.vercel.app/mcp</code><br>
+<b>Sign-in:</b> your Unify account (OAuth). <b>Works in:</b> Claude on the web, desktop and mobile, and Claude Code.</div>
+
+<h2>What you need</h2>
+<ul>
+<li>A Unify business account with the <b>Admin</b>, <b>Manager</b> or <b>Staff</b> role. Sign up at <a href="/register">se-3090-se-002.vercel.app/register</a>.</li>
+<li>A Claude plan that includes connectors.</li>
+</ul>
+
+<h2>Connect</h2>
+<ol>
+<li>In Claude, open <b>Settings → Connectors</b>. Find <b>Unify</b> in the directory, or choose <b>Add custom connector</b> and paste <code>https://se-3090-se-002.vercel.app/mcp</code>.</li>
+<li>Click <b>Connect</b>. A Unify sign-in page opens.</li>
+<li>Sign in with your Unify email and password. Leave <b>Allow changes</b> ticked to let Claude create and change bookings, or untick it for view-only access.</li>
+<li>In a new chat, try <i>"Who am I in Unify?"</i></li>
+</ol>
+<p>Your password goes only to Unify. Claude receives a token that lets it act as you, within your role and your business only.</p>
+
+<h2>Things to ask</h2>
+<ul>
+<li>"What does tomorrow look like at the clinic?"</li>
+<li>"Find Dr. Perera's free slots on Friday afternoon and book Nimal Silva for a 30-minute check-up."</li>
+<li>"Move booking 7f3e… to next Tuesday at 10:00."</li>
+<li>"Are there any double-bookings this week?"</li>
+<li>"Show this month's revenue and no-show rate."</li>
+<li>"Which inventory items are low on stock?"</li>
+<li>"Show pending AI planner workflows and reject the one that books outside opening hours."</li>
+</ul>
+
+<h2>Tools</h2>
+<p>Every tool is labelled read or write. Claude can run read tools straight away and asks you before it runs a write tool.</p>
+<table><tr><th>Tool</th><th>What it does</th><th>Type</th></tr><tr><th colspan="3">Account & business</th></tr><tr><td><code>unify_whoami</code></td><td>The signed-in user, their role, the business profile and today's date in business time</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_list_branches</code></td><td>Branches (locations)</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_list_staff</code></td><td>Staff and manager accounts</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_search_customers</code></td><td>Find customers by name, email or phone</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_list_public_businesses</code></td><td>The public directory of Unify businesses</td><td><span class="tag r">Read</span></td></tr><tr><th colspan="3">Resources & availability</th></tr><tr><td><code>unify_list_resources</code></td><td>Doctors, tables, trainers, rooms, vehicles, boats and other bookable resources</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_get_resource</code></td><td>One resource with its weekly schedule and exceptions</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_find_available_slots</code></td><td>Free time slots on a day, for one resource or all of them</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_get_booked_ranges</code></td><td>Booked periods for nightly and multi-day rentals</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_list_booking_types</code></td><td>The services you sell, with duration, price and booking unit</td><td><span class="tag r">Read</span></td></tr><tr><th colspan="3">Bookings</th></tr><tr><td><code>unify_list_bookings</code></td><td>Bookings filtered by date, status, resource, branch or customer</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_get_booking</code></td><td>One booking with its history</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_get_my_schedule</code></td><td>The signed-in staff member's bookings for a day</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_find_booking_conflicts</code></td><td>Double-bookings on the same resource</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_create_booking</code></td><td>Create a booking</td><td><span class="tag w">Write</span></td></tr><tr><td><code>unify_reschedule_booking</code></td><td>Move a booking to a new time</td><td><span class="tag w">Write</span></td></tr><tr><td><code>unify_cancel_booking</code></td><td>Cancel a booking (Unify notifies the customer)</td><td><span class="tag w">Write</span></td></tr><tr><td><code>unify_update_booking_status</code></td><td>Confirm, reject, complete or mark a no-show</td><td><span class="tag w">Write</span></td></tr><tr><td><code>unify_check_in_booking</code></td><td>Check a guest in</td><td><span class="tag w">Write</span></td></tr><tr><td><code>unify_send_booking_reminder</code></td><td>Send the customer a reminder</td><td><span class="tag w">Write</span></td></tr><tr><th colspan="3">Reports</th></tr><tr><td><code>unify_get_dashboard</code></td><td>Clinic, restaurant, gym, school or excursion dashboard</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_get_revenue_report</code></td><td>Revenue for a period</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_get_booking_stats</code></td><td>No-show statistics and revenue per time slot</td><td><span class="tag r">Read</span></td></tr><tr><th colspan="3">Inventory, invoices & notifications</th></tr><tr><td><code>unify_list_inventory</code></td><td>Stock items, or only low stock</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_list_invoices</code></td><td>Invoices by status, date or customer</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_get_invoice</code></td><td>One invoice with lines and payments</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_list_notifications</code></td><td>Your in-app notifications</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_mark_notification_read</code></td><td>Mark a notification read</td><td><span class="tag w">Write</span></td></tr><tr><th colspan="3">AI planner</th></tr><tr><td><code>unify_list_ai_workflows</code></td><td>AI planner workflows and their status</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_get_ai_workflow</code></td><td>One workflow with its plan</td><td><span class="tag r">Read</span></td></tr><tr><td><code>unify_plan_schedule_with_ai</code></td><td>Ask Unify's AI planner to propose bookings (nothing is booked until approved and applied)</td><td><span class="tag w">Write</span></td></tr><tr><td><code>unify_approve_ai_workflow</code></td><td>Approve a plan</td><td><span class="tag w">Write</span></td></tr><tr><td><code>unify_reject_ai_workflow</code></td><td>Reject a plan with a reason</td><td><span class="tag w">Write</span></td></tr><tr><td><code>unify_apply_ai_workflow</code></td><td>Carry out an approved plan</td><td><span class="tag w">Write</span></td></tr><tr><td><code>unify_ask_workspace_assistant</code></td><td>Ask Unify's built-in workspace assistant</td><td><span class="tag r">Read</span></td></tr><tr><th colspan="3">Everything else</th></tr><tr><td><code>unify_api_get</code></td><td>Read-only access to other Unify API endpoints (departures, equipment, subscriptions, purchase orders and more)</td><td><span class="tag r">Read</span></td></tr></table>
+
+<h2>Permissions and safety</h2>
+<ul>
+<li>Claude acts as the Unify user who signed in, so Unify's own role rules apply. A Staff account can't do what only an Admin can.</li>
+<li>Data stays inside your business (tenant). The owner-only platform console and account/password endpoints aren't available through the connector.</li>
+<li>View-only access: untick <b>Allow changes</b> when signing in, or connect with <code>https://se-3090-se-002.vercel.app/mcp?readonly=1</code>.</li>
+<li>Times are read and shown in business-local time (Asia/Colombo).</li>
+</ul>
+
+<h2>Disconnect</h2>
+<p>In Claude, open <b>Settings → Connectors → Unify → Disconnect</b>. Claude then deletes its tokens.</p>
+
+<h2>Troubleshooting</h2>
+<ul>
+<li><b>The first request is slow, or the sign-in takes a while.</b> Unify's server sleeps when idle and can take up to a minute to wake up. Try again after a minute.</li>
+<li><b>The sign-in page shows "404 – Page Not Found".</b> An old cached copy of the Unify web app answered. Refresh the page once.</li>
+<li><b>"Your Unify role is not allowed to do this".</b> The action needs a higher Unify role, such as Admin or Manager.</li>
+<li><b>"Your Unify session ended".</b> Disconnect and connect again.</li>
+</ul>
+
+<h2>Support</h2>
+<p>Open an issue at <a href="https://github.com/IT24102850/SE3090_SE002/issues">github.com/IT24102850/SE3090_SE002/issues</a>. Source code: <a href="https://github.com/IT24102850/SE3090_SE002/tree/main/mcp-connector">mcp-connector</a>.</p>
+</main>
+<footer><div class="wrap">Unify booking platform · Support: <a href="https://github.com/IT24102850/SE3090_SE002/issues">GitHub issues</a> · <a href="/connector/privacy">Privacy policy</a></div></footer>
+</body></html>

@@ -18,7 +18,7 @@ It is a [Model Context Protocol](https://modelcontextprotocol.io) server that ta
 
 The connector is deployed with the web app at **`https://se-3090-se-002.vercel.app/mcp`**.
 
-1. In Claude, open **Settings → Connectors → Add custom connector**.
+1. In Claude, open **Settings → Connectors**, find **Unify** in the directory or choose **Add custom connector**.
 2. Name: **Unify**. URL: `https://se-3090-se-002.vercel.app/mcp`
 3. Click **Connect**. A Unify sign-in page opens. Sign in with your Unify email and password, and leave **Allow changes** ticked unless you want view-only access.
 
@@ -83,7 +83,7 @@ claude mcp add unify \
 | `UNIFY_READ_ONLY` | `false` | `true` registers only the read tools. |
 | `UNIFY_TIMEOUT_SECONDS` | `90` | Per-request timeout. The free Render backend can take about a minute to wake up. |
 
-## Tools (34)
+## Tools (36)
 
 | Area | Tools |
 |---|---|
@@ -94,12 +94,14 @@ claude mcp add unify \
 | Reports | `unify_get_dashboard` (clinic / restaurant / gym / school / excursions, auto-picked from the business type), `unify_get_revenue_report`, `unify_get_booking_stats` (no-shows, revenue per slot) |
 | Inventory & billing | `unify_list_inventory`, `unify_list_invoices`, `unify_get_invoice` |
 | Notifications | `unify_list_notifications`, `unify_mark_notification_read` |
-| AI planner | `unify_list_ai_workflows`, `unify_get_ai_workflow`, `unify_review_ai_workflow` (approve / reject / apply), `unify_plan_schedule_with_ai`, `unify_ask_workspace_assistant` |
-| Everything else | `unify_api_request`: any `/api` endpoint (departures, sightings, equipment, subscriptions, purchase orders, forms…). Platform-owner and auth endpoints are blocked. |
+| AI planner | `unify_list_ai_workflows`, `unify_get_ai_workflow`, `unify_approve_ai_workflow`, `unify_reject_ai_workflow`, `unify_apply_ai_workflow`, `unify_plan_schedule_with_ai`, `unify_ask_workspace_assistant` |
+| Everything else | `unify_api_get`: read-only GET to any other `/api` endpoint (departures, sightings, equipment, subscriptions, purchase orders, forms…), see the [API reference](https://sme-backend-lxsp.onrender.com/swagger). Platform-owner and auth endpoints are blocked. |
 
 Prompts: **daily_briefing** and **book_appointment**.
 
-Every tool is marked read-only or write/destructive (MCP tool annotations), so Claude asks before cancelling, rejecting or applying anything.
+Every tool has a title and is marked `readOnlyHint` or `destructiveHint`, so Claude runs reads straight away and asks before any change.
+
+Public pages: [documentation](https://se-3090-se-002.vercel.app/connector/docs) · [privacy policy](https://se-3090-se-002.vercel.app/connector/privacy)
 
 ## How it works
 
@@ -154,3 +156,7 @@ When you change anything in `src/`, run `npm run build:vercel` and commit `front
 ### Running it yourself
 
 `UNIFY_MCP_SECRET=... PORT=8787 npm run start:http` serves the same thing at `http://localhost:8787/mcp`, for local testing or hosting elsewhere.
+
+## Privacy policy
+
+See <https://se-3090-se-002.vercel.app/connector/privacy>. In short: your Unify password goes only to Unify's sign-in service. Session tokens are encrypted into the tokens Claude holds. The connector has no database and stores none of your business data. Its hosting (Vercel) keeps standard request logs, which never contain passwords.
