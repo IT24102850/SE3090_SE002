@@ -135,3 +135,34 @@ jobs:
 
       - name: Test
         run: flutter test
+
+  mcp-connector:
+    name: Claude connector (MCP server + OAuth)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-connector
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mcp-connector/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      # Builds the Desktop/stdio server and the Vercel function, then runs the
+      # end-to-end suite (OAuth flow + every tool path) against a mock Unify API.
+      - name: Test
+        run: npm test
+
+      # frontend/api/claude-mcp.js is what Vercel deploys. It must be rebuilt
+      # and committed whenever mcp-connector/src changes.
+      - name: Deployed bundle is up to date
+        run: git diff --exit-code -- ../frontend/api/claude-mcp.js

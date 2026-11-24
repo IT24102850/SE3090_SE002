@@ -340,6 +340,15 @@ A business can take bookings on its own website by pasting a two-line snippet
 the dashboard as Pending with source `Website`. See
 [`docs/website-booking-widget.md`](docs/website-booking-widget.md).
 
+## Claude connector (MCP)
+Business users can manage Unify from Claude by chat: check the day, find free
+slots, book, reschedule, cancel, check guests in, read the dashboards and
+approve AI plans. In Claude: **Settings → Connectors → Add custom connector**,
+URL `https://se-3090-se-002.vercel.app/mcp`, then sign in with a Unify account.
+The URL and a Claude Desktop download are also under **Settings → Connect to
+Claude** in the web app. Source, the tool list and the one-time Vercel setup
+(`UNIFY_MCP_SECRET`) are in [`mcp-connector/`](mcp-connector/README.md).
+
 ## Customer accounts (global, join-on-first-booking)
 
 A customer signs up with just a name, email and password - no business to
@@ -524,6 +533,8 @@ demonstration.
 | OpenAPI JSON | https://sme-backend-lxsp.onrender.com/swagger/v1/swagger.json |
 | Agentic AI service health (internal service, token-protected apart from `/health`) | https://sme-agentic-ai.onrender.com/health |
 | Platform owner console | https://se-3090-se-002.vercel.app/platform/login |
+| Claude connector (MCP endpoint) | https://se-3090-se-002.vercel.app/mcp |
+| Claude Desktop extension | https://se-3090-se-002.vercel.app/downloads/unify-claude.mcpb |
 | Android APK | GitHub Actions → "Build Android APK" workflow artifact, and attached to the submission |
 | Demonstration video | _add the public link before submitting_ |
 

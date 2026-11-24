@@ -13,6 +13,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        // The service worker answers page navigations with index.html. These
+        // paths are served by the server, not the SPA: the API proxy, the
+        // Claude connector (its OAuth sign-in page is opened in this same
+        // browser) and file downloads.
+        navigateFallbackDenylist: [/^\/api\//, /^\/mcp/, /^\/oauth\//, /^\/\.well-known\//, /^\/downloads\//],
+      },
       manifest: {
         name: 'Unify',
         short_name: 'Unify',

@@ -1,0 +1,250 @@
+{
+  "manifest_version": "0.3",
+  "name": "unify",
+  "display_name": "Unify Booking Platform",
+  "version": "1.0.0",
+  "description": "Manage your Unify business from Claude: bookings, availability, resources, reports, inventory, invoices and AI planner approvals.",
+  "long_description": "Connects Claude to the Unify SME booking platform (https://se-3090-se-002.vercel.app). Sign in with your Unify business account (Admin, Manager or Staff) and ask Claude to find free slots, book, reschedule or cancel appointments, check in guests, read your clinic/restaurant/gym/school/excursion dashboards, review revenue and no-shows, check low stock, look up invoices, and approve or reject AI planner workflows. Times are shown in your business's time zone.",
+  "author": {
+    "name": "SE3090 SE002 team",
+    "url": "https://github.com/IT24102850/SE3090_SE002"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IT24102850/SE3090_SE002"
+  },
+  "homepage": "https://se-3090-se-002.vercel.app",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/index.js"
+      ],
+      "env": {
+        "UNIFY_API_URL": "${user_config.api_url}",
+        "UNIFY_EMAIL": "${user_config.email}",
+        "UNIFY_PASSWORD": "${user_config.password}",
+        "UNIFY_TIMEZONE": "${user_config.timezone}",
+        "UNIFY_READ_ONLY": "${user_config.read_only}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "unify_whoami",
+      "description": "Shows the signed-in Unify user (name, role, tenant/business id, branch), the business profile (name, business type, sub-type), the API being used, and the time zone this connector uses."
+    },
+    {
+      "name": "unify_list_branches",
+      "description": "Lists the business's branches (locations)."
+    },
+    {
+      "name": "unify_list_staff",
+      "description": "Lists staff and manager accounts of the business (Admin/Manager only)."
+    },
+    {
+      "name": "unify_search_customers",
+      "description": "Finds customers of this business by name, email or phone."
+    },
+    {
+      "name": "unify_list_public_businesses",
+      "description": "Lists the public directory of businesses on the Unify platform (what customers see in the app's 'Find a business' screen)."
+    },
+    {
+      "name": "unify_list_resources",
+      "description": "Lists bookable resources (doctors, tables, trainers, tutors, boats, rooms, vehicles, equipment...)."
+    },
+    {
+      "name": "unify_get_resource",
+      "description": "Gets one resource with its weekly working schedule and schedule exceptions (holidays, leave, closures)."
+    },
+    {
+      "name": "unify_find_available_slots",
+      "description": "Finds open time slots on a given day."
+    },
+    {
+      "name": "unify_get_booked_ranges",
+      "description": "Returns the periods a resource is already booked between two dates."
+    },
+    {
+      "name": "unify_list_booking_types",
+      "description": "Lists the services/products that can be booked (e.g."
+    },
+    {
+      "name": "unify_list_bookings",
+      "description": "Lists bookings/reservations with filters."
+    },
+    {
+      "name": "unify_get_booking",
+      "description": "Gets one booking, optionally with its full history timeline (who created, rescheduled, checked in...)."
+    },
+    {
+      "name": "unify_get_my_schedule",
+      "description": "The signed-in staff member's own bookings for a day (Admin/Manager/Staff)."
+    },
+    {
+      "name": "unify_find_booking_conflicts",
+      "description": "Reports overlapping bookings on the same resource (Admin/Manager)."
+    },
+    {
+      "name": "unify_create_booking",
+      "description": "Creates a booking."
+    },
+    {
+      "name": "unify_reschedule_booking",
+      "description": "Moves a booking to a new time."
+    },
+    {
+      "name": "unify_cancel_booking",
+      "description": "Cancels a booking (the customer is notified)."
+    },
+    {
+      "name": "unify_update_booking_status",
+      "description": "Sets a booking's status: Confirmed (approve), Rejected, CheckedIn, InProgress, Completed, NoShow..."
+    },
+    {
+      "name": "unify_check_in_booking",
+      "description": "Checks a customer in for their booking (same as scanning their QR code)."
+    },
+    {
+      "name": "unify_send_booking_reminder",
+      "description": "Sends the customer a reminder for an upcoming booking."
+    },
+    {
+      "name": "unify_get_dashboard",
+      "description": "Reads a business-type operations dashboard."
+    },
+    {
+      "name": "unify_get_revenue_report",
+      "description": "Revenue for a period (optionally one branch)."
+    },
+    {
+      "name": "unify_get_booking_stats",
+      "description": "No-show statistics and revenue per time slot for a period (Admin/Manager)."
+    },
+    {
+      "name": "unify_list_inventory",
+      "description": "Lists stock items (with quantities and reorder levels)."
+    },
+    {
+      "name": "unify_list_invoices",
+      "description": "Lists invoices with filters (status e.g."
+    },
+    {
+      "name": "unify_get_invoice",
+      "description": "Gets one invoice with its line items and payments."
+    },
+    {
+      "name": "unify_list_notifications",
+      "description": "The signed-in user's in-app notifications (new bookings, cancellations, approvals...), with unread count."
+    },
+    {
+      "name": "unify_mark_notification_read",
+      "description": "Marks one notification as read."
+    },
+    {
+      "name": "unify_list_ai_workflows",
+      "description": "Lists Unify's AI agent workflows (scheduling plans, find-and-book proposals) awaiting review or already handled."
+    },
+    {
+      "name": "unify_get_ai_workflow",
+      "description": "Gets one AI workflow with its objective, planned steps and validation results."
+    },
+    {
+      "name": "unify_review_ai_workflow",
+      "description": "Approves, rejects, or applies an AI planner workflow (Admin/Manager)."
+    },
+    {
+      "name": "unify_plan_schedule_with_ai",
+      "description": "Asks Unify's own AI planner to propose a batch of bookings (e.g."
+    },
+    {
+      "name": "unify_ask_workspace_assistant",
+      "description": "Sends a question to the built-in Unify workspace assistant (the chat panel in the web app) and returns its answer."
+    },
+    {
+      "name": "unify_api_request",
+      "description": "Calls any Unify REST endpoint directly, for things the other tools don't cover (equipment, departures, sightings, subscriptions, purchase orders, suppliers, dynamic forms, school attendance, etc.)."
+    }
+  ],
+  "tools_generated": false,
+  "prompts": [
+    {
+      "name": "daily_briefing",
+      "description": "Summarise today's bookings, alerts, conflicts and pending approvals.",
+      "arguments": [
+        "date"
+      ],
+      "text": "Give me a briefing for my Unify business for ${arguments.date}."
+    },
+    {
+      "name": "book_appointment",
+      "description": "Find a free slot and book it for a customer, confirming before booking.",
+      "arguments": [
+        "request"
+      ],
+      "text": "Book this in Unify: ${arguments.request}"
+    }
+  ],
+  "keywords": [
+    "booking",
+    "appointments",
+    "scheduling",
+    "clinic",
+    "restaurant",
+    "gym",
+    "tourism",
+    "sme",
+    "unify"
+  ],
+  "license": "MIT",
+  "user_config": {
+    "email": {
+      "type": "string",
+      "title": "Unify email",
+      "description": "The email you sign in to Unify with (Admin, Manager or Staff account).",
+      "required": true
+    },
+    "password": {
+      "type": "string",
+      "title": "Unify password",
+      "description": "Stored in your system keychain and only sent to the Unify API.",
+      "sensitive": true,
+      "required": true
+    },
+    "api_url": {
+      "type": "string",
+      "title": "API URL",
+      "description": "Unify API base URL. Leave the default unless you run your own backend.",
+      "default": "https://se-3090-se-002.vercel.app/api",
+      "required": false
+    },
+    "timezone": {
+      "type": "string",
+      "title": "Business time zone",
+      "description": "IANA time zone used to read and show times, e.g. Asia/Colombo.",
+      "default": "Asia/Colombo",
+      "required": false
+    },
+    "read_only": {
+      "type": "boolean",
+      "title": "Read-only mode",
+      "description": "Only allow viewing - hides every tool that creates, changes or cancels anything.",
+      "default": false,
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}
