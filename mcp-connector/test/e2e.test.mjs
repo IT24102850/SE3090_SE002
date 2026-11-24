@@ -139,3 +139,37 @@ test("directory rules: titles, read/write annotations, short names, no catch-all
   const get = tools.find((t) => t.name === "unify_api_get");
   assert.match(get.description, /swagger/i, "free-form tool names the API reference");
 });
+
+test("update_booking_type merges prices and config, keeps other settings", async () => {
+  const r = await call("unify_update_booking_type", { bookingTypeId: "77777777-7777-4777-8777-777777777777",
+    adultPrice: 6500, configPatch: { priceConfidence: "CONFIRMED by owner" } });
+  assert.equal(r.isError, false, r.text);
+  const req = [...mock.log].reverse().find((l) => l.method === "PUT" && l.path.startsWith("/api/bookingtypes/"));
+  const cfg = JSON.parse(req.body.configJson);
+  assert.equal(cfg.pricing.adult, 6500);
+  assert.equal(cfg.pricing.child, 3500, "untouched price kept");
+  assert.deepEqual(cfg.season, { months: ["Nov"] }, "other settings kept");
+  assert.equal(cfg.priceConfidence, "CONFIRMED by owner");
+  assert.ok(!("name" in req.body), "fields not given are not sent");
+});
+
+test("status-only booking type update does not touch config", async () => {
+  const r = await call("unify_update_booking_type", { bookingTypeId: "77777777-7777-4777-8777-777777777777", status: "Inactive" });
+  assert.equal(r.isError, false, r.text);
+  const req = [...mock.log].reverse().find((l) => l.method === "PUT" && l.path.startsWith("/api/bookingtypes/"));
+  assert.deepEqual(req.body, { status: "Inactive" });
+});
+
+test("resource create, update and delete", async () => {
+  const c = await call("unify_create_resource", { name: "Private Speed Boat", category: "Vehicle", capacity: 8, customAttributes: { engines: "2x Suzuki 200" } });
+  assert.equal(c.isError, false, c.text);
+  const post = [...mock.log].reverse().find((l) => l.method === "POST" && l.path === "/api/resources");
+  assert.equal(post.body.tenantId, "22222222-2222-4222-8222-222222222222");
+  assert.equal(JSON.parse(post.body.customAttributes).engines, "2x Suzuki 200");
+  const u = await call("unify_update_resource", { resourceId: "88888888-8888-4888-8888-888888888888", status: "UnderMaintenance" });
+  assert.equal(u.isError, false, u.text);
+  const put = [...mock.log].reverse().find((l) => l.method === "PUT" && l.path.startsWith("/api/resources/"));
+  assert.deepEqual(put.body, { status: "UnderMaintenance" });
+  const d = await call("unify_delete_resource", { resourceId: "88888888-8888-4888-8888-888888888888" });
+  assert.equal(d.isError, false, d.text);
+});

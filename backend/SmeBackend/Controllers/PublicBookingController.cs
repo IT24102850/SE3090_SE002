@@ -119,6 +119,9 @@ public class PublicBookingController : ControllerBase
                     bt.Description,
                     bt.DefaultDurationMinutes,
                     bt.RequiresApproval,
+                    // "tour", "addon", ... from the booking type's settings; the
+                    // widget keeps add-ons (hotel pickup) out of its tour list.
+                    category = JsonAttributes.String(config, "category"),
                     currency = JsonAttributes.String(config, "pricing.currency") ?? "LKR",
                     // Base (non-seasonal) prices, for the summary the visitor
                     // sees before they submit. The server re-prices on

@@ -83,13 +83,13 @@ claude mcp add unify \
 | `UNIFY_READ_ONLY` | `false` | `true` registers only the read tools. |
 | `UNIFY_TIMEOUT_SECONDS` | `90` | Per-request timeout. The free Render backend can take about a minute to wake up. |
 
-## Tools (36)
+## Tools (42)
 
 | Area | Tools |
 |---|---|
 | Account & business | `unify_whoami`, `unify_list_branches`, `unify_list_staff`, `unify_search_customers`, `unify_list_public_businesses` |
 | Resources & availability | `unify_list_resources`, `unify_get_resource` (with weekly schedule and exceptions), `unify_find_available_slots`, `unify_get_booked_ranges` (Night/DateRange) |
-| Booking types | `unify_list_booking_types` |
+| Resources & booking types (setup) | `unify_list_booking_types`, `unify_create_resource`, `unify_update_resource`, `unify_delete_resource`, `unify_create_booking_type`, `unify_update_booking_type` (prices merge into existing settings), `unify_delete_booking_type` (archives) |
 | Bookings | `unify_list_bookings`, `unify_get_booking` (with history), `unify_get_my_schedule`, `unify_find_booking_conflicts`, `unify_create_booking`, `unify_reschedule_booking`, `unify_cancel_booking`, `unify_update_booking_status`, `unify_check_in_booking`, `unify_send_booking_reminder` |
 | Reports | `unify_get_dashboard` (clinic / restaurant / gym / school / excursions, auto-picked from the business type), `unify_get_revenue_report`, `unify_get_booking_stats` (no-shows, revenue per slot) |
 | Inventory & billing | `unify_list_inventory`, `unify_list_invoices`, `unify_get_invoice` |
