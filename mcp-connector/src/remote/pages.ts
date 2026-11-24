@@ -56,7 +56,7 @@ ${hidden}
 <span>Allow changes<small>Create, reschedule and cancel bookings, approve AI plans. Untick for view-only access.</small></span></label>
 <button type="submit" id="go">Sign in and allow</button>
 </form>
-<p class="fine">Your password is sent only to Unify, never to ${esc(opts.clientName)}. You can disconnect at any time from the app's connector settings.</p>`;
+<p class="fine">Your password is sent only to Unify, never to ${esc(opts.clientName)}. You can disconnect at any time from the app's connector settings. <a href="/connector/privacy" target="_blank" rel="noopener">Privacy policy</a></p>`;
   const script = `document.getElementById('f').addEventListener('submit',function(){var b=document.getElementById('go');b.disabled=true;b.textContent='Signing in… (up to a minute if Unify was asleep)';});`;
   return shell("Sign in to Unify", body, opts.nonce, script);
 }
@@ -75,6 +75,7 @@ export function infoPage(base: string) {
 <li>Name: <b>Unify</b>. URL: <code>${esc(base)}/mcp</code></li>
 <li>Click <b>Connect</b> and sign in with your Unify account.</li>
 </ol>
-<p class="fine">View-only variant: <code>${esc(base)}/mcp?readonly=1</code></p>`,
+<p class="fine">View-only variant: <code>${esc(base)}/mcp?readonly=1</code></p>
+<p class="fine"><a href="/connector/docs">Documentation</a> · <a href="/connector/privacy">Privacy policy</a></p>`,
   );
 }

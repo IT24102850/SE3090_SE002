@@ -108,7 +108,7 @@ test("full OAuth connect flow, then tools work over Streamable HTTP", async () =
   const { tok } = await connectFlow();
   const c = await mcpClient(tok.access_token);
   const { tools } = await c.listTools();
-  assert.equal(tools.length, 34);
+  assert.equal(tools.length, 36);
   const who = await c.callTool({ name: "unify_whoami", arguments: {} });
   assert.ok(!who.isError, who.content[0].text);
   assert.match(who.content[0].text, /Asia MediHealth/);

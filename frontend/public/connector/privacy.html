@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unify connector for Claude – Privacy policy</title><meta name="description" content="How the Unify connector for Claude handles your data."><link rel="icon" href="/unify-logo.svg"><style>
+:root{--blue:#2563eb;--ink:#0f172a;--muted:#475569;--line:#e2e8f0;--bg:#f8fafc}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:#fff;border-bottom:1px solid var(--line)}.wrap{max-width:860px;margin:0 auto;padding:0 24px}
+header .wrap{display:flex;align-items:center;gap:12px;height:64px}header b{font-size:1.1rem}header nav{margin-left:auto;display:flex;gap:18px;font-size:.92rem}
+a{color:var(--blue)}main{padding:36px 0 64px}h1{font-size:2rem;line-height:1.2;margin:0 0 8px}h2{margin:40px 0 10px;font-size:1.3rem}h3{margin:24px 0 6px;font-size:1.05rem}
+.lead{color:var(--muted);font-size:1.08rem;margin:0 0 20px}code{background:#eef2ff;padding:2px 6px;border-radius:6px;font-size:.9em;word-break:break-all}
+.box{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:.94rem}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{background:#f1f5f9;font-weight:600}td code{white-space:nowrap;word-break:normal}
+.tag{display:inline-block;font-size:.75rem;font-weight:600;padding:1px 8px;border-radius:99px}.r{background:#dcfce7;color:#166534}.w{background:#fee2e2;color:#991b1b}
+footer{border-top:1px solid var(--line);color:var(--muted);font-size:.88rem;padding:22px 0}
+</style></head>
+<body><header><div class="wrap"><svg width="34" height="34" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#2563eb"/><path d="M32 12 49 22v20L32 52 15 42V22z" fill="#fff"/><text x="32" y="40" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="20" fill="#2563eb">U</text></svg><b>Unify</b><span style="color:#64748b">· Claude connector</span>
+<nav><a href="/connector/docs">Documentation</a><a href="/connector/privacy">Privacy</a><a href="/">Unify</a></nav></div></header>
+<main class="wrap">
+<h1>Privacy policy: Unify connector for Claude</h1>
+<p class="lead">Effective 24 November 2026</p>
+
+<p>This policy covers the Unify connector for Claude (the "connector"), the service at <code>https://se-3090-se-002.vercel.app/mcp</code> that lets Claude work with your Unify account. The Unify team operates it. Your use of Unify itself is covered by Unify's terms. Your use of Claude is covered by Anthropic's terms and <a href="https://www.anthropic.com/legal/privacy">privacy policy</a>.</p>
+
+<h2>What data the connector handles</h2>
+<ul>
+<li><b>Sign-in details.</b> When you connect, you type your Unify email and password on the Unify sign-in page. The connector sends them over HTTPS to Unify's sign-in service and doesn't store them. They are never shared with Claude or Anthropic.</li>
+<li><b>Session tokens.</b> After sign-in, Unify issues an access token (valid for up to 2 hours) and a refresh token (valid for up to 14 days from its last use). The connector encrypts them (AES-256-GCM) into the tokens it gives Claude. Claude holds these tokens and sends them with each request. The connector keeps no copy.</li>
+<li><b>Business data you ask about.</b> When Claude uses a tool, the connector passes the request to the Unify API and returns Unify's response to Claude. This can include bookings, customer names and contact details, schedules, staff, inventory, invoices and reports, limited to what your Unify role can see. The connector doesn't store this data.</li>
+<li><b>Your conversations.</b> The connector receives only the tool requests Claude sends. It doesn't access your chat history, memory, files or other conversations.</li>
+</ul>
+
+<h2>How the data is used</h2>
+<p>Only to carry out the action you or Claude asked for in your Unify account. The data isn't used for advertising, profiling or training AI models, and it isn't sold.</p>
+
+<h2>Storage and retention</h2>
+<ul>
+<li>The connector has no database. Requests are handled and then discarded.</li>
+<li>The hosting provider, Vercel, keeps technical request logs (time, path, status code and error messages) for operating and debugging the service. These logs don't contain passwords, and they're kept for Vercel's standard log retention period.</li>
+<li>Your Unify data stays in Unify's database, under Unify's own retention.</li>
+<li>When you disconnect the connector in Claude, Claude deletes its tokens. The Unify refresh token then expires on its own within 14 days.</li>
+</ul>
+
+<h2>Sharing with third parties</h2>
+<ul>
+<li><b>Anthropic (Claude):</b> receives tool results as part of your conversation, under Anthropic's privacy policy.</li>
+<li><b>Service providers:</b> Vercel (connector hosting), Render (Unify API hosting) and Supabase (Unify database). They process data only to run the service.</li>
+<li>Nothing else is shared, except where the law requires it.</li>
+</ul>
+
+<h2>Security</h2>
+<p>All traffic uses HTTPS. Sign-in uses OAuth 2.1 with PKCE. Tokens are encrypted and tied to the client they were issued to. Each request runs with your Unify permissions and inside your business only.</p>
+
+<h2>Your choices and rights</h2>
+<ul>
+<li>Disconnect at any time in Claude: <b>Settings → Connectors → Unify → Disconnect</b>.</li>
+<li>Use view-only access by unticking <b>Allow changes</b> when you sign in.</li>
+<li>To access, correct or delete your Unify data, contact your business's Unify administrator or us at the address below.</li>
+</ul>
+
+<h2>Children</h2>
+<p>The connector is for business users and isn't directed at children under 16.</p>
+
+<h2>Changes</h2>
+<p>We'll update this page and its effective date if this policy changes.</p>
+
+<h2>Contact</h2>
+<p>Questions or requests: <a href="https://github.com/IT24102850/SE3090_SE002/issues">github.com/IT24102850/SE3090_SE002/issues</a>.</p>
+</main>
+<footer><div class="wrap">Unify booking platform · Support: <a href="https://github.com/IT24102850/SE3090_SE002/issues">GitHub issues</a> · <a href="/connector/privacy">Privacy policy</a></div></footer>
+</body></html>

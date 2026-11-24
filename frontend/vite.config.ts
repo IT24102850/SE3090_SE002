@@ -18,7 +18,7 @@ export default defineConfig({
         // paths are served by the server, not the SPA: the API proxy, the
         // Claude connector (its OAuth sign-in page is opened in this same
         // browser) and file downloads.
-        navigateFallbackDenylist: [/^\/api\//, /^\/mcp/, /^\/oauth\//, /^\/\.well-known\//, /^\/downloads\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/mcp/, /^\/oauth\//, /^\/\.well-known\//, /^\/downloads\//, /^\/connector\//],
       },
       manifest: {
         name: 'Unify',
