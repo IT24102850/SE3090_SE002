@@ -66,6 +66,9 @@ export default function EmbedBookingPage() {
   const accent = params.get('accent');
   const theme = params.get('theme') === 'dark' ? 'dark' : 'light';
   const whatsappParam = params.get('whatsapp');
+  /* data-service on the snippet: the tour this page sells (a booking type id
+   * or name), so a whale-watching page opens on whale watching. */
+  const serviceParam = (params.get('service') ?? '').trim().toLowerCase();
 
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -76,6 +79,7 @@ export default function EmbedBookingPage() {
   const [date, setDate] = useState('');
   const [departureId, setDepartureId] = useState('');
   const [resourceId, setResourceId] = useState('');
+  const [serviceId, setServiceId] = useState('');
   const [slotStart, setSlotStart] = useState('');
   const [slots, setSlots] = useState<Slot[] | null>(null);
   const [adults, setAdults] = useState(2);
@@ -117,7 +121,15 @@ export default function EmbedBookingPage() {
   useEffect(() => {
     let cancelled = false;
     axios.get<Catalog>(`${API_BASE_URL}/public/booking/${tenantId}/catalog`)
-      .then((r) => { if (!cancelled) setCatalog(r.data); })
+      .then((r) => {
+        if (cancelled) return;
+        setCatalog(r.data);
+        const wanted = serviceParam
+          ? r.data.bookingTypes.find((bt) => bt.id.toLowerCase() === serviceParam || bt.name.trim().toLowerCase() === serviceParam)
+          : undefined;
+        // One type: nothing to choose. Otherwise the visitor picks, unless the page named one.
+        setServiceId(wanted?.id ?? (r.data.bookingTypes.length === 1 ? r.data.bookingTypes[0].id : ''));
+      })
       .catch((err) => {
         if (cancelled) return;
         setLoadError(axios.isAxiosError(err) && err.response?.status === 404
@@ -125,7 +137,7 @@ export default function EmbedBookingPage() {
           : 'The booking service is unavailable right now. Please try again shortly.');
       });
     return () => { cancelled = true; };
-  }, [tenantId]);
+  }, [tenantId, serviceParam]);
 
   const hasDepartures = (catalog?.departures.length ?? 0) > 0;
 
@@ -147,11 +159,11 @@ export default function EmbedBookingPage() {
     let cancelled = false;
     setSlots(null);
     axios.get(`${API_BASE_URL}/bookings/available-slots`, {
-      params: { resourceId, date, bookingTypeId: catalog?.bookingTypes[0]?.id },
+      params: { resourceId, date, bookingTypeId: serviceId || undefined },
     }).then((r) => { if (!cancelled) setSlots(r.data.slots ?? []); })
       .catch(() => { if (!cancelled) setSlots([]); });
     return () => { cancelled = true; };
-  }, [hasDepartures, resourceId, date, catalog]);
+  }, [hasDepartures, resourceId, date, serviceId]);
 
   /* The type that prices the form. Once a sailing is chosen it is that
    * sailing's type. Before that, the type the upcoming sailings actually
@@ -162,11 +174,15 @@ export default function EmbedBookingPage() {
     if (!catalog) return null;
     const byId = (id: string | null | undefined) => (id ? catalog.bookingTypes.find((bt) => bt.id === id) ?? null : null);
     if (departure) return byId(departure.bookingTypeId) ?? catalog.bookingTypes[0] ?? null;
+    /* No sailings scheduled: the visitor's chosen tour prices the form.
+     * Falling back to the first type here priced a whale-watching booking
+     * as a "Coastal Boat Tour" and recorded it as one. */
+    if (catalog.departures.length === 0) return byId(serviceId);
     const counts = new Map<string, number>();
     for (const d of catalog.departures) if (d.bookingTypeId) counts.set(d.bookingTypeId, (counts.get(d.bookingTypeId) ?? 0) + 1);
     const commonest = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
     return byId(commonest) ?? catalog.bookingTypes[0] ?? null;
-  }, [catalog, departure]);
+  }, [catalog, departure, serviceId]);
 
   const currency = bookingType?.currency ?? 'LKR';
   const price = (t: 'adult' | 'child' | 'infant') => bookingType?.pricing[t] ?? 0;
@@ -217,6 +233,7 @@ export default function EmbedBookingPage() {
     if (!fullName.trim()) return 'Please enter your full name.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return 'Please enter a valid email address.';
     if (phone.trim().length < 6) return 'Please enter a phone number we can reach you on.';
+    if (!hasDepartures && !bookingType) return 'Please choose a tour.';
     if (hasDepartures ? !departureId : !(resourceId && slotStart)) return hasDepartures ? 'Please choose a departure.' : 'Please choose a time.';
     if (adults < 1) return 'At least one adult is required.';
     if (seatsLeft != null && seats > seatsLeft) return `Only ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} left on that departure.`;
@@ -403,6 +420,19 @@ export default function EmbedBookingPage() {
             </>
           ) : (
             <>
+              {catalog.bookingTypes.length > 1 && (
+                <label className="ub-field ub-full">
+                  <span>Tour</span>
+                  <select value={serviceId} onChange={(e) => { setServiceId(e.target.value); setSlotStart(''); }} required>
+                    <option value="">Choose a tour</option>
+                    {catalog.bookingTypes.map((bt) => (
+                      <option key={bt.id} value={bt.id}>
+                        {bt.name}{bt.pricing.adult ? ` · ${fmtMoney(bt.pricing.adult, bt.currency)} per adult` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className="ub-field">
                 <span>{catalog.resources.length > 1 ? 'Choose' : 'Service'}</span>
                 <select value={resourceId} onChange={(e) => { setResourceId(e.target.value); setSlotStart(''); }} required>
@@ -418,7 +448,7 @@ export default function EmbedBookingPage() {
                 <span>Time</span>
                 <select value={slotStart} onChange={(e) => setSlotStart(e.target.value)} disabled={!resourceId || !date || slots === null} required>
                   <option value="">
-                    {!resourceId || !date ? 'Choose a service and date first' : slots === null ? 'Checking availability…' : slots.some((s) => s.isAvailable) ? 'Choose a time' : 'No times available that day'}
+                    {!resourceId || !date ? 'Choose a boat and date first' : slots === null ? 'Checking availability…' : slots.some((s) => s.isAvailable) ? 'Choose a time' : 'No times available that day'}
                   </option>
                   {(slots ?? []).filter((s) => s.isAvailable).map((s) => (
                     <option key={s.startTime} value={s.startTime}>{fmtTime(s.startTime)} – {fmtTime(s.endTime)}</option>

@@ -14,6 +14,10 @@
  *   data-accent="#0d3b66"   the widget's button/link colour (any hex)
  *   data-theme="dark"       dark ground instead of light
  *   data-min-height="520"   height before the first measurement arrives
+ *   data-service="Whale Watching"
+ *                           the tour this page sells (booking type name or id),
+ *                           so the form opens on it with its prices; visitors
+ *                           can still pick another tour
  *   data-whatsapp="94777728439"
  *                           the business's WhatsApp number (country code, digits
  *                           only). When set, confirming a booking also opens
@@ -57,6 +61,8 @@
     if (theme) params.push('theme=' + encodeURIComponent(theme));
     var whatsapp = host.getAttribute('data-whatsapp');
     if (whatsapp) params.push('whatsapp=' + encodeURIComponent(whatsapp.replace(/[^0-9]/g, '')));
+    var service = host.getAttribute('data-service');
+    if (service) params.push('service=' + encodeURIComponent(service));
     params = params.concat(attributionParams());
 
     var frame = document.createElement('iframe');
