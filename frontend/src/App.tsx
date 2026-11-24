@@ -82,6 +82,10 @@ const BillingAgentMonitorPage = lazy(() => import('./features/billing/pages/Bill
 const InvoiceDesignerPage = lazy(() => import('./features/billing/pages/InvoiceDesignerPage'));
 const DynamicFormBuilderPage = lazy(() => import('./features/billing/pages/DynamicFormBuilderPage'));
 const PaymentGatewaySettingsPage = lazy(() => import('./features/billing/pages/PaymentGatewaySettingsPage'));
+const SocialHubPage = lazy(() => import('./features/social/SocialHubPage'));
+const SocialPublisherPage = lazy(() => import('./features/social/SocialPublisherPage'));
+const SocialInboxPage = lazy(() => import('./features/social/SocialInboxPage'));
+const AdsPage = lazy(() => import('./features/social/AdsPage'));
 const MyBillsPage = lazy(() => import('./features/billing/pages/MyBillsPage'));
 const ForbiddenPage = lazy(() => import('./features/inventory/pages/ForbiddenPage').then((m) => ({ default: m.ForbiddenPage })));
 
@@ -403,6 +407,40 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
                     <Shell><AdminPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* ── Marketing & social ─────────────────────────────── */}
+              <Route
+                path="/social"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><SocialHubPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/social-posts"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><SocialPublisherPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/social-inbox"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Staff']}>
+                    <Shell><SocialInboxPage /></Shell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/ads"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                    <Shell><AdsPage /></Shell>
                   </ProtectedRoute>
                 }
               />

@@ -114,6 +114,16 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    id: 'marketing',
+    label: 'Marketing & Social',
+    items: [
+      { path: '/social-inbox', label: 'Inbox', icon: '💬', roles: ['Admin', 'Manager', 'Staff'] },
+      { path: '/social-posts', label: 'Publisher', icon: '📣', roles: ['Admin', 'Manager'] },
+      { path: '/ads', label: 'Ads & Attribution', icon: '🎯', roles: ['Admin', 'Manager'] },
+      { path: '/social', label: 'Social Accounts', icon: '🔗', roles: ['Admin', 'Manager', 'Staff'] },
+    ],
+  },
+  {
     id: 'business',
     label: 'Business',
     items: [

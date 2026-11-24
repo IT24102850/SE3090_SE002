@@ -67,23 +67,20 @@ development, user secrets are also suitable). The reset request response is
 deliberately generic; a code is only accepted after the mail provider accepts
 the email. Check backend logs for delivery errors without exposing the code.
 
-## Password reset email
-The forgot-password flow sends a six-digit code through Gmail SMTP or SendGrid.
-For Gmail, enable 2-Step Verification on the sender account and create an
-App Password. Configure the backend environment (never commit the App Password):
+## Marketing & social (Facebook, Instagram, TikTok)
+Connect Facebook Pages, Instagram professional accounts and TikTok accounts to
+a business, then publish to all of them from one composer (now or scheduled,
+with automatic retries), answer Messenger and Instagram DMs in one inbox, and
+share tracked booking links. Bookings that come through those links are
+labelled with their channel and campaign, reported to Meta and TikTok as
+server-side conversions (Conversions API / Events API), and joined with ad
+spend into a cost-per-booking and ROAS report.
 
-```text
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your-sender@gmail.com
-SMTP_PASSWORD=your-16-character-google-app-password
-SMTP_FROM=your-sender@gmail.com
-```
-
-Set these variables in the environment that runs `SmeBackend` (for local
-development, user secrets are also suitable). The reset request response is
-deliberately generic; a code is only accepted after the mail provider accepts
-the email. Check backend logs for delivery errors without exposing the code.
+- Web: Marketing & Social → Inbox, Publisher, Ads & Attribution, Social Accounts
+- Backend: `Controllers/Marketing/*`, `Services/Marketing/*`, `Models/Marketing/*`
+- Setup (Meta/TikTok apps, env vars, webhooks), design and limits:
+  [`docs/marketing-social.md`](docs/marketing-social.md)
+- Works without any platform credentials through sandbox accounts.
 
 ## Sub-type dashboards
 The tenant admin dashboard adapts to what the business actually does. A

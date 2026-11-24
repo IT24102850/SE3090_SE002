@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SmeBackend.Models;
+using SmeBackend.Models.Marketing;
 using SmeBackend.Services;
 
 namespace SmeBackend.Data;
@@ -117,6 +118,19 @@ public class AppDbContext : DbContext
     public DbSet<CommissionRule> CommissionRules { get; set; } = null!;
     public DbSet<PaymentGateway> PaymentGateways { get; set; } = null!;
     public DbSet<InvoiceTemplate> InvoiceTemplates { get; set; } = null!;
+
+    // Marketing & social: connected accounts, the publisher, the DM inbox,
+    // and server-side conversion tracking (Models/Marketing). All tenant-
+    // filtered; the publishing/conversion workers and the Meta webhook read
+    // them with IgnoreQueryFilters and an explicit TenantId.
+    public DbSet<SocialAccount> SocialAccounts { get; set; } = null!;
+    public DbSet<SocialPost> SocialPosts { get; set; } = null!;
+    public DbSet<SocialPostTarget> SocialPostTargets { get; set; } = null!;
+    public DbSet<SocialConversation> SocialConversations { get; set; } = null!;
+    public DbSet<SocialMessage> SocialMessages { get; set; } = null!;
+    public DbSet<MarketingSettings> MarketingSettings { get; set; } = null!;
+    public DbSet<BookingAttribution> BookingAttributions { get; set; } = null!;
+    public DbSet<ConversionEvent> ConversionEvents { get; set; } = null!;
 
     private Guid? CurrentTenantId => _tenantContext.CurrentTenantId;
 
@@ -1237,6 +1251,86 @@ public class AppDbContext : DbContext
                 .HasMaxLength(1000);
         });
 
+        ConfigureMarketing(modelBuilder);
+    }
+
+    private void ConfigureMarketing(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SocialAccount>(entity =>
+        {
+            entity.ToTable("social_accounts");
+            entity.HasQueryFilter(a => a.TenantId == CurrentTenantId);
+            entity.HasIndex(a => new { a.TenantId, a.Platform, a.ExternalId }).IsUnique();
+            // The webhook has only the page / Instagram id to go on.
+            entity.HasIndex(a => new { a.Platform, a.ExternalId });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(a => a.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SocialPost>(entity =>
+        {
+            entity.ToTable("social_posts");
+            entity.HasQueryFilter(p => p.TenantId == CurrentTenantId);
+            entity.HasIndex(p => new { p.TenantId, p.Status, p.ScheduledAt });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(p => p.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(p => p.Targets).WithOne(t => t.Post!).HasForeignKey(t => t.SocialPostId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SocialPostTarget>(entity =>
+        {
+            entity.ToTable("social_post_targets");
+            entity.HasQueryFilter(t => t.TenantId == CurrentTenantId);
+            entity.HasIndex(t => new { t.Status, t.NextAttemptAt });
+            entity.HasIndex(t => new { t.SocialPostId, t.SocialAccountId }).IsUnique();
+            // Accounts are never hard-deleted (see SocialAccountStatus.Disconnected).
+            entity.HasOne(t => t.Account).WithMany().HasForeignKey(t => t.SocialAccountId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SocialConversation>(entity =>
+        {
+            entity.ToTable("social_conversations");
+            entity.HasQueryFilter(c => c.TenantId == CurrentTenantId);
+            entity.HasIndex(c => new { c.SocialAccountId, c.ParticipantId }).IsUnique();
+            entity.HasIndex(c => new { c.TenantId, c.IsArchived, c.LastMessageAt });
+            entity.HasOne(c => c.Account).WithMany().HasForeignKey(c => c.SocialAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(c => c.Messages).WithOne(m => m.Conversation!).HasForeignKey(m => m.SocialConversationId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SocialMessage>(entity =>
+        {
+            entity.ToTable("social_messages");
+            entity.HasQueryFilter(m => m.TenantId == CurrentTenantId);
+            entity.HasIndex(m => new { m.SocialConversationId, m.SentAt });
+            // A redelivered webhook carries the same mid; this makes it a
+            // no-op. Per conversation, not global: two businesses may connect
+            // the same Page and each keeps its own copy of the thread.
+            entity.HasIndex(m => new { m.SocialConversationId, m.ExternalMessageId }).IsUnique();
+        });
+
+        modelBuilder.Entity<MarketingSettings>(entity =>
+        {
+            entity.ToTable("marketing_settings");
+            entity.HasQueryFilter(s => s.TenantId == CurrentTenantId);
+            entity.HasIndex(s => s.TenantId).IsUnique();
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(s => s.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BookingAttribution>(entity =>
+        {
+            entity.ToTable("booking_attributions");
+            entity.HasQueryFilter(a => a.TenantId == CurrentTenantId);
+            entity.HasIndex(a => new { a.TenantId, a.CreatedAt });
+            entity.HasIndex(a => new { a.TenantId, a.Channel });
+            entity.HasOne<Booking>().WithOne().HasForeignKey<BookingAttribution>(a => a.BookingId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ConversionEvent>(entity =>
+        {
+            entity.ToTable("conversion_events");
+            entity.HasQueryFilter(e => e.TenantId == CurrentTenantId);
+            entity.HasIndex(e => new { e.BookingId, e.Platform, e.EventName }).IsUnique();
+            entity.HasIndex(e => new { e.Status, e.NextAttemptAt });
+            entity.HasIndex(e => new { e.TenantId, e.CreatedAt });
+        });
     }
 
     private void AddDefaultInventoryCatalogs()
